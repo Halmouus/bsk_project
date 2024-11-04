@@ -1,0 +1,13 @@
+# Ignore virtual environment
+django_project_env/
+
+# Ignore compiled Python files
+__pycache__/
+*.py[cod]
+
+# Ignore environment variable and database files
+*.env
+*.sqlite3
+
+# Ignore static files if generated on the server
+static/
