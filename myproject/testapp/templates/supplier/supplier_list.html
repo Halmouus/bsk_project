@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+
+{% block title %}Supplier List{% endblock %}
+
+{% block content %}
+<h1>Supplier List</h1>
+<a href="{% url 'supplier-create' %}" class="btn btn-primary">Add New Supplier</a>
+<table class="table mt-4">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>IF Code</th>
+            <th>ICE Code</th>
+            <th>RC Code</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for supplier in suppliers %}
+            <tr>
+                <td>{{ supplier.name }}</td>
+                <td>{{ supplier.if_code }}</td>
+                <td>{{ supplier.ice_code }}</td>
+                <td>{{ supplier.rc_code }}</td>
+                <td>
+                    <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning">Edit</a>
+                    <a href="{% url 'supplier-delete' supplier.pk %}" class="btn btn-danger">Delete</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="5">No suppliers found.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

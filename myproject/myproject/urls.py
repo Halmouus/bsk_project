@@ -17,9 +17,14 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.shortcuts import render
+from django.contrib.auth import views as auth_views
+from testapp.views import CustomLoginView, logout_view
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', lambda request: render(request, 'home.html'), name='home'),  # Home view for the root URL
+    path('', CustomLoginView.as_view(), name='login'),  # Use custom login view
     path('testapp/', include('testapp.urls')),  # Include the URLs from testapp
+    path('profile/', lambda request: render(request, 'profile.html'), name='profile'),  # Profile page
+    path('logout/', logout_view, name='logout'),  # Logout view   
 ]
+
