@@ -12,7 +12,7 @@ class ProductListView(ListView):
 # Create a new Product
 class ProductCreateView(SuccessMessageMixin, CreateView):
     model = Product
-    fields = ['name', 'vat_rate', 'expense_code', 'is_energy']
+    fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
     template_name = 'product/product_form.html'
     success_url = reverse_lazy('product-list')
     success_message = "Product successfully created."
@@ -20,7 +20,7 @@ class ProductCreateView(SuccessMessageMixin, CreateView):
 # Update an existing Product
 class ProductUpdateView(SuccessMessageMixin, UpdateView):
     model = Product
-    fields = ['name', 'vat_rate', 'expense_code', 'is_energy']
+    fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
     template_name = 'product/product_form.html'
     success_url = reverse_lazy('product-list')
     success_message = "Product successfully updated."

@@ -62,7 +62,7 @@
 
 <!-- Modal Template -->
 <div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog" role="document">
+    <div class="modal-dialog modal-lg" role="document"> <!-- Added modal-lg for larger modal -->
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="invoiceDetailsModalLabel">Invoice Details</h5>
@@ -70,7 +70,7 @@
                     <span aria-hidden="true">&times;</span>
                 </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body modal-scrollable-content">
                 <table class="table table-striped">
                     <thead>
                         <tr>
@@ -95,7 +95,6 @@
         </div>
     </div>
 </div>
-
 
 <!-- JavaScript to populate modal -->
 <script>
@@ -141,4 +140,75 @@
         });
     });
 </script>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const productFormsDiv = document.getElementById('product-forms');
+        const addProductButton = document.getElementById('add-product');
+        let totalFormsInput = document.querySelector('#id_products-TOTAL_FORMS');
+        let formIndex = parseInt(totalFormsInput.value);  // Start with the current total number of forms
+
+        // Add product form when clicking 'Add Product'
+        addProductButton.addEventListener('click', function() {
+            const newForm = productFormsDiv.querySelector('.product-form').cloneNode(true);
+            newForm.querySelectorAll('input').forEach(input => input.value = '');
+            newForm.innerHTML = newForm.innerHTML.replace(/products-(\d+)-/g, `products-${formIndex}-`);
+            formIndex++;
+            totalFormsInput.value = formIndex;  // Update TOTAL_FORMS count
+
+            productFormsDiv.appendChild(newForm);
+            addAutocomplete(newForm);  // Add autocomplete for the newly added product form
+
+            newForm.querySelector('.remove-product').addEventListener('click', function() {
+                newForm.remove();
+                updateTotalFormsCount();
+            });
+        });
+
+        document.querySelectorAll('.remove-product').forEach(button => {
+            button.addEventListener('click', function() {
+                button.parentElement.remove();
+                updateTotalFormsCount();
+            });
+        });
+
+        function updateTotalFormsCount() {
+            formIndex = productFormsDiv.querySelectorAll('.product-form').length;
+            totalFormsInput.value = formIndex;
+        }
+
+        // Add jQuery autocomplete to all product name fields
+        function addAutocomplete(formElement) {
+            $(formElement).find('input[name$="-product"]').autocomplete({
+                source: function(request, response) {
+                    $.ajax({
+                        url: "{% url 'product-autocomplete' %}",
+                        data: {
+                            term: request.term
+                        },
+                        success: function(data) {
+                            response(data);
+                        }
+                    });
+                },
+                minLength: 2,
+                select: function(event, ui) {
+                    const productInput = event.target;
+                    const formPrefix = productInput.name.split('-').slice(0, -1).join('-');
+                    $(`input[name="${formPrefix}-expense_code"]`).val(ui.item.expense_code);
+                    $(`input[name="${formPrefix}-vat_rate"]`).val(ui.item.vat_rate);
+                    $(`input[name="${formPrefix}-fiscal_label"]`).val(ui.item.fiscal_label);
+                }
+            });
+        }
+
+        // Initialize autocomplete for existing forms
+        document.querySelectorAll('.product-form').forEach(addAutocomplete);
+    });
+</script>
+
 {% endblock %}

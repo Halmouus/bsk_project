@@ -57,11 +57,11 @@ class Supplier(BaseModel):
 class Product(BaseModel):
     name = models.CharField(max_length=100)
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, choices=[
-    (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
+    (0.00, '0%'), (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
 ])
     expense_code = models.CharField(max_length=20, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
     is_energy = models.BooleanField(default=False)
-
+    fiscal_label = models.CharField(max_length=255, blank=False)
     def __str__(self):
         return self.name
 
@@ -69,7 +69,7 @@ class Invoice(BaseModel):
     ref = models.CharField(max_length=50, unique=True)
     date = models.DateField()
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
-    fiscal_label = models.CharField(max_length=255)  # By default, supplier's service can be used
+    fiscal_label = models.CharField(max_length=255, blank=False)  # By default, supplier's service can be used
     status = models.CharField(
         max_length=20, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
     )

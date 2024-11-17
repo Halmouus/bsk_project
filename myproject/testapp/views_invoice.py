@@ -1,7 +1,7 @@
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Invoice, InvoiceProduct
+from .models import Invoice, InvoiceProduct, Product
 from .forms import InvoiceForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -126,3 +126,10 @@ class InvoiceDetailsView(View):
             return JsonResponse(response_data)
         except Invoice.DoesNotExist:
             return JsonResponse({'error': 'Invoice not found'}, status=404)
+
+# Product Autocomplete View
+def product_autocomplete(request):
+    query = request.GET.get('term', '')
+    products = Product.objects.filter(name__icontains=query)[:10]  # Limit to 10 suggestions
+    product_list = [{"label": product.name, "value": product.id} for product in products]
+    return JsonResponse(product_list, safe=False)
