@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}Product List{% endblock %}
+
+{% block content %}
+<h1>Product List</h1>
+<a href="{% url 'product-create' %}" class="btn btn-primary">Add New Product</a>
+<table class="table mt-4">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>VAT Rate</th>
+            <th>Expense Code</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+            <tr>
+                <td>{{ product.name }}</td>
+                <td>{{ product.vat_rate }}</td>
+                <td>{{ product.expense_code }}</td>
+                <td>
+                    <a href="{% url 'product-update' product.pk %}" class="btn btn-warning">Edit</a>
+                    <a href="{% url 'product-delete' product.pk %}" class="btn btn-danger">Delete</a>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="4">No products found.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

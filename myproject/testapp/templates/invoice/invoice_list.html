@@ -1,0 +1,144 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Invoice List{% endblock %}
+
+{% block content %}
+<h1>Invoice List</h1>
+<a href="{% url 'invoice-create' %}" class="btn btn-primary">Add New Invoice</a>
+<table class="table mt-4">
+    <thead>
+        <tr>
+            <th>Date</th>
+            <th>Reference</th>
+            <th>Supplier</th>
+            <th>Fiscal Label</th>
+            <th>Raw Amount</th>
+            <th>Tax Rate (%)</th>
+            <th>Tax Amount</th>
+            <th>Total Amount (Incl. Tax)</th>
+            <th>Actions</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+            <tr>
+                <td>{{ invoice.date }}</td>
+                <td>{{ invoice.ref }}</td>
+                <td>{{ invoice.supplier.name }}</td>
+                <td>{{ invoice.fiscal_label }}</td>
+                <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                <td>
+                    {% with invoice.products.all|length as product_count %}
+                        {% for product in invoice.products.all %}
+                            {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                        {% endfor %}
+                    {% endwith %}
+                </td>
+                <td>
+                    {% if invoice.total_tax_amount %}
+                        {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                    {% else %}
+                        <strong>Tax Missing</strong>
+                    {% endif %}
+                </td>                
+                <td>{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                <td>
+                    <a href="{% url 'invoice-update' invoice.pk %}" class="btn btn-warning">Edit</a>
+                    <a href="{% url 'invoice-delete' invoice.pk %}" class="btn btn-danger">Delete</a>
+                </td>
+                <td>
+                    <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                </td>
+            </tr>
+        {% empty %}
+            <tr>
+                <td colspan="10">No invoices found.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+<!-- Modal Template -->
+<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoiceDetailsModalLabel">Invoice Details</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Unit Price</th>
+                            <th>Quantity</th>
+                            <th>VAT Rate</th>
+                            <th>Reduction Rate</th>
+                            <th>Raw Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoice-details-table">
+                        <!-- Filled by JavaScript -->
+                    </tbody>
+                </table>
+                <div id="vat-summary"></div>
+                <div id="total-amount-summary"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<!-- JavaScript to populate modal -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        $('#invoiceDetailsModal').on('show.bs.modal', function (event) {
+            const button = $(event.relatedTarget);
+            const invoiceId = button.data('invoice');
+
+            $.ajax({
+                url: "{% url 'invoice-details' %}",
+                data: {
+                    'invoice_id': invoiceId
+                },
+                success: function (data) {
+                    // Populate the modal with the invoice details
+                    $('#invoice-details-table').empty();
+                    data.products.forEach(product => {
+                        $('#invoice-details-table').append(`
+                            <tr>
+                                <td>${product.name}</td>
+                                <td>${product.unit_price}</td>
+                                <td>${product.quantity}</td>
+                                <td>${product.vat_rate}</td> <!-- VAT Rate -->
+                                <td>${product.reduction_rate}</td>
+                                <td>${product.raw_price}</td>
+                            </tr>
+                        `);
+                    });
+
+                    // Update the VAT summary, Total Raw Amount, and Total Amount
+                    $('#vat-summary').empty();
+                    data.vat_subtotals.forEach(vatSubtotal => {
+                        $('#vat-summary').append(`<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`);
+                    });
+
+                    $('#total-amount-summary').html(`
+                        <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
+                        <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
+                        <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
+                    `);
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}

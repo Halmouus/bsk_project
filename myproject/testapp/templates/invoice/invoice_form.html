@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+
+{% block title %}Invoice Form{% endblock %}
+
+{% block content %}
+<h1>{{ view.object.pk|default:'Add New Invoice' }}</h1>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    
+    <div id="product-forms">
+        {{ products.management_form }}
+        {% for form in products.forms %}
+            <div class="product-form">
+                {{ form.as_p }}
+                <button type="button" class="btn btn-danger remove-product">Remove Product</button>
+            </div>
+        {% endfor %}
+    </div>
+    
+    <button type="button" id="add-product" class="btn btn-secondary">Add Product</button>
+
+    <button type="submit" class="btn btn-success mt-4">Save</button>
+    <a href="{% url 'invoice-list' %}" class="btn btn-secondary mt-4">Cancel</a>
+</form>
+
+<!-- JavaScript to handle adding/removing products -->
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const productFormsDiv = document.getElementById('product-forms');
+        const addProductButton = document.getElementById('add-product');
+        let totalFormsInput = document.querySelector('#id_products-TOTAL_FORMS');
+        let formIndex = parseInt(totalFormsInput.value);  // Start with the current total number of forms
+
+        // Add product form when clicking 'Add Product'
+        addProductButton.addEventListener('click', function() {
+            // Clone the last form and clear its values
+            const newForm = productFormsDiv.querySelector('.product-form').cloneNode(true);
+            newForm.querySelectorAll('input').forEach(input => input.value = '');
+
+            // Update the form index for each input name and id
+            newForm.innerHTML = newForm.innerHTML.replace(/products-(\d+)-/g, `products-${formIndex}-`);
+            formIndex++;
+            totalFormsInput.value = formIndex;  // Update TOTAL_FORMS count
+
+            // Append the new form and add remove button functionality
+            productFormsDiv.appendChild(newForm);
+            newForm.querySelector('.remove-product').addEventListener('click', function() {
+                newForm.remove();
+                updateTotalFormsCount();
+            });
+        });
+
+        // Remove product form when clicking 'Remove Product'
+        document.querySelectorAll('.remove-product').forEach(button => {
+            button.addEventListener('click', function() {
+                button.parentElement.remove();
+                updateTotalFormsCount();
+            });
+        });
+
+        // Update the TOTAL_FORMS count when a form is removed
+        function updateTotalFormsCount() {
+            formIndex = productFormsDiv.querySelectorAll('.product-form').length;
+            totalFormsInput.value = formIndex;
+        }
+    });
+</script>
+{% endblock %}
