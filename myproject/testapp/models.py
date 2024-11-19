@@ -69,19 +69,20 @@ class Invoice(BaseModel):
     ref = models.CharField(max_length=50, unique=True)
     date = models.DateField()
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
-    fiscal_label = models.CharField(max_length=255, blank=False)  # By default, supplier's service can be used
     status = models.CharField(
         max_length=20, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
     )
     payment_due_date = models.DateField(null=True, blank=True)
 
     def save(self, *args, **kwargs):
-        if not self.fiscal_label:
-            self.fiscal_label = self.supplier.service
         if not self.payment_due_date:
             self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
         super().save(*args, **kwargs)
 
+    @property
+    def fiscal_label(self):
+        """Generate a combined fiscal label from all related products."""
+        return " - ".join([item.product.fiscal_label for item in self.products.all()])
     
     @property
     def raw_amount(self):

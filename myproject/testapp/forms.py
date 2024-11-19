@@ -21,10 +21,10 @@ InvoiceProductFormset = inlineformset_factory(
 class InvoiceForm(forms.ModelForm):
     class Meta:
         model = Invoice
-        fields = ['ref', 'date', 'supplier', 'fiscal_label']
+        fields = ['ref', 'date', 'supplier']
         widgets = {
             'ref': forms.TextInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'supplier': forms.Select(attrs={'class': 'form-control'}),
-            'fiscal_label': forms.TextInput(attrs={'class': 'form-control'}),
         }
+
