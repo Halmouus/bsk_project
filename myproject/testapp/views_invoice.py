@@ -6,6 +6,38 @@ from .forms import InvoiceForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.shortcuts import get_object_or_404
+
+@method_decorator(csrf_exempt, name='dispatch')
+class AddProductToInvoiceView(View):
+    def post(self, request):
+        invoice_id = request.POST.get('invoice_id')
+        product_id = request.POST.get('product')
+        quantity = request.POST.get('quantity')
+        unit_price = request.POST.get('unit_price')
+        vat_rate = request.POST.get('vat_rate')
+
+        try:
+            # Fetch the invoice and product
+            invoice = get_object_or_404(Invoice, pk=invoice_id)
+            product = get_object_or_404(Product, pk=product_id)
+
+            # Create a new InvoiceProduct entry
+            invoice_product = InvoiceProduct.objects.create(
+                invoice=invoice,
+                product=product,
+                quantity=quantity,
+                unit_price=unit_price,
+                vat_rate=vat_rate
+            )
+
+            # Success response
+            return JsonResponse({"message": "Product added successfully."}, status=200)
+        
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=400)
 
 # List all Invoices
 class InvoiceListView(ListView):
@@ -21,25 +53,15 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully created."
 
-    # Handle inline formset for adding products to the invoice
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        # We may want to pass the newly created invoice to the next page or modal
+        return response
+
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
-        if self.request.POST:
-            data['products'] = InvoiceProductInlineFormset(self.request.POST)
-        else:
-            data['products'] = InvoiceProductInlineFormset()
+        data['products'] = Product.objects.all()  # Add all products to the context for dropdown population
         return data
-
-    def form_valid(self, form):
-        context = self.get_context_data()
-        products = context['products']
-        if form.is_valid() and products.is_valid():
-            self.object = form.save()
-            products.instance = self.object
-            products.save()
-            return super().form_valid(form)
-        else:
-            return super().form_invalid(form)
 
 # Update an existing Invoice
 class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
@@ -133,3 +155,65 @@ def product_autocomplete(request):
     products = Product.objects.filter(name__icontains=query)[:10]  # Limit to 10 suggestions
     product_list = [{"label": product.name, "value": product.id} for product in products]
     return JsonResponse(product_list, safe=False)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class EditProductInInvoiceView(View):
+    def get(self, request, pk):
+        """
+        Handles loading the product data for editing.
+        """
+        try:
+            # Fetch the existing InvoiceProduct
+            invoice_product = get_object_or_404(InvoiceProduct, pk=pk)
+            # Prepare product data to return
+            product_data = {
+                'product': invoice_product.product.pk,
+                'quantity': invoice_product.quantity,
+                'unit_price': float(invoice_product.unit_price),
+                'vat_rate': float(invoice_product.vat_rate),
+                'reduction_rate': float(invoice_product.reduction_rate),
+            }
+            return JsonResponse(product_data, status=200)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    def post(self, request, pk):
+        """
+        Handles updating the product information.
+        """
+        quantity = request.POST.get('quantity')
+        unit_price = request.POST.get('unit_price')
+        vat_rate = request.POST.get('vat_rate')
+        reduction_rate = request.POST.get('reduction_rate')
+
+        try:
+            # Fetch the existing InvoiceProduct
+            invoice_product = get_object_or_404(InvoiceProduct, pk=pk)
+
+            # Update the fields with the provided data
+            invoice_product.quantity = quantity
+            invoice_product.unit_price = unit_price
+            invoice_product.vat_rate = vat_rate
+            invoice_product.reduction_rate = reduction_rate
+            invoice_product.save()
+
+            # Success response
+            return JsonResponse({"message": "Product updated successfully."}, status=200)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    def delete(self, request, pk):
+        """
+        Handles deleting the product from the invoice.
+        """
+        try:
+            # Fetch the InvoiceProduct instance
+            invoice_product = get_object_or_404(InvoiceProduct, pk=pk)
+
+            # Delete the instance
+            invoice_product.delete()
+
+            # Success response
+            return JsonResponse({"message": "Product deleted successfully."}, status=200)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)

@@ -2,8 +2,10 @@ from django.urls import path
 from . import views
 from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
 from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView
-from .views_invoice import InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView, product_autocomplete 
-
+from .views_invoice import (
+    InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
+    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView  # Import the EditProductInInvoiceView
+)
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
@@ -27,5 +29,7 @@ urlpatterns = [
     path('invoices/<uuid:pk>/delete/', InvoiceDeleteView.as_view(), name='invoice-delete'),  # Delete an invoice
     path('invoices/details/', InvoiceDetailsView.as_view(), name='invoice-details'),  # Details for a specific invoice
     path('products/autocomplete/', product_autocomplete, name='product-autocomplete'),  # Autocomplete for products
+    path('invoices/add-product/', AddProductToInvoiceView.as_view(), name='add-product-to-invoice'),  # Add a product to an invoice
+    path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
 
 ]

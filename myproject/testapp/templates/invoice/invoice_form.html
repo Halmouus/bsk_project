@@ -7,63 +7,287 @@
 <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
-    
-    <div id="product-forms">
-        {{ products.management_form }}
-        {% for form in products.forms %}
-            <div class="product-form">
-                {{ form.as_p }}
-                <button type="button" class="btn btn-danger remove-product">Remove Product</button>
-            </div>
-        {% endfor %}
-    </div>
-    
-    <button type="button" id="add-product" class="btn btn-secondary">Add Product</button>
 
     <button type="submit" class="btn btn-success mt-4">Save</button>
     <a href="{% url 'invoice-list' %}" class="btn btn-secondary mt-4">Cancel</a>
 </form>
 
-<!-- JavaScript to handle adding/removing products -->
+<!-- Add Product Button after Invoice is saved -->
+{% if view.object.pk %}
+    <button type="button" id="add-product" class="btn btn-primary mt-4" data-toggle="modal" data-target="#productModal">Add Product</button>
+
+    <!-- Table to show all products linked to the current invoice -->
+    <h3 class="mt-4">Products in Invoice</h3>
+    <table class="table table-hover table-bordered mt-2">
+        <thead class="thead-dark">
+            <tr>
+                <th>Product</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Reduction Rate (%)</th>
+                <th>VAT Rate (%)</th>
+                <th>Subtotal</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody id="product-list">
+            {% for product in view.object.products.all %}
+            <tr data-product-id="{{ product.pk }}">
+                <td>{{ product.product.name }}</td>
+                <td>{{ product.quantity }}</td>
+                <td>{{ product.unit_price }}</td>
+                <td>{{ product.reduction_rate }}</td>
+                <td>{{ product.vat_rate }}</td>
+                <td>{{ product.subtotal|floatformat:2 }}</td>
+                <td>
+                    <button class="btn btn-warning btn-sm edit-product" data-product-id="{{ product.pk }}">Edit</button>
+                    <button class="btn btn-danger btn-sm delete-product" data-product-id="{{ product.pk }}">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <th colspan="5" class="text-right">Raw Total:</th>
+                <th id="raw-total">{{ view.object.raw_amount|floatformat:2 }}</th>
+            </tr>
+            <tr>
+                <th colspan="5" class="text-right">Total Tax Amount:</th>
+                <th id="tax-total">{{ view.object.total_tax_amount|floatformat:2 }}</th>
+            </tr>
+            <tr>
+                <th colspan="5" class="text-right text-primary">Total Amount (Including Tax):</th>
+                <th id="total-amount">{{ view.object.total_amount|floatformat:2 }}</th>
+            </tr>
+        </tfoot>
+    </table>
+{% else %}
+    <div class="alert alert-warning mt-4">
+        Save the invoice before adding products.
+    </div>
+{% endif %}
+
+<!-- Modal Template for Adding Product -->
+<div class="modal fade" id="productModal" tabindex="-1" role="dialog" aria-labelledby="productModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="productModalLabel">Add Product to Invoice</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="add-product-form">
+                    <div class="form-group">
+                        <label for="product">Product:</label>
+                        <select id="product" name="product" class="form-control">
+                            <option value="">Select a Product</option>
+                            <!-- Product options dynamically populated here -->
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="quantity">Quantity:</label>
+                        <input type="number" id="quantity" name="quantity" class="form-control" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label for="unit_price">Unit Price:</label>
+                        <input type="number" id="unit_price" name="unit_price" class="form-control" min="0.01" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="reduction_rate">Reduction Rate (%)</label>
+                        <input type="number" id="reduction_rate" name="reduction_rate" class="form-control" min="0" max="100" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label for="vat_rate">VAT Rate (%):</label>
+                        <select id="vat_rate" name="vat_rate" class="form-control">
+                            <option value="0.00">0%</option>
+                            <option value="7.00">7%</option>
+                            <option value="10.00">10%</option>
+                            <option value="14.00">14%</option>
+                            <option value="20.00">20%</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" id="save-product-button" class="btn btn-primary">Save Product</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        const productFormsDiv = document.getElementById('product-forms');
-        const addProductButton = document.getElementById('add-product');
-        let totalFormsInput = document.querySelector('#id_products-TOTAL_FORMS');
-        let formIndex = parseInt(totalFormsInput.value);  // Start with the current total number of forms
+    document.addEventListener('DOMContentLoaded', function () {
+        // Function to load products into dropdown
+        function loadProducts(selectedProductId = null) {
+            $.ajax({
+                url: "{% url 'product-autocomplete' %}",
+                method: "GET",
+                success: function (data) {
+                    const productSelect = document.getElementById('product');
+                    productSelect.innerHTML = '<option value="">Select a Product</option>';
 
-        // Add product form when clicking 'Add Product'
-        addProductButton.addEventListener('click', function() {
-            // Clone the last form and clear its values
-            const newForm = productFormsDiv.querySelector('.product-form').cloneNode(true);
-            newForm.querySelectorAll('input').forEach(input => input.value = '');
+                    // Populate dropdown with products
+                    data.forEach(function (product) {
+                        const option = document.createElement('option');
+                        option.value = product.value;
+                        option.text = product.label;
+                        productSelect.appendChild(option);
+                    });
 
-            // Update the form index for each input name and id
-            newForm.innerHTML = newForm.innerHTML.replace(/products-(\d+)-/g, `products-${formIndex}-`);
-            formIndex++;
-            totalFormsInput.value = formIndex;  // Update TOTAL_FORMS count
-
-            // Append the new form and add remove button functionality
-            productFormsDiv.appendChild(newForm);
-            newForm.querySelector('.remove-product').addEventListener('click', function() {
-                newForm.remove();
-                updateTotalFormsCount();
+                    // If a product ID is provided, select it
+                    if (selectedProductId) {
+                        $('#product').val(selectedProductId);
+                        $('#product').prop('disabled', true);  // Disable product selection in edit mode
+                    } else {
+                        $('#product').prop('disabled', false);  // Enable product selection in add mode
+                    }
+                },
+                error: function () {
+                    alert("Failed to load products.");
+                }
             });
-        });
-
-        // Remove product form when clicking 'Remove Product'
-        document.querySelectorAll('.remove-product').forEach(button => {
-            button.addEventListener('click', function() {
-                button.parentElement.remove();
-                updateTotalFormsCount();
-            });
-        });
-
-        // Update the TOTAL_FORMS count when a form is removed
-        function updateTotalFormsCount() {
-            formIndex = productFormsDiv.querySelectorAll('.product-form').length;
-            totalFormsInput.value = formIndex;
         }
+
+        // Modal show event handler
+        $('#productModal').on('show.bs.modal', function () {
+            const editingProductId = $('#save-product-button').attr('data-editing');
+            if (!editingProductId) {
+                // Add mode - load all products
+                loadProducts();
+            }
+        });
+
+        // Save button click handler
+        document.getElementById('save-product-button').addEventListener('click', function () {
+            const productId = $('#save-product-button').attr('data-editing');
+            const selectedProductId = $('#product').val();
+            const quantity = $('#quantity').val();
+            const unitPrice = $('#unit_price').val();
+            const reductionRate = $('#reduction_rate').val();
+            const vatRate = $('#vat_rate').val();
+
+            // Validate fields before submission
+            let isValid = true;
+            let errorMessage = "";
+
+            if (!productId && !selectedProductId) {  // Only validate product selection in add mode
+                isValid = false;
+                errorMessage += "Please select a product.\n";
+            }
+            if (quantity <= 0) {
+                isValid = false;
+                errorMessage += "Quantity must be a positive number.\n";
+            }
+            if (unitPrice <= 0) {
+                isValid = false;
+                errorMessage += "Unit Price must be a positive value.\n";
+            }
+            if (reductionRate < 0 || reductionRate > 100) {
+                isValid = false;
+                errorMessage += "Reduction Rate must be between 0 and 100.\n";
+            }
+
+            if (!isValid) {
+                alert(errorMessage);
+                return;
+            }
+
+            // Prepare AJAX request based on mode
+            const requestData = {
+                quantity: quantity,
+                unit_price: unitPrice,
+                reduction_rate: reductionRate,
+                vat_rate: vatRate,
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            };
+
+            if (!productId) {
+                // Add mode - include additional fields
+                requestData.invoice_id = '{{ view.object.pk }}';
+                requestData.product = selectedProductId;
+            }
+
+            // Make AJAX request
+            $.ajax({
+                url: productId ? 
+                    `/testapp/invoices/edit-product/${productId}/` : 
+                    "{% url 'add-product-to-invoice' %}",
+                method: "POST",
+                data: requestData,
+                success: function (response) {
+                    location.reload();
+                },
+                error: function (error) {
+                    alert("Failed to save product. Please try again.");
+                    console.error(error);
+                }
+            });
+        });
+
+        // Edit button click handler
+        document.querySelectorAll('.edit-product').forEach(function (editButton) {
+            editButton.addEventListener('click', function () {
+                const productId = editButton.getAttribute('data-product-id');
+
+                // Load product data into the modal for editing
+                $.ajax({
+                    url: `/testapp/invoices/edit-product/${productId}/`,
+                    method: "GET",
+                    success: function (data) {
+                        // First load all products, then set the selected one
+                        loadProducts(data.product);
+                        
+                        // Populate other fields
+                        $('#productModalLabel').text('Edit Product in Invoice');
+                        $('#quantity').val(data.quantity);
+                        $('#unit_price').val(data.unit_price);
+                        $('#reduction_rate').val(data.reduction_rate);
+                        $('#vat_rate').val(data.vat_rate.toFixed(2));
+
+                        // Set editing mode
+                        $('#save-product-button').attr('data-editing', productId);
+                        $('#productModal').modal('show');
+                    },
+                    error: function (error) {
+                        alert("Failed to load product data for editing.");
+                    }
+                });
+            });
+        });
+
+        // Delete button click handler
+        document.querySelectorAll('.delete-product').forEach(function (deleteButton) {
+            deleteButton.addEventListener('click', function () {
+                const productId = deleteButton.getAttribute('data-product-id');
+
+                if (confirm("Are you sure you want to delete this product?")) {
+                    $.ajax({
+                        url: `/testapp/invoices/edit-product/${productId}/`,
+                        method: "DELETE",
+                        headers: {
+                            'X-CSRFToken': '{{ csrf_token }}'
+                        },
+                        success: function (response) {
+                            deleteButton.closest('tr').remove();
+                        },
+                        error: function (error) {
+                            alert("Failed to delete product. Please try again.");
+                        }
+                    });
+                }
+            });
+        });
+
+        // Modal close handler
+        $('#productModal').on('hidden.bs.modal', function () {
+            $('#add-product-form')[0].reset();
+            $('#save-product-button').removeAttr('data-editing');
+            $('#productModalLabel').text('Add Product to Invoice');
+            $('#product').prop('disabled', false);  // Re-enable product selection
+        });
     });
 </script>
 {% endblock %}
