@@ -18,6 +18,8 @@ class AddProductToInvoiceView(View):
         quantity = request.POST.get('quantity')
         unit_price = request.POST.get('unit_price')
         vat_rate = request.POST.get('vat_rate')
+        reduction_rate = request.POST.get('reduction_rate', 0)  # Add default value
+        expense_code = request.POST.get('expense_code')
 
         try:
             # Fetch the invoice and product
@@ -30,7 +32,8 @@ class AddProductToInvoiceView(View):
                 product=product,
                 quantity=quantity,
                 unit_price=unit_price,
-                vat_rate=vat_rate
+                vat_rate=vat_rate,
+                reduction_rate=reduction_rate
             )
 
             # Success response
@@ -172,6 +175,8 @@ class EditProductInInvoiceView(View):
                 'unit_price': float(invoice_product.unit_price),
                 'vat_rate': float(invoice_product.vat_rate),
                 'reduction_rate': float(invoice_product.reduction_rate),
+                'expense_code': invoice_product.product.expense_code,
+                'fiscal_label': invoice_product.product.fiscal_label 
             }
             return JsonResponse(product_data, status=200)
         except Exception as e:

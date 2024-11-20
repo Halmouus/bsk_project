@@ -1,7 +1,7 @@
 from django.urls import path
 from . import views
 from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
-from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView
+from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView  # Import the EditProductInInvoiceView
@@ -21,6 +21,8 @@ urlpatterns = [
     path('products/create/', ProductCreateView.as_view(), name='product-create'),  # Create a new product
     path('products/<uuid:pk>/update/', ProductUpdateView.as_view(), name='product-update'),  # Update a product
     path('products/<uuid:pk>/delete/', ProductDeleteView.as_view(), name='product-delete'),  # Delete a product
+    path('products/<uuid:pk>/details/', ProductDetailsView.as_view(), name='product-details'),  # Details for a specific product
+    path('products/ajax-create/', ProductAjaxCreateView.as_view(), name='product-ajax-create'),  # AJAX view for creating a new Product
 
     # Invoice CRUD operations
     path('invoices/', InvoiceListView.as_view(), name='invoice-list'),  # List all invoices

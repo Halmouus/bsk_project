@@ -1,4 +1,6 @@
 {% extends 'base.html' %}
+{% load humanize %}
+{% load accounting_filters %}
 
 {% block title %}Invoice Form{% endblock %}
 
@@ -22,6 +24,8 @@
         <thead class="thead-dark">
             <tr>
                 <th>Product</th>
+                <th>Fiscal Label</th>
+                <th>Expense Code</th>
                 <th>Quantity</th>
                 <th>Unit Price</th>
                 <th>Reduction Rate (%)</th>
@@ -34,11 +38,13 @@
             {% for product in view.object.products.all %}
             <tr data-product-id="{{ product.pk }}">
                 <td>{{ product.product.name }}</td>
+                <td>{{ product.product.fiscal_label }}</td>
+                <td>{{ product.product.expense_code }}</td> 
                 <td>{{ product.quantity }}</td>
-                <td>{{ product.unit_price }}</td>
+                <td>{{ product.unit_price|space_thousands }}</td>
                 <td>{{ product.reduction_rate }}</td>
                 <td>{{ product.vat_rate }}</td>
-                <td>{{ product.subtotal|floatformat:2 }}</td>
+                <td>{{ product.subtotal|space_thousands }}</td>
                 <td>
                     <button class="btn btn-warning btn-sm edit-product" data-product-id="{{ product.pk }}">Edit</button>
                     <button class="btn btn-danger btn-sm delete-product" data-product-id="{{ product.pk }}">Delete</button>
@@ -48,16 +54,70 @@
         </tbody>
         <tfoot>
             <tr>
-                <th colspan="5" class="text-right">Raw Total:</th>
-                <th id="raw-total">{{ view.object.raw_amount|floatformat:2 }}</th>
+                <th colspan="7" class="text-right">Raw Total:</th>
+                <th id="raw-total">{{ view.object.raw_amount|space_thousands }}</th>
             </tr>
             <tr>
-                <th colspan="5" class="text-right">Total Tax Amount:</th>
-                <th id="tax-total">{{ view.object.total_tax_amount|floatformat:2 }}</th>
+                <th colspan="7" class="text-right">Total Tax Amount:</th>
+                <th id="tax-total">{{ view.object.total_tax_amount|space_thousands }}</th>
             </tr>
             <tr>
-                <th colspan="5" class="text-right text-primary">Total Amount (Including Tax):</th>
-                <th id="total-amount">{{ view.object.total_amount|floatformat:2 }}</th>
+                <th colspan="7" class="text-right text-primary">Total Amount (Including Tax):</th>
+                <th id="total-amount">{{ view.object.total_amount|space_thousands }}</th>
+            </tr>
+        </tfoot>
+    </table>
+    <!-- Accounting Summary -->
+    <h3 class="mt-4">Accounting Summary</h3>
+    <table class="table table-hover table-bordered mt-2 accounting-table">
+        <thead class="thead-dark">
+            <tr>
+                <th class="align-middle">Date</th>
+                <th class="align-middle label-column">Label</th>
+                <th class="text-right align-middle">Debit</th>
+                <th class="text-right align-middle">Credit</th>
+                <th class="align-middle">Account Code</th>
+                <th class="align-middle">Reference</th>
+                <th class="align-middle">Journal</th>
+                <th class="align-middle">Counterpart</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for entry in view.object.get_accounting_entries %}
+            <tr class="{% if entry.credit %}total-row font-weight-bold{% elif 'VAT' in entry.label %}vat-row{% endif %}">
+                <td>{{ entry.date|date:"Y-m-d" }}</td>
+                <td>{{ entry.label }}</td>
+                <td class="text-right">
+                    {% if entry.debit %}
+                        {{ entry.debit|space_thousands }}
+                    {% endif %}
+                </td>
+                <td class="text-right">
+                    {% if entry.credit %}
+                        {{ entry.credit|space_thousands }}
+                    {% endif %}
+                </td>
+                <td>{{ entry.account_code }}</td>
+                <td>{{ entry.reference }}</td>
+                <td class="text-center">{{ entry.journal }}</td>
+                <td>{{ entry.counterpart }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+        <tfoot class="bg-light">
+            <tr class="font-weight-bold">
+                <td colspan="2" class="text-right">Totals:</td>
+                <td class="text-right">
+                    {% with entries=view.object.get_accounting_entries %}
+                        {{ entries|sum_debit|space_thousands }}
+                    {% endwith %}
+                </td>
+                <td class="text-right">
+                    {% with entries=view.object.get_accounting_entries %}
+                        {{ entries|sum_credit|space_thousands }}
+                    {% endwith %}
+                </td>
+                <td colspan="4"></td>
             </tr>
         </tfoot>
     </table>
@@ -82,9 +142,22 @@
                     <div class="form-group">
                         <label for="product">Product:</label>
                         <select id="product" name="product" class="form-control">
-                            <option value="">Select a Product</option>
+                            <option value="">Select a Product or Enter New</option>
                             <!-- Product options dynamically populated here -->
                         </select>
+                        <!-- New product fields (initially hidden) -->
+                        <div id="new-product-fields" style="display: none;">
+                            <input type="text" id="new-product-name" class="form-control mt-2" placeholder="New Product Name">
+                            <input type="text" id="fiscal-label" class="form-control mt-2" placeholder="Fiscal Label">
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="is-energy">
+                                <label class="custom-control-label" for="is-energy">Is Energy Product</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="expense_code">Expense Code:</label>
+                        <input type="text" id="expense_code" name="expense_code" class="form-control" pattern="[0-9]{5,}" title="Expense code must be numeric and at least 5 characters long">
                     </div>
                     <div class="form-group">
                         <label for="quantity">Quantity:</label>
@@ -120,36 +193,68 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        // Function to load products into dropdown
-        function loadProducts(selectedProductId = null) {
+        const productSelect = document.getElementById('product');
+        productSelect.addEventListener('change', function() {
+            const newProductFields = document.getElementById('new-product-fields');
+            if (this.value === 'new') {
+                newProductFields.style.display = 'block';
+                // Clear and enable expense code field for new entry
+                $('#expense_code').val('').prop('disabled', false);
+            } else {
+                newProductFields.style.display = 'none';
+                // If existing product selected, load its expense code
+                if (this.value) {
+                    loadProductDetails(this.value);
+                }
+            }
+        });
+
+        // Add this function to load product details
+        function loadProductDetails(productId) {
             $.ajax({
-                url: "{% url 'product-autocomplete' %}",
-                method: "GET",
-                success: function (data) {
-                    const productSelect = document.getElementById('product');
-                    productSelect.innerHTML = '<option value="">Select a Product</option>';
-
-                    // Populate dropdown with products
-                    data.forEach(function (product) {
-                        const option = document.createElement('option');
-                        option.value = product.value;
-                        option.text = product.label;
-                        productSelect.appendChild(option);
-                    });
-
-                    // If a product ID is provided, select it
-                    if (selectedProductId) {
-                        $('#product').val(selectedProductId);
-                        $('#product').prop('disabled', true);  // Disable product selection in edit mode
-                    } else {
-                        $('#product').prop('disabled', false);  // Enable product selection in add mode
-                    }
+                url: `/testapp/products/${productId}/details/`,  // You'll need to create this endpoint
+                method: 'GET',
+                success: function(data) {
+                    $('#expense_code').val(data.expense_code).prop('disabled', true);
+                    $('#vat_rate').val(data.vat_rate);
                 },
-                error: function () {
-                    alert("Failed to load products.");
+                error: function() {
+                    alert("Failed to load product details.");
                 }
             });
-        }
+}
+        // Function to load products into dropdown
+        function loadProducts(selectedProductId = null) {
+        $.ajax({
+            url: "{% url 'product-autocomplete' %}",
+            method: "GET",
+            success: function (data) {
+                const productSelect = document.getElementById('product');
+                productSelect.innerHTML = '<option value="">Select a Product</option>';
+                productSelect.innerHTML += '<option value="new">+ Create New Product</option>';
+
+                // Populate dropdown with products
+                data.forEach(function (product) {
+                    const option = document.createElement('option');
+                    option.value = product.value;
+                    option.text = product.label;
+                    productSelect.appendChild(option);
+                });
+
+                // If a product ID is provided, select it
+                if (selectedProductId) {
+                    $('#product').val(selectedProductId);
+                    $('#product').prop('disabled', true);
+                    $('#new-product-fields').hide();
+                } else {
+                    $('#product').prop('disabled', false);
+                }
+            },
+            error: function () {
+                alert("Failed to load products.");
+            }
+        });
+    }
 
         // Modal show event handler
         $('#productModal').on('show.bs.modal', function () {
@@ -168,6 +273,8 @@
             const unitPrice = $('#unit_price').val();
             const reductionRate = $('#reduction_rate').val();
             const vatRate = $('#vat_rate').val();
+            const expenseCode = $('#expense_code').val();
+            const isNewProduct = selectedProductId === 'new';
 
             // Validate fields before submission
             let isValid = true;
@@ -189,42 +296,107 @@
                 isValid = false;
                 errorMessage += "Reduction Rate must be between 0 and 100.\n";
             }
+            if (!/^\d{5,}$/.test(expenseCode)) {
+                isValid = false;
+                errorMessage += "Expense code must be numeric and at least 5 characters long.\n";
+            }
+
+            if (isNewProduct) {
+                if (!$('#new-product-name').val()) {
+                    isValid = false;
+                    errorMessage += "Product name is required.\n";
+                }
+                if (!$('#fiscal-label').val()) {
+                    isValid = false;
+                    errorMessage += "Fiscal label is required.\n";
+                }
+            }
 
             if (!isValid) {
                 alert(errorMessage);
                 return;
             }
 
-            // Prepare AJAX request based on mode
-            const requestData = {
-                quantity: quantity,
-                unit_price: unitPrice,
-                reduction_rate: reductionRate,
-                vat_rate: vatRate,
-                csrfmiddlewaretoken: '{{ csrf_token }}'
-            };
+            // If creating a new product
+            if (isNewProduct && !productId) {
+                // First create the product
+                const productData = {
+                    name: $('#new-product-name').val(),
+                    fiscal_label: $('#fiscal-label').val(),
+                    is_energy: $('#is-energy').is(':checked'),
+                    expense_code: expenseCode,
+                    vat_rate: vatRate,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                };
 
-            if (!productId) {
-                // Add mode - include additional fields
-                requestData.invoice_id = '{{ view.object.pk }}';
-                requestData.product = selectedProductId;
-            }
+                $.ajax({
+                    url: "{% url 'product-ajax-create' %}",
+                    method: "POST",
+                    data: productData,
+                    success: function(response) {
+                        // Now create the invoice product with the new product ID
+                        const requestData = {
+                            quantity: quantity,
+                            unit_price: unitPrice,
+                            reduction_rate: reductionRate,
+                            vat_rate: vatRate,
+                            expense_code: expenseCode,
+                            invoice_id: '{{ view.object.pk }}',
+                            product: response.product_id,
+                            csrfmiddlewaretoken: '{{ csrf_token }}'
+                        };
 
-            // Make AJAX request
-            $.ajax({
-                url: productId ? 
-                    `/testapp/invoices/edit-product/${productId}/` : 
-                    "{% url 'add-product-to-invoice' %}",
-                method: "POST",
-                data: requestData,
-                success: function (response) {
-                    location.reload();
-                },
-                error: function (error) {
-                    alert("Failed to save product. Please try again.");
-                    console.error(error);
+                        $.ajax({
+                            url: "{% url 'add-product-to-invoice' %}",
+                            method: "POST",
+                            data: requestData,
+                            success: function(response) {
+                                location.reload();
+                            },
+                            error: function(error) {
+                                alert("Failed to add product to invoice.");
+                                console.error(error);
+                            }
+                        });
+                    },
+                    error: function(error) {
+                        alert("Failed to create new product.");
+                        console.error(error);
+                    }
+                });
+            } else {
+                // Existing logic for editing or adding existing product
+                const requestData = {
+                    quantity: quantity,
+                    unit_price: unitPrice,
+                    reduction_rate: reductionRate,
+                    vat_rate: vatRate,
+                    expense_code: expenseCode,
+                    csrfmiddlewaretoken: '{{ csrf_token }}'
+                };
+
+                if (!productId) {
+                    // Add mode - include additional fields
+                    requestData.invoice_id = '{{ view.object.pk }}';
+                    requestData.product = selectedProductId;
                 }
-            });
+
+                // Make AJAX request
+                $.ajax({
+                    url: productId ? 
+                        `/testapp/invoices/edit-product/${productId}/` : 
+                        "{% url 'add-product-to-invoice' %}",
+                    method: "POST",
+                    data: requestData,
+                    success: function (response) {
+                        location.reload();
+                    },
+                    error: function (error) {
+                        alert("Failed to save product. Please try again.");
+                        console.error(error);
+                    }
+                });
+            }
         });
 
         // Edit button click handler
@@ -246,6 +418,7 @@
                         $('#unit_price').val(data.unit_price);
                         $('#reduction_rate').val(data.reduction_rate);
                         $('#vat_rate').val(data.vat_rate.toFixed(2));
+                        $('#expense_code').val(data.expense_code);
 
                         // Set editing mode
                         $('#save-product-button').attr('data-editing', productId);

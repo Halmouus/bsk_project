@@ -109,7 +109,70 @@ class Invoice(BaseModel):
         """Calculate the total amount of the invoice including tax."""
         return self.raw_amount + self.total_tax_amount
 
+    def get_accounting_entries(self):
+        entries = []
+        # Group products by expense code
+        expense_groups = {}
+        tax_groups = {}
+        
+        for invoice_product in self.products.all():
+            # Group products by expense code
+            key = invoice_product.product.expense_code
+            if key not in expense_groups:
+                expense_groups[key] = {
+                    'products': [],
+                    'amount': 0,
+                    'is_energy': invoice_product.product.is_energy
+                }
+            expense_groups[key]['products'].append(invoice_product.product.name)
+            expense_groups[key]['amount'] += (invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100))
 
+            # Group taxes by rate
+            tax_key = invoice_product.vat_rate
+            if tax_key not in tax_groups:
+                tax_groups[tax_key] = 0
+            tax_groups[tax_key] += (invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100) * invoice_product.vat_rate / 100)
+
+        # Add expense entries
+        for expense_code, data in expense_groups.items():
+            entries.append({
+                'date': self.date,
+                'label': ', '.join(data['products']),
+                'debit': data['amount'],
+                'credit': None,
+                'account_code': expense_code,
+                'reference': self.ref,
+                'journal': '10' if data['is_energy'] else '01',
+                'counterpart': ''
+            })
+
+        # Add tax entries
+        for rate, amount in tax_groups.items():
+            if rate > 0:  # Only create tax entries for non-zero VAT rates
+                entries.append({
+                    'date': self.date,
+                    'label': f'VAT {int(rate)}%',
+                    'debit': amount,
+                    'credit': None,
+                    'account_code': f'345{int(rate):02d}',
+                    'reference': self.ref,
+                    'journal': '10' if self.supplier.is_energy else '01',
+                    'counterpart': ''
+                })
+
+        # Add final credit entry
+        entries.append({
+            'date': self.date,
+            'label': self.supplier.name,
+            'debit': None,
+            'credit': self.total_amount,
+            'account_code': self.supplier.accounting_code,
+            'reference': self.ref,
+            'journal': '10' if self.supplier.is_energy else '01',
+            'counterpart': ''
+        })
+
+        return entries
 
     def __str__(self):
         return f'Invoice {self.ref} from {self.supplier.name}'
