@@ -30,7 +30,7 @@ class Supplier(BaseModel):
     numeric_validator = RegexValidator(r'^[0-9]*$', 'Only numeric characters are allowed.')
     alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', 'Only alphanumeric characters are allowed.')
 
-    name = models.CharField(max_length=100, validators=[alphanumeric_validator])
+    name = models.CharField(max_length=100, unique=True, validators=[alphanumeric_validator])
     if_code = models.CharField(max_length=20, unique=True, validators=[numeric_validator])
     ice_code = models.CharField(max_length=15, unique=True, validators=[numeric_validator])  # Exactly 15 characters
     rc_code = models.CharField(max_length=20, validators=[numeric_validator])
@@ -50,6 +50,11 @@ class Supplier(BaseModel):
         # Ensure ICE code has exactly 15 characters
         if len(self.ice_code) != 15:
             raise ValidationError("ICE code must contain exactly 15 characters.")
+    
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['name', 'rc_code'], name='unique_supplier_name_rc_code')
+        ]
 
     def __str__(self):
         return self.name
@@ -62,27 +67,58 @@ class Product(BaseModel):
     expense_code = models.CharField(max_length=20, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
     is_energy = models.BooleanField(default=False)
     fiscal_label = models.CharField(max_length=255, blank=False)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['name', 'expense_code'], name='unique_product_name_expense_code')
+        ]
     def __str__(self):
         return self.name
 
 class Invoice(BaseModel):
     ref = models.CharField(max_length=50, unique=True)
     date = models.DateField()
-    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE)
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT)
     status = models.CharField(
         max_length=20, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
     )
     payment_due_date = models.DateField(null=True, blank=True)
+    exported_at = models.DateTimeField(null=True, blank=True)
+    export_history = models.ManyToManyField('ExportRecord', blank=True, related_name='invoices')
 
     def save(self, *args, **kwargs):
         if not self.payment_due_date:
             self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
         super().save(*args, **kwargs)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['supplier', 'ref'], name='unique_supplier_invoice_ref')
+        ]
+        permissions = [
+        ("can_export_invoice", "Can export invoice"),
+        ("can_unexport_invoice", "Can unexport invoice"),
+        ]
+
     @property
     def fiscal_label(self):
         """Generate a combined fiscal label from all related products."""
-        return " - ".join([item.product.fiscal_label for item in self.products.all()])
+        products = [(item.product.fiscal_label, item.quantity * item.unit_price) 
+                    for item in self.products.all()]
+        unique_labels = []
+        seen = set()
+        
+        # Sort by value and get unique labels
+        for label, _ in sorted(products, key=lambda x: x[1], reverse=True):
+            if label not in seen:
+                unique_labels.append(label)
+                seen.add(label)
+        
+        top_labels = unique_labels[:3]
+        if len(unique_labels) > 3:
+            top_labels.append('...')
+        
+        return " - ".join(top_labels)
     
     @property
     def raw_amount(self):
@@ -111,7 +147,6 @@ class Invoice(BaseModel):
 
     def get_accounting_entries(self):
         entries = []
-        # Group products by expense code
         expense_groups = {}
         tax_groups = {}
         
@@ -120,24 +155,39 @@ class Invoice(BaseModel):
             key = invoice_product.product.expense_code
             if key not in expense_groups:
                 expense_groups[key] = {
-                    'products': [],
+                    'products': {},  # Changed to dict to track values
                     'amount': 0,
                     'is_energy': invoice_product.product.is_energy
                 }
-            expense_groups[key]['products'].append(invoice_product.product.name)
-            expense_groups[key]['amount'] += (invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100))
+            # Track product value
+            product_value = invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100)
+            expense_groups[key]['products'][invoice_product.product.name] = product_value
+            expense_groups[key]['amount'] += product_value
 
-            # Group taxes by rate
+            # Group taxes by rate (unchanged)
             tax_key = invoice_product.vat_rate
             if tax_key not in tax_groups:
                 tax_groups[tax_key] = 0
-            tax_groups[tax_key] += (invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100) * invoice_product.vat_rate / 100)
+            tax_groups[tax_key] += (product_value * invoice_product.vat_rate / 100)
 
-        # Add expense entries
+        # Add expense entries with top 3 products by value
         for expense_code, data in expense_groups.items():
+            # Sort products by value and get unique names
+            sorted_products = sorted(data['products'].items(), key=lambda x: x[1], reverse=True)
+            unique_products = []
+            seen = set()
+            for name, _ in sorted_products:
+                if name not in seen:
+                    unique_products.append(name)
+                    seen.add(name)
+            
+            product_names = unique_products[:3]
+            if len(sorted_products) > 3:
+                product_names.append('...')
+
             entries.append({
                 'date': self.date,
-                'label': ', '.join(data['products']),
+                'label': ', '.join(product_names),
                 'debit': data['amount'],
                 'credit': None,
                 'account_code': expense_code,
@@ -146,9 +196,9 @@ class Invoice(BaseModel):
                 'counterpart': ''
             })
 
-        # Add tax entries
+        # Rest of the method remains unchanged
         for rate, amount in tax_groups.items():
-            if rate > 0:  # Only create tax entries for non-zero VAT rates
+            if rate > 0:
                 entries.append({
                     'date': self.date,
                     'label': f'VAT {int(rate)}%',
@@ -160,7 +210,6 @@ class Invoice(BaseModel):
                     'counterpart': ''
                 })
 
-        # Add final credit entry
         entries.append({
             'date': self.date,
             'label': self.supplier.name,
@@ -179,7 +228,7 @@ class Invoice(BaseModel):
 
 class InvoiceProduct(BaseModel):
     invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name='products')
-    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
     unit_price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     reduction_rate = models.DecimalField(
@@ -206,3 +255,12 @@ class InvoiceProduct(BaseModel):
 
     def __str__(self):
         return f'{self.product.name} on Invoice {self.invoice.ref}'
+    
+class ExportRecord(BaseModel):
+    exported_at = models.DateTimeField(auto_now_add=True)
+    filename = models.CharField(max_length=255)
+    exported_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    note = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"Export {self.filename} at {self.exported_at}"

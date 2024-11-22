@@ -6,9 +6,11 @@
 {% block content %}
 <h1>Invoice List</h1>
 <a href="{% url 'invoice-create' %}" class="btn btn-primary">Add New Invoice</a>
+
 <table class="table mt-4">
     <thead>
         <tr>
+            <th>Export</th>
             <th>Date</th>
             <th>Reference</th>
             <th>Supplier</th>
@@ -23,7 +25,24 @@
     </thead>
     <tbody>
         {% for invoice in invoices %}
-            <tr>
+            <tr {% if invoice.exported_at %}class="table-light"{% endif %}>
+                <td>
+                    {% if invoice.exported_at %}
+                        <span class="text-muted">
+                            Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                            <button type="button" 
+                                    class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                    data-invoice-id="{{ invoice.id }}">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                        </span>
+                    {% else %}
+                        <input type="checkbox" 
+                            name="invoice_ids" 
+                            value="{{ invoice.id }}" 
+                            class="export-checkbox">
+                    {% endif %}
+                </td>
                 <td>{{ invoice.date }}</td>
                 <td>{{ invoice.ref }}</td>
                 <td>{{ invoice.supplier.name }}</td>
@@ -59,6 +78,16 @@
         {% endfor %}
     </tbody>
 </table>
+
+<!-- Export Button -->
+<div class="d-flex justify-content-end mt-3">
+    <button type="button" 
+            id="export-selected" 
+            class="btn btn-primary" 
+            disabled>
+        Export Selected
+    </button>
+</div>
 
 <!-- Modal Template -->
 <div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
@@ -96,9 +125,80 @@
     </div>
 </div>
 
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
+
 <!-- JavaScript to populate modal -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        // Export functionality
+        const checkboxes = document.querySelectorAll('.export-checkbox');
+        const exportButton = document.getElementById('export-selected');
+
+        checkboxes.forEach(function(checkbox) {
+            checkbox.addEventListener('click', function() {
+                const checkedBoxes = document.querySelectorAll('.export-checkbox:checked');
+                exportButton.disabled = checkedBoxes.length === 0;
+                console.log('Checked boxes:', checkedBoxes.length);
+            });
+        });
+
+        exportButton.addEventListener('click', function() {
+            const selectedIds = [...checkboxes]
+                .filter(cb => cb.checked)
+                .map(cb => cb.value);
+
+            if (selectedIds.length === 0) return;
+
+            fetch('{% url "export-invoices" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({invoice_ids: selectedIds})
+            })
+            .then(response => {
+                if (response.ok) return response.blob();
+                throw new Error('Export failed');
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `accounting_export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                location.reload();
+            })
+            .catch(error => {
+                alert('Failed to export invoices: ' + error.message);
+            });
+        });
+
+        // Unexport functionality
+        const unexportButtons = document.querySelectorAll('.unexport-btn');
+        unexportButtons.forEach(button => {
+            button.addEventListener('click', function() {
+                const invoiceId = this.dataset.invoiceId;
+                if (!confirm('Are you sure you want to unexport this invoice?')) return;
+
+                fetch(`/testapp/invoices/${invoiceId}/unexport/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                })
+                .then(response => {
+                    if (!response.ok) throw new Error('Unexport failed');
+                    location.reload();
+                })
+                .catch(error => {
+                    alert('Failed to unexport invoice: ' + error.message);
+                });
+            });
+        });
         $('#invoiceDetailsModal').on('show.bs.modal', function (event) {
             const button = $(event.relatedTarget);
             const invoiceId = button.data('invoice');
@@ -123,30 +223,21 @@
                             </tr>
                         `);
                     });
-
+                    
                     // Update the VAT summary, Total Raw Amount, and Total Amount
                     $('#vat-summary').empty();
                     data.vat_subtotals.forEach(vatSubtotal => {
                         $('#vat-summary').append(`<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`);
                     });
-
+                    
                     $('#total-amount-summary').html(`
-                        <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
-                        <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
-                        <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
+                    <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
+                    <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
+                    <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
                     `);
                 }
             });
         });
-    });
-</script>
-
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-<link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
         const productFormsDiv = document.getElementById('product-forms');
         const addProductButton = document.getElementById('add-product');
         let totalFormsInput = document.querySelector('#id_products-TOTAL_FORMS');
@@ -208,6 +299,7 @@
 
         // Initialize autocomplete for existing forms
         document.querySelectorAll('.product-form').forEach(addAutocomplete);
+        
     });
 </script>
 

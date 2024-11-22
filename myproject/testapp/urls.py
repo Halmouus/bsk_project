@@ -4,7 +4,7 @@ from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdate
 from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
-    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView  # Import the EditProductInInvoiceView
+    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView  # Import the EditProductInInvoiceView
 )
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
@@ -29,9 +29,11 @@ urlpatterns = [
     path('invoices/create/', InvoiceCreateView.as_view(), name='invoice-create'),  # Create a new invoice
     path('invoices/<uuid:pk>/update/', InvoiceUpdateView.as_view(), name='invoice-update'),  # Update an invoice
     path('invoices/<uuid:pk>/delete/', InvoiceDeleteView.as_view(), name='invoice-delete'),  # Delete an invoice
-    path('invoices/details/', InvoiceDetailsView.as_view(), name='invoice-details'),  # Details for a specific invoice
     path('products/autocomplete/', product_autocomplete, name='product-autocomplete'),  # Autocomplete for products
+    path('invoices/details/', InvoiceDetailsView.as_view(), name='invoice-details'),  # Details for a specific invoice
     path('invoices/add-product/', AddProductToInvoiceView.as_view(), name='add-product-to-invoice'),  # Add a product to an invoice
     path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
+    path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
+    path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
 
 ]
