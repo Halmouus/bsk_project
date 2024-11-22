@@ -2,6 +2,7 @@
 {% load humanize %}
 {% load accounting_filters %}
 
+
 {% block title %}Invoice Form{% endblock %}
 
 {% block content %}
@@ -141,11 +142,9 @@
                 <form id="add-product-form">
                     <div class="form-group">
                         <label for="product">Product:</label>
-                        <select id="product" name="product" class="form-control">
-                            <option value="">Select a Product or Enter New</option>
-                            <!-- Product options dynamically populated here -->
-                        </select>
-                        <!-- New product fields (initially hidden) -->
+                        <input type="text" id="product" name="product" class="form-control" placeholder="Search for a product...">
+                        <input type="hidden" id="product_id" name="product_id">
+                        
                         <div id="new-product-fields" style="display: none;">
                             <input type="text" id="new-product-name" class="form-control mt-2" placeholder="New Product Name">
                             <input type="text" id="fiscal-label" class="form-control mt-2" placeholder="Fiscal Label">
@@ -179,12 +178,12 @@
                             <option value="10.00">10%</option>
                             <option value="11.00">11%</option>
                             <option value="14.00">14%</option>
-                            <option value="14.00">14%</option>
+                            <option value="16.00">16%</option>
                             <option value="20.00">20%</option>
                         </select>
                     </div>
                 </form>
-            </div>
+             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
                 <button type="button" id="save-product-button" class="btn btn-primary">Save Product</button>
@@ -193,23 +192,64 @@
     </div>
 </div>
 
+<style>
+    .ui-autocomplete {
+        position: absolute;
+        z-index: 2000;
+        background-color: white;
+        border: 1px solid #ccc;
+        max-height: 200px;
+        overflow-y: auto;
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+    
+    .ui-menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+    
+    .ui-menu-item:hover {
+        background-color: #f8f9fa;
+    }
+</style>
+
 <script>
     document.addEventListener('DOMContentLoaded', function () {
-        const productSelect = document.getElementById('product');
-        productSelect.addEventListener('change', function() {
-            const newProductFields = document.getElementById('new-product-fields');
-            if (this.value === 'new') {
-                newProductFields.style.display = 'block';
-                // Clear and enable expense code field for new entry
-                $('#expense_code').val('').prop('disabled', false);
-            } else {
-                newProductFields.style.display = 'none';
-                // If existing product selected, load its expense code
-                if (this.value) {
-                    loadProductDetails(this.value);
+        $(document).ready(function() {
+            $("#product").autocomplete({
+            minLength: 2,
+            source: function(request, response) {
+                $.ajax({
+                    url: "{% url 'product-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        response(data);
+                    }
+                });
+            },
+
+            select: function(event, ui) {
+                $("#product").val(ui.item.label.split(' (')[0]);
+                $("#product_id").val(ui.item.value);
+                
+                if (ui.item.value === 'new') {
+                    $('#new-product-fields').show();
+                    $('#expense_code').val('').prop('disabled', false);
+                } else {
+                    $('#new-product-fields').hide();
+                    loadProductDetails(ui.item.value);
                 }
+                return false;
             }
         });
+        
+        // Test if element exists
+        console.log("Product input element:", $("#product").length);
+    });
+
 
         // Add this function to load product details
         function loadProductDetails(productId) {
@@ -270,7 +310,7 @@
         // Save button click handler
         document.getElementById('save-product-button').addEventListener('click', function () {
             const productId = $('#save-product-button').attr('data-editing');
-            const selectedProductId = $('#product').val();
+            const selectedProductId = $('#product_id').val();
             const quantity = $('#quantity').val();
             const unitPrice = $('#unit_price').val();
             const reductionRate = $('#reduction_rate').val();
@@ -344,7 +384,7 @@
                             vat_rate: vatRate,
                             expense_code: expenseCode,
                             invoice_id: '{{ view.object.pk }}',
-                            product: response.product_id,
+                            product: selectedProductId,
                             csrfmiddlewaretoken: '{{ csrf_token }}'
                         };
 
@@ -415,6 +455,8 @@
                         loadProducts(data.product);
                         
                         // Populate other fields
+                        $('#product').val(data.product_name); // Add product_name to your EditProductInInvoiceView response
+                        $('#product_id').val(data.product);
                         $('#productModalLabel').text('Edit Product in Invoice');
                         $('#quantity').val(data.quantity);
                         $('#unit_price').val(data.unit_price);
@@ -462,6 +504,8 @@
             $('#save-product-button').removeAttr('data-editing');
             $('#productModalLabel').text('Add Product to Invoice');
             $('#product').prop('disabled', false);  // Re-enable product selection
+            $('#new-product-fields').hide(); // Hide new product fields
+            $('#expense_code').prop('disabled', false); // Reset expense code field
         });
     });
 </script>

@@ -14,6 +14,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import json
 from django.contrib.auth.mixins import UserPassesTestMixin
+from django.db.models import Q
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AddProductToInvoiceView(View):
@@ -123,6 +124,7 @@ class InvoiceDetailsView(View):
             product_data = [
                 {
                     'name': product.product.name,
+                    'product_name': invoiceproduct.product.name, 
                     'unit_price': f"{product.unit_price:,.2f}",
                     'quantity': product.quantity,
                     'vat_rate': f"{product.vat_rate}%",  # Add VAT Rate
@@ -160,8 +162,22 @@ class InvoiceDetailsView(View):
 # Product Autocomplete View
 def product_autocomplete(request):
     query = request.GET.get('term', '')
-    products = Product.objects.filter(name__icontains=query)[:10]  # Limit to 10 suggestions
-    product_list = [{"label": product.name, "value": product.id} for product in products]
+    products = Product.objects.filter(
+        Q(name__icontains=query) | 
+        Q(fiscal_label__icontains=query)
+    )[:10]
+    
+    product_list = [{
+        "label": f"{product.name} ({product.fiscal_label})",
+        "value": product.id
+    } for product in products]
+    
+    if not products:
+        product_list.append({
+            "label": f"Create new product: {query}",
+            "value": "new"
+        })
+        
     return JsonResponse(product_list, safe=False)
 
 @method_decorator(csrf_exempt, name='dispatch')
