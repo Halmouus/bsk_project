@@ -14,6 +14,7 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
 from django.contrib import messages
 from django.utils import timezone
+from dateutil.parser import parse
 
 
 class CheckerListView(ListView):
@@ -153,9 +154,7 @@ class CheckListView(ListView):
 
     def get_queryset(self):
         return Check.objects.select_related('checker', 'beneficiary', 'cause')
-        for checker in checkers:
-            checker.remaining_pages = checker.final_page - checker.current_position + 1
-        return checkers
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckStatusView(View):
@@ -194,3 +193,63 @@ def supplier_autocomplete(request):
     } for supplier in suppliers]
     
     return JsonResponse(supplier_list, safe=False)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CheckUpdateView(View):
+    def get(self, request, pk):
+        try:
+            check = get_object_or_404(Check, pk=pk)
+            return JsonResponse({
+                'id': str(check.id),
+                'status': check.status,
+                'delivered_at': check.delivered_at.strftime('%Y-%m-%dT%H:%M') if check.delivered_at else None,
+                'paid_at': check.paid_at.strftime('%Y-%m-%dT%H:%M') if check.paid_at else None,
+                'cancelled_at': check.cancelled_at.strftime('%Y-%m-%dT%H:%M') if check.cancelled_at else None,
+                'cancellation_reason': check.cancellation_reason
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+    def post(self, request, pk):
+        try:
+            data = json.loads(request.body)
+            check = get_object_or_404(Check, pk=pk)
+            
+            if 'delivered_at' in data:
+                check.delivered_at = parse(data['delivered_at']) if data['delivered_at'] else None
+                check.delivered = bool(check.delivered_at)
+                if check.delivered_at:
+                    check.status = 'delivered'
+            
+            if 'paid_at' in data:
+                if data['paid_at'] and not check.delivered_at:
+                    return JsonResponse({'error': 'Check must be delivered before being marked as paid'}, status=400)
+                check.paid_at = parse(data['paid_at']) if data['paid_at'] else None
+                check.paid = bool(check.paid_at)
+                if check.paid_at:
+                    check.status = 'paid'
+            
+            check.save()
+            return JsonResponse({'message': 'Check updated successfully'})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+        
+
+@method_decorator(csrf_exempt, name='dispatch')
+class CheckCancelView(View):
+    def post(self, request, pk):
+        try:
+            data = json.loads(request.body)
+            check = get_object_or_404(Check, pk=pk)
+            
+            if check.paid_at:
+                return JsonResponse({'error': 'Cannot cancel a paid check'}, status=400)
+                
+            check.cancelled_at = timezone.now()
+            check.cancellation_reason = data.get('reason')
+            check.status = 'cancelled'
+            check.save()
+            
+            return JsonResponse({'message': 'Check cancelled successfully'})
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)

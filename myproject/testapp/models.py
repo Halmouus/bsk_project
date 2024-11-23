@@ -319,6 +319,13 @@ class Checker(BaseModel):
     final_page = models.IntegerField(blank=True)
     current_position = models.IntegerField(blank=True)
 
+    @property
+    def remaining_pages(self):
+        print(f"Calculating remaining pages for {self.bank}")
+        print(f"final_page: {self.final_page}")
+        print(f"current_position: {self.current_position}")
+        return self.final_page - self.current_position + 1
+
     def save(self, *args, **kwargs):
         if not self.code:
             self.code = self.generate_code()
@@ -326,15 +333,13 @@ class Checker(BaseModel):
             self.final_page = self.starting_page + self.num_pages - 1
         if not self.current_position:
             self.current_position = self.starting_page
+        print(f"Saving checker for {self.bank}")
+        print(f"current_position: {self.current_position}")
         super().save(*args, **kwargs)
 
     def generate_code(self):
         # Generate random alphanumeric code
         return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    
-    @property
-    def remaining_pages(self):
-        return self.final_page - self.current_position + 1
 
     def __str__(self):
         return f'Checker {self.index}'
@@ -358,8 +363,23 @@ class Check(BaseModel):
     observation = models.TextField(blank=True)
     delivered = models.BooleanField(default=False)
     paid = models.BooleanField(default=False)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancellation_reason = models.TextField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('delivered', 'Delivered'),
+            ('paid', 'Paid'),
+            ('cancelled', 'Cancelled')
+        ],
+        default='pending'
+    )
     
     def save(self, *args, **kwargs):
+        print(f"New creation at:  {self.checker.current_position}")
         if not self.position:
             self.position = f"{self.checker.index}{self.checker.current_position}"
         if not self.amount_due:
@@ -368,8 +388,14 @@ class Check(BaseModel):
         
         # Update checker's current position
         if self.checker.current_position == int(self.position[3:]):
+            print(f"Previous position {self.checker.current_position}")
             self.checker.current_position += 1
+            print(f"Current position {self.checker.current_position}")
             self.checker.save()
+
+    def clean(self):
+        if self.paid_at and not self.delivered_at:
+            raise ValidationError("Check cannot be marked as paid before delivery")
 
     class Meta:
         ordering = ['-creation_date']

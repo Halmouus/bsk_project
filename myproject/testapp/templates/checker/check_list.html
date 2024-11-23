@@ -1,5 +1,7 @@
 {% extends 'base.html' %}
 
+{% load check_tags %}
+
 {% block content %}
 <div class="container mt-4">
     <h2>Checks List</h2>
@@ -24,7 +26,7 @@
         </thead>
         <tbody>
             {% for check in checks %}
-            <tr>
+            <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
                 <td>{{ check.checker.code }}</td>
                 <td>{{ check.checker.get_bank_display }}</td>
                 <td>{{ check.checker.owner }}</td>
@@ -37,7 +39,9 @@
                 <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
                 <td class="text-right">{{ check.amount|floatformat:2 }}</td>
                 <td>
-                    {% if check.paid %}
+                    {% if check.status == 'cancelled' %}
+                        <span class="badge badge-danger">Cancelled</span>
+                    {% elif check.paid %}
                         <span class="badge badge-success">Paid</span>
                     {% elif check.delivered %}
                         <span class="badge badge-warning">Delivered</span>
@@ -47,6 +51,10 @@
                 </td>
                 <td>
                     <div class="btn-group">
+                        <button class="btn btn-primary btn-sm edit-check-btn" 
+                                data-check-id="{{ check.id }}">
+                            Edit
+                        </button>
                         {% if not check.delivered %}
                             <button class="btn btn-warning btn-sm mark-delivered" 
                                     data-check="{{ check.id }}">
@@ -59,8 +67,15 @@
                                 Mark Paid
                             </button>
                         {% endif %}
+                        {% if not check.paid %}
+                            <button class="btn btn-danger btn-sm cancel-check-btn" 
+                                    data-check-id="{{ check.id }}">
+                                Cancel
+                            </button>
+                        {% endif %}
                         <button class="btn btn-info btn-sm">Print</button>
                     </div>
+                </td>
                 </td>
             </tr>
             {% endfor %}
@@ -68,8 +83,76 @@
     </table>
 </div>
 
+<div class="modal fade" id="editCheckModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Check</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-check-form">
+                    <div class="form-group">
+                        <label>Status: <span class="badge" id="check-status-badge"></span></label>
+                    </div>
+                    <div class="form-group">
+                        <label for="delivered_at">Delivered At:</label>
+                        <input type="datetime-local" id="delivered_at" class="form-control">
+                    </div>
+                    <div class="form-group">
+                        <label for="paid_at">Paid At:</label>
+                        <input type="datetime-local" id="paid_at" class="form-control">
+                    </div>
+                    
+                    <!-- Cancel Check Button (only shown if not paid) -->
+                    <div class="form-group" id="cancel-check-section">
+                        <button type="button" class="btn btn-danger" id="cancel-check-btn">
+                            Cancel Check
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="save-check-btn">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Cancellation Modal -->
+<div class="modal fade" id="cancelCheckModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cancel Check</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="cancellation_reason">Reason for Cancellation:</label>
+                    <textarea id="cancellation_reason" class="form-control" placeholder="Reason for cancellation" rows="2" required ></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-danger" id="confirm-cancel-btn">Confirm Cancellation</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 $(document).ready(function() {
+    let currentCheckId;
+
+    // Disable controls for cancelled checks
+    $('tr[data-cancelled="true"]').each(function() {
+        const reason = $(this).data('cancel-reason');
+        $(this).find('button').prop('disabled', true)
+            .attr('title', `Check cancelled: ${reason}`);
+    });
+
     $('.mark-delivered').click(function() {
         const checkId = $(this).data('check');
         if (confirm('Mark this check as delivered?')) {
@@ -106,6 +189,111 @@ $(document).ready(function() {
                 }
             });
         }
+    });
+
+     // Edit Check Modal
+    $('.edit-check-btn').click(function() {
+        const $row = $(this).closest('tr');
+        if ($row.data('cancelled')) {
+            alert(`Check cancelled: ${$row.data('cancel-reason')}`);
+            return;
+        }
+
+        currentCheckId = $(this).data('check-id');
+        console.log("Opening edit modal for check:", currentCheckId);
+        
+        $.ajax({
+            url: `/testapp/checks/${currentCheckId}/`,
+            method: 'GET',
+            success: function(data) {
+                console.log("Received data:", data); // Debug
+                $('#delivered_at').val(data.delivered_at)
+                    .prop('readonly', data.delivered_at != null);
+                $('#paid_at').val(data.paid_at)
+                    .prop('readonly', data.paid_at != null);
+                
+                // Update status badge
+                const badgeClass = {
+                    'pending': 'badge-warning',
+                    'delivered': 'badge-info',
+                    'paid': 'badge-success',
+                    'cancelled': 'badge-danger'
+                }[data.status];
+            
+                
+                $('#check-status-badge')
+                    .text(data.status.toUpperCase())
+                    .removeClass()
+                    .addClass(`badge ${badgeClass}`);
+                
+                // Show/hide cancel section based on status
+                $('#cancel-section').toggle(!data.paid_at);
+                $('#save-check-btn').prop('disabled', data.cancelled_at);
+                
+                $('#editCheckModal').modal('show');
+            },
+            error: function(xhr) {
+                alert("Error loading check details");
+            }
+        });
+    });
+    
+    // Save Check Changes
+    $('#save-check-btn').click(function() {
+        console.log("Saving changes for check:", currentCheckId);   
+
+        $.ajax({
+            url: `/testapp/checks/${currentCheckId}/`,
+            method: 'POST',
+            data: JSON.stringify({
+                delivered_at: $('#delivered_at').val(),
+                paid_at: $('#paid_at').val()
+            }),
+            contentType: 'application/json',
+            success: function() {
+                $('#editCheckModal').modal('hide');
+                location.reload();
+            },
+            error: function(xhr) {
+                alert(xhr.responseJSON.error|| "Error saving changes");
+            }
+        });
+    });
+    
+    // Cancel Check
+    $('#cancel-check-btn').click(function() {
+        $('#editCheckModal').modal('hide');
+        $('#cancelCheckModal').modal('show');
+    });
+    
+    // Confirm Cancellation
+    $('#confirm-cancel-btn').click(function() {
+        const reason = $('#cancellation_reason').val();
+        
+        if (!reason.trim()) {
+            alert('Please provide a reason for cancellation');
+            return;
+        }
+
+        console.log("Cancelling check:", currentCheckId);
+        $.ajax({
+            url: `/testapp/checks/${currentCheckId}/cancel/`,
+            method: 'POST',
+            data: JSON.stringify({ reason: reason }),
+            contentType: 'application/json',
+            success: function() {
+                $('#cancelCheckModal').modal('hide');
+                location.reload();
+            },
+            error: function(xhr) {
+                alert(xhr.responseJSON.error || "Error cancelling check");
+            }
+        });
+    });
+
+    // Reset modals on close
+    $('#editCheckModal, #cancelCheckModal').on('hidden.bs.modal', function() {
+        $('#cancellation_reason').val('');
     });
 });
 </script>

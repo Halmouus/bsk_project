@@ -8,7 +8,7 @@ from .views_invoice import (
 )
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
-    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView
+    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView
 )
 
 urlpatterns = [
@@ -53,5 +53,7 @@ urlpatterns = [
     path('checks/<uuid:pk>/mark-paid/', 
         CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
     path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
+    path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
+    path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
 
 ]
