@@ -139,6 +139,7 @@
                 </button>
             </div>
             <div class="modal-body">
+                <div id="modal-alert" class="alert d-none" role="alert"></div>
                 <form id="add-product-form">
                     <div class="form-group">
                         <label for="product">Product:</label>
@@ -161,6 +162,9 @@
                     <div class="form-group">
                         <label for="quantity">Quantity:</label>
                         <input type="number" id="quantity" name="quantity" class="form-control" min="1">
+                        <div class="invalid-feedback">
+                            Please enter a valid quantity (minimum of 1).
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="unit_price">Unit Price:</label>
@@ -217,6 +221,17 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        $('#productModal').on('hidden.bs.modal', function () {
+        // Reset the form fields
+        $('#add-product-form')[0].reset();
+
+        // Remove validation styles
+        $('#add-product-form .is-invalid').removeClass('is-invalid');
+
+        // Remove error messages
+        $('#add-product-form .invalid-feedback').remove();
+    });
+
         $(document).ready(function() {
             $("#product").autocomplete({
             minLength: 2,
@@ -384,7 +399,7 @@
                             vat_rate: vatRate,
                             expense_code: expenseCode,
                             invoice_id: '{{ view.object.pk }}',
-                            product: selectedProductId,
+                            product: response.product_id,
                             csrfmiddlewaretoken: '{{ csrf_token }}'
                         };
 
@@ -461,8 +476,8 @@
                         $('#quantity').val(data.quantity);
                         $('#unit_price').val(data.unit_price);
                         $('#reduction_rate').val(data.reduction_rate);
-                        $('#vat_rate').val(data.vat_rate.toFixed(2));
-                        $('#expense_code').val(data.expense_code);
+                        $('#vat_rate').val(data.vat_rate.toFixed(2)).prop('disabled', true);
+                        $('#expense_code').val(data.expense_code).prop('disabled', true);
 
                         // Set editing mode
                         $('#save-product-button').attr('data-editing', productId);
@@ -506,6 +521,58 @@
             $('#product').prop('disabled', false);  // Re-enable product selection
             $('#new-product-fields').hide(); // Hide new product fields
             $('#expense_code').prop('disabled', false); // Reset expense code field
+        });
+
+        const form = document.getElementById("add-product-form");
+        const alertBox = document.getElementById("modal-alert");
+
+        document.getElementById("save-product-button").addEventListener("click", () => {
+            // Clear previous alerts
+            alertBox.classList.add("d-none");
+            alertBox.innerHTML = "";
+
+            // Reset validation states
+            const inputs = form.querySelectorAll(".form-control");
+            inputs.forEach((input) => {
+                input.classList.remove("is-invalid");
+            });
+
+            // Validate fields
+            let isValid = true;
+
+            // Example validation: Quantity
+            const quantity = document.getElementById("quantity");
+            if (!quantity.value || quantity.value < 1) {
+                isValid = false;
+                quantity.classList.add("is-invalid");
+                quantity.nextElementSibling.textContent = "Quantity must be at least 1.";
+            }
+
+            // Example validation: Expense Code
+            const expenseCode = document.getElementById("expense_code");
+            if (!quantity.value ||!/^[0-9]{5,}$/.test(expenseCode.value)) {
+                isValid = false;
+                expenseCode.classList.add("is-invalid");
+                expenseCode.nextElementSibling.textContent =
+                    "Expense code must be numeric and at least 5 characters long.";
+            }
+
+            if (isValid) {
+                // Simulate form submission success
+                alertBox.className = "alert alert-success";
+                alertBox.textContent = "Product saved successfully!";
+                alertBox.classList.remove("d-none");
+
+                // Close modal after 2 seconds
+                setTimeout(() => {
+                    $("#productModal").modal("hide");
+                }, 2000);
+            } else {
+                // Show error alert
+                alertBox.className = "alert alert-danger";
+                alertBox.textContent = "Please fix the errors in the form.";
+                alertBox.classList.remove("d-none");
+            }
         });
     });
 </script>

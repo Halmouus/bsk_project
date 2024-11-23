@@ -6,6 +6,11 @@ from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView  # Import the EditProductInInvoiceView
 )
+from .views_checkers import (
+    CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
+    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView
+)
+
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
@@ -35,5 +40,18 @@ urlpatterns = [
     path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
     path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
     path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
+
+    path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
+    path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
+    path('checkers/create/', CheckerCreateView.as_view(), name='checker-create'),
+    path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
+    path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
+    path('checks/create/', CheckCreateView.as_view(), name='check-create'),
+    path('checks/', CheckListView.as_view(), name='check-list'),
+    path('checks/<uuid:pk>/mark-delivered/', 
+        CheckStatusView.as_view(), {'action': 'delivered'}, name='check-mark-delivered'),
+    path('checks/<uuid:pk>/mark-paid/', 
+        CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
+    path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
 
 ]

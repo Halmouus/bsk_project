@@ -1,0 +1,375 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Checkers</h2>
+        <button class="btn btn-primary" data-toggle="modal" data-target="#checkerModal">
+            Add New Checker
+        </button>
+    </div>
+
+    <table class="table table-hover">
+        <thead class="thead-dark">
+            <tr>
+                <th>Code</th>
+                <th>Owner</th>
+                <th>Type</th>
+                <th>Bank</th>
+                <th>Account</th>
+                <th>City</th>
+                <th>Starting Page</th>
+                <th>Final Page</th>
+                <th>Current Position</th>
+                <th>Remaining Pages</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for checker in checkers %}
+            <tr>
+                <td>{{ checker.code }}</td>
+                <td>{{ checker.owner }}</td>
+                <td>{{ checker.get_type_display }}</td>
+                <td>{{ checker.get_bank_display }}</td>
+                <td>{{ checker.account_number }}</td>
+                <td>{{ checker.city }}</td>
+                <td>{{ checker.index }}{{ checker.starting_page }}</td>
+                <td>{{ checker.index }}{{ checker.final_page }}</td>
+                <td>{{ checker.index }}{{ checker.current_position }}</td>
+                <td>{{ checker.remaining_pages }}</td>
+                <td>
+                    <button class="btn btn-primary btn-sm add-payment" data-checker="{{ checker.id }}">
+                        Add Payment
+                    </button>
+                    <button class="btn btn-info btn-sm view-details" data-checker="{{ checker.id }}">
+                        Details
+                    </button>
+                    <button class="btn btn-danger btn-sm delete-checker" data-checker="{{ checker.id }}">
+                        Delete
+                    </button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Checker Modal -->
+<div class="modal fade" id="checkerModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Checker</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="checker-form">
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select class="form-control" name="type" required>
+                            <option value="CHQ">Cheque</option>
+                            <option value="LCN">LCN</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Bank</label>
+                        <select class="form-control" name="bank" required>
+                            {% for code, name in bank_choices %}
+                            <option value="{{ code }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Account Number</label>
+                        <input type="text" class="form-control" name="account_number" 
+                               pattern="^\d+$" required>
+                    </div>
+                    <div class="form-group">
+                        <label>City</label>
+                        <input type="text" class="form-control" name="city" 
+                               pattern="^[A-Za-z\s]+$" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Number of Pages</label>
+                        <select class="form-control" name="num_pages" required>
+                            <option value="25">25</option>
+                            <option value="50">50</option>
+                            <option value="100">100</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Index (3 uppercase letters)</label>
+                        <input type="text" class="form-control" name="index" 
+                               pattern="^[A-Z]{3}$" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Starting Page</label>
+                        <input type="number" class="form-control" name="starting_page" 
+                               min="1" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary" id="save-checker">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1" role="dialog">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Payment</h5>
+                <button type="button" class="close" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="payment-form">
+                    <input type="hidden" id="checker_id" name="checker_id">
+                    <div class="form-group">
+                        <label>Position</label>
+                        <input type="text" class="form-control" id="position" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>Creation Date</label>
+                        <input type="date" class="form-control" name="creation_date" 
+                               value="{% now 'Y-m-d' %}">
+                    </div>
+                    <div class="form-group">
+                        <label>Beneficiary</label>
+                        <input type="text" class="form-control" id="beneficiary" 
+                               placeholder="Search supplier...">
+                        <input type="hidden" id="supplier_id">
+                    </div>
+                    <div class="form-group">
+                        <label>Invoice</label>
+                        <input type="text" class="form-control" id="invoice" 
+                               placeholder="Search invoice..." disabled>
+                        <input type="hidden" id="invoice_id" name="invoice_id">
+                    </div>
+                    <div class="form-group">
+                        <label>Payment Due Date</label>
+                        <input type="date" class="form-control" name="payment_due">
+                    </div>
+                    <div class="form-group">
+                        <label>Amount Due</label>
+                        <input type="number" class="form-control" id="amount_due" disabled>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" class="form-control" name="amount" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Observation</label>
+                        <textarea class="form-control" name="observation"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-success" id="save-and-clone">Save and Clone</button>
+                <button type="button" class="btn btn-primary" id="save-payment">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .ui-autocomplete {
+        position: absolute;
+        z-index: 2000; /* Make sure it appears above the modal */
+        background-color: white;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        padding: 5px 0;
+        max-height: 200px;
+        overflow-y: auto;
+        list-style: none;
+    }
+
+    .ui-menu-item {
+        padding: 8px 12px;
+        cursor: pointer;
+    }
+
+    .ui-menu-item:hover {
+        background-color: #f8f9fa;
+    }
+
+    .ui-helper-hidden-accessible {
+        display: none;
+    }
+</style>
+
+<script>
+$(document).ready(function() {
+    console.log("Document ready");
+
+    $('#save-checker').click(function() {
+        console.log("Save button clicked"); 
+        const form = $('#checker-form');
+        const formData = {};
+        
+        form.serializeArray().forEach(item => {
+            formData[item.name] = item.value;
+        });
+
+        console.log("Sending data:", formData); // Debug log
+
+        $.ajax({
+            url: "{% url 'checker-create' %}",
+            method: 'POST',
+            data: JSON.stringify(formData),
+            contentType: 'application/json',
+            success: function(response) {
+                console.log("Success:", response); // Debug log
+                location.reload();
+            },
+            error: function(xhr, status, error) {
+                console.error("Error:", xhr.responseText); // Debug log
+                alert('Error creating checker: ' + xhr.responseText);
+            }
+        });
+    });
+
+    $('.add-payment').click(function() {
+        const checkerId = $(this).data('checker');
+        $('#checker_id').val(checkerId);
+        
+        // Load checker details to get current position
+        $.ajax({
+            url: `/testapp/checkers/${checkerId}/details/`,
+            method: 'GET',
+            success: function(data) {
+                $('#position').val(`${data.index}${data.current_position}`);
+                $('#paymentModal').modal('show');
+            }
+        });
+    });
+
+    // Beneficiary autocomplete
+    $('#beneficiary').autocomplete({
+        minLength: 2,
+        source: function(request, response) {
+            $.ajax({
+                url: "{% url 'supplier-autocomplete' %}",
+                data: { term: request.term },
+                success: function(data) {
+                    response($.map(data, function(item) {
+                        return {
+                            label: item.label,
+                            value: item.value
+                        };
+                    }));
+                }
+            });
+        },
+        appendTo: "#paymentModal", // Make sure dropdown appears inside modal
+        select: function(event, ui) {
+            $('#beneficiary').val(ui.item.label.split(' (')[0]);
+            $('#supplier_id').val(ui.item.value);
+            $('#invoice').prop('disabled', false);
+            return false;
+        }
+    }).data("ui-autocomplete")._renderItem = function(ul, item) {
+        return $("<li>")
+            .append("<div>" + item.label + "</div>")
+            .appendTo(ul);
+    };
+
+    // Invoice autocomplete
+    $('#invoice').autocomplete({
+        minLength: 2,
+        source: function(request, response) {
+            const supplierId = $('#supplier_id').val();
+            console.log("Supplier ID for invoice search:", supplierId);  // Debug
+            console.log("Search term:", request.term);  // Debug
+            
+            if (!supplierId) {
+                console.log("No supplier selected");  // Debug
+                return;
+            }
+            
+            $.ajax({
+                url: "{% url 'invoice-autocomplete' %}",
+                data: { 
+                    term: request.term,
+                    supplier: supplierId
+                },
+                success: function(data) {
+                    console.log("Received invoices:", data);  // Debug
+                    response($.map(data, function(item) {
+                        console.log("Mapping item:", item);  // Debug
+                        return {
+                            label: item.label,
+                            value: item.value,
+                            amount: item.amount
+                        };
+                    }));
+                },
+                error: function(xhr, status, error) {
+                    console.error("Invoice search error:", error);  // Debug
+                    console.error("Response:", xhr.responseText);  // Debug
+                }
+            });
+        },
+        select: function(event, ui) {
+            console.log("Selected invoice:", ui.item);  // Debug
+            $('#invoice').val(ui.item.label.split(' (')[0]);
+            $('#invoice_id').val(ui.item.value);
+            $('#amount_due').val(ui.item.amount);
+            $('input[name="amount"]').val(ui.item.amount);
+            return false;
+        }
+    });
+
+    $('#save-payment').click(function() {
+        const form = $('#payment-form');
+        const formData = {};
+        
+        form.serializeArray().forEach(item => {
+            formData[item.name] = item.value;
+        });
+
+        $.ajax({
+            url: "{% url 'check-create' %}",
+            method: 'POST',
+            data: JSON.stringify(formData),
+            contentType: 'application/json',
+            headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+            success: function(response) {
+                location.reload();
+            },
+            error: function(xhr) {
+                alert(xhr.responseJSON.error);
+            }
+        });
+    });
+    $('.delete-checker').click(function() {
+        if (confirm('Are you sure you want to delete this checker?')) {
+            const checkerId = $(this).data('checker');
+            $.ajax({
+                url: `/testapp/checkers/${checkerId}/delete/`,
+                method: 'POST',
+                headers: {'X-CSRFToken': '{{ csrf_token }}'},
+                success: function() {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert(xhr.responseJSON.error);
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

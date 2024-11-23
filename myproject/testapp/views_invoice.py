@@ -8,13 +8,15 @@ from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import json
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
+from django.contrib import messages
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class AddProductToInvoiceView(View):
@@ -99,6 +101,13 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
         else:
             return super().form_invalid(form)
 
+    def dispatch(self, request, *args, **kwargs):
+        invoice = self.get_object()
+        if invoice.exported_at:
+            messages.error(request, 'Cannot edit an exported invoice.')
+            return redirect('invoice-list')
+        return super().dispatch(request, *args, **kwargs)
+
 # Delete an Invoice
 class InvoiceDeleteView(DeleteView):
     model = Invoice
@@ -124,7 +133,6 @@ class InvoiceDetailsView(View):
             product_data = [
                 {
                     'name': product.product.name,
-                    'product_name': invoiceproduct.product.name, 
                     'unit_price': f"{product.unit_price:,.2f}",
                     'quantity': product.quantity,
                     'vat_rate': f"{product.vat_rate}%",  # Add VAT Rate
@@ -191,7 +199,8 @@ class EditProductInInvoiceView(View):
             invoice_product = get_object_or_404(InvoiceProduct, pk=pk)
             # Prepare product data to return
             product_data = {
-                'product': invoice_product.product.pk,
+                'product': invoice_product.product.name,
+                'product_name': invoice_product.product.name,
                 'quantity': invoice_product.quantity,
                 'unit_price': float(invoice_product.unit_price),
                 'vat_rate': float(invoice_product.vat_rate),

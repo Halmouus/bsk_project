@@ -2,6 +2,7 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from .models import Product
+from .forms import ProductForm
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -30,10 +31,24 @@ class ProductCreateView(SuccessMessageMixin, CreateView):
 # Update an existing Product
 class ProductUpdateView(SuccessMessageMixin, UpdateView):
     model = Product
-    fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
+    form_class = ProductForm
     template_name = 'product/product_form.html'
     success_url = reverse_lazy('product-list')
     success_message = "Product successfully updated."
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        product = self.get_object()
+        print("Current VAT rate:", product.vat_rate)  # Debug print
+        print("Form VAT rate:", form.initial.get('vat_rate'))  # Debug print
+        return form
+
+    def get_initial(self):
+        initial = super().get_initial()
+        product = self.get_object()
+        print("Initial VAT rate:", product.vat_rate)  # Debug print
+        initial['vat_rate'] = product.vat_rate
+        return initial
 
 # Delete a Product
 class ProductDeleteView(DeleteView):
@@ -91,7 +106,7 @@ class ProductDetailsView(View):
             product = get_object_or_404(Product, pk=pk)
             return JsonResponse({
                 'expense_code': product.expense_code,
-                'vat_rate': float(product.vat_rate)
+                'vat_rate': str(product.vat_rate)
             })
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)

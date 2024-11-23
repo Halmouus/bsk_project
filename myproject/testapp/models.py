@@ -4,6 +4,12 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
 from .base import BaseModel
 from datetime import timedelta 
+import random
+import string
+from django.utils import timezone
+from decimal import Decimal
+
+
 
 
 class item(BaseModel):
@@ -264,3 +270,112 @@ class ExportRecord(BaseModel):
 
     def __str__(self):
         return f"Export {self.filename} at {self.exported_at}"
+    
+class Checker(BaseModel):
+    TYPE_CHOICES = [
+        ('CHQ', 'Cheque'),
+        ('LCN', 'LCN')
+    ]
+    
+    BANK_CHOICES = [
+        ('ATW', 'Attijariwafa Bank'),
+        ('BCP', 'Banque Populaire'),
+        ('BOA', 'Bank of Africa'),
+        ('CAM', 'Crédit Agricole du Maroc'),
+        ('CIH', 'CIH Bank'),
+        ('BMCI', 'BMCI'),
+        ('SGM', 'Société Générale Maroc'),
+        ('CDM', 'Crédit du Maroc'),
+        ('ABB', 'Al Barid Bank'),
+        ('CFG', 'CFG Bank'),
+        ('ABM', 'Arab Bank Maroc'),
+        ('CTB', 'Citibank Maghreb')
+    ]
+    
+    PAGE_CHOICES = [
+        (25, '25'),
+        (50, '50'),
+        (100, '100')
+    ]
+
+    code = models.CharField(max_length=10, unique=True, blank=True)
+    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
+    bank = models.CharField(max_length=4, choices=BANK_CHOICES)
+    account_number = models.CharField(
+        max_length=20,
+        validators=[RegexValidator(r'^\d+$', 'Only numeric characters allowed.')]
+    )
+    city = models.CharField(
+        max_length=50,
+        validators=[RegexValidator(r'^[A-Za-z\s]+$', 'Only alphabetical characters allowed.')]
+    )
+    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
+    num_pages = models.IntegerField(choices=PAGE_CHOICES)
+    index = models.CharField(
+        max_length=3,
+        validators=[RegexValidator(r'^[A-Z]{3}$', 'Must be 3 uppercase letters.')]
+    )
+    starting_page = models.IntegerField(validators=[MinValueValidator(1)])
+    final_page = models.IntegerField(blank=True)
+    current_position = models.IntegerField(blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = self.generate_code()
+        if not self.final_page:
+            self.final_page = self.starting_page + self.num_pages - 1
+        if not self.current_position:
+            self.current_position = self.starting_page
+        super().save(*args, **kwargs)
+
+    def generate_code(self):
+        # Generate random alphanumeric code
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    @property
+    def remaining_pages(self):
+        return self.final_page - self.current_position + 1
+
+    def __str__(self):
+        return f'Checker {self.index}'
+
+    class Meta:
+        ordering = ['-created_at']
+
+class Check(BaseModel):
+    checker = models.ForeignKey(Checker, on_delete=models.PROTECT, related_name='checks')
+    position = models.CharField(max_length=10)  # Will store "INDEX + position number"
+    creation_date = models.DateField(default=timezone.now)
+    beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
+    cause = models.ForeignKey(Invoice, on_delete=models.PROTECT)
+    payment_due = models.DateField(null=True, blank=True)
+    amount_due = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
+    amount = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    observation = models.TextField(blank=True)
+    delivered = models.BooleanField(default=False)
+    paid = models.BooleanField(default=False)
+    
+    def save(self, *args, **kwargs):
+        if not self.position:
+            self.position = f"{self.checker.index}{self.checker.current_position}"
+        if not self.amount_due:
+            self.amount_due = self.cause.total_amount
+        super().save(*args, **kwargs)
+        
+        # Update checker's current position
+        if self.checker.current_position == int(self.position[3:]):
+            self.checker.current_position += 1
+            self.checker.save()
+
+    class Meta:
+        ordering = ['-creation_date']
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(amount__lte=models.F('amount_due')),
+                name='check_amount_cannot_exceed_due'
+            )
+        ]

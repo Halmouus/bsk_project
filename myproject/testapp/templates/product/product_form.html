@@ -3,11 +3,46 @@
 {% block title %}Product Form{% endblock %}
 
 {% block content %}
-<h1>{{ view.object.pk|default:'Add New Product' }}</h1>
+<h1>{{ view.object.name|default:'Add New Product' }}</h1>
 <form method="post">
     {% csrf_token %}
-    {{ form.as_p }}
+    {% for field in form %}
+        {% if field.name == 'vat_rate' %}
+            <div class="form-group">
+                <label>{{ field.label }}</label>
+                <select name="{{ field.name }}" class="form-control auto-size-select">
+                    {% for choice in field.field.choices %}
+                        <option value="{{ choice.0 }}" {% if field.value|floatformat:2 == choice.0|floatformat:2 %}selected{% endif %}>
+                            {{ choice.1 }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% else %}
+            <div class="form-group">
+                {{ field.label_tag }}
+                {{ field }}
+            </div>
+        {% endif %}
+    {% endfor %}
     <button type="submit" class="btn btn-success">Save</button>
     <a href="{% url 'product-list' %}" class="btn btn-secondary">Cancel</a>
 </form>
+
+<style>
+    .auto-size-select {
+        display: inline-block;
+        min-width: 100px; /* Set a reasonable minimum width */
+        max-width: 100%; /* Ensure it doesn't exceed the container width */
+        width: auto; /* Automatically adjust to content */
+    }
+</style>
+
+<script>
+    document.querySelectorAll('.auto-size-select').forEach(select => {
+        select.style.width = `${select.scrollWidth}px`;
+    });
+</script>
+
+
 {% endblock %}

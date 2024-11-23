@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Checks List</h2>
+
+    <table class="table table-hover">
+        <thead class="thead-dark">
+            <tr>
+                <th>Checker Code</th>
+                <th>Bank</th>
+                <th>Owner</th>
+                <th>Type</th>
+                <th>Position</th>
+                <th>Creation Date</th>
+                <th>Beneficiary</th>
+                <th>Invoice Ref</th>
+                <th>Payment Due</th>
+                <th>Amount Due</th>
+                <th>Amount</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for check in checks %}
+            <tr>
+                <td>{{ check.checker.code }}</td>
+                <td>{{ check.checker.get_bank_display }}</td>
+                <td>{{ check.checker.owner }}</td>
+                <td>{{ check.checker.get_type_display }}</td>
+                <td>{{ check.position }}</td>
+                <td>{{ check.creation_date|date:"Y-m-d" }}</td>
+                <td>{{ check.beneficiary.name }}</td>
+                <td>{{ check.cause.ref }}</td>
+                <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
+                <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
+                <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+                <td>
+                    {% if check.paid %}
+                        <span class="badge badge-success">Paid</span>
+                    {% elif check.delivered %}
+                        <span class="badge badge-warning">Delivered</span>
+                    {% else %}
+                        <span class="badge badge-secondary">Pending</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <div class="btn-group">
+                        {% if not check.delivered %}
+                            <button class="btn btn-warning btn-sm mark-delivered" 
+                                    data-check="{{ check.id }}">
+                                Mark Delivered
+                            </button>
+                        {% endif %}
+                        {% if check.delivered and not check.paid %}
+                            <button class="btn btn-success btn-sm mark-paid" 
+                                    data-check="{{ check.id }}">
+                                Mark Paid
+                            </button>
+                        {% endif %}
+                        <button class="btn btn-info btn-sm">Print</button>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<script>
+$(document).ready(function() {
+    $('.mark-delivered').click(function() {
+        const checkId = $(this).data('check');
+        if (confirm('Mark this check as delivered?')) {
+            $.ajax({
+                url: `/testapp/checks/${checkId}/mark-delivered/`,
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                success: function() {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert('Error marking check as delivered');
+                }
+            });
+        }
+    });
+
+    $('.mark-paid').click(function() {
+        const checkId = $(this).data('check');
+        if (confirm('Mark this check as paid?')) {
+            $.ajax({
+                url: `/testapp/checks/${checkId}/mark-paid/`,
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                success: function() {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert('Error marking check as paid');
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

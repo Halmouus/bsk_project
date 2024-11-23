@@ -1,6 +1,7 @@
 from django import forms
-from .models import Invoice, InvoiceProduct
+from .models import Invoice, InvoiceProduct, Product
 from django.forms.models import inlineformset_factory
+from decimal import Decimal
 
 # Define the inline formset for linking Invoice and InvoiceProduct
 InvoiceProductFormset = inlineformset_factory(
@@ -28,3 +29,18 @@ class InvoiceForm(forms.ModelForm):
             'supplier': forms.Select(attrs={'class': 'form-control'}),
         }
 
+class ProductForm(forms.ModelForm):
+    class Meta:
+        model = Product
+        fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
+        widgets = {
+            'vat_rate': forms.Select(choices=[
+                ('0.00', '0%'), 
+                ('7.00', '7%'), 
+                ('10.00', '10%'), 
+                ('11.00', '11%'), 
+                ('14.00', '14%'), 
+                ('16.00', '16%'), 
+                ('20.00', '20%')
+            ])
+        }
