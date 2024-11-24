@@ -19,15 +19,43 @@ InvoiceProductFormset = inlineformset_factory(
     }
 )
 
-class InvoiceForm(forms.ModelForm):
+class InvoiceCreateForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        print("INITIALIZING CREATE FORM")  # Debug print
+        super().__init__(*args, **kwargs)
+        print(f"CREATE FORM fields: {self.fields}")  # Debug print
+
     class Meta:
         model = Invoice
         fields = ['ref', 'date', 'supplier']
-        widgets = {
+        widgets = { 
             'ref': forms.TextInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'supplier': forms.Select(attrs={'class': 'form-control'}),
         }
+
+class InvoiceUpdateForm(forms.ModelForm):
+    def __init__(self, *args, **kwargs):
+        print("INITIALIZING UPDATE FORM")  # Debug print
+        super().__init__(*args, **kwargs)
+        print(f"UPDATE FORM Before disable: {self.fields}")  # Debug print
+        self.fields['supplier'].disabled = True
+        print(f"UPDATE FORM After disable: {self.fields}")  # Debug print
+
+    class Meta:
+        model = Invoice
+        fields = ['ref', 'date', 'supplier']
+        widgets = { 
+            'ref': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'supplier': forms.Select(attrs={'class': 'form-control'}),
+        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        cleaned_data['supplier'] = self.instance.supplier
+        return cleaned_data
+        
 
 class ProductForm(forms.ModelForm):
     class Meta:

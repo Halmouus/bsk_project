@@ -9558,7 +9558,7 @@ class Checker(BaseModel):
     num_pages = models.IntegerField(choices=PAGE_CHOICES)
     index = models.CharField(
         max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{3}$', 'Must be 3 uppercase letters.')]
+        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
     )
     starting_page = models.IntegerField(validators=[MinValueValidator(1)])
     final_page = models.IntegerField(blank=True)
@@ -9632,10 +9632,8 @@ class Check(BaseModel):
         super().save(*args, **kwargs)
         
         # Update checker's current position
-        if self.checker.current_position == int(self.position[3:]):
-            print(f"Previous position {self.checker.current_position}")
+        if self.checker.current_position == int(self.position[len(self.checker.index):]):
             self.checker.current_position += 1
-            print(f"Current position {self.checker.current_position}")
             self.checker.save()
 
     def clean(self):
@@ -9683,24 +9681,21 @@ def create_or_update_profile(sender, instance, created, **kwargs):
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}MyProject{% endblock %}</title>
     
-    <!-- Bootstrap CSS -->
+    <!-- Bootstrap 4.5 CSS -->
     <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
 
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-    
-    <!-- Bootstrap JavaScript Bundle -->
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+    <!-- jQuery and Bootstrap 4.5 JS -->
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.4/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
-    <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
 
-    <!-- Custom JavaScript -->
-    <script src="{% static 'js/scripts.js' %}"></script>
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
 </head>
 <body>
-
     <!-- Header / Navigation Bar -->
 <header>
     <nav class="navbar navbar-expand-lg navbar-light bg-light">
@@ -9712,33 +9707,33 @@ def create_or_update_profile(sender, instance, created, **kwargs):
             <ul class="navbar-nav ml-auto">
                 {% if user.is_authenticated %}
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="supplierDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle hover-trigger" href="#" id="supplierDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                             Supplier
                         </a>
-                        <div class="dropdown-menu" aria-labelledby="supplierDropdown">
-                            <a class="dropdown-item" href="{% url 'supplier-list' %}">Suppliers</a>
-                            <a class="dropdown-item" href="{% url 'product-list' %}">Products</a>
-                            <a class="dropdown-item" href="{% url 'invoice-list' %}">Invoices</a>
-                        </div>    
+                        <div class="dropdown-menu dropdown-hover" aria-labelledby="supplierDropdown">
+                            <a class="dropdown-item hover-highlight" href="{% url 'supplier-list' %}">Suppliers</a>
+                            <a class="dropdown-item hover-highlight" href="{% url 'product-list' %}">Products</a>
+                            <a class="dropdown-item hover-highlight" href="{% url 'invoice-list' %}">Invoices</a>
+                        </div>
                     </li>
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#" id="checkDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+                        <a class="nav-link dropdown-toggle hover-trigger" href="#" id="checkDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
                             Check/Checkers
                         </a>
-                        <div class="dropdown-menu" aria-labelledby="checkDropdown">
-                            <a class="dropdown-item" href="{% url 'checker-list' %}">Checkers</a>
-                            <a class="dropdown-item" href="{% url 'check-list' %}">Checks</a>
+                        <div class="dropdown-menu dropdown-hover" aria-labelledby="checkDropdown">
+                            <a class="dropdown-item hover-highlight" href="{% url 'checker-list' %}">Checkers</a>
+                            <a class="dropdown-item hover-highlight" href="{% url 'check-list' %}">Checks</a>
                         </div>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'profile' %}">Profile</a>
+                        <a class="nav-link hover-trigger" href="{% url 'profile' %}">Profile</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'logout' %}">Logout</a>
+                        <a class="nav-link hover-trigger" href="{% url 'logout' %}">Logout</a>
                     </li>
                 {% else %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{% url 'login' %}">Login</a>
+                        <a class="nav-link hover-trigger" href="{% url 'login' %}">Login</a>
                     </li>
                 {% endif %}
             </ul>
@@ -9746,43 +9741,107 @@ def create_or_update_profile(sender, instance, created, **kwargs):
     </nav>
 </header>
 
-
     <!-- Message Alerts -->
-    <div id="alerts-container" class="mt-4">
+    <div id="alerts-container" class="container mt-4">
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
+                    {% if message.tags == 'error' %}
+                        <i class="fas fa-exclamation-triangle"></i>
+                    {% endif %}
+                    <strong>{{ message|safe }}</strong>
+                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
                 </div>
             {% endfor %}
         {% endif %}
     </div>
-    <script>
-        // Automatically fade out alerts after 5 seconds
-        $(document).ready(function() {
-            setTimeout(function() {
-                $(".alert").alert('close');
-            }, 5000);
-        });
-    </script>
-
 
     <!-- Main Content Block -->
     <main class="container mt-4">
         {% block content %}
-        <!-- Page specific content will go here -->
+        <!-- Page-specific content goes here -->
         {% endblock %}
     </main>
 
     <!-- Footer -->
     <footer class="footer mt-auto py-3 bg-light">
-        <div class="container">
+        <div class="container text-center">
             <span class="text-muted">&copy; 2024 MyProject. All rights reserved.</span>
+            <div>
+                <a href="#" class="text-muted mx-2">Privacy</a>
+                <a href="#" class="text-muted mx-2">Terms</a>
+                <a href="#" class="text-muted mx-2">Support</a>
+            </div>
         </div>
     </footer>
 
-    
+    <!-- Custom JavaScript -->
+    <script src="{% static 'js/scripts.js' %}"></script>
+
+    <script>
+        // Fading Alerts
+        $(document).ready(function() {
+            setTimeout(function() {
+                $(".alert").fadeOut("slow");
+            }, 5000);
+
+            // Dropdown on Hover
+            $(".hover-trigger").hover(function() {
+                $(this).parent().addClass('show');
+                $(this).siblings('.dropdown-menu').addClass('show').stop(true, true).slideDown(200);
+            }, function() {
+                $(this).parent().removeClass('show');
+                $(this).siblings('.dropdown-menu').removeClass('show').stop(true, true).slideUp(200);
+            });
+
+            $(".dropdown-menu").hover(function() {
+                $(this).addClass('show').stop(true, true).slideDown(200);
+            }, function() {
+                $(this).removeClass('show').stop(true, true).slideUp(200);
+            });
+        });
+    </script>
+
+    <style>
+        /* Alert Styling */
+        .alert {
+            border-left: 5px solid;
+        }
+        .alert-danger {
+            border-left-color: #dc3545;
+        }
+        .alert i {
+            margin-right: 10px;
+        }
+
+        /* Navbar Hover Effects */
+        .hover-trigger:hover {
+            background-color: rgba(159, 165, 174, 0.2);
+            transition: background-color 0.3s ease;
+            text-decoration:underline;
+        }
+
+        /* Dropdown Menu Styling */
+        .dropdown-menu {
+            display: none;
+        }
+        .hover-highlight:hover {
+            background-color: rgba(200, 52, 203, 0.1);
+            transition: background-color 0.3s ease;
+        }
+
+        /* Footer Styling */
+        .footer a {
+            margin: 0 5px;
+            color: inherit;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
 </body>
 </html>
 
@@ -9798,82 +9857,91 @@ def create_or_update_profile(sender, instance, created, **kwargs):
 {% block content %}
 <div class="container mt-4">
     <h2>Checks List</h2>
-
-    <table class="table table-hover">
-        <thead class="thead-dark">
-            <tr>
-                <th>Checker Code</th>
-                <th>Bank</th>
-                <th>Owner</th>
-                <th>Type</th>
-                <th>Position</th>
-                <th>Creation Date</th>
-                <th>Beneficiary</th>
-                <th>Invoice Ref</th>
-                <th>Payment Due</th>
-                <th>Amount Due</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for check in checks %}
-            <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
-                <td>{{ check.checker.code }}</td>
-                <td>{{ check.checker.get_bank_display }}</td>
-                <td>{{ check.checker.owner }}</td>
-                <td>{{ check.checker.get_type_display }}</td>
-                <td>{{ check.position }}</td>
-                <td>{{ check.creation_date|date:"Y-m-d" }}</td>
-                <td>{{ check.beneficiary.name }}</td>
-                <td>{{ check.cause.ref }}</td>
-                <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
-                <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
-                <td class="text-right">{{ check.amount|floatformat:2 }}</td>
-                <td>
-                    {% if check.status == 'cancelled' %}
-                        <span class="badge badge-danger">Cancelled</span>
-                    {% elif check.paid %}
-                        <span class="badge badge-success">Paid</span>
-                    {% elif check.delivered %}
-                        <span class="badge badge-warning">Delivered</span>
-                    {% else %}
-                        <span class="badge badge-secondary">Pending</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="btn-group">
-                        <button class="btn btn-primary btn-sm edit-check-btn" 
-                                data-check-id="{{ check.id }}">
-                            Edit
-                        </button>
-                        {% if not check.delivered %}
-                            <button class="btn btn-warning btn-sm mark-delivered" 
-                                    data-check="{{ check.id }}">
-                                Mark Delivered
-                            </button>
-                        {% endif %}
-                        {% if check.delivered and not check.paid %}
-                            <button class="btn btn-success btn-sm mark-paid" 
-                                    data-check="{{ check.id }}">
-                                Mark Paid
-                            </button>
-                        {% endif %}
-                        {% if not check.paid %}
-                            <button class="btn btn-danger btn-sm cancel-check-btn" 
-                                    data-check-id="{{ check.id }}">
-                                Cancel
-                            </button>
-                        {% endif %}
-                        <button class="btn btn-info btn-sm">Print</button>
-                    </div>
-                </td>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="container-fluid px-1">  <!-- Add padding -->
+        <div class="table-responsive">  <!-- Make table responsive -->
+            <table class="table table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>Checker Code</th>
+                        <th>Bank</th>
+                        <th>Owner</th>
+                        <th>Type</th>
+                        <th>Position</th>
+                        <th>Creation Date</th>
+                        <th>Beneficiary</th>
+                        <th>Invoice Ref</th>
+                        <th>Payment Due</th>
+                        <th>Amount Due</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for check in checks %}
+                    <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
+                        <td>{{ check.checker.code }}</td>
+                        <td>{{ check.checker.get_bank_display }}</td>
+                        <td>{{ check.checker.owner }}</td>
+                        <td>{{ check.checker.get_type_display }}</td>
+                        <td>{{ check.position }}</td>
+                        <td>{{ check.creation_date|date:"Y-m-d" }}</td>
+                        <td>{{ check.beneficiary.name }}</td>
+                        <td>{{ check.cause.ref }}</td>
+                        <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
+                        <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
+                        <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+                        <td>
+                            {% if check.status == 'cancelled' %}
+                            <span class="badge badge-danger cancellation-info" 
+                                    role="button" 
+                                    data-toggle="modal" 
+                                    data-target="#cancellationDetailModal"
+                                    data-reason="{{ check.cancellation_reason }}">
+                                Cancelled
+                            </span>
+                            {% elif check.paid %}
+                                <span class="badge badge-success">Paid</span>
+                            {% elif check.delivered %}
+                                <span class="badge badge-warning">Delivered</span>
+                            {% else %}
+                                <span class="badge badge-secondary">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-primary btn-sm edit-check-btn" 
+                                        data-check-id="{{ check.id }}">
+                                    Edit
+                                </button>
+                                {% if not check.delivered %}
+                                    <button class="btn btn-warning btn-sm mark-delivered" 
+                                            data-check="{{ check.id }}">
+                                        Mark Delivered
+                                    </button>
+                                {% endif %}
+                                {% if check.delivered and not check.paid %}
+                                    <button class="btn btn-success btn-sm mark-paid" 
+                                            data-check="{{ check.id }}">
+                                        Mark Paid
+                                    </button>
+                                {% endif %}
+                                {% if not check.paid %}
+                                    <button class="btn btn-danger btn-sm cancel-check-btn" 
+                                            data-check-id="{{ check.id }}">
+                                        Cancel
+                                    </button>
+                                {% endif %}
+                                <button class="btn btn-info btn-sm">Print</button>
+                            </div>
+                        </td>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <div class="modal fade" id="editCheckModal" tabindex="-1">
@@ -9934,6 +10002,70 @@ def create_or_update_profile(sender, instance, created, **kwargs):
         </div>
     </div>
 </div>
+
+<!-- Add this modal to your template -->
+<div class="modal fade" id="cancellationDetailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cancellation Reason</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="cancellationReason"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cancellation-info {
+        cursor: pointer;
+    }
+    .cancellation-info:hover {
+        opacity: 0.8;
+    }
+    
+    /* Make buttons more refined */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s;
+    }
+    
+    .btn i {
+        font-size: 0.875rem;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Space out buttons in button groups */
+    .btn-group .btn {
+        margin-right: 0.25rem;
+    }
+    .btn-group .btn:last-child {
+        margin-right: 0;
+    }
+
+    .table-responsive {
+    margin: 0 auto;
+    padding: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    max-height: 500px;
+
+    }
+</style>
 
 <script>
 $(document).ready(function() {
@@ -10084,6 +10216,12 @@ $(document).ready(function() {
         });
     });
 
+    // Display cancellation reason
+    $('.cancellation-info').click(function() {
+        const reason = $(this).data('reason');
+        $('#cancellationReason').text(reason);
+    });
+
     // Reset modals on close
     $('#editCheckModal, #cancelCheckModal').on('hidden.bs.modal', function() {
         $('#cancellation_reason').val('');
@@ -10103,7 +10241,7 @@ $(document).ready(function() {
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Checkers</h2>
         <button class="btn btn-primary" data-toggle="modal" data-target="#checkerModal">
-            Add New Checker
+            <i class="fas fa-plus"></i> Add New Checker
         </button>
     </div>
 
@@ -10138,13 +10276,13 @@ $(document).ready(function() {
                 <td>{{ checker.remaining_pages }}</td>
                 <td>
                     <button class="btn btn-primary btn-sm add-payment" data-checker="{{ checker.id }}">
-                        Add Payment
+                        <i class="fas fa-plus"></i> Add Payment
                     </button>
                     <button class="btn btn-info btn-sm view-details" data-checker="{{ checker.id }}">
                         Details
                     </button>
                     <button class="btn btn-danger btn-sm delete-checker" data-checker="{{ checker.id }}">
-                        Delete
+                        <i class="fas fa-times"></i> Delete
                     </button>
                 </td>
             </tr>
@@ -10182,8 +10320,12 @@ $(document).ready(function() {
                     </div>
                     <div class="form-group">
                         <label>Account Number</label>
-                        <input type="text" class="form-control" name="account_number" 
-                               pattern="^\d+$" required>
+                        <input type="text" id="account_number" name="account_number" 
+                            class="form-control" 
+                            pattern="\d+" 
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                            title="Only numbers allowed"
+                            required>
                     </div>
                     <div class="form-group">
                         <label>City</label>
@@ -10220,7 +10362,7 @@ $(document).ready(function() {
 
 <!-- Payment Modal -->
 <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Add Payment</h5>
@@ -10522,7 +10664,22 @@ $(document).ready(function() {
 <form method="post">
     {% csrf_token %}
     {{ form.as_p }}
+    {{ products.management_form }}
 
+    <div style="display: none;">
+        {% for product_form in products %}
+            <div class="product-form">
+                {{ product_form.id }}
+                {{ product_form.product }}
+                {{ product_form.quantity }}
+                {{ product_form.unit_price }}
+                {{ product_form.reduction_rate }}
+                {{ product_form.vat_rate }}
+                {% if product_form.instance.pk %}{{ product_form.DELETE }}{% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    
     <button type="submit" class="btn btn-success mt-4">Save</button>
     <a href="{% url 'invoice-list' %}" class="btn btn-secondary mt-4">Cancel</a>
 </form>
@@ -12053,7 +12210,7 @@ from .models import Invoice, InvoiceProduct, Product, ExportRecord
 from .forms import InvoiceForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404, redirect
@@ -12125,34 +12282,43 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
 # Update an existing Invoice
 class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     model = Invoice
-    form_class = InvoiceForm  # Use the custom form here
+    form_class = InvoiceForm
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully updated."
 
     def get_context_data(self, **kwargs):
-        data = super().get_context_data(**kwargs)
+        data = super().get_context_data(**kwargs) 
         if self.request.POST:
-            data['products'] = InvoiceProductInlineFormset(self.request.POST, instance=self.object)
+            data['products'] = InvoiceProductInlineFormset(self.request.POST, instance=self.object) 
         else:
              data['products'] = InvoiceProductInlineFormset(instance=self.object, queryset=InvoiceProduct.objects.filter(invoice=self.object))
         return data
 
     def form_valid(self, form):
+        print("Entering form_valid")
+        print("Form data:", form.cleaned_data)
         context = self.get_context_data()
         products = context['products']
+        print("Form valid:", form.is_valid())
+        print("Products valid:", products.is_valid())
+        if not products.is_valid():
+            print("Products errors:", products.errors)  # Add this
+            print("Non-form errors:", products.non_form_errors())  # And this
         if form.is_valid() and products.is_valid():
+            print("Both form and products are valid")
             self.object = form.save()
             products.instance = self.object
             products.save()
+            print("Save completed")
             return super().form_valid(form)
-        else:
-            return super().form_invalid(form)
+        print("Form validation failed")
+        return self.form_invalid(form)
 
     def dispatch(self, request, *args, **kwargs):
         invoice = self.get_object()
         if invoice.exported_at:
-            messages.error(request, 'Cannot edit an exported invoice.')
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!', extra_tags='danger')
             return redirect('invoice-list')
         return super().dispatch(request, *args, **kwargs)
 
@@ -12162,6 +12328,13 @@ class InvoiceDeleteView(DeleteView):
     template_name = 'invoice/invoice_confirm_delete.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully deleted."
+
+    def dispatch(self, request, *args, **kwargs):
+        invoice = self.get_object()
+        if invoice.exported_at:
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be deleted!', extra_tags='danger')
+            return redirect('invoice-list')
+        return super().dispatch(request, *args, **kwargs)
 
 
 InvoiceProductInlineFormset = inlineformset_factory(

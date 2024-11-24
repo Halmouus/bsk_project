@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from .models import Invoice, InvoiceProduct, Product, ExportRecord
-from .forms import InvoiceForm  # Import the custom form here
+from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
@@ -59,7 +59,7 @@ class InvoiceListView(ListView):
 # Create a new Invoice
 class InvoiceCreateView(SuccessMessageMixin, CreateView):
     model = Invoice
-    form_class = InvoiceForm  # Use the custom form here
+    form_class = InvoiceUpdateForm  # Use the custom form here
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully created."
@@ -69,6 +69,10 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
         # We may want to pass the newly created invoice to the next page or modal
         return response
 
+    def get_form_class(self):
+        print("Using CREATE VIEW")  # Debug print
+        return InvoiceCreateForm
+
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs)
         data['products'] = Product.objects.all()  # Add all products to the context for dropdown population
@@ -77,18 +81,11 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
 # Update an existing Invoice
 class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     model = Invoice
-    form_class = InvoiceForm
+    form_class = InvoiceUpdateForm
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully updated."
 
-    def get_form(self, form_class=None):
-        form = super().get_form(form_class)
-        if self.object:  # If editing existing invoice
-            form.fields['supplier'].widget.attrs['disabled'] = 'disabled'
-            form.fields['supplier'].widget.attrs['readonly'] = 'readonly'
-        return form
-    
     def get_context_data(self, **kwargs):
         data = super().get_context_data(**kwargs) 
         if self.request.POST:
@@ -97,6 +94,11 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
              data['products'] = InvoiceProductInlineFormset(instance=self.object, queryset=InvoiceProduct.objects.filter(invoice=self.object))
         return data
 
+
+    def get_form_class(self):
+        print("Using UPDATE VIEW")  # Debug print
+        return InvoiceUpdateForm
+    
     def form_valid(self, form):
         print("Entering form_valid")
         print("Form data:", form.cleaned_data)
