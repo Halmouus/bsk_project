@@ -7,7 +7,7 @@
 <h1>Invoice List</h1>
 <a href="{% url 'invoice-create' %}" class="btn btn-primary">Add New Invoice</a>
 
-<table class="table mt-4">
+<table class="table mt-4 table-hover">
     <thead>
         <tr>
             <th>Export</th>
@@ -26,69 +26,83 @@
     </thead>
     <tbody>
         {% for invoice in invoices %}
-            <tr {% if invoice.exported_at %}class="table-light"{% endif %}>
-                <td>
-                    {% if invoice.exported_at %}
-                        <span class="text-muted">
-                            Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                            <button type="button" 
-                                    class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                    data-invoice-id="{{ invoice.id }}">
-                                <i class="fas fa-undo"></i>
+        <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
+            <td>
+                {% if invoice.exported_at %}
+                    <span class="text-muted">
+                        Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                        <button type="button" 
+                                class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                data-invoice-id="{{ invoice.id }}">
+                            <i class="fas fa-undo"></i>
+                        </button>
+                    </span>
+                {% else %}
+                    <input type="checkbox" 
+                           name="invoice_ids" 
+                           value="{{ invoice.id }}" 
+                           class="export-checkbox"
+                           {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
+                {% endif %}
+            </td>
+                    <td>{{ invoice.date }}</td>
+                    <td>{{ invoice.ref }}</td>
+                    <td>{{ invoice.supplier.name }}</td>
+                    <td>{{ invoice.fiscal_label }}</td>
+                    <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                    <td>
+                        {% with invoice.products.all|length as product_count %}
+                            {% for product in invoice.products.all %}
+                                {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        {% endwith %}
+                    </td>
+                    <td>
+                        {% if invoice.total_tax_amount %}
+                            {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                        {% else %}
+                            <strong>Tax Missing</strong>
+                        {% endif %}
+                    </td>                
+                    <td>{{ invoice.total_amount|floatformat:2|intcomma }}</td>
+                    <td>
+                        {% if invoice.payment_status == 'paid' %}
+                            <span class="badge badge-success">Paid</span>
+                        {% elif invoice.payment_status == 'partially_paid' %}
+                            <span class="badge badge-warning">
+                                Partially Paid 
+                                <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                            </span>
+                        {% else %}
+                            <span class="badge badge-danger">Not Paid</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if not invoice.payment_status == 'paid' %}
+                            <a href="{% url 'invoice-update' invoice.pk %}" 
+                            class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
+                                Edit
+                            </a>
+                            <a href="{% url 'invoice-delete' invoice.pk %}" 
+                            class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
+                                Delete
+                            </a>
+                        {% else %}
+                            <button class="btn btn-secondary" disabled>
+                                <i class="fas fa-lock"></i> Paid
                             </button>
-                        </span>
-                    {% else %}
-                        <input type="checkbox" 
-                            name="invoice_ids" 
-                            value="{{ invoice.id }}" 
-                            class="export-checkbox">
-                    {% endif %}
-                </td>
-                <td>{{ invoice.date }}</td>
-                <td>{{ invoice.ref }}</td>
-                <td>{{ invoice.supplier.name }}</td>
-                <td>{{ invoice.fiscal_label }}</td>
-                <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
-                <td>
-                    {% with invoice.products.all|length as product_count %}
-                        {% for product in invoice.products.all %}
-                            {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
-                        {% endfor %}
-                    {% endwith %}
-                </td>
-                <td>
-                    {% if invoice.total_tax_amount %}
-                        {{ invoice.total_tax_amount|floatformat:2|intcomma }}
-                    {% else %}
-                        <strong>Tax Missing</strong>
-                    {% endif %}
-                </td>                
-                <td>{{ invoice.total_amount|floatformat:2|intcomma }}</td>
-                <td>
-                    {% if invoice.payment_status == 'paid' %}
-                        <span class="badge badge-success">Paid</span>
-                    {% elif invoice.payment_status == 'partially_paid' %}
-                        <span class="badge badge-warning">
-                            Partially Paid 
-                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
-                        </span>
-                    {% else %}
-                        <span class="badge badge-danger">Not Paid</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <a href="{% url 'invoice-update' invoice.pk %}" class="btn btn-warning">Edit</a>
-                    <a href="{% url 'invoice-delete' invoice.pk %}" class="btn btn-danger">Delete</a>
-                </td>
-                <td>
-                    <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                    <button class="btn btn-info btn-sm"                             
-                            data-toggle="modal" 
-                            data-target="#paymentDetailsModal"
-                            data-invoice="{{ invoice.pk }}">
-                        Payment Details
-                    </button>
-                </td>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                        <button class="btn btn-info btn-sm"                             
+                                data-toggle="modal" 
+                                data-target="#paymentDetailsModal"
+                                data-invoice="{{ invoice.pk }}">
+                            Payment Details
+                        </button>
+                    </td>
+                </tr>
             </tr>
         {% empty %}
             <tr>

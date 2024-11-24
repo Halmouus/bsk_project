@@ -95,23 +95,42 @@ class CheckerDeleteView(View):
 def invoice_autocomplete(request):
     query = request.GET.get('term', '')
     supplier_id = request.GET.get('supplier')
-    print("Query:", query)  # Debug
-    print("Supplier ID:", supplier_id)  # Debug
     
     invoices = Invoice.objects.filter(
         supplier_id=supplier_id,
         ref__icontains=query
     )
-    print("Found invoices:", invoices.count())  # Debug
-    print("Query SQL:", invoices.query)  # Debug
     
-    invoice_list = [{
-        'label': f"{i.ref} ({i.date}) - {i.total_amount:,.2f}",
-        'value': str(i.id),
-        'amount': float(i.total_amount)
-    } for i in invoices]
+    invoice_list = []
+    for invoice in invoices:
+        payment_info = invoice.payments_summary
+        total_amount = float(invoice.total_amount)
+        issued_amount = float(payment_info['pending_amount'] + 
+                            payment_info['delivered_amount'] + 
+                            payment_info['paid_amount'])
+        available_amount = total_amount - issued_amount
+        
+        status_icon = {
+            'paid': '🔒 Paid',
+            'partially_paid': '⏳ Partially Paid',
+            'not_paid': '📄 Not Paid'
+        }.get(invoice.payment_status, '')
+        
+        invoice_list.append({
+            'id': str(invoice.id),
+            'ref': invoice.ref,
+            'date': invoice.date.strftime('%Y-%m-%d'),
+            'status': status_icon,
+            'amount': total_amount,
+            'payment_info': {
+                'total_amount': total_amount,
+                'issued_amount': issued_amount,
+                'paid_amount': float(payment_info['paid_amount']),
+                'available_amount': total_amount - issued_amount
+            },
+            'label': f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - {status_icon} - {total_amount:,.2f} MAD"
+        })
     
-    print("Response:", invoice_list)  # Debug
     return JsonResponse(invoice_list, safe=False)
 
 @method_decorator(csrf_exempt, name='dispatch')

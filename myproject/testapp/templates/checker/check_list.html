@@ -3,7 +3,7 @@
 {% load check_tags %}
 
 {% block content %}
-<div class="container mt-4">
+<div class="container-fluid mt-4">
     <h2>Checks List</h2>
     <div class="container-fluid px-1">  <!-- Add padding -->
         <div class="table-responsive">  <!-- Make table responsive -->
@@ -27,7 +27,10 @@
                 </thead>
                 <tbody>
                     {% for check in checks %}
-                    <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
+                    <tr class="{% if check.status == 'paid' %}table-success{% elif check.status == 'cancelled' %}table-danger{% elif check.status == 'delivered' %}table-warning{% endif %}"
+                        {% if check.cancelled_at %}data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}
+                        {% if check.status == 'paid' %}data-paid="true"{% endif %}>
+
                         <td>{{ check.checker.code }}</td>
                         <td>{{ check.checker.get_bank_display }}</td>
                         <td>{{ check.checker.owner }}</td>
@@ -58,23 +61,31 @@
                         </td>
                         <td>
                             <div class="btn-group">
-                                <button class="btn btn-primary btn-sm edit-check-btn" 
-                                        data-check-id="{{ check.id }}">
-                                    Edit
+
+                                <button class="btn btn-sm edit-check-btn
+                                    {% if check.status == 'paid' or check.status == 'cancelled' %}btn-secondary{% else %}btn-primary{% endif %}"
+                                    data-check-id="{{ check.id }}"
+                                    {% if check.status == 'paid' or check.status == 'cancelled' %}disabled{% endif %}>
+                                    {% if check.status == 'paid' or check.status == 'cancelled' %}
+                                        <i class="fas fa-lock"></i> Edit
+                                    {% else %}
+                                    <i class="fas fa-edit"></i> Edit
+                                    {% endif %}
                                 </button>
-                                {% if not check.delivered %}
+                            
+                                {% if not check.delivered and not check.status == 'paid' and not check.status == 'cancelled' %}
                                     <button class="btn btn-warning btn-sm mark-delivered" 
                                             data-check="{{ check.id }}">
                                         Mark Delivered
                                     </button>
                                 {% endif %}
-                                {% if check.delivered and not check.paid %}
+                                {% if check.delivered and not check.paid and not check.status == 'cancelled' %}
                                     <button class="btn btn-success btn-sm mark-paid" 
                                             data-check="{{ check.id }}">
                                         Mark Paid
                                     </button>
                                 {% endif %}
-                                {% if not check.paid %}
+                                {% if not check.paid and not check.status == 'cancelled' %}
                                     <button class="btn btn-danger btn-sm cancel-check-btn" 
                                             data-check-id="{{ check.id }}">
                                         Cancel
@@ -151,7 +162,7 @@
     </div>
 </div>
 
-<!-- Add this modal to your template -->
+<!-- Cancellation Detail Modal -->
 <div class="modal fade" id="cancellationDetailModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -164,6 +175,21 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Details Modal -->
+<div class="modal fade" id="paymentDetailsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Details</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="payment-info"></div>
             </div>
         </div>
     </div>
@@ -205,12 +231,27 @@
     }
 
     .table-responsive {
-    margin: 0 auto;
-    padding: 10px;
-    overflow-x: auto;
-    overflow-y: auto;
-
+    margin-left: auto;
+    margin-right: auto;
+    padding: 0 15px; /* Minor borders on the left and right */
+    max-width: 100%; /* Ensure it takes the entire width */
     }
+
+
+    .table-hover tbody tr {
+    height: 3rem; /* Increase row height */
+    }
+
+    .btn-secondary {
+    background-color: #d6d6d6;
+    color: #555;
+    cursor: not-allowed;
+    }
+
+    .btn-secondary i {
+        margin-right: 5px; /* Adds spacing between icon and text */
+    }
+
 </style>
 
 <script>
@@ -372,6 +413,32 @@ $(document).ready(function() {
     $('#editCheckModal, #cancelCheckModal').on('hidden.bs.modal', function() {
         $('#cancellation_reason').val('');
     });
+
+    // Payment details popup
+    $('.payment-info').click(function() {
+        const checkId = $(this).data('check');
+        $.ajax({
+            url: `/testapp/checks/${checkId}/payment-details/`,
+            success: function(data) {
+                $('.payment-info').html(`
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-subtitle mb-3">Payment Information</h6>
+                            <p><strong>Paid Amount:</strong> ${formatMoney(data.amount)}</p>
+                            <p><strong>Payment Date:</strong> ${data.paid_at}</p>
+                            <p><strong>Payment Reference:</strong> ${data.reference}</p>
+                            <hr>
+                            <h6 class="card-subtitle mb-3">Invoice Information</h6>
+                            <p><strong>Invoice Ref:</strong> ${data.invoice_ref}</p>
+                            <p><strong>Beneficiary:</strong> ${data.beneficiary}</p>
+                            <p><strong>Original Amount:</strong> ${formatMoney(data.invoice_amount)}</p>
+                        </div>
+                    </div>
+                `);
+            }
+        });
+    });
+    
 });
 </script>
 {% endblock %}

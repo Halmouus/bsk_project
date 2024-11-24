@@ -121,8 +121,13 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
 
     def dispatch(self, request, *args, **kwargs):
         invoice = self.get_object()
+        if invoice.payment_status == 'paid':
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been paid and cannot be edited!', 
+                         extra_tags='danger')
+            return redirect('invoice-list')
         if invoice.exported_at:
-            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!', extra_tags='danger')
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!', 
+                         extra_tags='danger')
             return redirect('invoice-list')
         return super().dispatch(request, *args, **kwargs)
 
