@@ -313,7 +313,7 @@ class Checker(BaseModel):
     num_pages = models.IntegerField(choices=PAGE_CHOICES)
     index = models.CharField(
         max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{3}$', 'Must be 3 uppercase letters.')]
+        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
     )
     starting_page = models.IntegerField(validators=[MinValueValidator(1)])
     final_page = models.IntegerField(blank=True)
@@ -387,10 +387,8 @@ class Check(BaseModel):
         super().save(*args, **kwargs)
         
         # Update checker's current position
-        if self.checker.current_position == int(self.position[3:]):
-            print(f"Previous position {self.checker.current_position}")
+        if self.checker.current_position == int(self.position[len(self.checker.index):]):
             self.checker.current_position += 1
-            print(f"Current position {self.checker.current_position}")
             self.checker.save()
 
     def clean(self):

@@ -5,7 +5,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Checkers</h2>
         <button class="btn btn-primary" data-toggle="modal" data-target="#checkerModal">
-            Add New Checker
+            <i class="fas fa-plus"></i> Add New Checker
         </button>
     </div>
 
@@ -40,13 +40,13 @@
                 <td>{{ checker.remaining_pages }}</td>
                 <td>
                     <button class="btn btn-primary btn-sm add-payment" data-checker="{{ checker.id }}">
-                        Add Payment
+                        <i class="fas fa-plus"></i> Add Payment
                     </button>
                     <button class="btn btn-info btn-sm view-details" data-checker="{{ checker.id }}">
                         Details
                     </button>
                     <button class="btn btn-danger btn-sm delete-checker" data-checker="{{ checker.id }}">
-                        Delete
+                        <i class="fas fa-times"></i> Delete
                     </button>
                 </td>
             </tr>
@@ -84,8 +84,12 @@
                     </div>
                     <div class="form-group">
                         <label>Account Number</label>
-                        <input type="text" class="form-control" name="account_number" 
-                               pattern="^\d+$" required>
+                        <input type="text" id="account_number" name="account_number" 
+                            class="form-control" 
+                            pattern="\d+" 
+                            oninput="this.value = this.value.replace(/[^0-9]/g, '')"
+                            title="Only numbers allowed"
+                            required>
                     </div>
                     <div class="form-group">
                         <label>City</label>
@@ -122,7 +126,7 @@
 
 <!-- Payment Modal -->
 <div class="modal fade" id="paymentModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog modal-lg" role="document">
+    <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Add Payment</h5>

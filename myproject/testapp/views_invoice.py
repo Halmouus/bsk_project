@@ -5,7 +5,7 @@ from .models import Invoice, InvoiceProduct, Product, ExportRecord
 from .forms import InvoiceForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404, redirect
@@ -77,34 +77,50 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
 # Update an existing Invoice
 class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     model = Invoice
-    form_class = InvoiceForm  # Use the custom form here
+    form_class = InvoiceForm
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully updated."
 
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        if self.object:  # If editing existing invoice
+            form.fields['supplier'].widget.attrs['disabled'] = 'disabled'
+            form.fields['supplier'].widget.attrs['readonly'] = 'readonly'
+        return form
+    
     def get_context_data(self, **kwargs):
-        data = super().get_context_data(**kwargs)
+        data = super().get_context_data(**kwargs) 
         if self.request.POST:
-            data['products'] = InvoiceProductInlineFormset(self.request.POST, instance=self.object)
+            data['products'] = InvoiceProductInlineFormset(self.request.POST, instance=self.object) 
         else:
              data['products'] = InvoiceProductInlineFormset(instance=self.object, queryset=InvoiceProduct.objects.filter(invoice=self.object))
         return data
 
     def form_valid(self, form):
+        print("Entering form_valid")
+        print("Form data:", form.cleaned_data)
         context = self.get_context_data()
         products = context['products']
+        print("Form valid:", form.is_valid())
+        print("Products valid:", products.is_valid())
+        if not products.is_valid():
+            print("Products errors:", products.errors)  # Add this
+            print("Non-form errors:", products.non_form_errors())  # And this
         if form.is_valid() and products.is_valid():
+            print("Both form and products are valid")
             self.object = form.save()
             products.instance = self.object
             products.save()
+            print("Save completed")
             return super().form_valid(form)
-        else:
-            return super().form_invalid(form)
+        print("Form validation failed")
+        return self.form_invalid(form)
 
     def dispatch(self, request, *args, **kwargs):
         invoice = self.get_object()
         if invoice.exported_at:
-            messages.error(request, 'Cannot edit an exported invoice.')
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!', extra_tags='danger')
             return redirect('invoice-list')
         return super().dispatch(request, *args, **kwargs)
 
@@ -114,6 +130,13 @@ class InvoiceDeleteView(DeleteView):
     template_name = 'invoice/invoice_confirm_delete.html'
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully deleted."
+
+    def dispatch(self, request, *args, **kwargs):
+        invoice = self.get_object()
+        if invoice.exported_at:
+            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be deleted!', extra_tags='danger')
+            return redirect('invoice-list')
+        return super().dispatch(request, *args, **kwargs)
 
 
 InvoiceProductInlineFormset = inlineformset_factory(

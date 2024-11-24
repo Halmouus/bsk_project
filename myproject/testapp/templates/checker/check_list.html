@@ -5,82 +5,91 @@
 {% block content %}
 <div class="container mt-4">
     <h2>Checks List</h2>
-
-    <table class="table table-hover">
-        <thead class="thead-dark">
-            <tr>
-                <th>Checker Code</th>
-                <th>Bank</th>
-                <th>Owner</th>
-                <th>Type</th>
-                <th>Position</th>
-                <th>Creation Date</th>
-                <th>Beneficiary</th>
-                <th>Invoice Ref</th>
-                <th>Payment Due</th>
-                <th>Amount Due</th>
-                <th>Amount</th>
-                <th>Status</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for check in checks %}
-            <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
-                <td>{{ check.checker.code }}</td>
-                <td>{{ check.checker.get_bank_display }}</td>
-                <td>{{ check.checker.owner }}</td>
-                <td>{{ check.checker.get_type_display }}</td>
-                <td>{{ check.position }}</td>
-                <td>{{ check.creation_date|date:"Y-m-d" }}</td>
-                <td>{{ check.beneficiary.name }}</td>
-                <td>{{ check.cause.ref }}</td>
-                <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
-                <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
-                <td class="text-right">{{ check.amount|floatformat:2 }}</td>
-                <td>
-                    {% if check.status == 'cancelled' %}
-                        <span class="badge badge-danger">Cancelled</span>
-                    {% elif check.paid %}
-                        <span class="badge badge-success">Paid</span>
-                    {% elif check.delivered %}
-                        <span class="badge badge-warning">Delivered</span>
-                    {% else %}
-                        <span class="badge badge-secondary">Pending</span>
-                    {% endif %}
-                </td>
-                <td>
-                    <div class="btn-group">
-                        <button class="btn btn-primary btn-sm edit-check-btn" 
-                                data-check-id="{{ check.id }}">
-                            Edit
-                        </button>
-                        {% if not check.delivered %}
-                            <button class="btn btn-warning btn-sm mark-delivered" 
-                                    data-check="{{ check.id }}">
-                                Mark Delivered
-                            </button>
-                        {% endif %}
-                        {% if check.delivered and not check.paid %}
-                            <button class="btn btn-success btn-sm mark-paid" 
-                                    data-check="{{ check.id }}">
-                                Mark Paid
-                            </button>
-                        {% endif %}
-                        {% if not check.paid %}
-                            <button class="btn btn-danger btn-sm cancel-check-btn" 
-                                    data-check-id="{{ check.id }}">
-                                Cancel
-                            </button>
-                        {% endif %}
-                        <button class="btn btn-info btn-sm">Print</button>
-                    </div>
-                </td>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="container-fluid px-1">  <!-- Add padding -->
+        <div class="table-responsive">  <!-- Make table responsive -->
+            <table class="table table-hover">
+                <thead class="thead-dark">
+                    <tr>
+                        <th>Checker Code</th>
+                        <th>Bank</th>
+                        <th>Owner</th>
+                        <th>Type</th>
+                        <th>Position</th>
+                        <th>Creation Date</th>
+                        <th>Beneficiary</th>
+                        <th>Invoice Ref</th>
+                        <th>Payment Due</th>
+                        <th>Amount Due</th>
+                        <th>Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for check in checks %}
+                    <tr {% if check.cancelled_at %}class="table-danger" data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}>
+                        <td>{{ check.checker.code }}</td>
+                        <td>{{ check.checker.get_bank_display }}</td>
+                        <td>{{ check.checker.owner }}</td>
+                        <td>{{ check.checker.get_type_display }}</td>
+                        <td>{{ check.position }}</td>
+                        <td>{{ check.creation_date|date:"Y-m-d" }}</td>
+                        <td>{{ check.beneficiary.name }}</td>
+                        <td>{{ check.cause.ref }}</td>
+                        <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
+                        <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
+                        <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+                        <td>
+                            {% if check.status == 'cancelled' %}
+                            <span class="badge badge-danger cancellation-info" 
+                                    role="button" 
+                                    data-toggle="modal" 
+                                    data-target="#cancellationDetailModal"
+                                    data-reason="{{ check.cancellation_reason }}">
+                                Cancelled
+                            </span>
+                            {% elif check.paid %}
+                                <span class="badge badge-success">Paid</span>
+                            {% elif check.delivered %}
+                                <span class="badge badge-warning">Delivered</span>
+                            {% else %}
+                                <span class="badge badge-secondary">Pending</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="btn-group">
+                                <button class="btn btn-primary btn-sm edit-check-btn" 
+                                        data-check-id="{{ check.id }}">
+                                    Edit
+                                </button>
+                                {% if not check.delivered %}
+                                    <button class="btn btn-warning btn-sm mark-delivered" 
+                                            data-check="{{ check.id }}">
+                                        Mark Delivered
+                                    </button>
+                                {% endif %}
+                                {% if check.delivered and not check.paid %}
+                                    <button class="btn btn-success btn-sm mark-paid" 
+                                            data-check="{{ check.id }}">
+                                        Mark Paid
+                                    </button>
+                                {% endif %}
+                                {% if not check.paid %}
+                                    <button class="btn btn-danger btn-sm cancel-check-btn" 
+                                            data-check-id="{{ check.id }}">
+                                        Cancel
+                                    </button>
+                                {% endif %}
+                                <button class="btn btn-info btn-sm">Print</button>
+                            </div>
+                        </td>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </div>
 
 <div class="modal fade" id="editCheckModal" tabindex="-1">
@@ -141,6 +150,70 @@
         </div>
     </div>
 </div>
+
+<!-- Add this modal to your template -->
+<div class="modal fade" id="cancellationDetailModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Cancellation Reason</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p id="cancellationReason"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .cancellation-info {
+        cursor: pointer;
+    }
+    .cancellation-info:hover {
+        opacity: 0.8;
+    }
+    
+    /* Make buttons more refined */
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.375rem 0.75rem;
+        border-radius: 0.25rem;
+        transition: all 0.2s;
+    }
+    
+    .btn i {
+        font-size: 0.875rem;
+    }
+    
+    .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    
+    /* Space out buttons in button groups */
+    .btn-group .btn {
+        margin-right: 0.25rem;
+    }
+    .btn-group .btn:last-child {
+        margin-right: 0;
+    }
+
+    .table-responsive {
+    margin: 0 auto;
+    padding: 10px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-width: 100%;
+    max-height: 500px;
+
+    }
+</style>
 
 <script>
 $(document).ready(function() {
@@ -289,6 +362,12 @@ $(document).ready(function() {
                 alert(xhr.responseJSON.error || "Error cancelling check");
             }
         });
+    });
+
+    // Display cancellation reason
+    $('.cancellation-info').click(function() {
+        const reason = $(this).data('reason');
+        $('#cancellationReason').text(reason);
     });
 
     // Reset modals on close
