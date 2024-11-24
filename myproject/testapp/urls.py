@@ -4,7 +4,8 @@ from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdate
 from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
-    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView  # Import the EditProductInInvoiceView
+    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
+    InvoicePaymentDetailsView  # Import the EditProductInInvoiceView
 )
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
@@ -40,6 +41,7 @@ urlpatterns = [
     path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
     path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
     path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
+    path('invoices/<str:pk>/payment-details/', InvoicePaymentDetailsView.as_view(), name='invoice-payment-details'),
 
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
     path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers

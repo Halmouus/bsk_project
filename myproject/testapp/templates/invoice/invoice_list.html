@@ -19,6 +19,7 @@
             <th>Tax Rate (%)</th>
             <th>Tax Amount</th>
             <th>Total Amount (Incl. Tax)</th>
+            <th>Status</th>
             <th>Actions</th>
             <th>Details</th>
         </tr>
@@ -64,11 +65,29 @@
                 </td>                
                 <td>{{ invoice.total_amount|floatformat:2|intcomma }}</td>
                 <td>
+                    {% if invoice.payment_status == 'paid' %}
+                        <span class="badge badge-success">Paid</span>
+                    {% elif invoice.payment_status == 'partially_paid' %}
+                        <span class="badge badge-warning">
+                            Partially Paid 
+                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                        </span>
+                    {% else %}
+                        <span class="badge badge-danger">Not Paid</span>
+                    {% endif %}
+                </td>
+                <td>
                     <a href="{% url 'invoice-update' invoice.pk %}" class="btn btn-warning">Edit</a>
                     <a href="{% url 'invoice-delete' invoice.pk %}" class="btn btn-danger">Delete</a>
                 </td>
                 <td>
                     <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                    <button class="btn btn-info btn-sm"                             
+                            data-toggle="modal" 
+                            data-target="#paymentDetailsModal"
+                            data-invoice="{{ invoice.pk }}">
+                        Payment Details
+                    </button>
                 </td>
             </tr>
         {% empty %}
@@ -125,7 +144,87 @@
     </div>
 </div>
 
+<!-- Payment Details Modal -->
+<div class="modal fade" id="paymentDetailsModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Details</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount Due</h6>
+                                <h4 id="amount-due" class="card-title"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount Paid</h6>
+                                <h4 id="amount-paid" class="card-title"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount to Issue</h6>
+                                <h4 id="amount-to-issue" class="card-title"></h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
+                <!-- Progress Bar -->
+                <div class="progress mb-4" style="height: 25px;">
+                    <div id="payment-progress" 
+                         class="progress-bar" 
+                         role="progressbar" 
+                         style="width: 0%"></div>
+                </div>
+
+                <!-- Detailed Breakdown -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <p class="mb-1">Pending Payments:</p>
+                        <h5 id="pending-amount"></h5>
+                    </div>
+                    <div class="col-md-4">
+                        <p class="mb-1">Delivered Payments:</p>
+                        <h5 id="delivered-amount"></h5>
+                    </div>
+                    <div class="col-md-4">
+                        <p class="mb-1">Remaining to Pay:</p>
+                        <h5 id="remaining-amount"></h5>
+                    </div>
+                </div>
+
+                <!-- Checks Table -->
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Amount</th>
+                                <th>Created</th>
+                                <th>Delivered</th>
+                                <th>Paid</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payment-checks-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <!-- JavaScript to populate modal -->
 <script>
@@ -197,6 +296,96 @@
                 });
             });
         });
+
+        // Payment details functionality
+        $('#paymentDetailsModal').on('show.bs.modal', function (event) {
+            const button = $(event.relatedTarget); // Button that triggered the modal
+            const invoiceId = button.data('invoice'); // Extract invoice ID
+
+            // Fetch payment details via AJAX
+            $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function (data) {
+                const details = data.payment_details;
+
+                // Update summary section
+                $('#amount-due').text(formatMoney(details.total_amount));
+                $('#amount-paid').text(formatMoney(details.paid_amount));
+                $('#amount-to-issue').text(formatMoney(details.amount_to_issue));
+
+                // Update progress bar
+                const progressBar = $('#payment-progress');
+                progressBar
+                    .css('width', `${details.payment_percentage}%`)
+                    .text(`${details.payment_percentage.toFixed(1)}%`)
+                    .removeClass('bg-success bg-warning bg-danger')
+                    .addClass(getProgressBarClass(details.payment_percentage));
+
+                // Update detailed breakdown
+                $('#pending-amount').text(formatMoney(details.pending_amount));
+                $('#delivered-amount').text(formatMoney(details.delivered_amount));
+                $('#remaining-amount').text(formatMoney(details.remaining_to_pay));
+
+                // Update checks table
+                updateChecksTable(data.checks);
+            });
+        });
+
+        // Utility function to format money
+        function formatMoney(amount) {
+            return new Intl.NumberFormat('fr-FR', {
+                style: 'currency',
+                currency: 'MAD',
+                minimumFractionDigits: 2
+            }).format(amount);
+        }
+
+        // Utility function to get progress bar class
+        function getProgressBarClass(percentage) {
+            if (percentage >= 100) return 'bg-success';
+            if (percentage > 50) return 'bg-warning';
+            return 'bg-danger';
+        }
+
+        // Update checks table with data
+        function updateChecksTable(checks) {
+            const tbody = $('#payment-checks-tbody');
+            tbody.empty();
+
+            checks.forEach(check => {
+                tbody.append(`
+                    <tr>
+                        <td>${check.reference}</td>
+                        <td>${formatMoney(check.amount)}</td>
+                        <td>${check.created_at}</td>
+                        <td>${check.delivered_at || '-'}</td>
+                        <td>${check.paid_at || '-'}</td>
+                        <td>
+                            <span class="badge badge-${getStatusBadgeClass(check.status)}">
+                                ${formatStatus(check.status)}
+                            </span>
+                        </td>
+                    </tr>
+                `);
+            });
+        }
+
+        // Utility function to get badge class for status
+        function getStatusBadgeClass(status) {
+            return {
+                'pending': 'secondary',
+                'delivered': 'warning',
+                'paid': 'success',
+                'cancelled': 'danger'
+            }[status] || 'secondary';
+        }
+
+        // Utility function to format status text
+        function formatStatus(status) {
+            return status.charAt(0).toUpperCase() + status.slice(1);
+        }
+
+
+
+        // Invoice details functionality
         $('#invoiceDetailsModal').on('show.bs.modal', function (event) {
             const button = $(event.relatedTarget);
             const invoiceId = button.data('invoice');
@@ -258,6 +447,7 @@
             });
         });
 
+        // Remove product form when clicking 'Remove Product'
         document.querySelectorAll('.remove-product').forEach(button => {
             button.addEventListener('click', function() {
                 button.parentElement.remove();
@@ -265,6 +455,7 @@
             });
         });
 
+        // Update TOTAL_FORMS count
         function updateTotalFormsCount() {
             formIndex = productFormsDiv.querySelectorAll('.product-form').length;
             totalFormsInput.value = formIndex;
@@ -295,9 +486,11 @@
             });
         }
 
+         
         // Initialize autocomplete for existing forms
         document.querySelectorAll('.product-form').forEach(addAutocomplete);
-        
+
+       
     });
 </script>
 

@@ -1,7 +1,7 @@
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Invoice, InvoiceProduct, Product, ExportRecord
+from .models import Invoice, InvoiceProduct, Product, ExportRecord, Check
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -406,3 +406,25 @@ class UnexportInvoiceView(UserPassesTestMixin, View):
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
+        
+class InvoicePaymentDetailsView(View):
+    def get(self, request, pk):
+        invoice = get_object_or_404(Invoice, pk=pk)
+        payment_details = invoice.get_payment_details()
+        
+        # Get all related checks with their details
+        checks = Check.objects.filter(cause=invoice).select_related('checker')
+        check_details = [{
+            'id': str(check.id),
+            'reference': f"{check.checker.bank}-{check.position}",
+            'amount': float(check.amount),
+            'status': check.status,
+            'created_at': check.creation_date.strftime('%Y-%m-%d'),
+            'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+            'paid_at': check.paid_at.strftime('%Y-%m-%d') if check.paid_at else None,
+        } for check in checks]
+
+        return JsonResponse({
+            'payment_details': payment_details,
+            'checks': check_details
+        })

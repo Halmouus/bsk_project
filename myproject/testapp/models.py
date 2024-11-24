@@ -91,6 +91,16 @@ class Invoice(BaseModel):
     payment_due_date = models.DateField(null=True, blank=True)
     exported_at = models.DateTimeField(null=True, blank=True)
     export_history = models.ManyToManyField('ExportRecord', blank=True, related_name='invoices')
+    PAYMENT_STATUS_CHOICES = [
+        ('not_paid', 'Not Paid'),
+        ('partially_paid', 'Partially Paid'),
+        ('paid', 'Paid')
+    ]
+    payment_status = models.CharField(
+        max_length=20,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_paid'
+    )
 
     def save(self, *args, **kwargs):
         if not self.payment_due_date:
@@ -228,6 +238,80 @@ class Invoice(BaseModel):
         })
 
         return entries
+    
+    def get_payment_details(self):
+        """Calculate comprehensive payment details"""
+        # Get all non-cancelled checks for this invoice
+        valid_checks = Check.objects.filter(
+            cause=self
+        ).exclude(
+            status='cancelled'
+        )
+
+        # Calculate various payment amounts
+        pending_amount = sum(c.amount for c in valid_checks.filter(status='pending'))
+        delivered_amount = sum(c.amount for c in valid_checks.filter(status='delivered'))
+        paid_amount = sum(c.amount for c in valid_checks.filter(status='paid'))
+        total_issued = sum(c.amount for c in valid_checks)
+
+        # Calculate remaining and percentages
+        amount_to_issue = self.total_amount - total_issued
+        print(f"Amount to issue: {amount_to_issue}")  # Debug output
+        remaining_to_pay = self.total_amount - paid_amount
+        print(f"Remaining to pay: {remaining_to_pay}") # Debug output
+        payment_percentage = (paid_amount / self.total_amount * 100) if self.total_amount else 0
+        print(f"Payment percentage: {payment_percentage}") # Debug output
+
+        details = {
+            'total_amount': float(self.total_amount),
+            'pending_amount': float(pending_amount),
+            'delivered_amount': float(delivered_amount),
+            'paid_amount': float(paid_amount),
+            'amount_to_issue': float(amount_to_issue),
+            'remaining_to_pay': float(remaining_to_pay),
+            'payment_percentage': float(payment_percentage),
+            'payment_status': self.get_payment_status(paid_amount)
+        }
+
+        print(details)  # Debug output
+        return details
+
+    def get_payment_status(self, paid_amount=None):
+        """Determine payment status based on paid amount"""
+        if paid_amount is None:
+            paid_amount = sum(c.amount for c in Check.objects.filter(
+                cause=self, 
+                status='paid'
+            ).exclude(status='cancelled'))
+
+        if paid_amount >= self.total_amount:
+            return 'paid'
+        elif paid_amount > 0:
+            return 'partially_paid'
+        return 'not_paid'
+
+
+    @property
+    def payments_summary(self):
+        payments = Check.objects.filter(cause=self).exclude(status='cancelled')
+        return {
+            'pending_amount': sum(p.amount for p in payments.filter(status='pending')),
+            'delivered_amount': sum(p.amount for p in payments.filter(status='delivered')),
+            'paid_amount': sum(p.amount for p in payments.filter(status='paid')),
+            'percentage_paid': (sum(p.amount for p in payments.filter(status='paid')) / self.total_amount * 100) if self.total_amount else 0,
+            'remaining_amount': self.total_amount - sum(p.amount for p in payments.filter(status='paid')),
+            'amount_to_issue': self.total_amount - sum(p.amount for p in payments.exclude(status='cancelled'))
+        }
+
+    def update_payment_status(self):
+        summary = self.payments_summary
+        if summary['paid_amount'] >= self.total_amount:
+            self.payment_status = 'paid'
+        elif summary['paid_amount'] > 0:
+            self.payment_status = 'partially_paid'
+        else:
+            self.payment_status = 'not_paid'
+        self.save()
 
     def __str__(self):
         return f'Invoice {self.ref} from {self.supplier.name}'
