@@ -12,6 +12,8 @@ from .views_checkers import (
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView
 )
 
+from .views_credit_notes import CreditNoteDetailsView
+
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
@@ -57,5 +59,9 @@ urlpatterns = [
     path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
+
+    path('invoices/<uuid:invoice_id>/credit-note-details/', 
+         CreditNoteDetailsView.as_view(), 
+         name='credit-note-details'),  # Details for a specific credit note
 
 ]

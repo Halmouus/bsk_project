@@ -8,6 +8,7 @@ import random
 import string
 from django.utils import timezone
 from decimal import Decimal
+from django.db.models import Q
 
 
 
@@ -82,6 +83,10 @@ class Product(BaseModel):
         return self.name
 
 class Invoice(BaseModel):
+    INVOICE_TYPE_CHOICES = [
+        ('invoice', 'Invoice'),
+        ('credit_note', 'Credit Note'),
+    ]
     ref = models.CharField(max_length=50, unique=True)
     date = models.DateField()
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT)
@@ -91,15 +96,31 @@ class Invoice(BaseModel):
     payment_due_date = models.DateField(null=True, blank=True)
     exported_at = models.DateTimeField(null=True, blank=True)
     export_history = models.ManyToManyField('ExportRecord', blank=True, related_name='invoices')
+
     PAYMENT_STATUS_CHOICES = [
         ('not_paid', 'Not Paid'),
         ('partially_paid', 'Partially Paid'),
         ('paid', 'Paid')
     ]
+
     payment_status = models.CharField(
         max_length=20,
         choices=PAYMENT_STATUS_CHOICES,
         default='not_paid'
+    )
+    
+    type = models.CharField(
+        max_length=20,
+        choices=INVOICE_TYPE_CHOICES,
+        default='invoice'
+    )
+
+    original_invoice = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name='credit_notes'
     )
 
     def save(self, *args, **kwargs):
@@ -109,7 +130,14 @@ class Invoice(BaseModel):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['supplier', 'ref'], name='unique_supplier_invoice_ref')
+            models.UniqueConstraint(fields=['supplier', 'ref'], name='unique_supplier_invoice_ref'),
+            models.CheckConstraint(
+                check=Q(
+                    Q(type='invoice', original_invoice__isnull=True) |
+                    Q(type='credit_note', original_invoice__isnull=False)
+                ),
+                name='credit_note_must_have_original_invoice'
+            )
         ]
         permissions = [
         ("can_export_invoice", "Can export invoice"),
@@ -160,6 +188,65 @@ class Invoice(BaseModel):
     def total_amount(self):
         """Calculate the total amount of the invoice including tax."""
         return self.raw_amount + self.total_tax_amount
+    
+    @property
+    def net_amount(self):
+        """Calculate net amount after credit notes"""
+        credit_notes_total = sum(
+            cn.total_amount for cn in self.credit_notes.all()
+        )
+        return self.total_amount - credit_notes_total
+
+    @property
+    def has_credit_notes(self):
+        """Check if invoice has any credit notes"""
+        return self.credit_notes.exists()
+    
+    @property
+    def can_be_credited(self):
+        """Check if invoice can have more credit notes"""
+        if self.type == 'credit_note':
+            return False
+        if self.payment_status == 'paid':
+            return False
+        credit_notes_total = sum(cn.total_amount for cn in self.credit_notes.all())
+        return credit_notes_total < self.total_amount
+    
+
+    def clean(self):
+        """Custom clean method to validate credit notes"""
+        super().clean()
+        if self.type == 'credit_note':
+            if not self.original_invoice:
+                raise ValidationError("Credit note must reference an original invoice")
+            if self.original_invoice.type != 'invoice':
+                raise ValidationError("Cannot create credit note for another credit note")
+            if self.supplier != self.original_invoice.supplier:
+                raise ValidationError("Credit note must have same supplier as original invoice")
+
+    def get_credited_quantities(self):
+        """Get total credited quantities per product"""
+        credited_quantities = {}
+        for credit_note in self.credit_notes.all():
+            for item in credit_note.products.all():
+                if item.product_id in credited_quantities:
+                    credited_quantities[item.product_id] += item.quantity
+                else:
+                    credited_quantities[item.product_id] = item.quantity
+        return credited_quantities
+
+    def get_available_quantities(self):
+        """Get available quantities that can still be credited"""
+        original_quantities = {
+            item.product_id: item.quantity 
+            for item in self.products.all()
+        }
+        credited_quantities = self.get_credited_quantities()
+        
+        return {
+            product_id: original_quantities[product_id] - credited_quantities.get(product_id, 0)
+            for product_id in original_quantities
+        }
 
     def get_accounting_entries(self):
         entries = []

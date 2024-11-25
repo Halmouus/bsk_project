@@ -87,6 +87,13 @@
                             class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
                                 Delete
                             </a>
+                            <button class="btn btn-info btn-sm" 
+                                    data-toggle="modal" 
+                                    data-target="#creditNoteModal" 
+                                    data-invoice-id="{{ invoice.id }}"
+                                    {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                <i class="fas fa-reply"></i> Credit Note
+                            </button>
                         {% else %}
                             <button class="btn btn-secondary" disabled>
                                 <i class="fas fa-lock"></i> Paid
@@ -235,6 +242,56 @@
                         <tbody id="payment-checks-tbody"></tbody>
                     </table>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Credit Note Modal -->
+<div class="modal fade" id="creditNoteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Credit Note</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Original Invoice Info -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-2 text-muted">Original Invoice</h6>
+                        <div id="original-invoice-details"></div>
+                    </div>
+                </div>
+
+                <!-- Products Selection -->
+                <form id="credit-note-form">
+                    <input type="hidden" id="original-invoice-id" name="original_invoice_id">
+                    <table class="table" id="products-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Original Qty</th>
+                                <th>Already Credited</th>
+                                <th>Available</th>
+                                <th>Credit Qty</th>
+                                <th>Unit Price</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="6" class="text-right">Total Credit Amount:</th>
+                                <th class="text-right" id="total-credit-amount">0.00</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-credit-note">Create Credit Note</button>
             </div>
         </div>
     </div>
@@ -500,6 +557,86 @@
             });
         }
 
+        // Credit Note Modal Handler
+        $('#creditNoteModal').on('show.bs.modal', function(event) {
+            const button = $(event.relatedTarget);
+            const invoiceId = button.data('invoice-id');
+            $('#original-invoice-id').val(invoiceId);
+
+            // Load invoice details and available products
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
+                method: 'GET',
+                success: function(data) {
+                    // Update original invoice details
+                    $('#original-invoice-details').html(`
+                        <p><strong>Reference:</strong> ${data.invoice.ref}</p>
+                        <p><strong>Date:</strong> ${data.invoice.date}</p>
+                        <p><strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}</p>
+                        <p><strong>Already Credited:</strong> ${formatMoney(data.invoice.credited_amount)}</p>
+                    `);
+
+                    // Populate products table
+                    const tbody = $('#products-table tbody').empty();
+                    data.products.forEach(product => {
+                        tbody.append(`
+                            <tr>
+                                <td>${product.name}</td>
+                                <td class="text-right">${product.original_quantity}</td>
+                                <td class="text-right">${product.credited_quantity}</td>
+                                <td class="text-right">${product.available_quantity}</td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm credit-quantity"
+                                        data-product-id="${product.id}"
+                                        data-unit-price="${product.unit_price}"
+                                        data-available="${product.available_quantity}"
+                                        min="0" max="${product.available_quantity}" value="0">
+                                </td>
+                                <td class="text-right">${formatMoney(product.unit_price)}</td>
+                                <td class="text-right subtotal">0.00</td>
+                            </tr>
+                        `);
+                    });
+
+                    // Initialize quantity handlers
+                    initializeQuantityHandlers();
+                },
+                error: function(xhr) {
+                    alert('Failed to load credit note details: ' + xhr.responseText);
+                }
+            });
+        });
+
+        // Handle quantity changes
+        function initializeQuantityHandlers() {
+            $('.credit-quantity').on('input', function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                const available = parseFloat($(this).data('available'));
+                const unitPrice = parseFloat($(this).data('unit-price'));
+                
+                // Validate quantity
+                if (quantity > available) {
+                    $(this).val(available);
+                    return;
+                }
+                
+                // Update subtotal
+                const subtotal = quantity * unitPrice;
+                $(this).closest('tr').find('.subtotal').text(formatMoney(subtotal));
+                
+                // Update total
+                updateTotal();
+            });
+        }
+
+        // Update total credit amount
+        function updateTotal() {
+            let total = 0;
+            $('.subtotal').each(function() {
+                total += parseFloat($(this).text().replace(/[^0-9.-]+/g, '')) || 0;
+            });
+            $('#total-credit-amount').text(formatMoney(total));
+        }
          
         // Initialize autocomplete for existing forms
         document.querySelectorAll('.product-form').forEach(addAutocomplete);
