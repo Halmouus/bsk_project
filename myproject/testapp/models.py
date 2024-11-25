@@ -124,8 +124,12 @@ class Invoice(BaseModel):
     )
 
     def save(self, *args, **kwargs):
-        if not self.payment_due_date:
-            self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
+        if self.type == 'invoice':  # Only calculate payment_due_date for regular invoices
+            if not self.payment_due_date:
+                self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
+        else:  # For credit notes
+            self.payment_due_date = None
+
         super().save(*args, **kwargs)
 
     class Meta:
@@ -250,6 +254,7 @@ class Invoice(BaseModel):
 
     def get_accounting_entries(self):
         entries = []
+        sign = -1 if self.type == 'credit_note' else 1
         expense_groups = {}
         tax_groups = {}
         
@@ -263,7 +268,12 @@ class Invoice(BaseModel):
                     'is_energy': invoice_product.product.is_energy
                 }
             # Track product value
-            product_value = invoice_product.quantity * invoice_product.unit_price * (1 - invoice_product.reduction_rate / 100)
+            product_value = (
+                invoice_product.quantity * 
+                invoice_product.unit_price * 
+                (1 - invoice_product.reduction_rate / 100) * 
+                sign
+            )
             expense_groups[key]['products'][invoice_product.product.name] = product_value
             expense_groups[key]['amount'] += product_value
 
@@ -274,6 +284,7 @@ class Invoice(BaseModel):
             tax_groups[tax_key] += (product_value * invoice_product.vat_rate / 100)
 
         # Add expense entries with top 3 products by value
+        prefix = "CN -" if self.type == 'credit_note' else ""
         for expense_code, data in expense_groups.items():
             # Sort products by value and get unique names
             sorted_products = sorted(data['products'].items(), key=lambda x: x[1], reverse=True)
@@ -290,9 +301,9 @@ class Invoice(BaseModel):
 
             entries.append({
                 'date': self.date,
-                'label': ', '.join(product_names),
-                'debit': data['amount'],
-                'credit': None,
+                'label': f"{prefix} {', '.join(product_names)}",
+                'debit': data['amount'] if sign > 0 else None,
+                'credit': abs(data['amount']) if sign < 0 else None,
                 'account_code': expense_code,
                 'reference': self.ref,
                 'journal': '10' if data['is_energy'] else '01',
@@ -305,8 +316,8 @@ class Invoice(BaseModel):
                 entries.append({
                     'date': self.date,
                     'label': f'VAT {int(rate)}%',
-                    'debit': amount,
-                    'credit': None,
+                    'debit': amount if sign > 0 else None,
+                    'credit': abs(amount) if sign < 0 else None,
                     'account_code': f'345{int(rate):02d}',
                     'reference': self.ref,
                     'journal': '10' if self.supplier.is_energy else '01',
@@ -316,15 +327,29 @@ class Invoice(BaseModel):
         entries.append({
             'date': self.date,
             'label': self.supplier.name,
-            'debit': None,
-            'credit': self.total_amount,
+            'debit': abs(self.total_amount) if sign < 0 else None,
+            'credit': self.total_amount if sign > 0 else None,
             'account_code': self.supplier.accounting_code,
             'reference': self.ref,
             'journal': '10' if self.supplier.is_energy else '01',
             'counterpart': ''
         })
 
-        return entries
+        return entries    
+    
+    @property
+    def amount_available_for_payment(self):
+        """Calculate amount available for payment considering credit notes"""
+        net_amount = self.net_amount
+        payments_sum = sum(
+            check.amount 
+            for check in Check.objects.filter(
+                cause=self
+            ).exclude(
+                status='cancelled'
+            )
+        )
+        return max(0, net_amount - payments_sum)
     
     def get_payment_details(self):
         """Calculate comprehensive payment details"""
@@ -341,16 +366,22 @@ class Invoice(BaseModel):
         paid_amount = sum(c.amount for c in valid_checks.filter(status='paid'))
         total_issued = sum(c.amount for c in valid_checks)
 
+        # Use net_amount instead of total_amount
+        net_amount = self.net_amount
+        amount_to_issue = net_amount - total_issued
+        remaining_to_pay = net_amount - paid_amount
+        payment_percentage = (paid_amount / net_amount * 100) if net_amount else 0
+
         # Calculate remaining and percentages
-        amount_to_issue = self.total_amount - total_issued
+        amount_to_issue = self.net_amount - total_issued
         print(f"Amount to issue: {amount_to_issue}")  # Debug output
-        remaining_to_pay = self.total_amount - paid_amount
+        remaining_to_pay = self.net_amount - paid_amount
         print(f"Remaining to pay: {remaining_to_pay}") # Debug output
-        payment_percentage = (paid_amount / self.total_amount * 100) if self.total_amount else 0
+        payment_percentage = (paid_amount / self.net_amount * 100) if self.net_amount else 0
         print(f"Payment percentage: {payment_percentage}") # Debug output
 
         details = {
-            'total_amount': float(self.total_amount),
+            'total_amount': float(self.net_amount),
             'pending_amount': float(pending_amount),
             'delivered_amount': float(delivered_amount),
             'paid_amount': float(paid_amount),

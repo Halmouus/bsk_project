@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 class CreditNoteDetailsView(View):
     def get(self, request, invoice_id):
+        print("Credit note details requested for invoice:", invoice_id) 
         invoice = get_object_or_404(Invoice, id=invoice_id)
         credited_quantities = invoice.get_credited_quantities()
         available_quantities = invoice.get_available_quantities()
@@ -39,16 +40,26 @@ class CreditNoteDetailsView(View):
 class CreateCreditNoteView(View):
     def post(self, request):
         try:
+            print("Received POST request for creating credit note")
             data = json.loads(request.body)
+            print("Received data:", data)
             original_invoice = get_object_or_404(Invoice, id=data['original_invoice_id'])
+            print("Original Invoice:", original_invoice)
+
+            # Check for duplicate reference
+            if Invoice.objects.filter(ref=data['ref']).exists():
+                return JsonResponse(
+                    {'error': 'Credit note reference already exists'}, 
+                    status=400
+                )
             
             # Create credit note
             credit_note = Invoice.objects.create(
                 type='credit_note',
                 original_invoice=original_invoice,
                 supplier=original_invoice.supplier,
-                ref=f"CN-{original_invoice.ref}",  # You might want a better reference generation
-                date=timezone.now().date(),
+                ref=data['ref'],
+                date=data['date'],
                 status='draft'
             )
 

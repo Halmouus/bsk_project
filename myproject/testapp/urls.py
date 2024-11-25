@@ -5,14 +5,14 @@ from .views_product import ProductListView, ProductCreateView, ProductUpdateView
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
-    InvoicePaymentDetailsView  # Import the EditProductInInvoiceView
+    InvoicePaymentDetailsView, InvoiceAccountingSummaryView  # Import the EditProductInInvoiceView
 )
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView
 )
 
-from .views_credit_notes import CreditNoteDetailsView
+from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
 
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
@@ -44,6 +44,7 @@ urlpatterns = [
     path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
     path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
     path('invoices/<str:pk>/payment-details/', InvoicePaymentDetailsView.as_view(), name='invoice-payment-details'),
+    path('invoices/<str:invoice_id>/accounting-summary/', InvoiceAccountingSummaryView.as_view(), name='invoice-accounting-summary'),
 
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
     path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
@@ -60,8 +61,10 @@ urlpatterns = [
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
 
-    path('invoices/<uuid:invoice_id>/credit-note-details/', 
-         CreditNoteDetailsView.as_view(), 
-         name='credit-note-details'),  # Details for a specific credit note
+    path('invoices/<str:invoice_id>/credit-note-details/', CreditNoteDetailsView.as_view(), name='credit-note-details'),
+
+    path('invoices/create-credit-note/', 
+         CreateCreditNoteView.as_view(), 
+         name='create-credit-note'),
 
 ]

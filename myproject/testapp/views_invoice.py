@@ -433,3 +433,28 @@ class InvoicePaymentDetailsView(View):
             'payment_details': payment_details,
             'checks': check_details
         })
+
+class InvoiceAccountingSummaryView(View):
+    def get(self, request, invoice_id):
+        invoice = get_object_or_404(Invoice, id=invoice_id)
+        
+        # Get original entries
+        original_entries = invoice.get_accounting_entries()
+        
+        # Get credit note entries
+        credit_note_entries = []
+        credit_notes_total = 0
+        for credit_note in invoice.credit_notes.all():
+            entries = credit_note.get_accounting_entries()
+            credit_note_entries.extend(entries)
+            credit_notes_total += credit_note.total_amount
+            
+        return JsonResponse({
+            'original_entries': original_entries,
+            'credit_note_entries': credit_note_entries,
+            'totals': {
+                'original': float(invoice.total_amount),
+                'credit_notes': float(-credit_notes_total),
+                'net': float(invoice.net_amount)
+            }
+        })

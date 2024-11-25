@@ -26,95 +26,186 @@
     </thead>
     <tbody>
         {% for invoice in invoices %}
-        <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
-            <td>
-                {% if invoice.exported_at %}
-                    <span class="text-muted">
-                        Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                        <button type="button" 
-                                class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                data-invoice-id="{{ invoice.id }}">
-                            <i class="fas fa-undo"></i>
-                        </button>
-                    </span>
-                {% else %}
-                    <input type="checkbox" 
-                           name="invoice_ids" 
-                           value="{{ invoice.id }}" 
-                           class="export-checkbox"
-                           {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
-                {% endif %}
-            </td>
-                    <td>{{ invoice.date }}</td>
-                    <td>{{ invoice.ref }}</td>
-                    <td>{{ invoice.supplier.name }}</td>
-                    <td>{{ invoice.fiscal_label }}</td>
-                    <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+            {% if invoice.type == 'invoice' %}
+                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
                     <td>
-                        {% with invoice.products.all|length as product_count %}
-                            {% for product in invoice.products.all %}
-                                {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
-                            {% endfor %}
-                        {% endwith %}
-                    </td>
-                    <td>
-                        {% if invoice.total_tax_amount %}
-                            {{ invoice.total_tax_amount|floatformat:2|intcomma }}
-                        {% else %}
-                            <strong>Tax Missing</strong>
-                        {% endif %}
-                    </td>                
-                    <td>{{ invoice.total_amount|floatformat:2|intcomma }}</td>
-                    <td>
-                        {% if invoice.payment_status == 'paid' %}
-                            <span class="badge badge-success">Paid</span>
-                        {% elif invoice.payment_status == 'partially_paid' %}
-                            <span class="badge badge-warning">
-                                Partially Paid 
-                                <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                        {% if invoice.exported_at %}
+                            <span class="text-muted">
+                                Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                                <button type="button" 
+                                        class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                        data-invoice-id="{{ invoice.id }}">
+                                    <i class="fas fa-undo"></i>
+                                </button>
                             </span>
                         {% else %}
-                            <span class="badge badge-danger">Not Paid</span>
+                            <input type="checkbox" 
+                                name="invoice_ids" 
+                                value="{{ invoice.id }}" 
+                                class="export-checkbox"
+                                {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
                         {% endif %}
                     </td>
-                    <td>
-                        {% if not invoice.payment_status == 'paid' %}
-                            <a href="{% url 'invoice-update' invoice.pk %}" 
-                            class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
-                                Edit
-                            </a>
-                            <a href="{% url 'invoice-delete' invoice.pk %}" 
-                            class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
-                                Delete
-                            </a>
-                            <button class="btn btn-info btn-sm" 
-                                    data-toggle="modal" 
-                                    data-target="#creditNoteModal" 
-                                    data-invoice-id="{{ invoice.id }}"
-                                    {% if not invoice.can_be_credited %}disabled{% endif %}>
-                                <i class="fas fa-reply"></i> Credit Note
-                            </button>
-                        {% else %}
-                            <button class="btn btn-secondary" disabled>
-                                <i class="fas fa-lock"></i> Paid
-                            </button>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                        <button class="btn btn-info btn-sm"                             
-                                data-toggle="modal" 
-                                data-target="#paymentDetailsModal"
-                                data-invoice="{{ invoice.pk }}">
-                            Payment Details
-                        </button>
-                    </td>
-                </tr>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="10">No invoices found.</td>
-            </tr>
+                            <td>{{ invoice.date }}</td>
+                            <td>{{ invoice.ref }}</td>
+                            <td>{{ invoice.supplier.name }}</td>
+                            <td>{{ invoice.fiscal_label }}</td>
+                            <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                            <td>
+                                {% with invoice.products.all|length as product_count %}
+                                    {% for product in invoice.products.all %}
+                                        {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                {% if invoice.total_tax_amount %}
+                                    {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                                {% else %}
+                                    <strong>Tax Missing</strong>
+                                {% endif %}
+                            </td>                
+                            <td class="text-right">
+                                {{ invoice.total_amount|floatformat:2|intcomma }}
+                                {% if invoice.credit_notes.exists %}
+                                    <br>
+                                    <small class="text-muted">
+                                        Net: {{ invoice.net_amount|floatformat:2|intcomma }}
+                                    </small>
+                                    <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
+                                            data-invoice="{{ invoice.id }}">
+                                        <i class="fas fa-receipt"></i>
+                                    </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invoice.payment_status == 'paid' %}
+                                    <span class="badge badge-success">
+                                        <i class="fas fa-lock"></i> Paid
+                                    </span>
+                                {% else %}
+                                    {% if invoice.credit_notes.exists %}
+                                        <span class="badge badge-info">
+                                            Partially Credited
+                                            <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
+                                        </span>
+                                    {% endif %}
+                                    <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
+                                        {% if invoice.payment_status == 'partially_paid' %}
+                                            Partially Paid 
+                                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                                        {% else %}
+                                            Not Paid
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if not invoice.payment_status == 'paid' %}
+                                    <a href="{% url 'invoice-update' invoice.pk %}" 
+                                    class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    <a href="{% url 'invoice-delete' invoice.pk %}" 
+                                    class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
+                                        Delete
+                                    </a>
+                                    <button class="btn btn-info btn-sm" 
+                                            data-toggle="modal" 
+                                            data-target="#creditNoteModal" 
+                                            data-invoice-id="{{ invoice.id }}"
+                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                        <i class="fas fa-reply"></i> Credit Note
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-secondary" disabled>
+                                        <i class="fas fa-lock"></i> Paid
+                                    </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                                <button class="btn btn-info btn-sm"                             
+                                        data-toggle="modal" 
+                                        data-target="#paymentDetailsModal"
+                                        data-invoice="{{ invoice.pk }}">
+                                    Payment Details
+                                </button>
+                                <button class="btn btn-info btn-sm accounting-summary-btn" 
+                                        data-invoice-id="{{ invoice.id }}" 
+                                        title="Show Accounting Summary">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tr>
+                {% if invoice.credit_notes.exists %}
+                    <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
+                        <td colspan="12">
+                            <div class="ml-4">
+                                <h6 class="mb-3">
+                                    <i class="fas fa-receipt"></i> 
+                                    Credit Notes for Invoice {{ invoice.ref }}
+                                </h6>
+                                <table class="table table-sm">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Reference</th>
+                                            <th>Products</th>
+                                            <th class="text-right">Amount</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for credit_note in invoice.credit_notes.all %}
+                                            <tr>
+                                                <td>{{ credit_note.date|date:"Y-m-d" }}</td>
+                                                <td>{{ credit_note.ref }}</td>
+                                                <td>
+                                                    {% for product in credit_note.products.all %}
+                                                        {{ product.product.name }} ({{ product.quantity }})
+                                                        {% if not forloop.last %}, {% endif %}
+                                                    {% endfor %}
+                                                </td>
+                                                <td class="text-right text-danger">
+                                                    -{{ credit_note.total_amount|floatformat:2|intcomma }}
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-info">
+                                                        <i class="fas fa-receipt"></i> Credit Note
+                                                    </span>
+                                                    {% if credit_note.exported_at %}
+                                                        <span class="badge badge-secondary">
+                                                            <i class="fas fa-file-export"></i> Exported
+                                                        </span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-sm btn-info"
+                                                            data-toggle="modal" 
+                                                            data-target="#invoiceDetailsModal" 
+                                                            data-invoice="{{ credit_note.id }}">
+                                                        <i class="fas fa-info-circle"></i> Details
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                        <tr class="font-weight-bold">
+                                            <td colspan="3" class="text-right">Net Balance:</td>
+                                            <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+
+            {% endif %}
+
         {% endfor %}
     </tbody>
 </table>
@@ -256,17 +347,37 @@
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
+                <!-- Credit Note Info -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="credit-note-ref">Credit Note Reference *</label>
+                        <input type="text" id="credit-note-ref" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="credit-note-date">Date *</label>
+                        <input type="date" id="credit-note-date" class="form-control" required>
+                    </div>
+                </div>
+
                 <!-- Original Invoice Info -->
                 <div class="card mb-4">
                     <div class="card-body">
-                        <h6 class="card-subtitle mb-2 text-muted">Original Invoice</h6>
-                        <div id="original-invoice-details"></div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Original Invoice</h6>
+                                <div id="original-invoice-details"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Net Balance After Credit</h6>
+                                <div id="net-balance-details"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Products Selection -->
                 <form id="credit-note-form">
-                    <input type="hidden" id="original-invoice-id" name="original_invoice_id">
+                    <input type="hidden" id="original-invoice-id">
                     <table class="table" id="products-table">
                         <thead>
                             <tr>
@@ -297,9 +408,327 @@
     </div>
 </div>
 
+<!-- Accounting Summary Modal -->
+<div class="modal fade" id="accountingSummaryModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-book"></i> Accounting Summary
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="accordion" id="accountingEntries">
+                    <!-- Original Invoice Section -->
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">Original Invoice Entries</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Account</th>
+                                        <th>Label</th>
+                                        <th class="text-right">Debit</th>
+                                        <th class="text-right">Credit</th>
+                                        <th>Reference</th>
+                                        <th>Journal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="originalEntries"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Credit Notes Section (shown only if exists) -->
+                    <div id="creditNotesSection" class="card mt-3 d-none">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">Credit Note Entries</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Account</th>
+                                        <th>Label</th>
+                                        <th class="text-right">Debit</th>
+                                        <th class="text-right">Credit</th>
+                                        <th>Reference</th>
+                                        <th>Journal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creditNoteEntries"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Net Effect Section -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0">Net Effect</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <h6>Original Amount</h6>
+                                    <p id="originalTotal" class="h4"></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Credit Notes</h6>
+                                    <p id="creditTotal" class="h4 text-danger"></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Net Amount</h6>
+                                    <p id="netTotal" class="h4 font-weight-bold"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <!-- JavaScript to populate modal -->
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+
+        // Credit Note Modal Handler
+        $('#creditNoteModal').on('show.bs.modal', function(event) {
+            console.log('Modal triggered');
+            const button = $(event.relatedTarget);
+            const invoiceId = button.data('invoice-id');
+            console.log('Invoice ID:', invoiceId);
+
+            if (!invoiceId) {
+                console.error('No Invoice ID found!');
+                return;
+            }
+            $('#original-invoice-id').val(invoiceId);
+            $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
+            // Load invoice details and available products
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
+                method: 'GET',
+                success: function(data) {
+                    // Update original invoice details
+                    $('#original-invoice-details').html(`
+                        <p><strong>Reference:</strong> ${data.invoice.ref}</p>
+                        <p><strong>Date:</strong> ${data.invoice.date}</p>
+                        <p><strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}</p>
+                        <p><strong>Already Credited:</strong> ${formatMoney(data.invoice.credited_amount)}</p>
+                    `);
+
+                    // Update net balance details
+                    updateNetBalance(data.invoice.total_amount, 0);
+
+                    // Populate products table
+                    const tbody = $('#products-table tbody').empty();
+                    data.products.forEach(product => {
+                        tbody.append(`
+                            <tr>
+                                <td>${product.name}</td>
+                                <td class="text-right">${product.original_quantity}</td>
+                                <td class="text-right">${product.credited_quantity}</td>
+                                <td class="text-right">${product.available_quantity}</td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm credit-quantity"
+                                        data-product-id="${product.id}"
+                                        data-unit-price="${product.unit_price}"
+                                        data-available="${product.available_quantity}"
+                                        min="0" max="${product.available_quantity}" value="0">
+                                </td>
+                                <td class="text-right">${formatMoney(product.unit_price)}</td>
+                                <td class="text-right subtotal">0.00</td>
+                            </tr>
+                        `);
+                    });
+
+                    // Initialize quantity handlers
+                    initializeQuantityHandlers();
+                },
+                error: function(xhr) {
+                    alert('Failed to load credit note details: ' + xhr.responseText);
+                }
+            });
+        });
+
+        // Update net balance
+        function updateNetBalance(invoiceTotal, creditAmount) {
+            const netAmount = invoiceTotal - creditAmount;
+            $('#net-balance-details').html(`
+                <p><strong>Original Amount:</strong> ${formatMoney(invoiceTotal)}</p>
+                <p><strong>Credit Amount:</strong> ${formatMoney(creditAmount)}</p>
+                <p class="font-weight-bold">Net Balance: ${formatMoney(netAmount)}</p>
+            `);
+        }
+
+
+        // Handle quantity changes
+        function initializeQuantityHandlers() {
+            $('.credit-quantity').on('input', function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                const available = parseFloat($(this).data('available'));
+                const unitPrice = parseFloat($(this).data('unit-price'));
+                
+                // Validate quantity
+                if (quantity > available) {
+                    $(this).val(available);
+                    return;
+                }
+                
+                updateSubtotalsAndTotal();
+            });
+        }
+
+        function updateSubtotalsAndTotal() {
+            let total = 0;
+            $('.credit-quantity').each(function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                const unitPrice = parseFloat($(this).data('unit-price'));
+                const subtotal = quantity * unitPrice;
+                
+                $(this).closest('tr').find('.subtotal').text(formatMoney(subtotal));
+                total += subtotal;
+            });
+
+            $('#total-credit-amount').text(formatMoney(total));
+            
+            // Update net balance
+            const invoiceTotal = parseFloat($('#original-invoice-details')
+                .find('strong:contains("Total Amount")')
+                .next()
+                .text()
+                .replace(/[^0-9.-]+/g, ''));
+            
+            updateNetBalance(invoiceTotal, total);
+        }
+
+        // Credit Note Modal Handler
+        $('#save-credit-note').click(function() {
+            console.log('Modal triggered');
+            if (!$('#credit-note-ref').val()) {
+                alert('Please enter a credit note reference');
+                return;
+            }
+            const products = [];
+            $('.credit-quantity').each(function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                if (quantity > 0) {
+                    products.push({
+                        product_id: $(this).data('product-id'),
+                        quantity: quantity
+                    });
+                }
+            });
+            
+            if (products.length === 0) {
+                alert('Please select at least one product to credit');
+                return;
+            }
+            
+            console.log('Sending data:', JSON.stringify({
+                original_invoice_id: $('#original-invoice-id').val(),
+                products: products
+            }));
+            $.ajax({
+                url: '/testapp/invoices/create-credit-note/',
+                method: 'POST',
+                data: JSON.stringify({
+                    original_invoice_id: $('#original-invoice-id').val(),
+                    ref: $('#credit-note-ref').val(),
+                    date: $('#credit-note-date').val(),
+                    products: products
+                }),
+                contentType: 'application/json',
+                success: function(response) {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert('Error creating credit note: ' + xhr.responseText);
+                }
+            });
+        });
+
+
+        // Toggle credit notes visibility
+        $('.toggle-credit-notes').click(function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const invoiceId = $(this).data('invoice');
+            const icon = $(this).find('i');
+            const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+            
+            creditNotesRow.toggleClass('d-none');
+            icon.toggleClass('fa-receipt fa-times-circle');
+        });
+        
+        $(document).on('click', '.accounting-summary-btn', function () {
+            const invoiceId = $(this).data('invoice-id');
+            console.log('Invoice ID:', invoiceId); // Debugging
+            if (!invoiceId) {
+                alert('Invoice ID is missing.');
+                return;
+            }
+            showAccountingSummary(invoiceId);
+        });
+
+        // Define the `showAccountingSummary` function
+        function showAccountingSummary(invoiceId) {
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/accounting-summary/`, // Update this to match your Django URL
+                method: 'GET',
+                success: function (data) {
+                    console.log('Accounting Summary Data:', data); // Debugging
+                    // Populate the modal
+                    $('#originalEntries').empty();
+                    data.original_entries.forEach(entry => {
+                        $('#originalEntries').append(createAccountingRow(entry));
+                    });
+
+                    if (data.credit_note_entries.length > 0) {
+                        $('#creditNotesSection').removeClass('d-none');
+                        $('#creditNoteEntries').empty();
+                        data.credit_note_entries.forEach(entry => {
+                            $('#creditNoteEntries').append(createAccountingRow(entry));
+                        });
+                    } else {
+                        $('#creditNotesSection').addClass('d-none');
+                    }
+
+                    $('#originalTotal').text(formatMoney(data.totals.original));
+                    $('#creditTotal').text(formatMoney(data.totals.credit_notes));
+                    $('#netTotal').text(formatMoney(data.totals.net));
+
+                    $('#accountingSummaryModal').modal('show');
+                },
+                error: function (xhr) {
+                    alert('Failed to load accounting summary: ' + xhr.responseText);
+                }
+            });
+        }
+
+        // Helper function to create accounting table rows
+        function createAccountingRow(entry) {
+            return `
+                <tr>
+                    <td>${entry.date}</td>
+                    <td>${entry.account_code}</td>
+                    <td>${entry.label}</td>
+                    <td class="text-right">${entry.debit ? formatMoney(entry.debit) : ''}</td>
+                    <td class="text-right">${entry.credit ? formatMoney(entry.credit) : ''}</td>
+                    <td>${entry.reference}</td>
+                    <td>${entry.journal}</td>
+                </tr>
+            `;
+        }
         // Export functionality
         const checkboxes = document.querySelectorAll('.export-checkbox');
         const exportButton = document.getElementById('export-selected');
@@ -557,86 +986,7 @@
             });
         }
 
-        // Credit Note Modal Handler
-        $('#creditNoteModal').on('show.bs.modal', function(event) {
-            const button = $(event.relatedTarget);
-            const invoiceId = button.data('invoice-id');
-            $('#original-invoice-id').val(invoiceId);
 
-            // Load invoice details and available products
-            $.ajax({
-                url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
-                method: 'GET',
-                success: function(data) {
-                    // Update original invoice details
-                    $('#original-invoice-details').html(`
-                        <p><strong>Reference:</strong> ${data.invoice.ref}</p>
-                        <p><strong>Date:</strong> ${data.invoice.date}</p>
-                        <p><strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}</p>
-                        <p><strong>Already Credited:</strong> ${formatMoney(data.invoice.credited_amount)}</p>
-                    `);
-
-                    // Populate products table
-                    const tbody = $('#products-table tbody').empty();
-                    data.products.forEach(product => {
-                        tbody.append(`
-                            <tr>
-                                <td>${product.name}</td>
-                                <td class="text-right">${product.original_quantity}</td>
-                                <td class="text-right">${product.credited_quantity}</td>
-                                <td class="text-right">${product.available_quantity}</td>
-                                <td>
-                                    <input type="number" class="form-control form-control-sm credit-quantity"
-                                        data-product-id="${product.id}"
-                                        data-unit-price="${product.unit_price}"
-                                        data-available="${product.available_quantity}"
-                                        min="0" max="${product.available_quantity}" value="0">
-                                </td>
-                                <td class="text-right">${formatMoney(product.unit_price)}</td>
-                                <td class="text-right subtotal">0.00</td>
-                            </tr>
-                        `);
-                    });
-
-                    // Initialize quantity handlers
-                    initializeQuantityHandlers();
-                },
-                error: function(xhr) {
-                    alert('Failed to load credit note details: ' + xhr.responseText);
-                }
-            });
-        });
-
-        // Handle quantity changes
-        function initializeQuantityHandlers() {
-            $('.credit-quantity').on('input', function() {
-                const quantity = parseFloat($(this).val()) || 0;
-                const available = parseFloat($(this).data('available'));
-                const unitPrice = parseFloat($(this).data('unit-price'));
-                
-                // Validate quantity
-                if (quantity > available) {
-                    $(this).val(available);
-                    return;
-                }
-                
-                // Update subtotal
-                const subtotal = quantity * unitPrice;
-                $(this).closest('tr').find('.subtotal').text(formatMoney(subtotal));
-                
-                // Update total
-                updateTotal();
-            });
-        }
-
-        // Update total credit amount
-        function updateTotal() {
-            let total = 0;
-            $('.subtotal').each(function() {
-                total += parseFloat($(this).text().replace(/[^0-9.-]+/g, '')) || 0;
-            });
-            $('#total-credit-amount').text(formatMoney(total));
-        }
          
         // Initialize autocomplete for existing forms
         document.querySelectorAll('.product-form').forEach(addAutocomplete);
