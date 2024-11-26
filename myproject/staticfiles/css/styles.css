@@ -137,3 +137,130 @@
     height: 38px !important;
     padding: 5px !important;
 }
+
+.filter-section {
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    margin-bottom: 2rem;
+}
+
+.filter-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #edf2f7;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.filter-toggle {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    transition: all 0.2s;
+}
+
+.filter-toggle:hover {
+    background: #edf2f7;
+}
+
+.filter-badge {
+    background: #3b82f6;
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.filter-panel {
+    padding: 1.5rem;
+    background: #f8fafc;
+    border-radius: 0 0 12px 12px;
+}
+
+.active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+}
+
+.filter-tag {
+    background: #e2e8f0;
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.filter-tag .close {
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.125rem;
+    border-radius: 4px;
+    margin-left: 0.25rem;
+    opacity: 0.6;
+}
+
+.filter-tag .close:hover {
+    background: rgba(0,0,0,0.1);
+    opacity: 1;
+}
+
+.filter-actions {
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e2e8f0;
+}
+
+.filter-form .form-group {
+    margin-bottom: 1.25rem;
+}
+
+.filter-form label {
+    font-weight: 500;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+}
+
+/* Improved Select2 styling */
+.select2-container--default .select2-selection--single {
+    border-color: #e2e8f0;
+    border-radius: 8px;
+    height: 38px;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__rendered {
+    line-height: 36px;
+    padding-left: 12px;
+}
+
+.select2-container--default .select2-selection--single .select2-selection__arrow {
+    height: 36px;
+}
+
+.filter-results {
+    background: #edf2f7;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: #4a5568;
+}
+
+/* Smooth transitions */
+.filter-panel {
+    transition: all 0.3s ease-in-out;
+    max-height: 2000px;
+    overflow: hidden;
+}
+
+.filter-panel.collapsed {
+    max-height: 0;
+    padding: 0;
+}

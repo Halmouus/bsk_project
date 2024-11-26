@@ -18,8 +18,10 @@ from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q,F, Case, When, DecimalField, Subquery, Sum, ExpressionWrapper
 from django.db.models.functions import Coalesce
 from django.contrib import messages
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.template.loader import render_to_string
+from django.db.models.sql.where import EmptyResultSet
+
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -61,79 +63,78 @@ class InvoiceListView(ListView):
     context_object_name = 'invoices'
 
     def get_queryset(self):
-            queryset = Invoice.objects.all().select_related('supplier')  # Add select_related for performance
-            
-            # Debug prints
-            print("Request GET params:", self.request.GET)
+        queryset = Invoice.objects.all().select_related('supplier').prefetch_related('products')
 
-           
-                # Date Range Filter
-            date_from = self.request.GET.get('date_from')
-            date_to = self.request.GET.get('date_to')
+        # Debug prints
+        print("Request GET params:", self.request.GET)
+
+        # Date Range Filter
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        try:
             if date_from:
-                try:
-                    queryset = queryset.filter(date__gte=date_from)
-                except Exception as e:
-                    print(f"Error filtering by date_from: {e}")
+                queryset = queryset.filter(date__gte=date_from)
             if date_to:
-                try:
-                    queryset = queryset.filter(date__lte=date_to)
-                except Exception as e:
-                    print(f"Error filtering by date_to: {e}")
+                queryset = queryset.filter(date__lte=date_to)
+        except Exception as e:
+            print(f"Error filtering by date range: {e}")
 
-            # Amount Range Filter
-            amount_min = self.request.GET.get('amount_min')
-            amount_max = self.request.GET.get('amount_max')
-
+        # Amount Range Filter
+        amount_min = self.request.GET.get('amount_min')
+        amount_max = self.request.GET.get('amount_max')
+        try:
             if amount_min or amount_max:
-                # First get all invoices
-                invoices = list(queryset)  # Convert to list to evaluate the queryset
+                invoices = list(queryset)  # Evaluate queryset into a list for manual filtering
                 filtered_invoices = []
 
                 amount_min = Decimal(amount_min if amount_min else '0')
                 amount_max = Decimal(amount_max if amount_max else '999999999')
 
-                # Filter based on net_amount property
                 for invoice in invoices:
-                    net_amount = invoice.net_amount
+                    net_amount = invoice.net_amount  # Assume net_amount is a computed property
                     if amount_min <= net_amount <= amount_max:
                         filtered_invoices.append(invoice.id)
 
-                # Filter queryset by IDs
                 queryset = queryset.filter(id__in=filtered_invoices)
+        except Exception as e:
+            print(f"Error filtering by amount range: {e}")
 
-                print(f"Debug - Amount range: {amount_min} to {amount_max}")
-                print(f"Debug - Filtered invoices count: {len(filtered_invoices)}")
-                for inv_id in filtered_invoices:
-                    invoice = next(inv for inv in invoices if inv.id == inv_id)
-                    print(f"Debug - Invoice {invoice.ref}: Net amount = {invoice.net_amount}")
-
-
-
-            # Supplier Filter
-            supplier = self.request.GET.get('supplier')
+        # Supplier Filter
+        supplier = self.request.GET.get('supplier')
+        try:
             if supplier:
-                print(f"Filtering by supplier: {supplier}")
                 queryset = queryset.filter(supplier_id=supplier)
+        except Exception as e:
+            print(f"Error filtering by supplier: {e}")
 
-            # Payment Status Filter
-            payment_status = self.request.GET.get('payment_status')
+        # Payment Status Filter
+        payment_status = self.request.GET.get('payment_status')
+        try:
             if payment_status:
                 queryset = queryset.filter(payment_status=payment_status)
+        except Exception as e:
+            print(f"Error filtering by payment status: {e}")
 
-            # Export Status Filter
-            export_status = self.request.GET.get('export_status')
+        # Export Status Filter
+        export_status = self.request.GET.get('export_status')
+        try:
             if export_status == 'exported':
                 queryset = queryset.filter(exported_at__isnull=False)
             elif export_status == 'not_exported':
                 queryset = queryset.filter(exported_at__isnull=True)
+        except Exception as e:
+            print(f"Error filtering by export status: {e}")
 
-            # Product Filter
-            product_id = self.request.GET.get('product')
+        # Product Filter
+        product_id = self.request.GET.get('product')
+        try:
             if product_id:
                 queryset = queryset.filter(products__product_id=product_id)
+        except Exception as e:
+            print(f"Error filtering by product: {e}")
 
-            # Payment Status Filters
+        # Payment Status Filters
+        try:
             has_pending_checks = self.request.GET.get('has_pending_checks')
             if has_pending_checks:
                 queryset = queryset.filter(check__status='pending').distinct()
@@ -141,46 +142,63 @@ class InvoiceListView(ListView):
             has_delivered_unpaid = self.request.GET.get('has_delivered_unpaid')
             if has_delivered_unpaid:
                 queryset = queryset.filter(check__status='delivered').exclude(check__status='paid').distinct()
+        except Exception as e:
+            print(f"Error filtering by payment status checks: {e}")
 
-            # Energy Filter
-            is_energy = self.request.GET.get('is_energy')
+        # Energy Filter
+        is_energy = self.request.GET.get('is_energy')
+        try:
             if is_energy:
                 queryset = queryset.filter(supplier__is_energy=True)
+        except Exception as e:
+            print(f"Error filtering by energy suppliers: {e}")
 
-            # Credit Note Status
-            credit_note_status = self.request.GET.get('credit_note_status')
+        # Credit Note Status
+        credit_note_status = self.request.GET.get('credit_note_status')
+        try:
             if credit_note_status == 'has_credit_notes':
                 queryset = queryset.filter(credit_notes__isnull=False).distinct()
             elif credit_note_status == 'no_credit_notes':
                 queryset = queryset.filter(credit_notes__isnull=True)
             elif credit_note_status == 'partially_credited':
-                # Invoices that have credit notes but are not fully credited
                 queryset = queryset.filter(
                     credit_notes__isnull=False,
                     payment_status__in=['not_paid', 'partially_paid']
                 ).distinct()
+        except Exception as e:
+            print(f"Error filtering by credit note status: {e}")
 
-            # Due Date Range
-            due_date_from = self.request.GET.get('due_date_from')
-            due_date_to = self.request.GET.get('due_date_to')
+        # Due Date Range
+        due_date_from = self.request.GET.get('due_date_from')
+        due_date_to = self.request.GET.get('due_date_to')
+        try:
             if due_date_from:
                 queryset = queryset.filter(payment_due_date__gte=due_date_from)
             if due_date_to:
                 queryset = queryset.filter(payment_due_date__lte=due_date_to)
+        except Exception as e:
+            print(f"Error filtering by due date range: {e}")
 
-            # Overdue Filter
-            is_overdue = self.request.GET.get('is_overdue')
+        # Overdue Filter
+        is_overdue = self.request.GET.get('is_overdue')
+        try:
             if is_overdue:
                 today = timezone.now().date()
                 queryset = queryset.filter(
                     payment_due_date__lt=today,
                     payment_status__in=['not_paid', 'partially_paid']
                 )
+        except Exception as e:
+            print(f"Error filtering by overdue invoices: {e}")
 
-            # Print final queryset SQL
+        # Print final queryset SQL for debugging
+        try:
             print("Final query SQL:", queryset.query)
+        except Exception as e:
+            print(f"Error printing final query SQL: {e}")
 
-            return queryset.order_by('-date')
+        return queryset.order_by('-date')
+
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
