@@ -7,6 +7,101 @@
 <h1>Invoice List</h1>
 <a href="{% url 'invoice-create' %}" class="btn btn-primary">Add New Invoice</a>
 
+<div class="filter-section mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-outline-secondary" id="toggle-filters">
+            <i class="fas fa-filter"></i> Filters
+            <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
+        </button>
+        <div class="active-filters">
+            <span class="results-count"></span>
+        </div>
+    </div>
+
+    <div class="filter-panel card" style="display:none">
+        <div class="card-body">
+            <form id="filter-form" class="row">
+                <!-- Date Range Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Date Range</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control" name="date_from" id="date-from">
+                        <div class="input-group-prepend input-group-append">
+                            <span class="input-group-text">to</span>
+                        </div>
+                        <input type="date" class="form-control" name="date_to" id="date-to">
+                    </div>
+                </div>
+
+                <!-- Supplier Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Supplier</label>
+                    <select class="form-control" name="supplier" id="supplier-filter">
+                        <option value="">All Suppliers</option>
+                    </select>
+                </div>
+
+                <!-- Payment Status Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Payment Status</label>
+                    <select class="form-control" name="payment_status" id="payment-status">
+                        <option value="">All</option>
+                        <option value="not_paid">Not Paid</option>
+                        <option value="partially_paid">Partially Paid</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+
+                <!-- Amount Range Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Amount Range</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="amount_min" id="amount-min" placeholder="Min">
+                        <div class="input-group-prepend input-group-append">
+                            <span class="input-group-text">to</span>
+                        </div>
+                        <input type="number" class="form-control" name="amount_max" id="amount-max" placeholder="Max">
+                    </div>
+                </div>
+
+                <!-- Export Status Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Export Status</label>
+                    <select class="form-control" name="export_status" id="export-status">
+                        <option value="">All</option>
+                        <option value="exported">Exported</option>
+                        <option value="not_exported">Not Exported</option>
+                    </select>
+                </div>
+
+                <!-- Document Type Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Document Type</label>
+                    <select class="form-control" name="document_type" id="document-type">
+                        <option value="">All</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="credit_note">Credit Note</option>
+                    </select>
+                </div>
+            </form>
+
+            <div class="d-flex justify-content-between mt-3">
+                <div>
+                    <button class="btn btn-primary" id="apply-filters">
+                        <i class="fas fa-check"></i> Apply Filters
+                    </button>
+                    <button class="btn btn-secondary ml-2" id="reset-filters">
+                        <i class="fas fa-times"></i> Reset
+                    </button>
+                </div>
+                <div class="active-filters-tags">
+                    <!-- Active filter tags will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <table class="table mt-4 table-hover">
     <thead>
         <tr>
@@ -220,7 +315,7 @@
     </button>
 </div>
 
-<!-- Modal Template -->
+<!-- Modal Template for Invoice Details -->
 <div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document"> <!-- Added modal-lg for larger modal -->
         <div class="modal-content">
@@ -512,21 +607,27 @@
             }
             $('#original-invoice-id').val(invoiceId);
             $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
+
             // Load invoice details and available products
             $.ajax({
                 url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
                 method: 'GET',
                 success: function(data) {
+                    // Store the net amount as a data attribute on the modal itself
+                    const netAmount = data.invoice.total_amount - data.invoice.credited_amount;
+                    $('#creditNoteModal').data('initial-net-amount', netAmount);
                     // Update original invoice details
                     $('#original-invoice-details').html(`
                         <p><strong>Reference:</strong> ${data.invoice.ref}</p>
                         <p><strong>Date:</strong> ${data.invoice.date}</p>
-                        <p><strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}</p>
+                        <p<p data-amount="${data.invoice.total_amount}">
+                            <strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}
+                        </p>
                         <p><strong>Already Credited:</strong> ${formatMoney(data.invoice.credited_amount)}</p>
                     `);
 
                     // Update net balance details
-                    updateNetBalance(data.invoice.total_amount, 0);
+                    updateNetBalance(0);
 
                     // Populate products table
                     const tbody = $('#products-table tbody').empty();
@@ -560,12 +661,15 @@
         });
 
         // Update net balance
-        function updateNetBalance(invoiceTotal, creditAmount) {
-            const netAmount = invoiceTotal - creditAmount;
+        function updateNetBalance(creditAmount) {
+
+            const initialNetAmount = $('#creditNoteModal').data('initial-net-amount');
+            const newBalance = initialNetAmount - creditAmount;
+
             $('#net-balance-details').html(`
-                <p><strong>Original Amount:</strong> ${formatMoney(invoiceTotal)}</p>
+                <p><strong>Original Amount:</strong> ${formatMoney(initialNetAmount)}</p>
                 <p><strong>Credit Amount:</strong> ${formatMoney(creditAmount)}</p>
-                <p class="font-weight-bold">Net Balance: ${formatMoney(netAmount)}</p>
+                <p class="font-weight-bold">Net Balance: ${formatMoney(newBalance)}</p>
             `);
         }
 
@@ -600,14 +704,7 @@
 
             $('#total-credit-amount').text(formatMoney(total));
             
-            // Update net balance
-            const invoiceTotal = parseFloat($('#original-invoice-details')
-                .find('strong:contains("Total Amount")')
-                .next()
-                .text()
-                .replace(/[^0-9.-]+/g, ''));
-            
-            updateNetBalance(invoiceTotal, total);
+            updateNetBalance(total);
         }
 
         // Credit Note Modal Handler
@@ -669,7 +766,7 @@
             creditNotesRow.toggleClass('d-none');
             icon.toggleClass('fa-receipt fa-times-circle');
         });
-        
+
         $(document).on('click', '.accounting-summary-btn', function () {
             const invoiceId = $(this).data('invoice-id');
             console.log('Invoice ID:', invoiceId); // Debugging

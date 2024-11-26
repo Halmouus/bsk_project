@@ -16,6 +16,8 @@ import json
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
 from django.contrib import messages
+from decimal import Decimal
+from django.db.models import F, ExpressionWrapper, DecimalField
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -55,6 +57,134 @@ class InvoiceListView(ListView):
     model = Invoice
     template_name = 'invoice/invoice_list.html'
     context_object_name = 'invoices'
+
+    def get_queryset(self):
+            queryset = Invoice.objects.all().select_related('supplier')  # Add select_related for performance
+            
+            # Date Range Filter
+            date_from = self.request.GET.get('date_from')
+            date_to = self.request.GET.get('date_to')
+            if date_from:
+                queryset = queryset.filter(date__gte=date_from)
+            if date_to:
+                queryset = queryset.filter(date__lte=date_to)
+
+            # Supplier Filter
+            supplier = self.request.GET.get('supplier')
+            if supplier:
+                queryset = queryset.filter(supplier_id=supplier)
+
+            # Payment Status Filter
+            payment_status = self.request.GET.get('payment_status')
+            if payment_status:
+                queryset = queryset.filter(payment_status=payment_status)
+
+            # Amount Range Filter
+            amount_min = self.request.GET.get('amount_min')
+            amount_max = self.request.GET.get('amount_max')
+            if amount_min:
+                queryset = queryset.filter(total_amount__gte=Decimal(amount_min))
+            if amount_max:
+                queryset = queryset.filter(total_amount__lte=Decimal(amount_max))
+
+            # Export Status Filter
+            export_status = self.request.GET.get('export_status')
+            if export_status == 'exported':
+                queryset = queryset.filter(exported_at__isnull=False)
+            elif export_status == 'not_exported':
+                queryset = queryset.filter(exported_at__isnull=True)
+
+            # Document Type Filter
+            document_type = self.request.GET.get('document_type')
+            if document_type:
+                queryset = queryset.filter(type=document_type)
+
+            return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Add filter counts
+        active_filters = {}
+        
+        # Date Range
+        if self.request.GET.get('date_from') or self.request.GET.get('date_to'):
+            date_range = []
+            if self.request.GET.get('date_from'):
+                date_range.append(f"From: {self.request.GET.get('date_from')}")
+            if self.request.GET.get('date_to'):
+                date_range.append(f"To: {self.request.GET.get('date_to')}")
+            active_filters['date_range'] = ' - '.join(date_range)
+
+        # Supplier
+        supplier_id = self.request.GET.get('supplier')
+        if supplier_id:
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                active_filters['supplier'] = supplier.name
+            except Supplier.DoesNotExist:
+                pass
+
+        # Payment Status
+        payment_status = self.request.GET.get('payment_status')
+        if payment_status:
+            status_display = {
+                'not_paid': 'Not Paid',
+                'partially_paid': 'Partially Paid',
+                'paid': 'Paid'
+            }
+            active_filters['payment_status'] = status_display.get(payment_status)
+
+        # Amount Range
+        if self.request.GET.get('amount_min') or self.request.GET.get('amount_max'):
+            amount_range = []
+            if self.request.GET.get('amount_min'):
+                amount_range.append(f"Min: {self.request.GET.get('amount_min')}")
+            if self.request.GET.get('amount_max'):
+                amount_range.append(f"Max: {self.request.GET.get('amount_max')}")
+            active_filters['amount_range'] = ' - '.join(amount_range)
+
+        # Export Status
+        export_status = self.request.GET.get('export_status')
+        if export_status:
+            active_filters['export_status'] = 'Exported' if export_status == 'exported' else 'Not Exported'
+
+        # Document Type
+        document_type = self.request.GET.get('document_type')
+        if document_type:
+            active_filters['document_type'] = 'Invoice' if document_type == 'invoice' else 'Credit Note'
+
+        context['active_filters'] = active_filters
+        context['total_results'] = self.get_queryset().count()
+        
+        # Add initial supplier data for the filter if selected
+        if supplier_id:
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                context['initial_supplier'] = {
+                    'id': supplier_id,
+                    'text': supplier.name
+                }
+            except Supplier.DoesNotExist:
+                pass
+
+        return context
+
+    def render_to_response(self, context, **response_kwargs):
+        """Handle both HTML and AJAX responses"""
+        if self.request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            # For AJAX requests, just return the table content
+            data = {
+                'html': render_to_string(
+                    'invoice/partials/invoice_table.html',  # We'll create this partial template
+                    context,
+                    request=self.request
+                ),
+                'total_results': context['total_results'],
+                'active_filters': context['active_filters']
+            }
+            return JsonResponse(data)
+        return super().render_to_response(context, **response_kwargs)
 
 # Create a new Invoice
 class InvoiceCreateView(SuccessMessageMixin, CreateView):

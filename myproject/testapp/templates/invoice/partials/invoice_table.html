@@ -1,0 +1,34 @@
+<!-- templates/invoice/partials/invoice_table.html -->
+<table class="table mt-4 table-hover">
+    <thead>
+        <tr>
+            <th>Export</th>
+            <th>Date</th>
+            <th>Reference</th>
+            <th>Supplier</th>
+            <th>Fiscal Label</th>
+            <th>Raw Amount</th>
+            <th>Tax Rate (%)</th>
+            <th>Tax Amount</th>
+            <th>Total Amount (Incl. Tax)</th>
+            <th>Status</th>
+            <th>Actions</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+            <!-- Your existing invoice row template here -->
+        {% empty %}
+            <tr>
+                <td colspan="12" class="text-center">
+                    <div class="p-4">
+                        <i class="fas fa-search fa-2x text-muted mb-3"></i>
+                        <p class="mb-0">No invoices found matching your filters</p>
+                        <button class="btn btn-link" id="reset-filters">Clear all filters</button>
+                    </div>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>

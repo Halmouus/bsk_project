@@ -98,37 +98,60 @@ def invoice_autocomplete(request):
     
     invoices = Invoice.objects.filter(
         supplier_id=supplier_id,
-        ref__icontains=query
+        ref__icontains=query,
+        type='invoice'
     )
     
     invoice_list = []
     for invoice in invoices:
-        payment_info = invoice.payments_summary
-        total_amount = float(invoice.total_amount)
-        issued_amount = float(payment_info['pending_amount'] + 
-                            payment_info['delivered_amount'] + 
-                            payment_info['paid_amount'])
-        available_amount = total_amount - issued_amount
+        net_amount = float(invoice.net_amount)
+        checks_amount = sum(
+            check.amount 
+            for check in Check.objects.filter(
+                cause=invoice
+            ).exclude(
+                status='cancelled'
+            )
+        )
         
+        # Calculate available amount
+        available_amount = max(0, net_amount - checks_amount)
+        
+        # Skip invoices that are fully paid or have no remaining amount
+        if available_amount <= 0:
+            continue
+
         status_icon = {
             'paid': '🔒 Paid',
             'partially_paid': '⏳ Partially Paid',
             'not_paid': '📄 Not Paid'
         }.get(invoice.payment_status, '')
+
+        credit_note_info = ""
+        if invoice.has_credit_notes:
+            credit_note_info = f" (Credited: {float(invoice.total_amount - invoice.net_amount):,.2f})"
         
         invoice_list.append({
             'id': str(invoice.id),
             'ref': invoice.ref,
             'date': invoice.date.strftime('%Y-%m-%d'),
             'status': status_icon,
-            'amount': total_amount,
+            'amount': net_amount,
             'payment_info': {
-                'total_amount': total_amount,
-                'issued_amount': issued_amount,
-                'paid_amount': float(payment_info['paid_amount']),
-                'available_amount': total_amount - issued_amount
+                'total_amount': net_amount,  # Use net amount instead of total
+                'issued_amount': float(checks_amount),
+                'paid_amount': float(sum(
+                    check.amount for check in Check.objects.filter(
+                        cause=invoice,
+                        status='paid'
+                    )
+                )),
+                'available_amount': available_amount
             },
-            'label': f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - {status_icon} - {total_amount:,.2f} MAD"
+            'label': (
+                f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - "
+                f"{status_icon} - {net_amount:,.2f} MAD{credit_note_info}"
+            )
         })
     
     return JsonResponse(invoice_list, safe=False)

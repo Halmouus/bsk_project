@@ -71,3 +71,60 @@
         transform: translateY(-10px);
     }
 }
+
+.filter-section {
+    background: #fff;
+    border-radius: 0.25rem;
+}
+
+.filter-panel {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+
+.filter-panel .card-body {
+    padding: 1.25rem;
+}
+
+.active-filters-tags .badge {
+    font-size: 0.875rem;
+    padding: 0.5em 0.75em;
+}
+
+.active-filters-tags .close {
+    font-size: 1rem;
+    padding: 0.25rem;
+    margin-left: 0.5rem;
+    text-shadow: none;
+}
+
+.loading {
+    position: relative;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2rem;
+    height: 2rem;
+    margin: -1rem 0 0 -1rem;
+    border: 0.25rem solid #f3f3f3;
+    border-top: 0.25rem solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.results-count {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
