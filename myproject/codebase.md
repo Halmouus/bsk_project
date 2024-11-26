@@ -720,72 +720,12 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # myproject/static/css/styles.css
 
 ```css
-body {
-    font-family: Arial, sans-serif;
-}
-
-.navbar-brand {
-    font-weight: bold;
-}
-
-.footer {
-    text-align: center;
-    font-size: 0.9em;
-}
-
-
-.modal-scrollable-content {
-        max-height: 70vh;  /* Limit modal body height to 70% of the viewport height */
-        overflow-y: auto;  /* Add scrolling to modal body if content exceeds max height */
-    }
-
-.modal-lg {
-        max-width: 90%;  /* Set a wider modal to better accommodate detailed content */
-    }
-
-/* Accounting Table Styles */
-.accounting-table td, 
-.accounting-table th {
-    vertical-align: middle;
-    padding: 0.75rem;
-}
-
-.accounting-table thead th {
-    background-color: #343a40;
-    color: white;
-    border-bottom: 2px solid #454d55;
-}
-
-.accounting-table .label-column {
-    min-width: 200px;
-}
-
-.accounting-table .vat-row {
-    background-color: rgba(255, 243, 205, 0.7);
-}
-
-.accounting-table .total-row {
-    background-color: rgba(209, 236, 241, 0.7);
-}
-
-.accounting-table td {
-    font-size: 0.95rem;
-}
-
-.accounting-table tfoot {
-    border-top: 2px solid #dee2e6;
-}
-
-.accounting-table tbody tr:hover {
-    background-color: rgba(0, 0, 0, 0.075);
-}
 
 ```
 
 # myproject/static/js/scripts.js
 
 ```js
-console.log("JavaScript file loaded successfully.");
 
 ```
 
@@ -8431,6 +8371,62 @@ Requires core.js and SelectBox.js.
     }
 }
 
+.filter-section {
+    background: #fff;
+    border-radius: 0.25rem;
+}
+
+.filter-panel {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.25rem;
+}
+
+.filter-panel .card-body {
+    padding: 1.25rem;
+}
+
+.active-filters-tags .badge {
+    font-size: 0.875rem;
+    padding: 0.5em 0.75em;
+}
+
+.active-filters-tags .close {
+    font-size: 1rem;
+    padding: 0.25rem;
+    margin-left: 0.5rem;
+    text-shadow: none;
+}
+
+.loading {
+    position: relative;
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 2rem;
+    height: 2rem;
+    margin: -1rem 0 0 -1rem;
+    border: 0.25rem solid #f3f3f3;
+    border-top: 0.25rem solid #3498db;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.results-count {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
 ```
 
 # staticfiles/js/scripts.js
@@ -11760,208 +11756,305 @@ $(document).ready(function() {
 <h1>Invoice List</h1>
 <a href="{% url 'invoice-create' %}" class="btn btn-primary">Add New Invoice</a>
 
-<table class="table mt-4 table-hover">
-    <thead>
-        <tr>
-            <th>Export</th>
-            <th>Date</th>
-            <th>Reference</th>
-            <th>Supplier</th>
-            <th>Fiscal Label</th>
-            <th>Raw Amount</th>
-            <th>Tax Rate (%)</th>
-            <th>Tax Amount</th>
-            <th>Total Amount (Incl. Tax)</th>
-            <th>Status</th>
-            <th>Actions</th>
-            <th>Details</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for invoice in invoices %}
-            {% if invoice.type == 'invoice' %}
-                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
-                    <td>
-                        {% if invoice.exported_at %}
-                            <span class="text-muted">
-                                Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                                <button type="button" 
-                                        class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                        data-invoice-id="{{ invoice.id }}">
-                                    <i class="fas fa-undo"></i>
-                                </button>
-                            </span>
-                        {% else %}
-                            <input type="checkbox" 
-                                name="invoice_ids" 
-                                value="{{ invoice.id }}" 
-                                class="export-checkbox"
-                                {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
-                        {% endif %}
-                    </td>
-                            <td>{{ invoice.date }}</td>
-                            <td>{{ invoice.ref }}</td>
-                            <td>{{ invoice.supplier.name }}</td>
-                            <td>{{ invoice.fiscal_label }}</td>
-                            <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
-                            <td>
-                                {% with invoice.products.all|length as product_count %}
-                                    {% for product in invoice.products.all %}
-                                        {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
-                                    {% endfor %}
-                                {% endwith %}
-                            </td>
-                            <td>
-                                {% if invoice.total_tax_amount %}
-                                    {{ invoice.total_tax_amount|floatformat:2|intcomma }}
-                                {% else %}
-                                    <strong>Tax Missing</strong>
-                                {% endif %}
-                            </td>                
-                            <td class="text-right">
-                                {{ invoice.total_amount|floatformat:2|intcomma }}
-                                {% if invoice.credit_notes.exists %}
-                                    <br>
-                                    <small class="text-muted">
-                                        Net: {{ invoice.net_amount|floatformat:2|intcomma }}
-                                    </small>
-                                    <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
-                                            data-invoice="{{ invoice.id }}">
-                                        <i class="fas fa-receipt"></i>
+<div class="filter-section mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <button class="btn btn-outline-secondary" id="toggle-filters">
+            <i class="fas fa-filter"></i> Filters
+            <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
+        </button>
+        <div class="active-filters">
+            <span class="results-count"></span>
+        </div>
+    </div>
+
+    <div class="filter-panel card" style="display:none">
+        <div class="card-body">
+            <form id="filter-form" class="row">
+                <!-- Date Range Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Date Range</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control" name="date_from" id="date-from">
+                        <div class="input-group-prepend input-group-append">
+                            <span class="input-group-text">to</span>
+                        </div>
+                        <input type="date" class="form-control" name="date_to" id="date-to">
+                    </div>
+                </div>
+
+                <!-- Supplier Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Supplier</label>
+                    <select class="form-control" name="supplier" id="supplier-filter">
+                        <option value="">All Suppliers</option>
+                    </select>
+                </div>
+
+                <!-- Payment Status Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Payment Status</label>
+                    <select class="form-control" name="payment_status" id="payment-status">
+                        <option value="">All</option>
+                        <option value="not_paid">Not Paid</option>
+                        <option value="partially_paid">Partially Paid</option>
+                        <option value="paid">Paid</option>
+                    </select>
+                </div>
+
+                <!-- Amount Range Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Amount Range</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" name="amount_min" id="amount-min" placeholder="Min">
+                        <div class="input-group-prepend input-group-append">
+                            <span class="input-group-text">to</span>
+                        </div>
+                        <input type="number" class="form-control" name="amount_max" id="amount-max" placeholder="Max">
+                    </div>
+                </div>
+
+                <!-- Export Status Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Export Status</label>
+                    <select class="form-control" name="export_status" id="export-status">
+                        <option value="">All</option>
+                        <option value="exported">Exported</option>
+                        <option value="not_exported">Not Exported</option>
+                    </select>
+                </div>
+
+                <!-- Document Type Filter -->
+                <div class="col-md-6 col-lg-3 mb-3">
+                    <label>Document Type</label>
+                    <select class="form-control" name="document_type" id="document-type">
+                        <option value="">All</option>
+                        <option value="invoice">Invoice</option>
+                        <option value="credit_note">Credit Note</option>
+                    </select>
+                </div>
+            </form>
+
+            <div class="d-flex justify-content-between mt-3">
+                <div>
+                    <button class="btn btn-primary" id="apply-filters">
+                        <i class="fas fa-check"></i> Apply Filters
+                    </button>
+                    <button class="btn btn-secondary ml-2" id="reset-filters">
+                        <i class="fas fa-times"></i> Reset
+                    </button>
+                </div>
+                <div class="active-filters-tags">
+                    <!-- Active filter tags will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="table-responsive" id="invoice-table-wrapper">
+    <table class="table mt-4 table-hover">
+        <thead>
+            <tr>
+                <th>Export</th>
+                <th>Date</th>
+                <th>Reference</th>
+                <th>Supplier</th>
+                <th>Fiscal Label</th>
+                <th>Raw Amount</th>
+                <th>Tax Rate (%)</th>
+                <th>Tax Amount</th>
+                <th>Total Amount (Incl. Tax)</th>
+                <th>Status</th>
+                <th>Actions</th>
+                <th>Details</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invoice in invoices %}
+                {% if invoice.type == 'invoice' %}
+                    <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
+                        <td>
+                            {% if invoice.exported_at %}
+                                <span class="text-muted">
+                                    Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                                    <button type="button" 
+                                            class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                            data-invoice-id="{{ invoice.id }}">
+                                        <i class="fas fa-undo"></i>
                                     </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if invoice.payment_status == 'paid' %}
-                                    <span class="badge badge-success">
-                                        <i class="fas fa-lock"></i> Paid
-                                    </span>
-                                {% else %}
+                                </span>
+                            {% else %}
+                                <input type="checkbox" 
+                                    name="invoice_ids" 
+                                    value="{{ invoice.id }}" 
+                                    class="export-checkbox"
+                                    {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
+                            {% endif %}
+                        </td>
+                                <td>{{ invoice.date }}</td>
+                                <td>{{ invoice.ref }}</td>
+                                <td>{{ invoice.supplier.name }}</td>
+                                <td>{{ invoice.fiscal_label }}</td>
+                                <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                                <td>
+                                    {% with invoice.products.all|length as product_count %}
+                                        {% for product in invoice.products.all %}
+                                            {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                                        {% endfor %}
+                                    {% endwith %}
+                                </td>
+                                <td>
+                                    {% if invoice.total_tax_amount %}
+                                        {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                                    {% else %}
+                                        <strong>Tax Missing</strong>
+                                    {% endif %}
+                                </td>                
+                                <td class="text-right">
+                                    {{ invoice.total_amount|floatformat:2|intcomma }}
                                     {% if invoice.credit_notes.exists %}
-                                        <span class="badge badge-info">
-                                            Partially Credited
-                                            <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
+                                        <br>
+                                        <small class="text-muted">
+                                            Net: {{ invoice.net_amount|floatformat:2|intcomma }}
+                                        </small>
+                                        <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
+                                                data-invoice="{{ invoice.id }}">
+                                            <i class="fas fa-receipt"></i>
+                                        </button>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if invoice.payment_status == 'paid' %}
+                                        <span class="badge badge-success">
+                                            <i class="fas fa-lock"></i> Paid
+                                        </span>
+                                    {% else %}
+                                        {% if invoice.credit_notes.exists %}
+                                            <span class="badge badge-info">
+                                                Partially Credited
+                                                <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
+                                            </span>
+                                        {% endif %}
+                                        <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
+                                            {% if invoice.payment_status == 'partially_paid' %}
+                                                Partially Paid 
+                                                <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                                            {% else %}
+                                                Not Paid
+                                            {% endif %}
                                         </span>
                                     {% endif %}
-                                    <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
-                                        {% if invoice.payment_status == 'partially_paid' %}
-                                            Partially Paid 
-                                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
-                                        {% else %}
-                                            Not Paid
-                                        {% endif %}
-                                    </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if not invoice.payment_status == 'paid' %}
-                                    <a href="{% url 'invoice-update' invoice.pk %}" 
-                                    class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </a>
-                                    <a href="{% url 'invoice-delete' invoice.pk %}" 
-                                    class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
-                                        Delete
-                                    </a>
-                                    <button class="btn btn-info btn-sm" 
+                                </td>
+                                <td>
+                                    {% if not invoice.payment_status == 'paid' %}
+                                        <a href="{% url 'invoice-update' invoice.pk %}" 
+                                        class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
+                                            <i class="fas fa-edit"></i> Edit
+                                        </a>
+                                        <a href="{% url 'invoice-delete' invoice.pk %}" 
+                                        class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
+                                            Delete
+                                        </a>
+                                        <button class="btn btn-info btn-sm" 
+                                                data-toggle="modal" 
+                                                data-target="#creditNoteModal" 
+                                                data-invoice-id="{{ invoice.id }}"
+                                                {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                            <i class="fas fa-reply"></i> Credit Note
+                                        </button>
+                                    {% else %}
+                                        <button class="btn btn-secondary" disabled>
+                                            <i class="fas fa-lock"></i> Paid
+                                        </button>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                                    <button class="btn btn-info btn-sm"                             
                                             data-toggle="modal" 
-                                            data-target="#creditNoteModal" 
-                                            data-invoice-id="{{ invoice.id }}"
-                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
-                                        <i class="fas fa-reply"></i> Credit Note
+                                            data-target="#paymentDetailsModal"
+                                            data-invoice="{{ invoice.pk }}">
+                                        Payment Details
                                     </button>
-                                {% else %}
-                                    <button class="btn btn-secondary" disabled>
-                                        <i class="fas fa-lock"></i> Paid
+                                    <button class="btn btn-info btn-sm accounting-summary-btn" 
+                                            data-invoice-id="{{ invoice.id }}" 
+                                            title="Show Accounting Summary">
+                                        <i class="fas fa-book"></i>
                                     </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                                <button class="btn btn-info btn-sm"                             
-                                        data-toggle="modal" 
-                                        data-target="#paymentDetailsModal"
-                                        data-invoice="{{ invoice.pk }}">
-                                    Payment Details
-                                </button>
-                                <button class="btn btn-info btn-sm accounting-summary-btn" 
-                                        data-invoice-id="{{ invoice.id }}" 
-                                        title="Show Accounting Summary">
-                                    <i class="fas fa-book"></i>
-                                </button>
+                                </td>
+                            </tr>
+                        </tr>
+                    {% if invoice.credit_notes.exists %}
+                        <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
+                            <td colspan="12">
+                                <div class="ml-4">
+                                    <h6 class="mb-3">
+                                        <i class="fas fa-receipt"></i> 
+                                        Credit Notes for Invoice {{ invoice.ref }}
+                                    </h6>
+                                    <table class="table table-sm">
+                                        <thead class="thead-light">
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Reference</th>
+                                                <th>Products</th>
+                                                <th class="text-right">Amount</th>
+                                                <th>Status</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for credit_note in invoice.credit_notes.all %}
+                                                <tr>
+                                                    <td>{{ credit_note.date|date:"Y-m-d" }}</td>
+                                                    <td>{{ credit_note.ref }}</td>
+                                                    <td>
+                                                        {% for product in credit_note.products.all %}
+                                                            {{ product.product.name }} ({{ product.quantity }})
+                                                            {% if not forloop.last %}, {% endif %}
+                                                        {% endfor %}
+                                                    </td>
+                                                    <td class="text-right text-danger">
+                                                        -{{ credit_note.total_amount|floatformat:2|intcomma }}
+                                                    </td>
+                                                    <td>
+                                                        <span class="badge badge-info">
+                                                            <i class="fas fa-receipt"></i> Credit Note
+                                                        </span>
+                                                        {% if credit_note.exported_at %}
+                                                            <span class="badge badge-secondary">
+                                                                <i class="fas fa-file-export"></i> Exported
+                                                            </span>
+                                                        {% endif %}
+                                                    </td>
+                                                    <td>
+                                                        <button class="btn btn-sm btn-info"
+                                                                data-toggle="modal" 
+                                                                data-target="#invoiceDetailsModal" 
+                                                                data-invoice="{{ credit_note.id }}">
+                                                            <i class="fas fa-info-circle"></i> Details
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            {% endfor %}
+                                            <tr class="font-weight-bold">
+                                                <td colspan="3" class="text-right">Net Balance:</td>
+                                                <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
+                                                <td colspan="2"></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </td>
                         </tr>
-                    </tr>
-                {% if invoice.credit_notes.exists %}
-                    <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
-                        <td colspan="12">
-                            <div class="ml-4">
-                                <h6 class="mb-3">
-                                    <i class="fas fa-receipt"></i> 
-                                    Credit Notes for Invoice {{ invoice.ref }}
-                                </h6>
-                                <table class="table table-sm">
-                                    <thead class="thead-light">
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Reference</th>
-                                            <th>Products</th>
-                                            <th class="text-right">Amount</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for credit_note in invoice.credit_notes.all %}
-                                            <tr>
-                                                <td>{{ credit_note.date|date:"Y-m-d" }}</td>
-                                                <td>{{ credit_note.ref }}</td>
-                                                <td>
-                                                    {% for product in credit_note.products.all %}
-                                                        {{ product.product.name }} ({{ product.quantity }})
-                                                        {% if not forloop.last %}, {% endif %}
-                                                    {% endfor %}
-                                                </td>
-                                                <td class="text-right text-danger">
-                                                    -{{ credit_note.total_amount|floatformat:2|intcomma }}
-                                                </td>
-                                                <td>
-                                                    <span class="badge badge-info">
-                                                        <i class="fas fa-receipt"></i> Credit Note
-                                                    </span>
-                                                    {% if credit_note.exported_at %}
-                                                        <span class="badge badge-secondary">
-                                                            <i class="fas fa-file-export"></i> Exported
-                                                        </span>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    <button class="btn btn-sm btn-info"
-                                                            data-toggle="modal" 
-                                                            data-target="#invoiceDetailsModal" 
-                                                            data-invoice="{{ credit_note.id }}">
-                                                        <i class="fas fa-info-circle"></i> Details
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                        <tr class="font-weight-bold">
-                                            <td colspan="3" class="text-right">Net Balance:</td>
-                                            <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
-                                            <td colspan="2"></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </td>
-                    </tr>
+                    {% endif %}
+
                 {% endif %}
 
-            {% endif %}
-
-        {% endfor %}
-    </tbody>
-</table>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
 
 <!-- Export Button -->
 <div class="d-flex justify-content-end mt-3">
@@ -11973,8 +12066,8 @@ $(document).ready(function() {
     </button>
 </div>
 
-<!-- Modal Template -->
-<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel" aria-hidden="true">
+<!-- Modal Template for Invoice Details -->
+<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel">
     <div class="modal-dialog modal-lg" role="document"> <!-- Added modal-lg for larger modal -->
         <div class="modal-content">
             <div class="modal-header">
@@ -12250,126 +12343,217 @@ $(document).ready(function() {
 
 <!-- JavaScript to populate modal -->
 <script>
-    document.addEventListener('DOMContentLoaded', function () {
 
-        // Credit Note Modal Handler
-        $('#creditNoteModal').on('show.bs.modal', function(event) {
-            console.log('Modal triggered');
-            const button = $(event.relatedTarget);
-            const invoiceId = button.data('invoice-id');
-            console.log('Invoice ID:', invoiceId);
+    // 1. Utility Functions - These are used throughout the code
+    const Utils = {
+        formatMoney: function(amount) {
+            return new Intl.NumberFormat('fr-FR', {
+                style: 'currency',
+                currency: 'MAD',
+                minimumFractionDigits: 2
+            }).format(amount);
+        },
+        
+        getProgressBarClass: function(percentage) {
+            if (percentage >= 100) return 'bg-success';
+            if (percentage > 50) return 'bg-warning';
+            return 'bg-danger';
+        },
+        
+        getStatusBadgeClass: function(status) {
+            return {
+                'pending': 'secondary',
+                'delivered': 'warning',
+                'paid': 'success',
+                'cancelled': 'danger'
+            }[status] || 'secondary';
+        },
+        
+        formatStatus: function(status) {
+            return status.charAt(0).toUpperCase() + status.slice(1);
+        }
+    };
 
-            if (!invoiceId) {
-                console.error('No Invoice ID found!');
-                return;
-            }
-            $('#original-invoice-id').val(invoiceId);
-            $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
-            // Load invoice details and available products
+    // 2. Modal Handlers - All modal-related functions
+    const ModalHandlers = {
+        // Invoice Details Modal
+        loadInvoiceDetails: function(invoiceId) {
             $.ajax({
-                url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
-                method: 'GET',
+                url: "{% url 'invoice-details' %}",
+                data: { 'invoice_id': invoiceId },
                 success: function(data) {
-                    // Update original invoice details
-                    $('#original-invoice-details').html(`
-                        <p><strong>Reference:</strong> ${data.invoice.ref}</p>
-                        <p><strong>Date:</strong> ${data.invoice.date}</p>
-                        <p><strong>Total Amount:</strong> ${formatMoney(data.invoice.total_amount)}</p>
-                        <p><strong>Already Credited:</strong> ${formatMoney(data.invoice.credited_amount)}</p>
-                    `);
-
-                    // Update net balance details
-                    updateNetBalance(data.invoice.total_amount, 0);
-
-                    // Populate products table
-                    const tbody = $('#products-table tbody').empty();
+                    $('#invoice-details-table').empty();
                     data.products.forEach(product => {
-                        tbody.append(`
+                        $('#invoice-details-table').append(`
                             <tr>
                                 <td>${product.name}</td>
-                                <td class="text-right">${product.original_quantity}</td>
-                                <td class="text-right">${product.credited_quantity}</td>
-                                <td class="text-right">${product.available_quantity}</td>
-                                <td>
-                                    <input type="number" class="form-control form-control-sm credit-quantity"
-                                        data-product-id="${product.id}"
-                                        data-unit-price="${product.unit_price}"
-                                        data-available="${product.available_quantity}"
-                                        min="0" max="${product.available_quantity}" value="0">
-                                </td>
-                                <td class="text-right">${formatMoney(product.unit_price)}</td>
-                                <td class="text-right subtotal">0.00</td>
+                                <td>${product.unit_price}</td>
+                                <td>${product.quantity}</td>
+                                <td>${product.vat_rate}</td>
+                                <td>${product.reduction_rate}</td>
+                                <td>${product.raw_price}</td>
                             </tr>
                         `);
                     });
-
-                    // Initialize quantity handlers
-                    initializeQuantityHandlers();
-                },
-                error: function(xhr) {
-                    alert('Failed to load credit note details: ' + xhr.responseText);
+                    
+                    $('#vat-summary').empty();
+                    data.vat_subtotals.forEach(vatSubtotal => {
+                        $('#vat-summary').append(
+                            `<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`
+                        );
+                    });
+                    
+                    $('#total-amount-summary').html(`
+                        <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
+                        <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
+                        <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
+                    `);
                 }
             });
-        });
+        },
 
-        // Update net balance
-        function updateNetBalance(invoiceTotal, creditAmount) {
-            const netAmount = invoiceTotal - creditAmount;
-            $('#net-balance-details').html(`
-                <p><strong>Original Amount:</strong> ${formatMoney(invoiceTotal)}</p>
-                <p><strong>Credit Amount:</strong> ${formatMoney(creditAmount)}</p>
-                <p class="font-weight-bold">Net Balance: ${formatMoney(netAmount)}</p>
-            `);
+        // Payment Details Modal
+        loadPaymentDetails: function(invoiceId) {
+            $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
+                const details = data.payment_details;
+                $('#amount-due').text(Utils.formatMoney(details.total_amount));
+                $('#amount-paid').text(Utils.formatMoney(details.paid_amount));
+                $('#amount-to-issue').text(Utils.formatMoney(details.amount_to_issue));
+
+                const progressBar = $('#payment-progress');
+                progressBar
+                    .css('width', `${details.payment_percentage}%`)
+                    .text(`${details.payment_percentage.toFixed(1)}%`)
+                    .removeClass('bg-success bg-warning bg-danger')
+                    .addClass(Utils.getProgressBarClass(details.payment_percentage));
+
+                $('#pending-amount').text(Utils.formatMoney(details.pending_amount));
+                $('#delivered-amount').text(Utils.formatMoney(details.delivered_amount));
+                $('#remaining-amount').text(Utils.formatMoney(details.remaining_to_pay));
+
+                ModalHandlers.updateChecksTable(data.checks);
+            });
+        },
+
+        updateChecksTable: function(checks) {
+            const tbody = $('#payment-checks-tbody');
+            tbody.empty();
+
+            checks.forEach(check => {
+                tbody.append(`
+                    <tr>
+                        <td>${check.reference}</td>
+                        <td>${Utils.formatMoney(check.amount)}</td>
+                        <td>${check.created_at}</td>
+                        <td>${check.delivered_at || '-'}</td>
+                        <td>${check.paid_at || '-'}</td>
+                        <td>
+                            <span class="badge badge-${Utils.getStatusBadgeClass(check.status)}">
+                                ${Utils.formatStatus(check.status)}
+                            </span>
+                        </td>
+                    </tr>
+                `);
+            });
+        },
+
+        showAccountingSummary: function(invoiceId) {
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/accounting-summary/`,
+                method: 'GET',
+                success: function(data) {
+                    // Populate the modal
+                    $('#originalEntries').empty();
+                    data.original_entries.forEach(entry => {
+                        $('#originalEntries').append(ModalHandlers.createAccountingRow(entry));
+                    });
+
+                    if (data.credit_note_entries.length > 0) {
+                        $('#creditNotesSection').removeClass('d-none');
+                        $('#creditNoteEntries').empty();
+                        data.credit_note_entries.forEach(entry => {
+                            $('#creditNoteEntries').append(ModalHandlers.createAccountingRow(entry));
+                        });
+                    } else {
+                        $('#creditNotesSection').addClass('d-none');
+                    }
+
+                    $('#originalTotal').text(Utils.formatMoney(data.totals.original));
+                    $('#creditTotal').text(Utils.formatMoney(data.totals.credit_notes));
+                    $('#netTotal').text(Utils.formatMoney(data.totals.net));
+
+                    $('#accountingSummaryModal').modal('show');
+                },
+                error: function(xhr) {
+                    alert('Failed to load accounting summary: ' + xhr.responseText);
+                }
+            });
+        },
+
+        createAccountingRow: function(entry) {
+            return `
+                <tr>
+                    <td>${entry.date}</td>
+                    <td>${entry.account_code}</td>
+                    <td>${entry.label}</td>
+                    <td class="text-right">${entry.debit ? Utils.formatMoney(entry.debit) : ''}</td>
+                    <td class="text-right">${entry.credit ? Utils.formatMoney(entry.credit) : ''}</td>
+                    <td>${entry.reference}</td>
+                    <td>${entry.journal}</td>
+                </tr>
+            `;
         }
 
+    };
 
-        // Handle quantity changes
-        function initializeQuantityHandlers() {
+    // 3. Credit Note Handlers
+    const CreditNoteHandlers = {
+        // Store the initial net amount for calculations
+        initialNetAmount: 0,
+
+        initializeQuantityHandlers: function() {
             $('.credit-quantity').on('input', function() {
                 const quantity = parseFloat($(this).val()) || 0;
                 const available = parseFloat($(this).data('available'));
-                const unitPrice = parseFloat($(this).data('unit-price'));
                 
-                // Validate quantity
                 if (quantity > available) {
                     $(this).val(available);
                     return;
                 }
                 
-                updateSubtotalsAndTotal();
+                CreditNoteHandlers.updateSubtotalsAndTotal();
             });
-        }
+        },
 
-        function updateSubtotalsAndTotal() {
+        updateNetBalance: function(creditAmount) {
+            $('#net-balance-details').html(`
+                <p><strong>Original Amount:</strong> ${Utils.formatMoney(this.initialNetAmount)}</p>
+                <p><strong>Credit Amount:</strong> ${Utils.formatMoney(creditAmount)}</p>
+                <p class="font-weight-bold">Net Balance: ${Utils.formatMoney(this.initialNetAmount - creditAmount)}</p>
+            `);
+        },
+
+        updateSubtotalsAndTotal: function() {
             let total = 0;
             $('.credit-quantity').each(function() {
                 const quantity = parseFloat($(this).val()) || 0;
                 const unitPrice = parseFloat($(this).data('unit-price'));
                 const subtotal = quantity * unitPrice;
                 
-                $(this).closest('tr').find('.subtotal').text(formatMoney(subtotal));
+                $(this).closest('tr').find('.subtotal').text(Utils.formatMoney(subtotal));
                 total += subtotal;
             });
 
-            $('#total-credit-amount').text(formatMoney(total));
-            
-            // Update net balance
-            const invoiceTotal = parseFloat($('#original-invoice-details')
-                .find('strong:contains("Total Amount")')
-                .next()
-                .text()
-                .replace(/[^0-9.-]+/g, ''));
-            
-            updateNetBalance(invoiceTotal, total);
-        }
+            $('#total-credit-amount').text(Utils.formatMoney(total));
+            this.updateNetBalance(total);
+        },
 
-        // Credit Note Modal Handler
-        $('#save-credit-note').click(function() {
-            console.log('Modal triggered');
+        saveCreditNote: function() {
             if (!$('#credit-note-ref').val()) {
                 alert('Please enter a credit note reference');
                 return;
             }
+
             const products = [];
             $('.credit-quantity').each(function() {
                 const quantity = parseFloat($(this).val()) || 0;
@@ -12385,11 +12569,7 @@ $(document).ready(function() {
                 alert('Please select at least one product to credit');
                 return;
             }
-            
-            console.log('Sending data:', JSON.stringify({
-                original_invoice_id: $('#original-invoice-id').val(),
-                products: products
-            }));
+
             $.ajax({
                 url: '/testapp/invoices/create-credit-note/',
                 method: 'POST',
@@ -12407,349 +12587,277 @@ $(document).ready(function() {
                     alert('Error creating credit note: ' + xhr.responseText);
                 }
             });
-        });
+        }
+    };
 
+    // 4. Filter Handlers
+    const FilterHandlers = {
+        updateActiveFilters: function() {
+            const activeFilters = [];
+            const filterLabels = {
+                date_from: 'From',
+                date_to: 'To',
+                supplier: 'Supplier',
+                payment_status: 'Payment Status',
+                amount_min: 'Min Amount',
+                amount_max: 'Max Amount',
+                export_status: 'Export Status',
+                document_type: 'Document Type'
+            };
 
-        // Toggle credit notes visibility
-        $('.toggle-credit-notes').click(function(e) {
-            e.preventDefault();
-            e.stopPropagation();
+            // Build URL parameters
+            const urlParams = new URLSearchParams();
             
-            const invoiceId = $(this).data('invoice');
-            const icon = $(this).find('i');
-            const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
-            
-            creditNotesRow.toggleClass('d-none');
-            icon.toggleClass('fa-receipt fa-times-circle');
-        });
-        
-        $(document).on('click', '.accounting-summary-btn', function () {
-            const invoiceId = $(this).data('invoice-id');
-            console.log('Invoice ID:', invoiceId); // Debugging
-            if (!invoiceId) {
-                alert('Invoice ID is missing.');
-                return;
+            $('#filter-form').serializeArray().forEach(function(item) {
+                if (item.value) {
+                    urlParams.append(item.name, item.value);
+                    activeFilters.push({
+                        name: filterLabels[item.name],
+                        value: item.value,
+                        param: item.name
+                    });
+                }
+            });
+
+            // Update URL without refreshing page
+            window.history.pushState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
+
+            // Update filter count badge
+            const filterCount = activeFilters.length;
+            const countBadge = $('.active-filters-count');
+            if (filterCount > 0) {
+                countBadge.text(filterCount).show();
+            } else {
+                countBadge.hide();
             }
-            showAccountingSummary(invoiceId);
-        });
 
-        // Define the `showAccountingSummary` function
-        function showAccountingSummary(invoiceId) {
-            $.ajax({
-                url: `/testapp/invoices/${invoiceId}/accounting-summary/`, // Update this to match your Django URL
-                method: 'GET',
-                success: function (data) {
-                    console.log('Accounting Summary Data:', data); // Debugging
-                    // Populate the modal
-                    $('#originalEntries').empty();
-                    data.original_entries.forEach(entry => {
-                        $('#originalEntries').append(createAccountingRow(entry));
-                    });
+            // Update filter tags
+            const tagsHtml = activeFilters.map(filter => `
+                <span class="badge badge-info mr-2">
+                    ${filter.name}: ${filter.value}
+                    <button type="button" class="close ml-1" 
+                            data-param="${filter.param}" 
+                            aria-label="Remove filter">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </span>
+            `).join('');
 
-                    if (data.credit_note_entries.length > 0) {
-                        $('#creditNotesSection').removeClass('d-none');
-                        $('#creditNoteEntries').empty();
-                        data.credit_note_entries.forEach(entry => {
-                            $('#creditNoteEntries').append(createAccountingRow(entry));
-                        });
-                    } else {
-                        $('#creditNotesSection').addClass('d-none');
-                    }
+            $('.active-filters-tags').html(tagsHtml);
+        },
 
-                    $('#originalTotal').text(formatMoney(data.totals.original));
-                    $('#creditTotal').text(formatMoney(data.totals.credit_notes));
-                    $('#netTotal').text(formatMoney(data.totals.net));
-
-                    $('#accountingSummaryModal').modal('show');
-                },
-                error: function (xhr) {
-                    alert('Failed to load accounting summary: ' + xhr.responseText);
+        applyFilters: function() {
+            const filters = {};
+            $('#filter-form').serializeArray().forEach(function(item) {
+                if (item.value) {
+                    filters[item.name] = item.value;
                 }
             });
+
+            window.location.search = new URLSearchParams(filters).toString();
+        },
+
+        resetFilters: function() {
+            $('#filter-form')[0].reset();
+            $('#supplier-filter').val(null).trigger('change');
+            window.location.search = '';
         }
+    };
 
-        // Helper function to create accounting table rows
-        function createAccountingRow(entry) {
-            return `
-                <tr>
-                    <td>${entry.date}</td>
-                    <td>${entry.account_code}</td>
-                    <td>${entry.label}</td>
-                    <td class="text-right">${entry.debit ? formatMoney(entry.debit) : ''}</td>
-                    <td class="text-right">${entry.credit ? formatMoney(entry.credit) : ''}</td>
-                    <td>${entry.reference}</td>
-                    <td>${entry.journal}</td>
-                </tr>
-            `;
+    
+    document.addEventListener('DOMContentLoaded', function () {
+
+  // Initialize Modal Events
+
+ // Accounting summary button handler
+ $(document).on('click', '.accounting-summary-btn', function() {
+        const invoiceId = $(this).data('invoice-id');
+        if (!invoiceId) {
+            alert('Invoice ID is missing.');
+            return;
         }
-        // Export functionality
-        const checkboxes = document.querySelectorAll('.export-checkbox');
-        const exportButton = document.getElementById('export-selected');
-
-        checkboxes.forEach(function(checkbox) {
-            checkbox.addEventListener('click', function() {
-                const checkedBoxes = document.querySelectorAll('.export-checkbox:checked');
-                exportButton.disabled = checkedBoxes.length === 0;
-                console.log('Checked boxes:', checkedBoxes.length);
-            });
-        });
-
-        exportButton.addEventListener('click', function() {
-            const selectedIds = [...checkboxes]
-                .filter(cb => cb.checked)
-                .map(cb => cb.value);
-
-            if (selectedIds.length === 0) return;
-
-            fetch('{% url "export-invoices" %}', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({invoice_ids: selectedIds})
-            })
-            .then(response => {
-                if (response.ok) return response.blob();
-                throw new Error('Export failed');
-            })
-            .then(blob => {
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `accounting_export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.xlsx`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                location.reload();
-            })
-            .catch(error => {
-                alert('Failed to export invoices: ' + error.message);
-            });
-        });
-
-        // Unexport functionality
-        const unexportButtons = document.querySelectorAll('.unexport-btn');
-        unexportButtons.forEach(button => {
-            button.addEventListener('click', function() {
-                const invoiceId = this.dataset.invoiceId;
-                if (!confirm('Are you sure you want to unexport this invoice?')) return;
-
-                fetch(`/testapp/invoices/${invoiceId}/unexport/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    }
-                })
-                .then(response => {
-                    if (!response.ok) throw new Error('Unexport failed');
-                    location.reload();
-                })
-                .catch(error => {
-                    alert('Failed to unexport invoice: ' + error.message);
-                });
-            });
-        });
-
-        // Payment details functionality
-        $('#paymentDetailsModal').on('show.bs.modal', function (event) {
-            const button = $(event.relatedTarget); // Button that triggered the modal
-            const invoiceId = button.data('invoice'); // Extract invoice ID
-
-            // Fetch payment details via AJAX
-            $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function (data) {
-                const details = data.payment_details;
-
-                // Update summary section
-                $('#amount-due').text(formatMoney(details.total_amount));
-                $('#amount-paid').text(formatMoney(details.paid_amount));
-                $('#amount-to-issue').text(formatMoney(details.amount_to_issue));
-
-                // Update progress bar
-                const progressBar = $('#payment-progress');
-                progressBar
-                    .css('width', `${details.payment_percentage}%`)
-                    .text(`${details.payment_percentage.toFixed(1)}%`)
-                    .removeClass('bg-success bg-warning bg-danger')
-                    .addClass(getProgressBarClass(details.payment_percentage));
-
-                // Update detailed breakdown
-                $('#pending-amount').text(formatMoney(details.pending_amount));
-                $('#delivered-amount').text(formatMoney(details.delivered_amount));
-                $('#remaining-amount').text(formatMoney(details.remaining_to_pay));
-
-                // Update checks table
-                updateChecksTable(data.checks);
-            });
-        });
-
-        // Utility function to format money
-        function formatMoney(amount) {
-            return new Intl.NumberFormat('fr-FR', {
-                style: 'currency',
-                currency: 'MAD',
-                minimumFractionDigits: 2
-            }).format(amount);
-        }
-
-        // Utility function to get progress bar class
-        function getProgressBarClass(percentage) {
-            if (percentage >= 100) return 'bg-success';
-            if (percentage > 50) return 'bg-warning';
-            return 'bg-danger';
-        }
-
-        // Update checks table with data
-        function updateChecksTable(checks) {
-            const tbody = $('#payment-checks-tbody');
-            tbody.empty();
-
-            checks.forEach(check => {
-                tbody.append(`
-                    <tr>
-                        <td>${check.reference}</td>
-                        <td>${formatMoney(check.amount)}</td>
-                        <td>${check.created_at}</td>
-                        <td>${check.delivered_at || '-'}</td>
-                        <td>${check.paid_at || '-'}</td>
-                        <td>
-                            <span class="badge badge-${getStatusBadgeClass(check.status)}">
-                                ${formatStatus(check.status)}
-                            </span>
-                        </td>
-                    </tr>
-                `);
-            });
-        }
-
-        // Utility function to get badge class for status
-        function getStatusBadgeClass(status) {
-            return {
-                'pending': 'secondary',
-                'delivered': 'warning',
-                'paid': 'success',
-                'cancelled': 'danger'
-            }[status] || 'secondary';
-        }
-
-        // Utility function to format status text
-        function formatStatus(status) {
-            return status.charAt(0).toUpperCase() + status.slice(1);
-        }
-
-
-
-        // Invoice details functionality
-        $('#invoiceDetailsModal').on('show.bs.modal', function (event) {
-            const button = $(event.relatedTarget);
-            const invoiceId = button.data('invoice');
-
-            $.ajax({
-                url: "{% url 'invoice-details' %}",
-                data: {
-                    'invoice_id': invoiceId
-                },
-                success: function (data) {
-                    // Populate the modal with the invoice details
-                    $('#invoice-details-table').empty();
-                    data.products.forEach(product => {
-                        $('#invoice-details-table').append(`
-                            <tr>
-                                <td>${product.name}</td>
-                                <td>${product.unit_price}</td>
-                                <td>${product.quantity}</td>
-                                <td>${product.vat_rate}</td> <!-- VAT Rate -->
-                                <td>${product.reduction_rate}</td>
-                                <td>${product.raw_price}</td>
-                            </tr>
-                        `);
-                    });
-                    
-                    // Update the VAT summary, Total Raw Amount, and Total Amount
-                    $('#vat-summary').empty();
-                    data.vat_subtotals.forEach(vatSubtotal => {
-                        $('#vat-summary').append(`<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`);
-                    });
-                    
-                    $('#total-amount-summary').html(`
-                    <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
-                    <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
-                    <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
-                    `);
-                }
-            });
-        });
-        const productFormsDiv = document.getElementById('product-forms');
-        const addProductButton = document.getElementById('add-product');
-        let totalFormsInput = document.querySelector('#id_products-TOTAL_FORMS');
-        let formIndex = parseInt(totalFormsInput.value);  // Start with the current total number of forms
-
-        // Add product form when clicking 'Add Product'
-        addProductButton.addEventListener('click', function() {
-            const newForm = productFormsDiv.querySelector('.product-form').cloneNode(true);
-            newForm.querySelectorAll('input').forEach(input => input.value = '');
-            newForm.innerHTML = newForm.innerHTML.replace(/products-(\d+)-/g, `products-${formIndex}-`);
-            formIndex++;
-            totalFormsInput.value = formIndex;  // Update TOTAL_FORMS count
-
-            productFormsDiv.appendChild(newForm);
-            addAutocomplete(newForm);  // Add autocomplete for the newly added product form
-
-            newForm.querySelector('.remove-product').addEventListener('click', function() {
-                newForm.remove();
-                updateTotalFormsCount();
-            });
-        });
-
-        // Remove product form when clicking 'Remove Product'
-        document.querySelectorAll('.remove-product').forEach(button => {
-            button.addEventListener('click', function() {
-                button.parentElement.remove();
-                updateTotalFormsCount();
-            });
-        });
-
-        // Update TOTAL_FORMS count
-        function updateTotalFormsCount() {
-            formIndex = productFormsDiv.querySelectorAll('.product-form').length;
-            totalFormsInput.value = formIndex;
-        }
-
-        // Add jQuery autocomplete to all product name fields
-        function addAutocomplete(formElement) {
-            $(formElement).find('input[name$="-product"]').autocomplete({
-                source: function(request, response) {
-                    $.ajax({
-                        url: "{% url 'product-autocomplete' %}",
-                        data: {
-                            term: request.term
-                        },
-                        success: function(data) {
-                            response(data);
-                        }
-                    });
-                },
-                minLength: 2,
-                select: function(event, ui) {
-                    const productInput = event.target;
-                    const formPrefix = productInput.name.split('-').slice(0, -1).join('-');
-                    $(`input[name="${formPrefix}-expense_code"]`).val(ui.item.expense_code);
-                    $(`input[name="${formPrefix}-vat_rate"]`).val(ui.item.vat_rate);
-                    $(`input[name="${formPrefix}-fiscal_label"]`).val(ui.item.fiscal_label);
-                }
-            });
-        }
-
-
-         
-        // Initialize autocomplete for existing forms
-        document.querySelectorAll('.product-form').forEach(addAutocomplete);
-
-       
+        ModalHandlers.showAccountingSummary(invoiceId);
     });
+
+    // Credit note toggle handler
+    $('.toggle-credit-notes').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const invoiceId = $(this).data('invoice');
+        const icon = $(this).find('i');
+        const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+        
+        creditNotesRow.toggleClass('d-none');
+        icon.toggleClass('fa-receipt fa-times-circle');
+    });
+
+    // Make sure toggle works for dynamically loaded content
+    $(document).on('click', '.toggle-credit-notes', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const invoiceId = $(this).data('invoice');
+        const icon = $(this).find('i');
+        const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+        
+        creditNotesRow.toggleClass('d-none');
+        icon.toggleClass('fa-receipt fa-times-circle');
+    });
+
+
+
+    $('#invoiceDetailsModal').on('show.bs.modal', function(event) {
+        const invoiceId = $(event.relatedTarget).data('invoice');
+        ModalHandlers.loadInvoiceDetails(invoiceId);
+    });
+
+    $('#paymentDetailsModal').on('show.bs.modal', function(event) {
+        const invoiceId = $(event.relatedTarget).data('invoice');
+        ModalHandlers.loadPaymentDetails(invoiceId);
+    });
+
+    // Initialize Credit Note Events
+    $('#creditNoteModal').on('show.bs.modal', function(event) {
+        const invoiceId = $(event.relatedTarget).data('invoice-id');
+        if (!invoiceId) {
+            console.error('No Invoice ID found!');
+            return;
+        }
+
+        $('#original-invoice-id').val(invoiceId);
+        $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
+
+        $.ajax({
+            url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
+            method: 'GET',
+            success: function(data) {
+                // Store initial net amount
+                CreditNoteHandlers.initialNetAmount = data.invoice.total_amount - data.invoice.credited_amount;
+                
+                // Update UI
+                $('#original-invoice-details').html(`
+                    <p><strong>Reference:</strong> ${data.invoice.ref}</p>
+                    <p><strong>Date:</strong> ${data.invoice.date}</p>
+                    <p data-amount="${data.invoice.total_amount}">
+                        <strong>Total Amount:</strong> ${Utils.formatMoney(data.invoice.total_amount)}
+                    </p>
+                    <p><strong>Already Credited:</strong> ${Utils.formatMoney(data.invoice.credited_amount)}</p>
+                `);
+
+                CreditNoteHandlers.updateNetBalance(0);
+
+                // Populate products table
+                const tbody = $('#products-table tbody').empty();
+                data.products.forEach(product => {
+                    tbody.append(`
+                        <tr>
+                            <td>${product.name}</td>
+                            <td class="text-right">${product.original_quantity}</td>
+                            <td class="text-right">${product.credited_quantity}</td>
+                            <td class="text-right">${product.available_quantity}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm credit-quantity"
+                                    data-product-id="${product.id}"
+                                    data-unit-price="${product.unit_price}"
+                                    data-available="${product.available_quantity}"
+                                    min="0" max="${product.available_quantity}" value="0">
+                            </td>
+                            <td class="text-right">${Utils.formatMoney(product.unit_price)}</td>
+                            <td class="text-right subtotal">0.00</td>
+                        </tr>
+                    `);
+                });
+
+                CreditNoteHandlers.initializeQuantityHandlers();
+            }
+        });
+    });
+
+    // Initialize Filter Events
+    $('#toggle-filters').on('click', function() {
+        $('.filter-panel').slideToggle();
+        $(this).find('i').toggleClass('fa-filter fa-filter-slash');
+    });
+
+    $('#supplier-filter').select2({
+        placeholder: 'Select supplier',
+        allowClear: true,
+        ajax: {
+            url: '/testapp/suppliers/autocomplete/',
+            dataType: 'json',
+            delay: 250,
+            processResults: function(data) {
+                return {
+                    results: data.map(item => ({
+                        id: item.value,
+                        text: item.label
+                    }))
+                };
+            }
+        }
+    });
+
+    $('#apply-filters').on('click', FilterHandlers.applyFilters);
+    $('#reset-filters').on('click', FilterHandlers.resetFilters);
+    
+    // Remove individual filters
+    $(document).on('click', '.active-filters-tags .close', function() {
+        const param = $(this).data('param');
+        $(`[name="${param}"]`).val('').trigger('change');
+        FilterHandlers.applyFilters();
+    });
+
+    
+    
+    // Initialize autocomplete for existing forms
+    document.querySelectorAll('.product-form').forEach(addAutocomplete);
+    
+});
+       
 </script>
 
 {% endblock %}
 
+```
+
+# testapp/templates/invoice/partials/invoice_table.html
+
+```html
+<!-- templates/invoice/partials/invoice_table.html -->
+<table class="table mt-4 table-hover">
+    <thead>
+        <tr>
+            <th>Export</th>
+            <th>Date</th>
+            <th>Reference</th>
+            <th>Supplier</th>
+            <th>Fiscal Label</th>
+            <th>Raw Amount</th>
+            <th>Tax Rate (%)</th>
+            <th>Tax Amount</th>
+            <th>Total Amount (Incl. Tax)</th>
+            <th>Status</th>
+            <th>Actions</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for invoice in invoices %}
+            <!-- Your existing invoice row template here -->
+        {% empty %}
+            <tr>
+                <td colspan="12" class="text-center">
+                    <div class="p-4">
+                        <i class="fas fa-search fa-2x text-muted mb-3"></i>
+                        <p class="mb-0">No invoices found matching your filters</p>
+                        <button class="btn btn-link" id="reset-filters">Clear all filters</button>
+                    </div>
+                </td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
 ```
 
 # testapp/templates/login.html
@@ -13247,37 +13355,60 @@ def invoice_autocomplete(request):
     
     invoices = Invoice.objects.filter(
         supplier_id=supplier_id,
-        ref__icontains=query
+        ref__icontains=query,
+        type='invoice'
     )
     
     invoice_list = []
     for invoice in invoices:
-        payment_info = invoice.payments_summary
-        total_amount = float(invoice.total_amount)
-        issued_amount = float(payment_info['pending_amount'] + 
-                            payment_info['delivered_amount'] + 
-                            payment_info['paid_amount'])
-        available_amount = total_amount - issued_amount
+        net_amount = float(invoice.net_amount)
+        checks_amount = float(sum(
+            check.amount
+        for check in Check.objects.filter(
+                        cause=invoice
+                    ).exclude(
+                        status='cancelled'
+                    )
+        ) or 0)
         
+        # Calculate available amount
+        available_amount = max(0, net_amount - checks_amount)
+        
+        # Skip invoices that are fully paid or have no remaining amount
+        if available_amount <= 0:
+            continue
+
         status_icon = {
             'paid': '🔒 Paid',
             'partially_paid': '⏳ Partially Paid',
             'not_paid': '📄 Not Paid'
         }.get(invoice.payment_status, '')
+
+        credit_note_info = ""
+        if invoice.has_credit_notes:
+            credit_note_info = f" (Credited: {float(invoice.total_amount - invoice.net_amount):,.2f})"
         
         invoice_list.append({
             'id': str(invoice.id),
             'ref': invoice.ref,
             'date': invoice.date.strftime('%Y-%m-%d'),
             'status': status_icon,
-            'amount': total_amount,
+            'amount': net_amount,
             'payment_info': {
-                'total_amount': total_amount,
-                'issued_amount': issued_amount,
-                'paid_amount': float(payment_info['paid_amount']),
-                'available_amount': total_amount - issued_amount
+                'total_amount': net_amount,  # Use net amount instead of total
+                'issued_amount': float(checks_amount),
+                'paid_amount': float(sum(
+                    check.amount for check in Check.objects.filter(
+                        cause=invoice,
+                        status='paid'
+                    )
+                )),
+                'available_amount': available_amount
             },
-            'label': f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - {status_icon} - {total_amount:,.2f} MAD"
+            'label': (
+                f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - "
+                f"{status_icon} - {net_amount:,.2f} MAD{credit_note_info}"
+            )
         })
     
     return JsonResponse(invoice_list, safe=False)
@@ -13534,6 +13665,9 @@ import json
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
 from django.contrib import messages
+from decimal import Decimal
+from django.db.models import F, ExpressionWrapper, DecimalField
+from django.template.loader import render_to_string
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -13573,6 +13707,132 @@ class InvoiceListView(ListView):
     model = Invoice
     template_name = 'invoice/invoice_list.html'
     context_object_name = 'invoices'
+
+    def get_queryset(self):
+            queryset = Invoice.objects.all().select_related('supplier')  # Add select_related for performance
+            
+            # Date Range Filter
+            date_from = self.request.GET.get('date_from')
+            date_to = self.request.GET.get('date_to')
+            if date_from:
+                queryset = queryset.filter(date__gte=date_from)
+            if date_to:
+                queryset = queryset.filter(date__lte=date_to)
+
+            # Supplier Filter
+            supplier = self.request.GET.get('supplier')
+            if supplier:
+                queryset = queryset.filter(supplier_id=supplier)
+
+            # Payment Status Filter
+            payment_status = self.request.GET.get('payment_status')
+            if payment_status:
+                queryset = queryset.filter(payment_status=payment_status)
+
+            # Amount Range Filter
+            amount_min = self.request.GET.get('amount_min')
+            amount_max = self.request.GET.get('amount_max')
+            if amount_min:
+                queryset = queryset.filter(total_amount__gte=Decimal(amount_min))
+            if amount_max:
+                queryset = queryset.filter(total_amount__lte=Decimal(amount_max))
+
+            # Export Status Filter
+            export_status = self.request.GET.get('export_status')
+            if export_status == 'exported':
+                queryset = queryset.filter(exported_at__isnull=False)
+            elif export_status == 'not_exported':
+                queryset = queryset.filter(exported_at__isnull=True)
+
+            # Document Type Filter
+            document_type = self.request.GET.get('document_type')
+            if document_type:
+                queryset = queryset.filter(type=document_type)
+
+            return queryset
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Add filter counts
+        active_filters = {}
+        
+        # Date Range
+        if self.request.GET.get('date_from') or self.request.GET.get('date_to'):
+            date_range = []
+            if self.request.GET.get('date_from'):
+                date_range.append(f"From: {self.request.GET.get('date_from')}")
+            if self.request.GET.get('date_to'):
+                date_range.append(f"To: {self.request.GET.get('date_to')}")
+            active_filters['date_range'] = ' - '.join(date_range)
+
+        # Supplier
+        supplier_id = self.request.GET.get('supplier')
+        if supplier_id:
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                active_filters['supplier'] = supplier.name
+            except Supplier.DoesNotExist:
+                pass
+
+        # Payment Status
+        payment_status = self.request.GET.get('payment_status')
+        if payment_status:
+            status_display = {
+                'not_paid': 'Not Paid',
+                'partially_paid': 'Partially Paid',
+                'paid': 'Paid'
+            }
+            active_filters['payment_status'] = status_display.get(payment_status)
+
+        # Amount Range
+        if self.request.GET.get('amount_min') or self.request.GET.get('amount_max'):
+            amount_range = []
+            if self.request.GET.get('amount_min'):
+                amount_range.append(f"Min: {self.request.GET.get('amount_min')}")
+            if self.request.GET.get('amount_max'):
+                amount_range.append(f"Max: {self.request.GET.get('amount_max')}")
+            active_filters['amount_range'] = ' - '.join(amount_range)
+
+        # Export Status
+        export_status = self.request.GET.get('export_status')
+        if export_status:
+            active_filters['export_status'] = 'Exported' if export_status == 'exported' else 'Not Exported'
+
+        # Document Type
+        document_type = self.request.GET.get('document_type')
+        if document_type:
+            active_filters['document_type'] = 'Invoice' if document_type == 'invoice' else 'Credit Note'
+
+        context['active_filters'] = active_filters
+        context['total_results'] = self.get_queryset().count()
+        
+        # Add initial supplier data for the filter if selected
+        if supplier_id:
+            try:
+                supplier = Supplier.objects.get(id=supplier_id)
+                context['initial_supplier'] = {
+                    'id': supplier_id,
+                    'text': supplier.name
+                }
+            except Supplier.DoesNotExist:
+                pass
+
+        return context
+
+    def render_to_response(self, context, **response_kwargs):
+        """Handle both HTML and AJAX responses"""
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
+                'html': render_to_string(
+                    'invoice/partials/invoice_table.html',
+                    context,
+                    request=self.request
+                ),
+                'total_results': context['total_results'],
+                'active_filters': context['active_filters']
+            })
+        return super().render_to_response(context, **response_kwargs)
 
 # Create a new Invoice
 class InvoiceCreateView(SuccessMessageMixin, CreateView):

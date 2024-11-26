@@ -105,14 +105,14 @@ def invoice_autocomplete(request):
     invoice_list = []
     for invoice in invoices:
         net_amount = float(invoice.net_amount)
-        checks_amount = sum(
-            check.amount 
-            for check in Check.objects.filter(
-                cause=invoice
-            ).exclude(
-                status='cancelled'
-            )
-        )
+        checks_amount = float(sum(
+            check.amount
+        for check in Check.objects.filter(
+                        cause=invoice
+                    ).exclude(
+                        status='cancelled'
+                    )
+        ) or 0)
         
         # Calculate available amount
         available_amount = max(0, net_amount - checks_amount)

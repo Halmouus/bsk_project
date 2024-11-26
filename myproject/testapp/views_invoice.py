@@ -1,7 +1,8 @@
 from django.urls import reverse_lazy
+from django.db import models
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Invoice, InvoiceProduct, Product, ExportRecord, Check
+from .models import Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -14,10 +15,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import json
 from django.contrib.auth.mixins import UserPassesTestMixin
-from django.db.models import Q
+from django.db.models import Q,F, Case, When, DecimalField, Subquery, Sum, ExpressionWrapper
+from django.db.models.functions import Coalesce
 from django.contrib import messages
 from decimal import Decimal
-from django.db.models import F, ExpressionWrapper, DecimalField
+from django.template.loader import render_to_string
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -61,31 +63,63 @@ class InvoiceListView(ListView):
     def get_queryset(self):
             queryset = Invoice.objects.all().select_related('supplier')  # Add select_related for performance
             
-            # Date Range Filter
+            # Debug prints
+            print("Request GET params:", self.request.GET)
+
+           
+                # Date Range Filter
             date_from = self.request.GET.get('date_from')
             date_to = self.request.GET.get('date_to')
             if date_from:
-                queryset = queryset.filter(date__gte=date_from)
+                try:
+                    queryset = queryset.filter(date__gte=date_from)
+                except Exception as e:
+                    print(f"Error filtering by date_from: {e}")
             if date_to:
-                queryset = queryset.filter(date__lte=date_to)
+                try:
+                    queryset = queryset.filter(date__lte=date_to)
+                except Exception as e:
+                    print(f"Error filtering by date_to: {e}")
+
+            # Amount Range Filter
+            amount_min = self.request.GET.get('amount_min')
+            amount_max = self.request.GET.get('amount_max')
+
+            if amount_min or amount_max:
+                # First get all invoices
+                invoices = list(queryset)  # Convert to list to evaluate the queryset
+                filtered_invoices = []
+
+                amount_min = Decimal(amount_min if amount_min else '0')
+                amount_max = Decimal(amount_max if amount_max else '999999999')
+
+                # Filter based on net_amount property
+                for invoice in invoices:
+                    net_amount = invoice.net_amount
+                    if amount_min <= net_amount <= amount_max:
+                        filtered_invoices.append(invoice.id)
+
+                # Filter queryset by IDs
+                queryset = queryset.filter(id__in=filtered_invoices)
+
+                print(f"Debug - Amount range: {amount_min} to {amount_max}")
+                print(f"Debug - Filtered invoices count: {len(filtered_invoices)}")
+                for inv_id in filtered_invoices:
+                    invoice = next(inv for inv in invoices if inv.id == inv_id)
+                    print(f"Debug - Invoice {invoice.ref}: Net amount = {invoice.net_amount}")
+
+
 
             # Supplier Filter
             supplier = self.request.GET.get('supplier')
             if supplier:
+                print(f"Filtering by supplier: {supplier}")
                 queryset = queryset.filter(supplier_id=supplier)
 
             # Payment Status Filter
             payment_status = self.request.GET.get('payment_status')
             if payment_status:
                 queryset = queryset.filter(payment_status=payment_status)
-
-            # Amount Range Filter
-            amount_min = self.request.GET.get('amount_min')
-            amount_max = self.request.GET.get('amount_max')
-            if amount_min:
-                queryset = queryset.filter(total_amount__gte=Decimal(amount_min))
-            if amount_max:
-                queryset = queryset.filter(total_amount__lte=Decimal(amount_max))
 
             # Export Status Filter
             export_status = self.request.GET.get('export_status')
@@ -94,12 +128,59 @@ class InvoiceListView(ListView):
             elif export_status == 'not_exported':
                 queryset = queryset.filter(exported_at__isnull=True)
 
-            # Document Type Filter
-            document_type = self.request.GET.get('document_type')
-            if document_type:
-                queryset = queryset.filter(type=document_type)
+            # Product Filter
+            product_id = self.request.GET.get('product')
+            if product_id:
+                queryset = queryset.filter(products__product_id=product_id)
 
-            return queryset
+            # Payment Status Filters
+            has_pending_checks = self.request.GET.get('has_pending_checks')
+            if has_pending_checks:
+                queryset = queryset.filter(check__status='pending').distinct()
+
+            has_delivered_unpaid = self.request.GET.get('has_delivered_unpaid')
+            if has_delivered_unpaid:
+                queryset = queryset.filter(check__status='delivered').exclude(check__status='paid').distinct()
+
+            # Energy Filter
+            is_energy = self.request.GET.get('is_energy')
+            if is_energy:
+                queryset = queryset.filter(supplier__is_energy=True)
+
+            # Credit Note Status
+            credit_note_status = self.request.GET.get('credit_note_status')
+            if credit_note_status == 'has_credit_notes':
+                queryset = queryset.filter(credit_notes__isnull=False).distinct()
+            elif credit_note_status == 'no_credit_notes':
+                queryset = queryset.filter(credit_notes__isnull=True)
+            elif credit_note_status == 'partially_credited':
+                # Invoices that have credit notes but are not fully credited
+                queryset = queryset.filter(
+                    credit_notes__isnull=False,
+                    payment_status__in=['not_paid', 'partially_paid']
+                ).distinct()
+
+            # Due Date Range
+            due_date_from = self.request.GET.get('due_date_from')
+            due_date_to = self.request.GET.get('due_date_to')
+            if due_date_from:
+                queryset = queryset.filter(payment_due_date__gte=due_date_from)
+            if due_date_to:
+                queryset = queryset.filter(payment_due_date__lte=due_date_to)
+
+            # Overdue Filter
+            is_overdue = self.request.GET.get('is_overdue')
+            if is_overdue:
+                today = timezone.now().date()
+                queryset = queryset.filter(
+                    payment_due_date__lt=today,
+                    payment_status__in=['not_paid', 'partially_paid']
+                )
+
+            # Print final queryset SQL
+            print("Final query SQL:", queryset.query)
+
+            return queryset.order_by('-date')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -172,18 +253,16 @@ class InvoiceListView(ListView):
 
     def render_to_response(self, context, **response_kwargs):
         """Handle both HTML and AJAX responses"""
-        if self.request.headers.get('x-requested-with') == 'XMLHttpRequest':
-            # For AJAX requests, just return the table content
-            data = {
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({
                 'html': render_to_string(
-                    'invoice/partials/invoice_table.html',  # We'll create this partial template
+                    'invoice/partials/invoice_table.html',
                     context,
                     request=self.request
                 ),
                 'total_results': context['total_results'],
                 'active_filters': context['active_filters']
-            }
-            return JsonResponse(data)
+            })
         return super().render_to_response(context, **response_kwargs)
 
 # Create a new Invoice

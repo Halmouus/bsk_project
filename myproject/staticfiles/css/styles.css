@@ -128,3 +128,12 @@
     color: #6c757d;
     font-size: 0.875rem;
 }
+
+.select2-container {
+    width: 100% !important;
+}
+
+.select2-selection {
+    height: 38px !important;
+    padding: 5px !important;
+}
