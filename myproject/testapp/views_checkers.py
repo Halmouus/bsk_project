@@ -1,7 +1,7 @@
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Checker, Check, Invoice, Supplier
+from .models import Checker, Check, Invoice, Supplier, BankAccount
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
@@ -14,6 +14,10 @@ from django.db.models import Q
 from django.contrib import messages
 from django.utils import timezone
 from dateutil.parser import parse
+from django.core.exceptions import ValidationError
+from django.db import transaction
+
+
 
 
 class CheckerListView(ListView):
@@ -21,43 +25,52 @@ class CheckerListView(ListView):
     template_name = 'checker/checker_list.html'
     context_object_name = 'checkers'
 
+    def get_queryset(self):
+        return Checker.objects.select_related('bank_account').filter(is_active=True)
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['bank_choices'] = Checker.BANK_CHOICES
+        context['banks'] = BankAccount.objects.filter(
+            is_active=True,
+            account_type='national'
+        )
         return context
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckerCreateView(View):
-        def post(self, request):
-            try:
-                print("Received data:", request.body)
-                data = json.loads(request.body)
-                print("Parsed data:", data)
-                
-                # Validate final page
-                starting_page = int(data['starting_page'])
-                num_pages = int(data['num_pages'])
-                calculated_final = starting_page + num_pages - 1
-                
-                checker = Checker.objects.create(
-                    type=data['type'],
-                    bank=data['bank'],
-                    account_number=data['account_number'],
-                    city=data['city'],
-                    num_pages=num_pages,
-                    index=data['index'].upper(),
-                    starting_page=starting_page,
-                    final_page=calculated_final
-                )
-                
-                return JsonResponse({
-                    'message': 'Checker created successfully',
-                    'checker_id': str(checker.id)
-                })
-                
-            except Exception as e:
-                print("Error:", e)
-                return JsonResponse({'error': str(e)}, status=400)
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            # Validate bank account
+            bank_account = get_object_or_404(
+                BankAccount, 
+                id=data['bank_account_id'],
+                is_active=True,
+                account_type='national'
+            )
+
+            # Create checker
+            checker = Checker.objects.create(
+                type=data['type'],
+                bank_account=bank_account,
+                num_pages=int(data['num_pages']),
+                index=data['index'].upper(),
+                starting_page=int(data['starting_page'])
+            )
+            
+            return JsonResponse({
+                'message': 'Checker created successfully',
+                'checker': {
+                    'id': str(checker.id),
+                    'code': checker.code,
+                    'current_position': checker.current_position,
+                    'final_page': checker.final_page
+                }
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckerDetailsView(View):
@@ -294,3 +307,62 @@ class CheckCancelView(View):
             return JsonResponse({'message': 'Check cancelled successfully'})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
+
+class CheckActionView(View):
+    def post(self, request, pk):
+        check = get_object_or_404(Check, id=pk)
+        data = json.loads(request.body)
+        
+        if data['action'] == 'deliver':
+            self._handle_delivery(check)
+        elif data['action'] == 'pay':
+            self._handle_payment(check)
+        elif data['action'] == 'reject':
+            self._handle_rejection(check, data)
+        elif data['action'] == 'replace':
+            return self._handle_replacement(check, data)
+
+        return JsonResponse({'status': 'success'})
+
+    def _handle_delivery(self, check):
+        if check.status != 'pending':
+            raise ValidationError("Only pending checks can be delivered")
+        check.status = 'delivered'
+        check.delivered_at = timezone.now()
+        check.save()
+
+    def _handle_payment(self, check):
+        if check.status != 'delivered':
+            raise ValidationError("Only delivered checks can be paid")
+        check.status = 'paid'
+        check.paid_at = timezone.now()
+        check.save()
+        check.cause.update_payment_status()
+
+    def _handle_rejection(self, check, data):
+        if check.status != 'delivered':
+            raise ValidationError("Only delivered checks can be rejected")
+        check.reject(
+            reason=data.get('rejection_reason'),
+            note=data.get('rejection_note', '')
+        )
+        check.cause.update_payment_status()
+
+    def _handle_replacement(self, check, data):
+        if check.status not in ['rejected', 'cancelled']:
+            raise ValidationError("Only rejected or cancelled checks can be replaced")
+        if check.has_replacement:
+            raise ValidationError("Check already replaced")
+
+        with transaction.atomic():
+            new_check = Check.objects.create(
+                checker=check.checker,
+                beneficiary=check.beneficiary,
+                cause=check.cause,
+                amount=data['amount'],
+                payment_due=data['payment_due'],
+                observation=data.get('observation', ''),
+                replaces=check
+            )
+            check.cause.update_payment_status()
+            return JsonResponse({'new_check_id': str(new_check.id)})

@@ -1,124 +1,147 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<div class="container-fluid mt-4">
+<div class="container-fluid">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Checkers</h2>
         <button class="btn btn-primary" data-toggle="modal" data-target="#checkerModal">
-            <i class="fas fa-plus"></i> Add New Checker
+            <i class="fas fa-plus"></i> New Checker
         </button>
     </div>
 
-    <table class="table table-hover">
-        <thead class="thead-dark">
-            <tr>
-                <th>Code</th>
-                <th>Owner</th>
-                <th>Type</th>
-                <th>Bank</th>
-                <th>Account</th>
-                <th>City</th>
-                <th>Starting Page</th>
-                <th>Final Page</th>
-                <th>Current Position</th>
-                <th>Remaining Pages</th>
-                <th>Actions</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for checker in checkers %}
-            <tr>
-                <td>{{ checker.code }}</td>
-                <td>{{ checker.owner }}</td>
-                <td>{{ checker.get_type_display }}</td>
-                <td>{{ checker.get_bank_display }}</td>
-                <td>{{ checker.account_number }}</td>
-                <td>{{ checker.city }}</td>
-                <td>{{ checker.index }}{{ checker.starting_page }}</td>
-                <td>{{ checker.index }}{{ checker.final_page }}</td>
-                <td>{{ checker.index }}{{ checker.current_position }}</td>
-                <td>{{ checker.remaining_pages }}</td>
-                <td>
-                    <button class="btn btn-primary btn-sm add-payment" data-checker="{{ checker.id }}">
-                        <i class="fas fa-plus"></i> Add Payment
-                    </button>
-                    <button class="btn btn-info btn-sm view-details" data-checker="{{ checker.id }}">
-                        Details
-                    </button>
-                    <button class="btn btn-danger btn-sm delete-checker" data-checker="{{ checker.id }}">
-                        <i class="fas fa-times"></i> Delete
-                    </button>
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <select class="form-control" id="bankFilter">
+                        <option value="">All Banks</option>
+                        {% for account in bank_accounts %}
+                            <option value="{{ account.id }}">
+                                {{ account.bank }} [{{ account.account_number }}]
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="typeFilter">
+                        <option value="">All Types</option>
+                        <option value="CHQ">Cheque</option>
+                        <option value="LCN">LCN</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="statusFilter">
+                        <option value="">All Status</option>
+                        <option value="available">Available</option>
+                        <option value="in_use">In Use</option>
+                        <option value="completed">Completed</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control" id="searchChecker" 
+                           placeholder="Search code or index...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Checkers Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Bank Account</th>
+                    <th>Type</th>
+                    <th>Index Range</th>
+                    <th>Current Position</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="checkersTableBody">
+                {% include 'checker/partials/checkers_table.html' %}
+            </tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Checker Modal -->
-<div class="modal fade" id="checkerModal" tabindex="-1" role="dialog">
-    <div class="modal-dialog" role="document">
+<div class="modal fade" id="checkerModal" tabindex="-1">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add New Checker</h5>
-                <button type="button" class="close" data-dismiss="modal">
-                    <span>&times;</span>
-                </button>
+                <h5 class="modal-title">Create New Checker</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
-                <form id="checker-form">
-                    <div class="form-group">
-                        <label>Type</label>
-                        <select class="form-control" name="type" required>
-                            <option value="CHQ">Cheque</option>
-                            <option value="LCN">LCN</option>
-                        </select>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Bank Account</label>
+                            <select class="form-control select2" id="bankAccount">
+                                <option value="">Select Account</option>
+                                {% for account in bank_accounts %}
+                                    <option value="{{ account.id }}" 
+                                            data-bank="{{ account.bank }}">
+                                        {{ account.bank }} [{{ account.account_number }}]
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">Required</div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Bank</label>
-                        <select class="form-control" name="bank" required>
-                            {% for code, name in bank_choices %}
-                            <option value="{{ code }}">{{ name }}</option>
-                            {% endfor %}
-                        </select>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Type</label>
+                            <select class="form-control" id="checkerType">
+                                <option value="CHQ">Cheque</option>
+                                <option value="LCN">LCN</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Account Number</label>
-                        <input type="text" id="account_number" name="account_number" 
-                            class="form-control" 
-                            pattern="\d+" 
-                            oninput="this.value = this.value.replace(/[^0-9]/g, '')"
-                            title="Only numbers allowed"
-                            required>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Number of Pages</label>
+                            <select class="form-control" id="numPages">
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>City</label>
-                        <input type="text" class="form-control" name="city" 
-                               pattern="^[A-Za-z\s]+$" required>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Index</label>
+                            <input type="text" class="form-control" id="checkerIndex" 
+                                   maxlength="3" style="text-transform: uppercase;">
+                            <div class="invalid-feedback">1-3 uppercase letters only</div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Number of Pages</label>
-                        <select class="form-control" name="num_pages" required>
-                            <option value="25">25</option>
-                            <option value="50">50</option>
-                            <option value="100">100</option>
-                        </select>
+
+                    <div class="col-12">
+                        <div class="form-group">
+                            <label>Starting Page</label>
+                            <input type="number" class="form-control" id="startingPage" min="1">
+                            <div class="invalid-feedback">Must be greater than 0</div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Index (3 uppercase letters)</label>
-                        <input type="text" class="form-control" name="index" 
-                               pattern="^[A-Z]{3}$" required>
+
+                    <div class="col-12">
+                        <div class="alert alert-info preview-alert" style="display: none;">
+                            <strong>Preview:</strong> <span id="checkerPreview"></span>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label>Starting Page</label>
-                        <input type="number" class="form-control" name="starting_page" 
-                               min="1" required>
-                    </div>
-                </form>
+                </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="save-checker">Save</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveChecker" disabled>Create</button>
             </div>
         </div>
     </div>
@@ -221,6 +244,109 @@
     </div>
 </div>
 
+<div class="modal fade" id="checkActionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Check Action</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="check-details mb-4">
+                    <div class="row">
+                        <div class="col-6">
+                            <small class="text-muted">Reference</small>
+                            <h5 id="checkRef"></h5>
+                        </div>
+                        <div class="col-6 text-right">
+                            <small class="text-muted">Amount</small>
+                            <h5 id="checkAmount"></h5>
+                        </div>
+                    </div>
+                </div>
+ 
+                <div class="action-section">
+                    <div class="form-group">
+                        <label>Action</label>
+                        <select class="form-control" id="checkAction">
+                            <option value="deliver">Deliver</option>
+                            <option value="pay">Mark as Paid</option>
+                            <option value="reject">Reject</option>
+                            <option value="replace">Replace</option>
+                        </select>
+                    </div>
+ 
+                    <!-- Rejection Fields -->
+                    <div id="rejectionFields" style="display: none;">
+                        <div class="form-group">
+                            <label>Rejection Reason</label>
+                            <select class="form-control" id="rejectionReason">
+                                <option value="insufficient_funds">Insufficient Funds</option>
+                                <option value="signature_mismatch">Signature Mismatch</option>
+                                <option value="amount_error">Amount Error</option>
+                                <option value="date_error">Date Error</option>
+                                <option value="other">Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Rejection Note</label>
+                            <textarea class="form-control" id="rejectionNote" rows="3"></textarea>
+                        </div>
+                    </div>
+ 
+                    <!-- Replacement Fields -->
+                    <div id="replacementFields" style="display: none;">
+                        <div class="alert alert-info">
+                            This will create a new check with the same details.
+                            You can modify the amount and date in the next step.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAction">Confirm</button>
+            </div>
+        </div>
+    </div>
+ </div>
+ 
+ <!-- Replacement Modal -->
+ <div class="modal fade" id="replacementModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Create Replacement Check</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <strong>Replacing check:</strong> <span id="oldCheckRef"></span>
+                </div>
+                
+                <div class="form-group">
+                    <label>Amount</label>
+                    <input type="number" class="form-control" id="newAmount" step="0.01">
+                </div>
+ 
+                <div class="form-group">
+                    <label>Payment Due Date</label>
+                    <input type="date" class="form-control" id="newDueDate">
+                </div>
+ 
+                <div class="form-group">
+                    <label>Observation</label>
+                    <textarea class="form-control" id="newObservation" rows="2"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="createReplacement">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .ui-autocomplete {
         position: absolute;
@@ -249,9 +375,297 @@
 </style>
 
 <script>
+
+const CheckerModal = {
+   init() {
+       this.modal = $('#checkerModal');
+       this.saveBtn = $('#saveChecker');
+       
+       this.setupSelect2();
+       this.setupValidation();
+       this.bindEvents();
+       this.setupPreview();
+   },
+
+   setupSelect2() {
+       $('#bankAccount').select2({
+           theme: 'bootstrap',
+           width: '100%',
+           placeholder: 'Select a bank account'
+       });
+   },
+
+   setupValidation() {
+       // Bank Account validation
+       $('#bankAccount').on('change', function() {
+           $(this).toggleClass('is-valid', !!this.value)
+                  .toggleClass('is-invalid', !this.value);
+           CheckerModal.updatePreview();
+           CheckerModal.checkFormValidity();
+       });
+
+       // Index validation
+       $('#checkerIndex').on('input', function() {
+           const value = this.value.toUpperCase();
+           this.value = value;
+           
+           const isValid = /^[A-Z]{1,3}$/.test(value);
+           $(this).toggleClass('is-valid', isValid)
+                  .toggleClass('is-invalid', value && !isValid);
+           
+           CheckerModal.updatePreview();
+           CheckerModal.checkFormValidity();
+       });
+
+       // Starting page validation
+       $('#startingPage').on('input', function() {
+           const value = parseInt(this.value);
+           const isValid = value > 0;
+           
+           $(this).toggleClass('is-valid', isValid)
+                  .toggleClass('is-invalid', this.value && !isValid);
+           
+           CheckerModal.updatePreview();
+           CheckerModal.checkFormValidity();
+       });
+   },
+
+   bindEvents() {
+       this.saveBtn.on('click', () => this.saveChecker());
+       this.modal.on('hidden.bs.modal', () => this.resetForm());
+       
+       // Update preview when any field changes
+       this.modal.find('select, input').on('change input', () => this.updatePreview());
+   },
+
+   updatePreview() {
+       const bankAccount = $('#bankAccount option:selected');
+       const index = $('#checkerIndex').val().toUpperCase();
+       const startPage = $('#startingPage').val();
+       const pages = $('#numPages').val();
+
+       if (bankAccount.val() && index && startPage) {
+           const bank = bankAccount.data('bank');
+           const endPage = parseInt(startPage) + parseInt(pages) - 1;
+           const preview = `${bank}-${index}${startPage} to ${bank}-${index}${endPage}`;
+           
+           $('#checkerPreview').text(preview);
+           $('.preview-alert').slideDown();
+       } else {
+           $('.preview-alert').slideUp();
+       }
+   },
+
+   checkFormValidity() {
+       const isValid = 
+           $('#bankAccount').val() &&
+           /^[A-Z]{1,3}$/.test($('#checkerIndex').val()) &&
+           parseInt($('#startingPage').val()) > 0;
+       
+       this.saveBtn.prop('disabled', !isValid);
+   },
+
+   async saveChecker() {
+       const data = {
+           bank_account_id: $('#bankAccount').val(),
+           type: $('#checkerType').val(),
+           num_pages: $('#numPages').val(),
+           index: $('#checkerIndex').val().toUpperCase(),
+           starting_page: $('#startingPage').val()
+       };
+
+       try {
+           const response = await fetch('/testapp/checkers/create/', {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+               },
+               body: JSON.stringify(data)
+           });
+
+           if (!response.ok) {
+               const error = await response.json();
+               throw new Error(error.error || 'Failed to create checker');
+           }
+
+           this.modal.modal('hide');
+           location.reload();
+
+       } catch (error) {
+           alert(error.message);
+       }
+   },
+
+   resetForm() {
+       this.modal.find('input').val('').removeClass('is-valid is-invalid');
+       this.modal.find('select').prop('selectedIndex', 0).trigger('change');
+       $('#bankAccount').val(null).trigger('change');
+       this.saveBtn.prop('disabled', true);
+       $('.preview-alert').hide();
+   }
+};
+
+const CheckerFilters = {
+    init() {
+        this.setupSelect2();
+        this.bindFilters();
+        this.setupSearch();
+    },
+
+    setupSelect2() {
+        $('#bankFilter').select2({
+            theme: 'bootstrap',
+            width: '100%',
+            placeholder: 'Select bank'
+        });
+    },
+
+    bindFilters() {
+        $('#bankFilter, #typeFilter, #statusFilter').on('change', () => this.applyFilters());
+    },
+
+    setupSearch() {
+        let timeout;
+        $('#searchChecker').on('input', () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => this.applyFilters(), 300);
+        });
+    },
+
+    async applyFilters() {
+        const filters = {
+            bank_account: $('#bankFilter').val(),
+            type: $('#typeFilter').val(),
+            status: $('#statusFilter').val(),
+            search: $('#searchChecker').val()
+        };
+
+        try {
+            const response = await fetch(`/testapp/checkers/filter/?${new URLSearchParams(filters)}`);
+            if (!response.ok) throw new Error('Filter request failed');
+            
+            const data = await response.json();
+            $('#checkersTableBody').html(data.html);
+        } catch (error) {
+            console.error('Error applying filters:', error);
+        }
+    }
+};
+
+const CheckActions = {
+   init() {
+       this.currentCheck = null;
+       this.bindEvents();
+   },
+
+   bindEvents() {
+       $('#checkAction').on('change', (e) => {
+           $('.action-fields').hide();
+           $(`#${e.target.value}Fields`).show();
+       });
+
+       $('#confirmAction').on('click', () => this.handleAction());
+       $('#createReplacement').on('click', () => this.createReplacement());
+   },
+
+   async handleAction() {
+       const action = $('#checkAction').val();
+       const checkId = this.currentCheck.id;
+
+       const data = {
+           action,
+           ...(action === 'reject' && {
+               reason: $('#rejectionReason').val(),
+               note: $('#rejectionNote').val()
+           })
+       };
+
+       try {
+           const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+               },
+               body: JSON.stringify(data)
+           });
+
+           if (!response.ok) throw new Error(await response.text());
+
+           if (action === 'replace') {
+               $('#checkActionModal').modal('hide');
+               this.showReplacementModal();
+           } else {
+               location.reload();
+           }
+       } catch (error) {
+           alert(error.message);
+       }
+   },
+
+   showReplacementModal() {
+       $('#oldCheckRef').text(this.currentCheck.reference);
+       $('#newAmount').val(this.currentCheck.amount);
+       $('#newDueDate').val(this.currentCheck.payment_due);
+       $('#replacementModal').modal('show');
+   },
+
+   async createReplacement() {
+       const data = {
+           original_check_id: this.currentCheck.id,
+           amount: $('#newAmount').val(),
+           payment_due: $('#newDueDate').val(),
+           observation: $('#newObservation').val()
+       };
+
+       try {
+           const response = await fetch('/testapp/checks/replace/', {
+               method: 'POST',
+               headers: {
+                   'Content-Type': 'application/json',
+                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+               },
+               body: JSON.stringify(data)
+           });
+
+           if (!response.ok) throw new Error(await response.text());
+           location.reload();
+
+       } catch (error) {
+           alert(error.message);
+       }
+   },
+
+   loadCheck(checkData) {
+       this.currentCheck = checkData;
+       $('#checkRef').text(checkData.reference);
+       $('#checkAmount').text(Utils.formatMoney(checkData.amount));
+       
+       // Enable/disable actions based on check status
+       const action = $('#checkAction');
+       action.find('option').remove();
+
+       if (checkData.status === 'pending') {
+           action.append(new Option('Deliver', 'deliver'));
+           action.append(new Option('Cancel', 'cancel'));
+       } else if (checkData.status === 'delivered') {
+           action.append(new Option('Mark as Paid', 'pay'));
+           action.append(new Option('Reject', 'reject'));
+       }
+
+       if (['rejected', 'cancelled'].includes(checkData.status) && !checkData.has_replacement) {
+           action.append(new Option('Replace', 'replace'));
+       }
+   }
+};
+
+
+
 $(document).ready(function() {
     console.log("Document ready");
-
+    CheckerModal.init();
+    CheckActions.init();
     $('#save-checker').click(function() {
         console.log("Save button clicked"); 
         const form = $('#checker-form');

@@ -1,0 +1,350 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Bank Accounts</h2>
+        <button class="btn btn-primary" data-toggle="modal" data-target="#bankModal">
+            <i class="fas fa-plus"></i> Add Bank Account
+        </button>
+    </div>
+
+    <!-- Filter Section -->
+    <div class="filter-section mb-4">
+        <div class="d-flex flex-wrap gap-3">
+            <div class="flex-grow-1">
+                <select class="form-control" id="bankFilter">
+                    <option value="">All Banks</option>
+                    {% for code, name in bank_choices %}
+                        <option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="flex-grow-1">
+                <select class="form-control" id="accountTypeFilter">
+                    <option value="">All Types</option>
+                    <option value="national">National</option>
+                    <option value="international">International</option>
+                </select>
+            </div>
+            <div class="flex-grow-1">
+                <input type="text" class="form-control" id="searchAccount" 
+                       placeholder="Search account number...">
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounts Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Bank</th>
+                    <th>Account Number</th>
+                    <th>Journal</th>
+                    <th>City</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="accountsTableBody">
+                {% include 'bank/partials/accounts_table.html' %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Bank Account Modal -->
+<div class="modal fade" id="bankModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Bank Account</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-12">
+                        <div class="form-group">
+                            <label>Bank</label>
+                            <select class="form-control" id="bank">
+                                {% for code, name in bank_choices %}
+                                    <option value="{{ code }}">{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="invalid-feedback">Please select a bank</div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-group">
+                            <label>Account Number</label>
+                            <input type="text" class="form-control" id="accountNumber" 
+                                   placeholder="Enter account number">
+                            <div class="invalid-feedback">
+                                Must be at least 10 numeric characters
+                            </div>
+                            <small class="text-muted">Minimum 10 digits, numbers only</small>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Accounting Number</label>
+                            <input type="text" class="form-control" id="accountingNumber" 
+                                   placeholder="Min. 5 digits">
+                            <div class="invalid-feedback">
+                                Must be at least 5 numeric characters
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Journal Number</label>
+                            <input type="text" class="form-control" id="journalNumber" 
+                                   placeholder="2 digits" maxlength="2">
+                            <div class="invalid-feedback">
+                                Must be exactly 2 digits
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>City</label>
+                            <input type="text" class="form-control" id="city" 
+                                   placeholder="Enter city">
+                            <div class="invalid-feedback">City is required</div>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-group">
+                            <label>Account Type</label>
+                            <select class="form-control" id="accountType">
+                                <option value="national">National</option>
+                                <option value="international">International</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveBankAccount" disabled>
+                    Create Account
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Real-time validation styles */
+    .form-control.is-typing {
+        border-color: #80bdff;
+        box-shadow: 0 0 0 0.2rem rgba(0,123,255,.25);
+    }
+
+    .form-control.is-valid {
+        border-color: #28a745;
+        padding-right: calc(1.5em + 0.75rem);
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%2328a745' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(0.375em + 0.1875rem) center;
+        background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    }
+
+    .form-control.is-invalid {
+        border-color: #dc3545;
+        padding-right: calc(1.5em + 0.75rem);
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' stroke='%23dc3545' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right calc(0.375em + 0.1875rem) center;
+        background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    }
+</style>
+
+<script>
+    const BankAccountModal = {
+        init() {
+            this.modal = $('#bankModal');
+            this.saveBtn = $('#saveBankAccount');
+            
+            this.setupValidation();
+            this.bindEvents();
+        },
+
+        setupValidation() {
+            // Account number validation
+            $('#accountNumber').on('input', function() {
+                const value = this.value.replace(/\D/g, ''); // Removed non-digits
+                this.value = value;
+                
+                $(this).toggleClass('is-valid', value.length >= 10)
+                    .toggleClass('is-invalid', value.length > 0 && value.length < 10);
+                
+                BankAccountModal.checkFormValidity();
+            });
+
+            // Accounting number validation
+            $('#accountingNumber').on('input', function() {
+                const value = this.value.replace(/\D/g, ''); // Removed non-digits
+                this.value = value;
+                
+                $(this).toggleClass('is-valid', value.length >= 5)
+                    .toggleClass('is-invalid', value.length > 0 && value.length < 5);
+                
+                BankAccountModal.checkFormValidity();
+            });
+
+            // Journal number validation
+            $('#journalNumber').on('input', function() {
+                const value = this.value.replace(/\D/g, ''); // Removed non-digits
+                this.value = value.slice(0, 2); // Restrict to two characters
+                
+                $(this).toggleClass('is-valid', value.length === 2)
+                    .toggleClass('is-invalid', value.length > 0 && value.length !== 2);
+                
+                BankAccountModal.checkFormValidity();
+            });
+
+            // City validation
+            $('#city').on('input', function() {
+                $(this).toggleClass('is-valid', this.value.length > 0)
+                    .toggleClass('is-invalid', this.value.length === 0);
+                
+                BankAccountModal.checkFormValidity();
+            });
+        },
+
+        bindEvents() {
+            this.saveBtn.on('click', () => this.saveAccount());
+            
+            this.modal.on('hidden.bs.modal', () => {
+                this.resetForm();
+            });
+        },
+
+        checkFormValidity() {
+            const isValid = 
+                $('#accountNumber').val().length >= 10 &&
+                $('#accountingNumber').val().length >= 5 &&
+                $('#journalNumber').val().length === 2 &&
+                $('#city').val().length > 0;
+            
+            this.saveBtn.prop('disabled', !isValid);
+        },
+
+        async saveAccount() {
+            const data = {
+                bank: $('#bank').val(),
+                account_number: $('#accountNumber').val(),
+                accounting_number: $('#accountingNumber').val(),
+                journal_number: $('#journalNumber').val(),
+                city: $('#city').val(),
+                account_type: $('#accountType').val()
+            };
+
+            try {
+                const response = await fetch('/testapp/bank-accounts/create/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                if (!response.ok) {
+                    const error = await response.json(); // Parse JSON for error message
+                    throw new Error(error.error || 'Failed to create bank account');
+                }
+
+                // Success handling
+                this.modal.modal('hide');
+                location.reload();  // Reload to reflect changes
+
+            } catch (error) {
+                alert(error.message); // Display error in alert
+            }
+        },
+
+        resetForm() {
+            $('#bankModal input').val('').removeClass('is-valid is-invalid'); // Reset form inputs
+            $('#bank, #accountType').prop('selectedIndex', 0); // Reset select fields
+            this.saveBtn.prop('disabled', true); // Disable the save button
+        }
+    };
+
+    // Filter functionality
+    const BankAccountFilters = {
+        init() {
+            this.bindFilters();
+            this.setupSearch();
+        },
+
+        bindFilters() {
+            $('#bankFilter, #accountTypeFilter').on('change', () => this.applyFilters());
+        },
+
+        setupSearch() {
+            let timeout;
+            $('#searchAccount').on('input', () => {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => this.applyFilters(), 300); // Add debounce for performance
+            });
+        },
+
+        async applyFilters() {
+            const filters = {
+                bank: $('#bankFilter').val(),
+                type: $('#accountTypeFilter').val(),
+                search: $('#searchAccount').val()
+            };
+
+            try {
+                const response = await fetch(`/testapp/bank-accounts/filter/?${new URLSearchParams(filters)}`);
+                if (!response.ok) throw new Error('Filter request failed');
+                
+                const data = await response.json();
+                $('#accountsTableBody').html(data.html); // Update table body
+            } catch (error) {
+                console.error('Error applying filters:', error);
+            }
+        }
+    };
+
+    // Handle account deactivation
+    $('.deactivate-account').on('click', async function() {
+        if (!confirm('Are you sure you want to deactivate this account?')) return;
+
+        const accountId = $(this).data('account-id');
+        try {
+            const response = await fetch(`/testapp/bank-accounts/${accountId}/deactivate/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(await response.text());
+            }
+
+            location.reload();
+        } catch (error) {
+            alert('Error deactivating account: ' + error.message); // Handle error gracefully
+        }
+    });
+
+    $(document).ready(() => {
+        BankAccountModal.init(); // Initialize the modal form functionality
+        BankAccountFilters.init(); // Initialize the filters
+    });
+</script>
+
+{% endblock %}

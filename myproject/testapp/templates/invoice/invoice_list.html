@@ -112,9 +112,12 @@
                 window.history.pushState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
             });
         }
-
+        const filterPanel = document.querySelector('.filter-panel');
         // Initialize filters from URL parameters
         const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.toString() !== '') {
+    filterPanel.style.display = 'block'; // Force display of the panel
+}
         for (let [key, value] of urlParams.entries()) {
             const input = document.querySelector(`[name="${key}"]`);
             if (input) {
@@ -138,16 +141,41 @@
             $('.filter-panel').slideToggle();
             $(this).find('i').toggleClass('fa-filter fa-filter-slash');
         });
+
+        const tableRows = document.querySelectorAll('.table-hover tbody tr');
+
+        tableRows.forEach(row => {
+            row.addEventListener('click', function () {
+                // Remove 'active-row' from all rows
+                tableRows.forEach(r => r.classList.remove('active-row'));
+
+                // Add 'active-row' to the clicked row
+                this.classList.add('active-row');
+            });
+        });
+
+        const rowButtons = document.querySelectorAll('td .btn');
+        rowButtons.forEach(button => {
+            button.addEventListener('click', function () {
+                const row = this.closest('tr');
+                row.classList.add('active-row');
+                setTimeout(() => {
+                    row.classList.remove('active-row');
+                }, 1000); // Highlight row for 1 second
+            });
+        });
     });
 </script>
     
 <h1>Invoice List</h1>
-<a href="{% url 'invoice-create' %}" class="btn btn-primary" fa-icon="plus">Add New Invoice</a>
 
 <div class="filter-section mb-4">
+    <a href="{% url 'invoice-create' %}" class="btn btn-primary btn-lg shadow-sm rounded-pill">
+        <i class="fas fa-plus-circle"></i> Add New Invoice
+    </a>
     <!-- Filter Toggle Button -->
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <button class="btn btn-outline-secondary" id="toggle-filters">
+        <button class="btn btn-outline-secondary shadow-sm rounded-pill" id="toggle-filters">
             <i class="fas fa-filter"></i> Filters
             <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
         </button>
@@ -227,7 +255,7 @@
                     <!-- Product Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Product</label>
-                        <select class="form-control w-100" name="product" id="product-filter">
+                        <select class="form-control w-100" name="product" id="product-filter" style="width: 100%;">
                             <option value="">All Products</option>
                         </select>
                     </div>
@@ -286,12 +314,12 @@
                     </div>
 
                     <!-- Filter Buttons -->
-                    <div class="col-12 d-flex justify-content-end mt-3">
-                        <button type="button" id="reset-filters" class="btn btn-secondary mr-2">
-                            <i class="fas fa-times"></i> Reset
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="button" id="reset-filters" class="btn btn-outline-danger rounded-pill mr-2">
+                            <i class="fas fa-times-circle"></i> Reset
                         </button>
-                        <button type="button" id="apply-filters" class="btn btn-primary">
-                            <i class="fas fa-check"></i> Apply Filters
+                        <button type="button" id="apply-filters" class="btn btn-primary rounded-pill">
+                            <i class="fas fa-check-circle"></i> Apply Filters
                         </button>
                     </div>
 
@@ -399,19 +427,19 @@
                                 <td>
                                     {% if not invoice.payment_status == 'paid' %}
                                         <a href="{% url 'invoice-update' invoice.pk %}" 
-                                        class="btn btn-warning {% if invoice.exported_at %}disabled{% endif %}">
+                                            class="btn btn-warning btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
                                             <i class="fas fa-edit"></i> Edit
                                         </a>
                                         <a href="{% url 'invoice-delete' invoice.pk %}" 
-                                        class="btn btn-danger {% if invoice.exported_at %}disabled{% endif %}">
-                                            Delete
+                                            class="btn btn-danger btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
+                                            <i class="fas fa-trash-alt"></i> Delete
                                         </a>
-                                        <button class="btn btn-info btn-sm" 
+                                        <button class="btn btn-outline-info btn-sm rounded-pill shadow-sm" 
                                                 data-toggle="modal" 
                                                 data-target="#creditNoteModal" 
                                                 data-invoice-id="{{ invoice.id }}"
                                                 {% if not invoice.can_be_credited %}disabled{% endif %}>
-                                            <i class="fas fa-reply"></i> Credit Note
+                                            <i class="fas fa-receipt"></i> Credit Note
                                         </button>
                                     {% else %}
                                         <button class="btn btn-secondary" disabled>
@@ -421,13 +449,13 @@
                                 </td>
                                 <td>
                                     <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                                    <button class="btn btn-info btn-sm"                             
+                                    <button class="btn btn-outline-success btn-sm rounded-pill shadow-sm"                             
                                             data-toggle="modal" 
                                             data-target="#paymentDetailsModal"
                                             data-invoice="{{ invoice.pk }}">
-                                        Payment Details
+                                            <i class="fas fa-money-check-alt"></i> Payment Details
                                     </button>
-                                    <button class="btn btn-info btn-sm accounting-summary-btn" 
+                                    <button class="btn btn-secondary btn-sm rounded-pill shadow-sm accounting-summary-btn"  
                                             data-invoice-id="{{ invoice.id }}" 
                                             title="Show Accounting Summary">
                                         <i class="fas fa-book"></i>
@@ -479,7 +507,7 @@
                                                         {% endif %}
                                                     </td>
                                                     <td>
-                                                        <button class="btn btn-sm btn-info"
+                                                        <button class="btn btn-outline-primary btn-sm rounded-pill shadow-sm"
                                                                 data-toggle="modal" 
                                                                 data-target="#invoiceDetailsModal" 
                                                                 data-invoice="{{ credit_note.id }}">
@@ -511,9 +539,9 @@
 <div class="d-flex justify-content-end mt-3">
     <button type="button" 
             id="export-selected" 
-            class="btn btn-primary" 
+            class="btn btn-success btn-lg rounded-pill shadow"
             disabled>
-        Export Selected
+            <i class="fas fa-file-export"></i> Export Selected
     </button>
 </div>
 
@@ -522,7 +550,9 @@
     <div class="modal-dialog modal-lg" role="document"> <!-- Added modal-lg for larger modal -->
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="invoiceDetailsModalLabel">Invoice Details</h5>
+                <h5 class="modal-title" id="invoiceDetailsModalLabel">
+                    <i class="fas fa-info-circle"></i>Invoice Details
+                </h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -547,7 +577,9 @@
                 <div id="total-amount-summary"></div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">
+                    <i class="fas fa-check"></i> Done
+                </button>
             </div>
         </div>
     </div>
@@ -640,8 +672,10 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Credit Note</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt"></i> Create Credit Note
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- Credit Note Info -->
@@ -698,8 +732,12 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="save-credit-note">Create Credit Note</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-info btn-sm" id="save-credit-note">
+                    <i class="fas fa-save"></i> Create Credit Note
+                </button>
             </div>
         </div>
     </div>
@@ -1304,7 +1342,7 @@
         });
     });
 
-    // Initialize Filter Events
+    // Initialize Filter Events  
 
     const InvoiceFilters = {
     init() {
@@ -1383,19 +1421,51 @@
     },
 
     initializeFromURL() {
-        const params = new URLSearchParams(window.location.search);
-        for (let [key, value] of params) {
-            const input = document.querySelector(`[name="${key}"]`);
-            if (!input) continue;
+        // Initialize Select2
+    const initializeSelect2WithRestore = (selector, endpoint) => {
+        const selectElement = $(selector);
+        
+        // Initialize Select2
+        selectElement.select2({
+            placeholder: 'Select an option',
+            allowClear: true,
+            ajax: {
+                url: endpoint,
+                dataType: 'json',
+                delay: 250,
+                processResults: function (data) {
+                    return {
+                        results: data.map(item => ({
+                            id: item.value,
+                            text: item.label,
+                        })),
+                    };
+                },
+            },
+        });
 
-            if (input.type === 'checkbox') {
-                input.checked = value === '1';
-            } else if ($(input).hasClass('select2-hidden-accessible')) {
-                $(input).append(new Option(value, value, true, true)).trigger('change');
-            } else {
-                input.value = value;
-            }
+        // Restore name if value exists in URL
+        const paramValue = new URLSearchParams(window.location.search).get(selectElement.attr('name'));
+        if (paramValue) {
+            // Fetch name from the server using the ID
+            fetch(`${endpoint}?id=${paramValue}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const selectedOption = data[0];
+                        const newOption = new Option(selectedOption.label, selectedOption.value, true, true);
+                        selectElement.append(newOption).trigger('change'); // Append and select it
+                    }
+                })
+                .catch(error => console.error(`Failed to restore ${selector}:`, error));
         }
+    };
+
+    // Supplier filter
+    initializeSelect2WithRestore('#supplier-filter', '{% url "supplier-autocomplete" %}');
+
+    // Product filter
+    initializeSelect2WithRestore('#product-filter', '{% url "product-autocomplete" %}');
     },
 
     updateActiveFilters() {

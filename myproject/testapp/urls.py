@@ -9,10 +9,15 @@ from .views_invoice import (
 )
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
-    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView
+    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView
 )
 
 from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
+
+from .views_bank import (
+    BankAccountListView, BankAccountCreateView, 
+    BankAccountDeactivateView, BankAccountFilterView
+)
 
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
@@ -57,6 +62,8 @@ urlpatterns = [
         CheckStatusView.as_view(), {'action': 'delivered'}, name='check-mark-delivered'),
     path('checks/<uuid:pk>/mark-paid/', 
         CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
+    path('checks/<uuid:pk>/action/', CheckActionView.as_view(), name='check-action'),
+
     path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
@@ -66,5 +73,13 @@ urlpatterns = [
     path('invoices/create-credit-note/', 
          CreateCreditNoteView.as_view(), 
          name='create-credit-note'),
+
+
+    path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
+    path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
+    path('bank-accounts/<uuid:pk>/deactivate/', 
+         BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
+    path('bank-accounts/filter/', 
+         BankAccountFilterView.as_view(), name='bank-account-filter'),
 
 ]

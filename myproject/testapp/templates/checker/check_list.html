@@ -43,56 +43,68 @@
                         <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
                         <td class="text-right">{{ check.amount|floatformat:2 }}</td>
                         <td>
-                            {% if check.status == 'cancelled' %}
-                            <span class="badge badge-danger cancellation-info" 
-                                    role="button" 
-                                    data-toggle="modal" 
-                                    data-target="#cancellationDetailModal"
-                                    data-reason="{{ check.cancellation_reason }}">
-                                Cancelled
+                            <span class="badge {% if check.status == 'paid' %}badge-success
+                                {% elif check.status == 'delivered' %}badge-warning
+                                {% elif check.status == 'rejected' %}badge-danger
+                                {% elif check.status == 'cancelled' %}badge-secondary
+                                {% else %}badge-info{% endif %}">
+                                {{ check.get_status_display }}
                             </span>
-                            {% elif check.paid %}
-                                <span class="badge badge-success">Paid</span>
-                            {% elif check.delivered %}
-                                <span class="badge badge-warning">Delivered</span>
-                            {% else %}
-                                <span class="badge badge-secondary">Pending</span>
+                            
+                            {% if check.status == 'rejected' %}
+                                <button class="btn btn-link btn-sm p-0 ml-1 show-rejection"
+                                        data-toggle="tooltip"
+                                        data-reason="{{ check.get_rejection_reason_display }}"
+                                        data-note="{{ check.rejection_note }}">
+                                    <i class="fas fa-info-circle"></i>
+                                </button>
+                            {% endif %}
+
+                            {% if check.replaces %}
+                                <button class="btn btn-link btn-sm p-0 ml-1"
+                                        data-toggle="tooltip"
+                                        title="Replaces check {{ check.replaces.reference }}">
+                                    <i class="fas fa-exchange-alt"></i>
+                                </button>
+                            {% endif %}
+
+                            {% if check.replaced_by.exists %}
+                                <button class="btn btn-link btn-sm p-0 ml-1"
+                                        data-toggle="tooltip" 
+                                        title="Replaced by check {{ check.replaced_by.first.reference }}">
+                                    <i class="fas fa-arrow-right"></i>
+                                </button>
                             {% endif %}
                         </td>
                         <td>
                             <div class="btn-group">
-
-                                <button class="btn btn-sm edit-check-btn
-                                    {% if check.status == 'paid' or check.status == 'cancelled' %}btn-secondary{% else %}btn-primary{% endif %}"
-                                    data-check-id="{{ check.id }}"
-                                    {% if check.status == 'paid' or check.status == 'cancelled' %}disabled{% endif %}>
-                                    {% if check.status == 'paid' or check.status == 'cancelled' %}
-                                        <i class="fas fa-lock"></i> Edit
-                                    {% else %}
-                                    <i class="fas fa-edit"></i> Edit
-                                    {% endif %}
-                                </button>
-                            
-                                {% if not check.delivered and not check.status == 'paid' and not check.status == 'cancelled' %}
-                                    <button class="btn btn-warning btn-sm mark-delivered" 
-                                            data-check="{{ check.id }}">
-                                        Mark Delivered
-                                    </button>
-                                {% endif %}
-                                {% if check.delivered and not check.paid and not check.status == 'cancelled' %}
-                                    <button class="btn btn-success btn-sm mark-paid" 
-                                            data-check="{{ check.id }}">
-                                        Mark Paid
-                                    </button>
-                                {% endif %}
-                                {% if not check.paid and not check.status == 'cancelled' %}
-                                    <button class="btn btn-danger btn-sm cancel-check-btn" 
+                                {% if check.status == 'pending' %}
+                                    <button class="btn btn-sm btn-success check-action" 
+                                            data-action="deliver" 
                                             data-check-id="{{ check.id }}">
-                                        Cancel
+                                        <i class="fas fa-check"></i> Deliver
+                                    </button>
+                                {% elif check.status == 'delivered' %}
+                                    <button class="btn btn-sm btn-success check-action"
+                                            data-action="pay"
+                                            data-check-id="{{ check.id }}">
+                                        <i class="fas fa-dollar-sign"></i> Pay
+                                    </button>
+                                    <button class="btn btn-sm btn-danger check-action"
+                                            data-action="reject"
+                                            data-check-id="{{ check.id }}">
+                                        <i class="fas fa-times"></i> Reject
                                     </button>
                                 {% endif %}
-                                <button class="btn btn-info btn-sm">Print</button>
-                            </div>
+                         
+                                {% if check.status in 'rejected,cancelled' and not check.has_replacement %}
+                                    <button class="btn btn-sm btn-info check-action"
+                                            data-action="replace"
+                                            data-check-id="{{ check.id }}">
+                                        <i class="fas fa-sync"></i> Replace
+                                    </button>
+                                {% endif %}
+                            </div>        
                         </td>
                         </td>
                     </tr>
@@ -441,4 +453,5 @@ $(document).ready(function() {
     
 });
 </script>
+{% include 'checker/partials/check_action_modals.html' %}
 {% endblock %}

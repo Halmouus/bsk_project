@@ -1,0 +1,34 @@
+{% for account in accounts %}
+<tr>
+    <td>
+        <div class="d-flex align-items-center">
+            <span class="bank-logo {{ account.bank|lower }}"></span>
+            <span class="ml-2">{{ account.get_bank_display }}</span>
+        </div>
+    </td>
+    <td>{{ account.account_number }}</td>
+    <td>{{ account.journal_number }}</td>
+    <td>{{ account.city }}</td>
+    <td>
+        <span class="badge {% if account.account_type == 'national' %}badge-primary{% else %}badge-info{% endif %}">
+            {{ account.get_account_type_display }}
+        </span>
+    </td>
+    <td>
+        <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}">
+            {{ account.is_active|yesno:"Active,Inactive" }}
+        </span>
+    </td>
+    <td>{{ account.created_at|date:"d/m/Y" }}</td>
+    <td>
+        {% if account.is_active %}
+            <button class="btn btn-sm btn-danger deactivate-account" 
+                    data-account-id="{{ account.id }}"
+                    {% if account.has_active_checkers %}disabled{% endif %}
+                    title="{% if account.has_active_checkers %}Cannot deactivate: Has active checkers{% endif %}">
+                <i class="fas fa-times"></i>
+            </button>
+        {% endif %}
+    </td>
+</tr>
+{% endfor %}

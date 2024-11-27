@@ -1,5 +1,5 @@
 from django import forms
-from .models import Invoice, InvoiceProduct, Product
+from .models import Invoice, InvoiceProduct, Product, BankAccount
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
 

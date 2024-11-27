@@ -1,0 +1,57 @@
+<!-- checkers_table.html -->
+{% for checker in checkers %}
+<tr>
+   <td>
+       <span class="font-monospace">{{ checker.code }}</span>
+   </td>
+   <td>
+       <div class="d-flex align-items-center">
+           <span class="bank-logo {{ checker.bank_account.bank|lower }}"></span>
+           <span class="ml-2">
+               {{ checker.bank_account.bank }} [{{ checker.bank_account.account_number }}]
+           </span>
+       </div>
+   </td>
+   <td>{{ checker.get_type_display }}</td>
+   <td>
+       {{ checker.index }}{{ checker.starting_page }} - {{ checker.index }}{{ checker.final_page }}
+       <small class="text-muted">({{ checker.num_pages }} pages)</small>
+   </td>
+   <td>
+       <div class="position-info">
+           {{ checker.index }}{{ checker.current_position }}
+           <div class="progress" style="height: 4px;">
+               <div class="progress-bar" role="progressbar" 
+                    style="width: {{ checker.get_progress_percentage }}%">
+               </div>
+           </div>
+       </div>
+   </td>
+   <td>
+       {% with status=checker.get_status %}
+           <span class="badge badge-{{ status.color }}">
+               {{ status.label }}
+           </span>
+       {% endwith %}
+   </td>
+   <td>{{ checker.created_at|date:"d/m/Y" }}</td>
+   <td>
+       <div class="btn-group">
+           {% if checker.is_active %}
+               <button class="btn btn-sm btn-info view-checks" 
+                       data-checker="{{ checker.id }}"
+                       data-toggle="modal" 
+                       data-target="#checksModal">
+                   <i class="fas fa-eye"></i>
+               </button>
+               {% if checker.can_be_closed %}
+                   <button class="btn btn-sm btn-danger close-checker"
+                           data-checker="{{ checker.id }}">
+                       <i class="fas fa-times"></i>
+                   </button>
+               {% endif %}
+           {% endif %}
+       </div>
+   </td>
+</tr>
+{% endfor %}

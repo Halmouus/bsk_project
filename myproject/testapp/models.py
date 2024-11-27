@@ -1,7 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator
 from .base import BaseModel
 from datetime import timedelta 
 import random
@@ -472,13 +472,8 @@ class ExportRecord(BaseModel):
 
     def __str__(self):
         return f"Export {self.filename} at {self.exported_at}"
-    
-class Checker(BaseModel):
-    TYPE_CHOICES = [
-        ('CHQ', 'Cheque'),
-        ('LCN', 'LCN')
-    ]
-    
+
+class BankAccount(BaseModel):
     BANK_CHOICES = [
         ('ATW', 'Attijariwafa Bank'),
         ('BCP', 'Banque Populaire'),
@@ -493,6 +488,49 @@ class Checker(BaseModel):
         ('ABM', 'Arab Bank Maroc'),
         ('CTB', 'Citibank Maghreb')
     ]
+
+    ACCOUNT_TYPE = [
+        ('national', 'National'),
+        ('international', 'International')
+    ]
+
+    bank = models.CharField(max_length=4, choices=BANK_CHOICES)
+    account_number = models.CharField(
+        max_length=30,
+        validators=[
+            MinLengthValidator(10, 'Account number must be at least 10 characters'),
+            RegexValidator(r'^\d+$', 'Only numeric characters allowed')
+        ]
+    )
+    accounting_number = models.CharField(
+        max_length=10,
+        validators=[
+            MinLengthValidator(5, 'Accounting number must be at least 5 characters'),
+            RegexValidator(r'^\d+$', 'Only numeric characters allowed')
+        ]
+    )
+    journal_number = models.CharField(
+        max_length=2,
+        validators=[
+            RegexValidator(r'^\d{2}$', 'Must be exactly 2 digits')
+        ]
+    )
+    city = models.CharField(max_length=100)
+    account_type = models.CharField(max_length=15, choices=ACCOUNT_TYPE)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ['bank', 'account_number']
+
+    def __str__(self):
+        type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
+        return f"{self.bank} [{self.account_number}] - {type_indicator}"
+    
+class Checker(BaseModel):
+    TYPE_CHOICES = [
+        ('CHQ', 'Cheque'),
+        ('LCN', 'LCN')
+    ]
     
     PAGE_CHOICES = [
         (25, '25'),
@@ -502,16 +540,7 @@ class Checker(BaseModel):
 
     code = models.CharField(max_length=10, unique=True, blank=True)
     type = models.CharField(max_length=3, choices=TYPE_CHOICES)
-    bank = models.CharField(max_length=4, choices=BANK_CHOICES)
-    account_number = models.CharField(
-        max_length=20,
-        validators=[RegexValidator(r'^\d+$', 'Only numeric characters allowed.')]
-    )
-    city = models.CharField(
-        max_length=50,
-        validators=[RegexValidator(r'^[A-Za-z\s]+$', 'Only alphabetical characters allowed.')]
-    )
-    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
+    bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
     num_pages = models.IntegerField(choices=PAGE_CHOICES)
     index = models.CharField(
         max_length=3,
@@ -520,6 +549,8 @@ class Checker(BaseModel):
     starting_page = models.IntegerField(validators=[MinValueValidator(1)])
     final_page = models.IntegerField(blank=True)
     current_position = models.IntegerField(blank=True)
+    is_active = models.BooleanField(default=True)
+    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
 
     @property
     def remaining_pages(self):
@@ -527,6 +558,14 @@ class Checker(BaseModel):
         print(f"final_page: {self.final_page}")
         print(f"current_position: {self.current_position}")
         return self.final_page - self.current_position + 1
+    
+    def clean(self):
+        super().clean()
+        if self.bank_account:
+            if not self.bank_account.is_active:
+                raise ValidationError("Cannot create checker for inactive bank account")
+            if self.bank_account.account_type != 'national':
+                raise ValidationError("Can only create checkers for national accounts")
 
     def save(self, *args, **kwargs):
         if not self.code:
@@ -535,8 +574,6 @@ class Checker(BaseModel):
             self.final_page = self.starting_page + self.num_pages - 1
         if not self.current_position:
             self.current_position = self.starting_page
-        print(f"Saving checker for {self.bank}")
-        print(f"current_position: {self.current_position}")
         super().save(*args, **kwargs)
 
     def generate_code(self):
@@ -575,10 +612,26 @@ class Check(BaseModel):
             ('pending', 'Pending'),
             ('delivered', 'Delivered'),
             ('paid', 'Paid'),
+            ('rejected', 'Rejected'),
             ('cancelled', 'Cancelled')
         ],
         default='pending'
     )
+
+    REJECTION_REASONS = [
+        ('insufficient_funds', 'Insufficient Funds'),
+        ('signature_mismatch', 'Signature Mismatch'),
+        ('amount_error', 'Amount Error'),
+        ('date_error', 'Date Error'),
+        ('other', 'Other')
+    ]
+
+    rejection_reason = models.CharField(max_length=50, choices=REJECTION_REASONS, null=True, blank=True)
+    rejection_note = models.TextField(blank=True)
+    rejection_date = models.DateTimeField(null=True, blank=True)
+
+    replaces = models.ForeignKey('self', null=True, blank=True, related_name='replaced_by', on_delete=models.PROTECT)
+
     
     def save(self, *args, **kwargs):
         print(f"New creation at:  {self.checker.current_position}")
@@ -605,3 +658,18 @@ class Check(BaseModel):
                 name='check_amount_cannot_exceed_due'
             )
         ]
+    
+    @property
+    def has_replacement(self):
+        return hasattr(self, 'replaced_by') and self.replaced_by.exists()
+
+    def reject(self, reason, note=''):
+        self.status = 'rejected'
+        self.rejection_reason = reason
+        self.rejection_note = note
+        self.rejection_date = timezone.now()
+        self.save()
+
+    def replace_with(self, new_check):
+        new_check.replaces = self
+        new_check.save()
