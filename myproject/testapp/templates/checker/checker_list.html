@@ -557,7 +557,7 @@ const CheckerModal = {
     },
 
     bindEvents() {
-        this.saveBtn.on('click', () => this.saveChecker());
+        this.saveBtn.off("click").on('click', () => this.saveChecker());
         this.modal.on('hidden.bs.modal', () => {
             if (this.form.length > 0) {
                 this.form[0].reset(); // Reset only if the form exists
@@ -569,6 +569,8 @@ const CheckerModal = {
             console.log("Modal opened. Checking dropdown options:");
             console.log(this.bankSelect.find('option')); // Confirm options are there
         });
+
+        
     }
 };
 
