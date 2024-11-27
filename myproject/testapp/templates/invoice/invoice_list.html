@@ -590,33 +590,45 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Payment Details</h5>
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill"></i> 
+                    Payment Details
+                    <small id="invoice-ref" class="text-muted"></small>
+                </h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- Summary Cards -->
                 <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="card">
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount Due</h6>
-                                <h4 id="amount-due" class="card-title"></h4>
+                                <h4 id="amount-due" class="card-title mb-0 text-primary"></h4>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card">
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount Paid</h6>
-                                <h4 id="amount-paid" class="card-title"></h4>
+                                <h4 id="amount-paid" class="card-title mb-0 text-success"></h4>
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card">
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount to Issue</h6>
-                                <h4 id="amount-to-issue" class="card-title"></h4>
+                                <h4 id="amount-to-issue" class="card-title mb-0 text-info"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Remaining</h6>
+                                <h4 id="remaining-amount" class="card-title mb-0 text-warning"></h4>
                             </div>
                         </div>
                     </div>
@@ -624,32 +636,27 @@
 
                 <!-- Progress Bar -->
                 <div class="progress mb-4" style="height: 25px;">
-                    <div id="payment-progress" 
-                         class="progress-bar" 
-                         role="progressbar" 
-                         style="width: 0%"></div>
+                    <div id="payment-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
                 </div>
 
                 <!-- Detailed Breakdown -->
                 <div class="row mb-4">
-                    <div class="col-md-4">
-                        <p class="mb-1">Pending Payments:</p>
-                        <h5 id="pending-amount"></h5>
-                    </div>
-                    <div class="col-md-4">
-                        <p class="mb-1">Delivered Payments:</p>
-                        <h5 id="delivered-amount"></h5>
-                    </div>
-                    <div class="col-md-4">
-                        <p class="mb-1">Remaining to Pay:</p>
-                        <h5 id="remaining-amount"></h5>
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>Pending Payments:</span>
+                            <h5 id="pending-amount" class="mb-0"></h5>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Delivered Payments:</span>
+                            <h5 id="delivered-amount" class="mb-0"></h5>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Checks Table -->
                 <div class="table-responsive">
-                    <table class="table">
-                        <thead>
+                    <table class="table table-hover">
+                        <thead class="thead-light">
                             <tr>
                                 <th>Reference</th>
                                 <th>Amount</th>
@@ -843,21 +850,8 @@
             }).format(amount);
         },
         
-        getProgressBarClass: function(percentage) {
-            if (percentage >= 100) return 'bg-success';
-            if (percentage > 50) return 'bg-warning';
-            return 'bg-danger';
-        },
         
-        getStatusBadgeClass: function(status) {
-            return {
-                'pending': 'secondary',
-                'delivered': 'warning',
-                'paid': 'success',
-                'cancelled': 'danger'
-            }[status] || 'secondary';
-        },
-        
+                
         formatStatus: function(status) {
             return status.charAt(0).toUpperCase() + status.slice(1);
         }
@@ -901,26 +895,68 @@
             });
         },
 
-        // Payment Details Modal
+        getProgressBarClass: function(percentage) {
+            if (percentage >= 100) return 'bg-success';
+            if (percentage > 50) return 'bg-warning';
+            return 'bg-danger';
+        },
+        
+        getStatusBadge: function(status) {
+            const badges = {
+                'pending': ['secondary', 'clock'],
+                'delivered': ['warning', 'truck'],
+                'paid': ['success', 'check-circle'],
+                'rejected': ['danger', 'times-circle'],
+                'cancelled': ['dark', 'ban']
+            };
+
+            const [color, icon] = badges[status] || ['secondary', 'question-circle'];
+            
+            return `
+                <span class="badge badge-${color}">
+                    <i class="fas fa-${icon} mr-1"></i>
+                    ${status.charAt(0).toUpperCase() + status.slice(1)}
+                </span>
+            `;
+        },
+
+        // Inside your existing ModalHandlers object
         loadPaymentDetails: function(invoiceId) {
             $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
                 const details = data.payment_details;
-                $('#amount-due').text(Utils.formatMoney(details.total_amount));
-                $('#amount-paid').text(Utils.formatMoney(details.paid_amount));
-                $('#amount-to-issue').text(Utils.formatMoney(details.amount_to_issue));
+                
+                // Update summary cards with animations
+                const updateAmount = (elementId, amount) => {
+                    const element = $(`#${elementId}`);
+                    element.fadeOut(200, function() {
+                        $(this).text(Utils.formatMoney(amount)).fadeIn(200);
+                    });
+                };
 
+                updateAmount('amount-due', details.total_amount);
+                updateAmount('amount-paid', details.paid_amount);
+                updateAmount('amount-to-issue', details.amount_to_issue);
+                updateAmount('pending-amount', details.pending_amount);
+                updateAmount('delivered-amount', details.delivered_amount);
+                updateAmount('remaining-amount', details.remaining_to_pay);
+
+                // Update progress bar
                 const progressBar = $('#payment-progress');
                 progressBar
-                    .css('width', `${details.payment_percentage}%`)
-                    .text(`${details.payment_percentage.toFixed(1)}%`)
+                    .css('width', '0%')
                     .removeClass('bg-success bg-warning bg-danger')
-                    .addClass(Utils.getProgressBarClass(details.payment_percentage));
-
-                $('#pending-amount').text(Utils.formatMoney(details.pending_amount));
-                $('#delivered-amount').text(Utils.formatMoney(details.delivered_amount));
-                $('#remaining-amount').text(Utils.formatMoney(details.remaining_to_pay));
+                    .addClass(ModalHandlers.getProgressBarClass(details.payment_percentage))
+                    .animate(
+                        { width: `${details.payment_percentage}%` }, 
+                        800, 
+                        function() {
+                            $(this).text(`${details.payment_percentage.toFixed(1)}%`);
+                        }
+                    );
 
                 ModalHandlers.updateChecksTable(data.checks);
+                
+                $('#paymentDetailsModal').modal('show');
             });
         },
 
@@ -928,18 +964,32 @@
             const tbody = $('#payment-checks-tbody');
             tbody.empty();
 
+            if (checks.length === 0) {
+                tbody.append(`
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> No checks issued yet
+                        </td>
+                    </tr>
+                `);
+                return;
+            }
+
             checks.forEach(check => {
                 tbody.append(`
                     <tr>
-                        <td>${check.reference}</td>
-                        <td>${Utils.formatMoney(check.amount)}</td>
+                        <td>
+                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                            ${check.reference}
+                        </td>
+                        <td class="text-right font-weight-bold">
+                            ${Utils.formatMoney(check.amount)}
+                        </td>
                         <td>${check.created_at}</td>
                         <td>${check.delivered_at || '-'}</td>
                         <td>${check.paid_at || '-'}</td>
                         <td>
-                            <span class="badge badge-${Utils.getStatusBadgeClass(check.status)}">
-                                ${Utils.formatStatus(check.status)}
-                            </span>
+                            ${ModalHandlers.getStatusBadge(check.status)}
                         </td>
                     </tr>
                 `);

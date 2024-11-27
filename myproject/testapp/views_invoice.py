@@ -648,7 +648,7 @@ class InvoicePaymentDetailsView(View):
         checks = Check.objects.filter(cause=invoice).select_related('checker')
         check_details = [{
             'id': str(check.id),
-            'reference': f"{check.checker.bank}-{check.position}",
+            'reference': f"{getattr(check.checker.bank_account, 'bank', 'Unknown')}-{check.position}",
             'amount': float(check.amount),
             'status': check.status,
             'created_at': check.creation_date.strftime('%Y-%m-%d'),

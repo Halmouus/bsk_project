@@ -35,23 +35,429 @@
        {% endwith %}
    </td>
    <td>{{ checker.created_at|date:"d/m/Y" }}</td>
-   <td>
-       <div class="btn-group">
-           {% if checker.is_active %}
-               <button class="btn btn-sm btn-info view-checks" 
-                       data-checker="{{ checker.id }}"
-                       data-toggle="modal" 
-                       data-target="#checksModal">
-                   <i class="fas fa-eye"></i>
-               </button>
-               {% if checker.can_be_closed %}
-                   <button class="btn btn-sm btn-danger close-checker"
-                           data-checker="{{ checker.id }}">
-                       <i class="fas fa-times"></i>
-                   </button>
-               {% endif %}
-           {% endif %}
-       </div>
-   </td>
+   <td class="actions">
+    {% if checker.status != 'completed' and checker.is_active %}
+        <div class="btn-group">
+            <button class="btn btn-sm btn-info view-checks" data-checker="{{ checker.id }}">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-sm btn-success add-payment" 
+                    data-checker="{{ checker.id }}"
+                    data-position="{{ checker.current_position }}"
+                    data-bank="{{ checker.bank_account.bank }}"
+                    data-type="{{ checker.type }}">
+                <i class="fas fa-money-check-alt"></i> Add Payment
+            </button>
+        </div>
+    {% endif %}
+</td>
 </tr>
 {% endfor %}
+
+<!-- Updated Payment Modal -->
+<div class="modal fade" id="paymentModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span id="payment-checker-info"></span>
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Payment Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Invoice Total</h6>
+                                <h4 id="invoice-total" class="mb-0">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Already Issued</h6>
+                                <h4 id="already-issued" class="mb-0">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Amount Paid</h6>
+                                <h4 id="amount-paid" class="mb-0">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Available</h6>
+                                <h4 id="amount-available" class="mb-0 text-success">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="payment-form">
+                    {% csrf_token %}
+                    <input type="hidden" id="checker_id" name="checker_id">
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Check Position</label>
+                                <input type="text" class="form-control" id="position" readonly>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Creation Date</label>
+                                <input type="date" class="form-control" name="creation_date" 
+                                       value="{% now 'Y-m-d' %}">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Beneficiary</label>
+                                <input type="text" class="form-control" id="beneficiary" 
+                                       placeholder="Search supplier...">
+                                <input type="hidden" id="supplier_id">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Invoice</label>
+                                <input type="text" class="form-control" id="invoice" 
+                                       placeholder="Search invoice..." disabled>
+                                <input type="hidden" id="invoice_id" name="invoice_id">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Amount</label>
+                                <input type="number" class="form-control" name="amount" 
+                                       step="0.01" required>
+                                <div class="invalid-feedback"></div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Payment Due Date</label>
+                                <input type="date" class="form-control" name="payment_due">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Observation</label>
+                                <textarea class="form-control" name="observation" rows="1"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="save-and-clone">
+                    <i class="fas fa-copy"></i> Save & Clone
+                </button>
+                <button type="button" class="btn btn-primary" id="save-payment">
+                    <i class="fas fa-save"></i> Save
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+
+function formatMoney(amount) {
+        return new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'MAD',
+            minimumFractionDigits: 2
+        }).format(amount);
+    }
+
+const PaymentSystem = {
+    init() {
+        this.modal = $('#paymentModal');
+        this.form = $('#payment-form');
+        this.beneficiaryInput = $('#beneficiary');
+        this.invoiceInput = $('#invoice');
+        this.amountInput = $('[name="amount"]');
+        this.currentCheckerData = null;
+
+        this.setupAutoComplete();
+        this.setupValidation();
+        this.bindEvents();
+    },
+
+    setupAutoComplete() {
+        // Beneficiary Autocomplete
+        this.beneficiaryInput.autocomplete({
+            minLength: 2,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                try {
+                    const data = await $.get('/testapp/suppliers/autocomplete/', {
+                        term: request.term
+                    });
+                    response(data.map(item => ({
+                        label: item.label,
+                        value: item.value 
+                    })));
+                } catch (error) {
+                    console.error('Supplier fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                $('#supplier_id').val(ui.item.value);
+                this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
+                this.invoiceInput.prop('disabled', false).val('');
+                $('#invoice_id').val('');
+                this.resetPaymentInfo();
+                return false;
+            }
+        });
+
+        // Invoice Autocomplete
+        this.invoiceInput.autocomplete({
+            minLength: 2,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                const supplierId = $('#supplier_id').val();
+                if (!supplierId) return response([]);
+
+                try {
+                    const data = await $.get('/testapp/invoices/autocomplete/', {
+                        term: request.term,
+                        supplier: supplierId
+                    });
+                    response(data.map(item => ({
+                        label: `${item.ref} (${item.date}) - ${item.status}`,
+                        value: item.id,
+                        payment_info: item.payment_info,
+                        ref: item.ref
+                    })));
+                } catch (error) {
+                    console.error('Invoice fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                this.handleInvoiceSelect(ui.item);
+                return false;
+            }
+        });
+    },
+
+    handleInvoiceSelect(item) {
+        const info = item.payment_info;
+        this.invoiceInput.val(item.ref);
+        $('#invoice_id').val(item.value);
+
+        // Update payment info cards
+        $('#invoice-total').text(Utils.formatMoney(info.total_amount));
+        $('#already-issued').text(Utils.formatMoney(info.issued_amount));
+        $('#amount-paid').text(Utils.formatMoney(info.paid_amount));
+        $('#amount-available').text(Utils.formatMoney(info.available_amount));
+
+        // Set initial amount
+        this.amountInput
+            .val(info.available_amount.toFixed(2))
+            .removeClass('is-invalid')
+            .trigger('input');
+
+        this.updateSaveButtons(true);
+    },
+
+    resetPaymentInfo() {
+        $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
+        this.amountInput.val('').removeClass('is-invalid');
+        this.updateSaveButtons(false);
+    },
+
+    setupValidation() {
+        let lastValidAmount = 0;
+
+        this.amountInput.on('input blur', (e) => {
+            const $input = $(e.target);
+            const rawValue = $input.val(); // Get the raw input value
+            console.log("Raw input value:", rawValue); // Debug
+            
+            
+            console.log("Sanitized value:", rawValue); // Debug
+
+            const amount = parseFloat(rawValue) || 0; // Parse sanitized input
+            console.log("Parsed amount:", amount); // Debug
+
+            const availableText = $('#amount-available').text();
+            const available = parseFloat(
+                availableText
+                    .replace(/[^0-9,-]+/g, '') // Clean non-numeric characters
+                    .replace(/\s|(?<=\d)\./g, '') // Remove thousand separators
+                    .replace(',', '.') // Normalize decimal separator
+            ) || 0;
+
+            console.log("Available amount (parsed):", available); // Debug
+
+            if (e.type === 'input') {
+                if (amount <= 0) {
+                    // Real-time feedback for zero or negative values
+                    $input.addClass('is-invalid');
+                    $('.invalid-feedback').text('Amount must be greater than 0');
+                    $('#save-payment').prop('disabled', true);
+                } else if (amount > available) {
+                    // Real-time feedback for exceeding available amount
+                    $input.addClass('is-invalid');
+                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
+                    $('#save-payment').prop('disabled', true);
+                } else {
+                    // Valid input
+                    $input.removeClass('is-invalid');
+                    $('.invalid-feedback').empty();
+                    $('#save-payment').prop('disabled', false);
+                    lastValidAmount = amount; // Update last valid amount
+                }
+            } else if (e.type === 'blur') {
+                // On blur, revert to last valid amount if input is invalid
+                if (amount <= 0 || amount > available) {
+                    console.log("Reverting to last valid amount:", lastValidAmount); // Debug
+                    $input.val(lastValidAmount.toFixed(2)); // Reset input
+                    $input.removeClass('is-invalid');
+                    $('#save-payment').prop('disabled', false);
+                }
+            }
+        });
+    },
+
+    updateSaveButtons(enabled) {
+        $('#save-payment, #save-and-clone').prop('disabled', !enabled);
+    },
+
+    openPaymentModal(checkerData) {
+        this.currentCheckerData = checkerData;
+        
+        // Set checker info
+        $('#payment-checker-info').html(
+            `Payment for ${checkerData.bank}-${checkerData.position} (${checkerData.type})`
+        );
+        
+        $('#checker_id').val(checkerData.id);
+        $('#position').val(checkerData.position);
+        console.log("Checker position: ", checkerData.position);
+        
+        this.resetForm();
+        this.modal.modal('show');
+    },
+
+    resetForm() {
+        this.form[0].reset();
+        this.beneficiaryInput.val('');
+        this.invoiceInput.val('').prop('disabled', true);
+        $('#supplier_id, #invoice_id').val('');
+        this.resetPaymentInfo();
+        $('[name="creation_date"]').val(new Date().toISOString().split('T')[0]);
+    },
+
+    async createPayment(cloneAfter = false) {
+        if (!this.validateForm()) return;
+
+        const data = {
+            checker_id: $('#checker_id').val(),
+            invoice_id: $('#invoice_id').val(),
+            amount: parseFloat(this.amountInput.val()),
+            payment_due: $('[name="payment_due"]').val() || null,
+            observation: $('[name="observation"]').val(),
+            creation_date: $('[name="creation_date"]').val()
+        };
+
+        try {
+            const response = await fetch('/testapp/checks/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Payment creation failed');
+            }
+
+            if (cloneAfter) {
+                // Keep modal open and reset only amount
+                const available = parseFloat(
+                    $('#amount-available').text().replace(/[^\d.-]/g, '')
+                );
+                this.amountInput.val(available.toFixed(2)).trigger('input');
+            } else {
+                this.modal.modal('hide');
+                location.reload();
+            }
+        } catch (error) {
+            Utils.showError(error.message);
+        }
+    },
+
+    validateForm() {
+        // Basic validation
+        if (!$('#supplier_id').val()) {
+            Utils.showError('Please select a supplier');
+            return false;
+        }
+        if (!$('#invoice_id').val()) {
+            Utils.showError('Please select an invoice');
+            return false;
+        }
+        if (!this.amountInput.val() || this.amountInput.hasClass('is-invalid')) {
+            Utils.showError('Please enter a valid amount');
+            return false;
+        }
+        return true;
+    },
+
+    bindEvents() {
+        // Open modal trigger
+        $(document).on('click', '.add-payment', (e) => {
+            const button = $(e.currentTarget);
+            this.openPaymentModal({
+                id: button.data('checker'),
+                bank: button.data('bank'),
+                type: button.data('type'),
+                position: button.data('position')
+            });
+        });
+
+        // Save buttons
+        $('#save-payment').on('click', () => this.createPayment(false));
+        $('#save-and-clone').on('click', () => this.createPayment(true));
+
+        // Modal cleanup
+        this.modal.on('hidden.bs.modal', () => {
+            this.resetForm();
+            this.currentCheckerData = null;
+        });
+    }
+    
+};
+
+// Initialize everything
+$(document).ready(() => {
+    CheckerModal.init();
+    CheckerFilters.init();
+    PaymentSystem.init();
+});
+</script>
