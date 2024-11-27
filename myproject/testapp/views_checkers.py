@@ -1,4 +1,5 @@
 from django.urls import reverse_lazy
+from django.template.loader import render_to_string
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 from .models import Checker, Check, Invoice, Supplier, BankAccount
@@ -34,6 +35,7 @@ class CheckerListView(ListView):
             is_active=True,
             account_type='national'
         )
+        print("Banks available:", context['banks'])
         return context
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -366,3 +368,36 @@ class CheckActionView(View):
             )
             check.cause.update_payment_status()
             return JsonResponse({'new_check_id': str(new_check.id)})
+
+class CheckerFilterView(View):
+    def get(self, request):
+        queryset = Checker.objects.all()
+        
+        bank_account = request.GET.get('bank_account')
+        if bank_account:
+            queryset = queryset.filter(bank_account_id=bank_account)
+            
+        checker_type = request.GET.get('type')
+        if checker_type:
+            queryset = queryset.filter(type=checker_type)
+            
+        status = request.GET.get('status')
+        if status:
+            if status == 'New':
+                queryset = queryset.filter(current_position__lt=F('final_page'))
+            elif status == 'Completed':
+                queryset = queryset.filter(current_position=F('final_page'))
+
+        search = request.GET.get('search')
+        if search:
+            queryset = queryset.filter(
+                Q(code__icontains=search) | Q(index__icontains=search)
+            )
+
+        html = render_to_string(
+            'checker/partials/checkers_table.html',
+            {'checkers': queryset},
+            request=request
+        )
+        
+        return JsonResponse({'html': html})

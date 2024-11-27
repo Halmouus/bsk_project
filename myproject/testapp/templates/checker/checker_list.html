@@ -16,7 +16,7 @@
                 <div class="col-md-3">
                     <select class="form-control" id="bankFilter">
                         <option value="">All Banks</option>
-                        {% for account in bank_accounts %}
+                        {% for account in banks %}
                             <option value="{{ account.id }}">
                                 {{ account.bank }} [{{ account.account_number }}]
                             </option>
@@ -33,7 +33,7 @@
                 <div class="col-md-3">
                     <select class="form-control" id="statusFilter">
                         <option value="">All Status</option>
-                        <option value="available">Available</option>
+                        <option value="new">New</option>
                         <option value="in_use">In Use</option>
                         <option value="completed">Completed</option>
                     </select>
@@ -83,7 +83,7 @@
                             <label>Bank Account</label>
                             <select class="form-control select2" id="bankAccount">
                                 <option value="">Select Account</option>
-                                {% for account in bank_accounts %}
+                                {% for account in banks %}
                                     <option value="{{ account.id }}" 
                                             data-bank="{{ account.bank }}">
                                         {{ account.bank }} [{{ account.account_number }}]
@@ -132,9 +132,9 @@
                         </div>
                     </div>
 
-                    <div class="col-12">
-                        <div class="alert alert-info preview-alert" style="display: none;">
-                            <strong>Preview:</strong> <span id="checkerPreview"></span>
+                    <div class="preview-section mt-3 d-none">
+                        <div class="alert alert-info">
+                            Preview: <strong id="checkerPreview"></strong>
                         </div>
                     </div>
                 </div>
@@ -374,547 +374,318 @@
     }
 </style>
 
+
 <script>
+const Utils = {
+    formatMoney: (amount) => {
+        return new Intl.NumberFormat('fr-FR', {
+            style: 'currency', 
+            currency: 'MAD',
+            minimumFractionDigits: 2
+        }).format(amount);
+    },
 
-const CheckerModal = {
-   init() {
-       this.modal = $('#checkerModal');
-       this.saveBtn = $('#saveChecker');
-       
-       this.setupSelect2();
-       this.setupValidation();
-       this.bindEvents();
-       this.setupPreview();
-   },
+    showError: (message) => {
+        const alert = $('<div>').addClass('alert alert-danger')
+            .text(message)
+            .prependTo('.modal-body');
+        setTimeout(() => alert.remove(), 5000);
+    },
 
-   setupSelect2() {
-       $('#bankAccount').select2({
-           theme: 'bootstrap',
-           width: '100%',
-           placeholder: 'Select a bank account'
-       });
-   },
-
-   setupValidation() {
-       // Bank Account validation
-       $('#bankAccount').on('change', function() {
-           $(this).toggleClass('is-valid', !!this.value)
-                  .toggleClass('is-invalid', !this.value);
-           CheckerModal.updatePreview();
-           CheckerModal.checkFormValidity();
-       });
-
-       // Index validation
-       $('#checkerIndex').on('input', function() {
-           const value = this.value.toUpperCase();
-           this.value = value;
-           
-           const isValid = /^[A-Z]{1,3}$/.test(value);
-           $(this).toggleClass('is-valid', isValid)
-                  .toggleClass('is-invalid', value && !isValid);
-           
-           CheckerModal.updatePreview();
-           CheckerModal.checkFormValidity();
-       });
-
-       // Starting page validation
-       $('#startingPage').on('input', function() {
-           const value = parseInt(this.value);
-           const isValid = value > 0;
-           
-           $(this).toggleClass('is-valid', isValid)
-                  .toggleClass('is-invalid', this.value && !isValid);
-           
-           CheckerModal.updatePreview();
-           CheckerModal.checkFormValidity();
-       });
-   },
-
-   bindEvents() {
-       this.saveBtn.on('click', () => this.saveChecker());
-       this.modal.on('hidden.bs.modal', () => this.resetForm());
-       
-       // Update preview when any field changes
-       this.modal.find('select, input').on('change input', () => this.updatePreview());
-   },
-
-   updatePreview() {
-       const bankAccount = $('#bankAccount option:selected');
-       const index = $('#checkerIndex').val().toUpperCase();
-       const startPage = $('#startingPage').val();
-       const pages = $('#numPages').val();
-
-       if (bankAccount.val() && index && startPage) {
-           const bank = bankAccount.data('bank');
-           const endPage = parseInt(startPage) + parseInt(pages) - 1;
-           const preview = `${bank}-${index}${startPage} to ${bank}-${index}${endPage}`;
-           
-           $('#checkerPreview').text(preview);
-           $('.preview-alert').slideDown();
-       } else {
-           $('.preview-alert').slideUp();
-       }
-   },
-
-   checkFormValidity() {
-       const isValid = 
-           $('#bankAccount').val() &&
-           /^[A-Z]{1,3}$/.test($('#checkerIndex').val()) &&
-           parseInt($('#startingPage').val()) > 0;
-       
-       this.saveBtn.prop('disabled', !isValid);
-   },
-
-   async saveChecker() {
-       const data = {
-           bank_account_id: $('#bankAccount').val(),
-           type: $('#checkerType').val(),
-           num_pages: $('#numPages').val(),
-           index: $('#checkerIndex').val().toUpperCase(),
-           starting_page: $('#startingPage').val()
-       };
-
-       try {
-           const response = await fetch('/testapp/checkers/create/', {
-               method: 'POST',
-               headers: {
-                   'Content-Type': 'application/json',
-                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-               },
-               body: JSON.stringify(data)
-           });
-
-           if (!response.ok) {
-               const error = await response.json();
-               throw new Error(error.error || 'Failed to create checker');
-           }
-
-           this.modal.modal('hide');
-           location.reload();
-
-       } catch (error) {
-           alert(error.message);
-       }
-   },
-
-   resetForm() {
-       this.modal.find('input').val('').removeClass('is-valid is-invalid');
-       this.modal.find('select').prop('selectedIndex', 0).trigger('change');
-       $('#bankAccount').val(null).trigger('change');
-       this.saveBtn.prop('disabled', true);
-       $('.preview-alert').hide();
-   }
+    validateAmount: (amount, available) => {
+        return amount > 0 && amount <= available;
+    }
 };
 
 const CheckerFilters = {
     init() {
+        console.log("Initializing checker filters");
+        this.bankFilter = $('#bankFilter');
+        this.typeFilter = $('#typeFilter');
+        this.statusFilter = $('#statusFilter');
+        this.searchInput = $('#searchChecker');
+
         this.setupSelect2();
-        this.bindFilters();
-        this.setupSearch();
+        this.bindEvents();
     },
 
     setupSelect2() {
-        $('#bankFilter').select2({
+        this.bankFilter.select2({
             theme: 'bootstrap',
             width: '100%',
-            placeholder: 'Select bank'
+            placeholder: 'All Banks',
+            allowClear: true
         });
     },
 
-    bindFilters() {
-        $('#bankFilter, #typeFilter, #statusFilter').on('change', () => this.applyFilters());
-    },
+    bindEvents() {
+        // Instant filter on select changes
+        this.bankFilter.on('change', () => this.applyFilters());
+        this.typeFilter.on('change', () => this.applyFilters());
+        this.statusFilter.on('change', () => this.applyFilters());
 
-    setupSearch() {
+        // Debounced search
         let timeout;
-        $('#searchChecker').on('input', () => {
+        this.searchInput.on('input', () => {
             clearTimeout(timeout);
             timeout = setTimeout(() => this.applyFilters(), 300);
         });
     },
 
     async applyFilters() {
+        console.log("Applying filters");
         const filters = {
-            bank_account: $('#bankFilter').val(),
-            type: $('#typeFilter').val(),
-            status: $('#statusFilter').val(),
-            search: $('#searchChecker').val()
+            bank_account: this.bankFilter.val(),
+            type: this.typeFilter.val(),
+            status: this.statusFilter.val(),
+            search: this.searchInput.val()
         };
+
+        console.log("Filter values:", filters);
 
         try {
             const response = await fetch(`/testapp/checkers/filter/?${new URLSearchParams(filters)}`);
             if (!response.ok) throw new Error('Filter request failed');
-            
+
             const data = await response.json();
             $('#checkersTableBody').html(data.html);
         } catch (error) {
-            console.error('Error applying filters:', error);
+            console.error('Filter error:', error);
         }
     }
 };
 
-const CheckActions = {
-   init() {
-       this.currentCheck = null;
-       this.bindEvents();
-   },
+const CheckerModal = {
+    init() {
+        this.modal = $('#checkerModal');
+        this.form = this.modal.find('form');
+        this.saveBtn = $('#saveChecker');
+        this.bankSelect = $('#bankAccount');
+        console.log("Initializing CheckerModal...");
+        console.log("BankAccount options available on init:", this.bankSelect.html());
+        this.setupSelect2();
+        this.setupValidation();
+        this.bindEvents();
+    },
 
-   bindEvents() {
-       $('#checkAction').on('change', (e) => {
-           $('.action-fields').hide();
-           $(`#${e.target.value}Fields`).show();
-       });
+    setupSelect2() {
+        console.log("Setting up Select2...");
+        console.log("Bank accounts available:", this.bankSelect.find('option').length);
+        console.log("BankAccount dropdown options:", this.bankSelect.find('option'));
+        this.bankSelect.select2({
+            theme: 'bootstrap',
+            dropdownParent: this.modal,
+            placeholder: 'Select bank account',
+            width: '100%' // Explicit width
+        }).on('select2:open', () => {
+            console.log("Select2 opened, options:", this.bankSelect.find('option').length);
+        });
+        console.log("Select2 initialized");
+    },
 
-       $('#confirmAction').on('click', () => this.handleAction());
-       $('#createReplacement').on('click', () => this.createReplacement());
-   },
+    setupValidation() {
+        const indexInput = $('#checkerIndex');
+        const startInput = $('#startingPage');
 
-   async handleAction() {
-       const action = $('#checkAction').val();
-       const checkId = this.currentCheck.id;
+        this.bankSelect.on('change', () => this.validateForm());
 
-       const data = {
-           action,
-           ...(action === 'reject' && {
-               reason: $('#rejectionReason').val(),
-               note: $('#rejectionNote').val()
-           })
-       };
+        indexInput.on('input', function() {
+            this.value = this.value.toUpperCase();
+            $(this).toggleClass('is-valid', /^[A-Z]{1,3}$/.test(this.value));
+            CheckerModal.validateForm();
+            CheckerModal.updatePreview();
+        });
 
-       try {
-           const response = await fetch(`/testapp/checks/${checkId}/action/`, {
-               method: 'POST',
-               headers: {
-                   'Content-Type': 'application/json',
-                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-               },
-               body: JSON.stringify(data)
-           });
+        startInput.on('input', function() {
+            $(this).toggleClass('is-valid', parseInt(this.value) > 0);
+            CheckerModal.validateForm();
+            CheckerModal.updatePreview();
+        });
+    },
 
-           if (!response.ok) throw new Error(await response.text());
+    validateForm() {
+        const isValid = 
+            this.bankSelect.val() && 
+            /^[A-Z]{1,3}$/.test($('#checkerIndex').val()) &&
+            parseInt($('#startingPage').val()) > 0;
+        
+        this.saveBtn.prop('disabled', !isValid);
+        return isValid;
+    },
 
-           if (action === 'replace') {
-               $('#checkActionModal').modal('hide');
-               this.showReplacementModal();
-           } else {
-               location.reload();
-           }
-       } catch (error) {
-           alert(error.message);
-       }
-   },
+    updatePreview() {
+        const bank = this.bankSelect.find(':selected').data('bank');
+        const index = $('#checkerIndex').val();
+        const start = $('#startingPage').val();
+        const pages = $('#numPages').val();
 
-   showReplacementModal() {
-       $('#oldCheckRef').text(this.currentCheck.reference);
-       $('#newAmount').val(this.currentCheck.amount);
-       $('#newDueDate').val(this.currentCheck.payment_due);
-       $('#replacementModal').modal('show');
-   },
+        if (bank && index && start) {
+            const end = parseInt(start) + parseInt(pages) - 1;
+            $('#checkerPreview').text(`${bank}-${index}${start} to ${bank}-${index}${end}`);
+            $('.preview-alert').removeClass('d-none');
+        }
+    },
 
-   async createReplacement() {
-       const data = {
-           original_check_id: this.currentCheck.id,
-           amount: $('#newAmount').val(),
-           payment_due: $('#newDueDate').val(),
-           observation: $('#newObservation').val()
-       };
+    async saveChecker() {
+        if (!this.validateForm()) return;
 
-       try {
-           const response = await fetch('/testapp/checks/replace/', {
-               method: 'POST',
-               headers: {
-                   'Content-Type': 'application/json',
-                   'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-               },
-               body: JSON.stringify(data)
-           });
+        try {
+            const response = await fetch('/testapp/checkers/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                },
+                body: JSON.stringify({
+                    bank_account_id: this.bankSelect.val(),
+                    type: $('#checkerType').val(),
+                    num_pages: $('#numPages').val(),
+                    index: $('#checkerIndex').val(),
+                    starting_page: $('#startingPage').val()
+                })
+            });
 
-           if (!response.ok) throw new Error(await response.text());
-           location.reload();
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Creation failed');
+            }
 
-       } catch (error) {
-           alert(error.message);
-       }
-   },
+            location.reload();
+        } catch (error) {
+            Utils.showError(error.message);
+        }
+    },
 
-   loadCheck(checkData) {
-       this.currentCheck = checkData;
-       $('#checkRef').text(checkData.reference);
-       $('#checkAmount').text(Utils.formatMoney(checkData.amount));
-       
-       // Enable/disable actions based on check status
-       const action = $('#checkAction');
-       action.find('option').remove();
-
-       if (checkData.status === 'pending') {
-           action.append(new Option('Deliver', 'deliver'));
-           action.append(new Option('Cancel', 'cancel'));
-       } else if (checkData.status === 'delivered') {
-           action.append(new Option('Mark as Paid', 'pay'));
-           action.append(new Option('Reject', 'reject'));
-       }
-
-       if (['rejected', 'cancelled'].includes(checkData.status) && !checkData.has_replacement) {
-           action.append(new Option('Replace', 'replace'));
-       }
-   }
+    bindEvents() {
+        this.saveBtn.on('click', () => this.saveChecker());
+        this.modal.on('hidden.bs.modal', () => {
+            if (this.form.length > 0) {
+                this.form[0].reset(); // Reset only if the form exists
+            }
+            this.bankSelect.val(null).trigger('change');
+            $('.preview-alert').addClass('d-none');
+        });
+        this.modal.on('shown.bs.modal', () => {
+            console.log("Modal opened. Checking dropdown options:");
+            console.log(this.bankSelect.find('option')); // Confirm options are there
+        });
+    }
 };
 
-
-
-$(document).ready(function() {
-    console.log("Document ready");
-    CheckerModal.init();
-    CheckActions.init();
-    $('#save-checker').click(function() {
-        console.log("Save button clicked"); 
-        const form = $('#checker-form');
-        const formData = {};
+const PaymentModal = {
+    init() {
+        this.modal = $('#paymentModal');
+        this.form = this.modal.find('form');
+        this.beneficiaryInput = $('#beneficiary');
+        this.invoiceInput = $('#invoice');
+        this.amountInput = $('input[name="amount"]');
         
-        form.serializeArray().forEach(item => {
-            formData[item.name] = item.value;
-        });
+        this.setupAutoComplete();
+        this.bindEvents();
+    },
 
-        console.log("Sending data:", formData); // Debug log
-
-        $.ajax({
-            url: "{% url 'checker-create' %}",
-            method: 'POST',
-            data: JSON.stringify(formData),
-            contentType: 'application/json',
-            success: function(response) {
-                console.log("Success:", response); // Debug log
-                location.reload();
+    setupAutoComplete() {
+        this.beneficiaryInput.autocomplete({
+            minLength: 2,
+            source: (request, response) => {
+                $.get('/testapp/suppliers/autocomplete/', { term: request.term }, data => {
+                    response(data.map(item => ({
+                        label: item.label,
+                        value: item.value
+                    })));
+                });
             },
-            error: function(xhr, status, error) {
-                console.error("Error:", xhr.responseText); // Debug log
-                alert('Error creating checker: ' + xhr.responseText);
+            select: (event, ui) => {
+                this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
+                $('#supplier_id').val(ui.item.value);
+                this.invoiceInput.prop('disabled', false);
+                return false;
             }
         });
-    });
 
-    $('.add-payment').click(function() {
-        const checkerId = $(this).data('checker');
-        $('#checker_id').val(checkerId);
-        
-        // Load checker details to get current position
-        $.ajax({
-            url: `/testapp/checkers/${checkerId}/details/`,
-            method: 'GET',
-            success: function(data) {
-                $('#position').val(`${data.index}${data.current_position}`);
-                $('#paymentModal').modal('show');
-            }
-        });
-    });
+        this.invoiceInput.autocomplete({
+            minLength: 2,
+            source: (request, response) => {
+                const supplierId = $('#supplier_id').val();
+                if (!supplierId) return;
 
-    // Beneficiary autocomplete
-    $('#beneficiary').autocomplete({
-        minLength: 2,
-        source: function(request, response) {
-            $.ajax({
-                url: "{% url 'supplier-autocomplete' %}",
-                data: { term: request.term },
-                success: function(data) {
-                    response($.map(data, function(item) {
-                        return {
-                            label: item.label,
-                            value: item.value
-                        };
-                    }));
-                }
-            });
-        },
-        appendTo: "#paymentModal", // Make sure dropdown appears inside modal
-        select: function(event, ui) {
-            $('#beneficiary').val(ui.item.label.split(' (')[0]);
-            $('#supplier_id').val(ui.item.value);
-            $('#invoice').prop('disabled', false);
-            return false;
-        }
-    }).data("ui-autocomplete")._renderItem = function(ul, item) {
-        return $("<li>")
-            .append("<div>" + item.label + "</div>")
-            .appendTo(ul);
-    };
-
-    // Store the last valid amount
-    let lastValidAmount = 0;
-
-    // Enhanced amount validation
-    $('input[name="amount"]').on('input blur', function(e) {
-        const $input = $(this);
-        const amount = parseFloat($input.val()) || 0;
-        const availableText = $('#amount-available').text();
-        const available = parseFloat(
-            availableText
-                .replace(/[^0-9.,-]+/g, '') // Remove non-numeric characters except '.' and ','
-                .replace(/\s|(?<=\d)\./g, '') // Remove spaces or thousands separators (e.g., '.')
-                .replace(',', '.') // Replace ',' with '.' for decimal compatibility
-        ) || 0;
-
-        console.log('Current amount:', amount); // Debug
-        console.log('Available amount:', available); // Debug
-        console.log('Is exceeding?', amount > available); // Debug
-            
-        if (e.type === 'input') {
-            // Real-time validation feedback
-            if (amount <= 0) {
-                $input.addClass('is-invalid');
-                $('.invalid-feedback').text('Amount must be greater than 0');
-                $('#save-payment').prop('disabled', true);
-            } else if (amount > available) {
-                $input.addClass('is-invalid');
-                $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
-                console.log('Amount cannot exceed ', available); // Debug
-                $('#save-payment').prop('disabled', true);
-            } else {
-                $input.removeClass('is-invalid');
-                $('#save-payment').prop('disabled', false);
-                lastValidAmount = amount; // Store the valid amount
-            }
-        } else if (e.type === 'blur') {
-            // When leaving the field, revert to last valid amount if invalid
-            if (amount <= 0 || amount > available) {
-                console.log('Reverting to last valid amount:', lastValidAmount); // Debug
-                $input.val(lastValidAmount.toFixed(2));
-                $input.removeClass('is-invalid');
-                $('#save-payment').prop('disabled', false);
-            }
-        }
-    });
-
-    // Invoice autocomplete
-    $('#invoice').autocomplete({
-        minLength: 2,
-        source: function(request, response) {
-            const supplierId = $('#supplier_id').val();
-            console.log("Supplier ID for invoice search:", supplierId);  // Debug
-            console.log("Search term:", request.term);  // Debug
-            
-            if (!supplierId) {
-                console.log("No supplier selected");  // Debug
-                return;
-            }
-            
-            $.ajax({
-                url: "{% url 'invoice-autocomplete' %}",
-                data: { 
+                $.get('/testapp/invoices/autocomplete/', {
                     term: request.term,
                     supplier: supplierId
-                },
-                success: function(data) {
-                    console.log("Received invoices:", data);  // Debug
-                    response($.map(data, function(item) {
-                        console.log("Mapping item:", item);  // Debug
-                        return {
-                            label: `${item.ref} (${item.date}) - ${item.status} - ${item.amount.toLocaleString()} MAD`,
-                            value: item.id,
-                            payment_info: item.payment_info,
-                            ref: item.ref 
-                        };
-                    }));
-                },
-                error: function(xhr, status, error) {
-                    console.error("Invoice search error:", error);  // Debug
-                    console.error("Response:", xhr.responseText);  // Debug
-                }
-            });
-        },
-        select: function(event, ui) {
-            const info = ui.item.payment_info;
-            $('#invoice').val(ui.item.ref);
-            $('#invoice_id').val(ui.item.value);
-
-            // Update summary cards
-            $('#invoice-total').text(formatMoney(info.total_amount));
-            $('#already-issued').text(formatMoney(info.issued_amount));
-            $('#amount-paid').text(formatMoney(info.paid_amount));
-            $('#amount-available').text(formatMoney(info.available_amount));
-
-            // Auto-fill amount field with available amount
-            const initialAmount = info.available_amount;
-            console.log('Setting initial amount:', initialAmount);
-            lastValidAmount = initialAmount;
-            $('input[name="amount"]').val(initialAmount.toFixed(2))
-                                .removeClass('is-invalid');
-            $('#save-payment').prop('disabled', false);
-
-            return false;
-        }
-    });
-
-
-    function formatMoney(amount) {
-        return new Intl.NumberFormat('fr-FR', {
-            style: 'currency',
-            currency: 'MAD',
-            minimumFractionDigits: 2
-        }).format(amount);
-    }
-
-    $('#save-payment').click(function(e) {
-        e.preventDefault();
-        
-        // Get form values
-        const checkerId = $('#checker_id').val();
-        const invoiceId = $('#invoice_id').val();
-        const amount = parseFloat($('input[name="amount"]').val()) || 0;
-        const paymentDue = $('input[name="payment_due"]').val();
-        const observation = $('textarea[name="observation"]').val();
-
-        // Validate required fields
-        if (!checkerId || !invoiceId) {
-            alert('Checker and Invoice are required');
-            return;
-        }
-
-        // Prepare data for submission
-        const data = {
-            checker_id: checkerId,
-            invoice_id: invoiceId,
-            amount: amount,
-            payment_due: paymentDue || null,
-            observation: observation || ''
-        };
-
-        console.log('Sending data:', data); // Debug log
-
-        // Send AJAX request
-        $.ajax({
-            url: "{% url 'check-create' %}",
-            method: 'POST',
-            data: JSON.stringify(data),
-            contentType: 'application/json',
-            success: function(response) {
-                console.log('Success:', response); // Debug log
-                location.reload();
+                }, data => {
+                    response(data.map(item => ({
+                        label: `${item.ref} (${item.date}) - ${item.status}`,
+                        value: item.id,
+                        payment_info: item.payment_info,
+                        ref: item.ref
+                    })));
+                });
             },
-            error: function(xhr, status, error) {
-                console.error('Error:', xhr.responseText); // Debug log
-                alert('Error creating payment: ' + xhr.responseText);
+            select: (event, ui) => {
+                this.handleInvoiceSelect(ui.item);
+                return false;
             }
         });
-    });
+    },
 
+    handleInvoiceSelect(item) {
+        const info = item.payment_info;
+        this.invoiceInput.val(item.ref);
+        $('#invoice_id').val(item.value);
 
-    // Delete checker
-    $('.delete-checker').click(function() {
-        if (confirm('Are you sure you want to delete this checker?')) {
-            const checkerId = $(this).data('checker');
-            $.ajax({
-                url: `/testapp/checkers/${checkerId}/delete/`,
+        // Update summary cards
+        $('#invoice-total').text(Utils.formatMoney(info.total_amount));
+        $('#already-issued').text(Utils.formatMoney(info.issued_amount));
+        $('#amount-paid').text(Utils.formatMoney(info.paid_amount));
+        $('#amount-available').text(Utils.formatMoney(info.available_amount));
+
+        // Set initial amount
+        this.amountInput.val(info.available_amount.toFixed(2));
+    },
+
+    async createPayment() {
+        try {
+            const data = {
+                checker_id: $('#checker_id').val(),
+                invoice_id: $('#invoice_id').val(),
+                amount: parseFloat(this.amountInput.val()),
+                payment_due: $('input[name="payment_due"]').val() || null,
+                observation: $('textarea[name="observation"]').val()
+            };
+
+            const response = await fetch('/testapp/checks/create/', {
                 method: 'POST',
-                headers: {'X-CSRFToken': '{{ csrf_token }}'},
-                success: function() {
-                    location.reload();
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
                 },
-                error: function(xhr) {
-                    alert(xhr.responseJSON.error);
-                }
+                body: JSON.stringify(data)
             });
+
+            if (!response.ok) throw new Error('Payment creation failed');
+            location.reload();
+        } catch (error) {
+            Utils.showError(error.message);
         }
-    });
+    },
+
+    bindEvents() {
+        $('#save-payment').on('click', () => this.createPayment());
+        
+        this.amountInput.on('input', (e) => {
+            const amount = parseFloat(e.target.value) || 0;
+            const available = parseFloat($('#amount-available').text().replace(/[^\d.-]/g, ''));
+            
+            $(e.target).toggleClass('is-invalid', !Utils.validateAmount(amount, available));
+            $('#save-payment').prop('disabled', !Utils.validateAmount(amount, available));
+        });
+    }
+};
+
+$(document).ready(() => {
+    CheckerModal.init();
+    PaymentModal.init();
+    CheckerFilters.init();
 });
 </script>
 {% endblock %}

@@ -538,6 +538,12 @@ class Checker(BaseModel):
         (100, '100')
     ]
 
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('in_use', 'In Use'), 
+        ('completed', 'Completed')
+    ]
+
     code = models.CharField(max_length=10, unique=True, blank=True)
     type = models.CharField(max_length=3, choices=TYPE_CHOICES)
     bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
@@ -551,6 +557,22 @@ class Checker(BaseModel):
     current_position = models.IntegerField(blank=True)
     is_active = models.BooleanField(default=True)
     owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
+
+    def update_status(self):
+        if self.current_position > self.starting_page:
+            self.status = 'in_use'
+        if self.current_position >= self.final_page:
+            self.status = 'completed'
+        self.save()
+
+    def get_status(self):
+        STATUS_STYLES = {
+            'new': {'label': 'New', 'color': 'primary'},
+            'in_use': {'label': 'In Use', 'color': 'warning'},
+            'completed': {'label': 'Completed', 'color': 'success'},
+        }
+        return STATUS_STYLES.get(self.status, {'label': 'Unknown', 'color': 'secondary'})
 
     @property
     def remaining_pages(self):

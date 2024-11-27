@@ -111,29 +111,40 @@ class BankAccountDeactivateView(View):
 class BankAccountFilterView(View):
     def get(self, request):
         try:
-            # Get the filtered queryset
+            # Start with all accounts
             queryset = BankAccount.objects.all()
+            print("Initial QuerySet Count:", queryset.count())  # Debug log
             
-            # Apply filters
+            # Apply bank filter
             bank = request.GET.get('bank')
             if bank:
+                print("Filter by bank:", bank)  # Debug log
                 queryset = queryset.filter(bank=bank)
-                
+
+            # Apply account type filter
             account_type = request.GET.get('type')
             if account_type:
+                print("Filter by account type:", account_type)  # Debug log
                 queryset = queryset.filter(account_type=account_type)
-                
+
+            # Apply status filter
             status = request.GET.get('status')
             if status:
+                print("Filter by status:", status)  # Debug log
                 queryset = queryset.filter(is_active=status == 'active')
-                
+
+            # Apply search filter
             search = request.GET.get('search')
             if search:
+                print("Filter by search term:", search)  # Debug log
                 queryset = queryset.filter(account_number__icontains=search)
-            
-            # Render only the table rows
+
+            # Final count before rendering
+            print("Filtered QuerySet Count:", queryset.count())  # Debug log
+
+            # Render rows
             html = render_to_string(
-                'bank/partials/account_rows.html',
+                'bank/partials/accounts_table.html',
                 {'accounts': queryset},
                 request=request
             )
@@ -141,4 +152,5 @@ class BankAccountFilterView(View):
             return JsonResponse({'html': html})
             
         except Exception as e:
+            print("Error in filter view:", str(e))  # Debug log
             return JsonResponse({'error': str(e)}, status=500)

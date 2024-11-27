@@ -9,7 +9,8 @@ from .views_invoice import (
 )
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
-    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView
+    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
+    CheckerFilterView
 )
 
 from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
@@ -53,6 +54,7 @@ urlpatterns = [
 
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
     path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
+    path('checkers/filter/', CheckerFilterView.as_view(), name='checker-filter'),
     path('checkers/create/', CheckerCreateView.as_view(), name='checker-create'),
     path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
     path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
