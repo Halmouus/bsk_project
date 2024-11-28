@@ -32,7 +32,18 @@
     </td>
     <td>
         <div class="btn-group">
-            {% if check.status == 'pending' and not check.cancelled_at %}
+            {% if check.status == 'draft' %}
+                <button class="btn btn-sm btn-info check-action" data-action="print" data-check-id="{{ check.id }}">
+                    <i class="fas fa-print"></i> Print
+                </button>
+            {% elif check.status == 'ready_to_sign' %}
+                <button class="btn btn-sm btn-primary check-action" data-action="sign" data-check-id="{{ check.id }}">
+                    <i class="fas fa-signature"></i> Sign
+                </button>
+                <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
+                    <i class="fas fa-ban"></i>
+                </button>
+            {% elif check.status == 'pending' and not check.cancelled_at %}
                 <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
                     <i class="fas fa-ban"></i>
                 </button>

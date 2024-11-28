@@ -43,7 +43,7 @@ class CheckerListView(ListView):
             checker.remaining_percentage = (
                 (checker.remaining_pages / checker.num_pages) * 100 if checker.num_pages > 0 else 0
             )
-            
+
         print("Banks available:", context['banks'])
         return context
 
@@ -217,6 +217,18 @@ def invoice_autocomplete(request):
     
     return JsonResponse(invoice_list, safe=False)
 
+class SignChecksView(View):
+    def post(self, request):
+        data = json.loads(request.body)
+        checks = Check.objects.filter(id__in=data['checks'])
+        signature = data['signature']
+        
+        for check in checks:
+            if check.can_be_signed(signature):
+                check.add_signature(signature)
+        
+        return JsonResponse({'status': 'success'})
+
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckCreateView(View):
     def post(self, request):
@@ -379,7 +391,15 @@ class CheckActionView(View):
                 print(f"Action received: {action}")  # Debug
                 print(f"Request data: {data}")  # Debug
 
-                if action == 'reject':
+                if action == 'print':
+                    if check.status == 'draft':
+                        check.status = 'printed'
+                        check.save()
+                elif action == 'sign':
+                    signature = data.get('signature')
+                    if check.can_be_signed(signature):
+                        check.add_signature(signature)                
+                elif action == 'reject':
                     reason = data.get('rejection_reason')
                     notes = data.get('rejection_note')
                     print(f"Rejection reason: {reason}")  # Debug

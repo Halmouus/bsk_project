@@ -1,0 +1,36 @@
+<div class="modal fade" id="signatureModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sign Checks</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="signature-controls mb-3">
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary signature-btn" data-signature="OUK">
+                            Sign OUK
+                        </button>
+                        <button class="btn btn-outline-primary signature-btn" data-signature="KEZ">
+                            Sign KEZ
+                        </button>
+                    </div>
+                </div>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Position</th>
+                            <th>Supplier</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Signatures</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="checksToSign">
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

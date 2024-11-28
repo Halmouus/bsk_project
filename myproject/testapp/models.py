@@ -631,13 +631,16 @@ class Check(BaseModel):
     status = models.CharField(
         max_length=20,
         choices=[
+            ('draft', 'Draft'),
+            ('printed', 'Printed'),
+            ('ready_to_sign', 'Ready to Sign'),
             ('pending', 'Pending'),
             ('delivered', 'Delivered'),
             ('paid', 'Paid'),
             ('rejected', 'Rejected'),
             ('cancelled', 'Cancelled')
         ],
-        default='pending'
+        default='draft'
     )
 
     REJECTION_REASONS = [
@@ -648,6 +651,12 @@ class Check(BaseModel):
         ('other', 'Other')
     ]
 
+    SIGNATURE_CHOICES = [
+        ('OUK', 'OUK'),
+        ('KEZ', 'KEZ')
+    ]
+    
+
     rejected_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.CharField(max_length=50, choices=REJECTION_REASONS, null=True, blank=True)
     rejection_note = models.TextField(blank=True)
@@ -657,6 +666,8 @@ class Check(BaseModel):
 
     received_at = models.DateTimeField(null=True, blank=True)
     received_notes = models.TextField(blank=True)
+
+    signatures = models.JSONField(default=list)
 
     
     def save(self, *args, **kwargs):
@@ -749,3 +760,28 @@ class Check(BaseModel):
             **kwargs  # Allow overriding specific fields like amount, due date
         )
         return replacement
+
+    @property
+    def signature_status(self):
+        sig_count = len(self.signatures)
+        if sig_count == 0:
+            return 'unsigned'
+        elif sig_count == 1:
+            return 'mono-signed'
+        return 'double-signed'
+
+    def can_be_signed(self, signature):
+        return (
+            signature in dict(self.SIGNATURE_CHOICES) and
+            signature not in self.signatures and
+            len(self.signatures) < 2
+        )
+
+    def add_signature(self, signature):
+        if self.can_be_signed(signature):
+            self.signatures.append(signature)
+            if len(self.signatures) == 2:
+                self.status = 'pending'
+            elif self.status == 'printed':
+                self.status = 'ready_to_sign'
+            self.save()

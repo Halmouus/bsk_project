@@ -186,11 +186,17 @@ const CheckFilters = {
             e.preventDefault();
             this.handleReceiveAction();
         });
-
+        
         $(document).on('click', '#create-replacement', (e) => {
             e.preventDefault();
             this.handleCreateReplacement();
         });
+        
+        $(document).on('click', '#confirm-receive', (e) => {
+            e.preventDefault();
+            this.handleReceiveAction();
+        });
+
     },
 
     async handleCheckAction(action, checkId) {
@@ -220,6 +226,10 @@ const CheckFilters = {
             case 'deliver':
             case 'pay':
                 await this.updateCheckStatus(checkId, action);
+                break;
+            case 'print':
+                console.log("Printing check:", checkId);
+                await this.updateCheckStatus(checkId);
                 break;
         }
     },
@@ -399,6 +409,7 @@ const CheckFilters = {
             alert('Failed to create replacement: ' + error.message);
         }
     },
+    
 
     async updateCheckStatus(checkId, action) {
         try {

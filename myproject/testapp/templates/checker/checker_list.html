@@ -310,6 +310,29 @@
         </div>
     </div>
  </div>
+ <div class="modal fade" id="signModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Sign Check</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-around">
+                    <button class="btn btn-lg btn-outline-primary sign-btn" data-signature="OUK">
+                        OUK
+                    </button>
+                    <button class="btn btn-lg btn-outline-primary sign-btn" data-signature="KEZ">
+                        KEZ
+                    </button>
+                </div>
+                <div class="signature-status mt-3 text-center">
+                    <span class="badge"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
  
 
 <style>
@@ -537,13 +560,50 @@ const CheckerModal = {
 
         
     }
+
 };
 
+const SignatureHandler = {
+    init() {
+        this.modal = $('#signatureModal');
+        this.bindEvents();
+    },
+
+    bindEvents() {
+        $('.signature-btn').on('click', (e) => {
+            const signature = $(e.target).data('signature');
+            const selectedChecks = $('.check-sign-select:checked');
+            this.signChecks(selectedChecks, signature);
+        });
+    },
+
+    async signChecks(checks, signature) {
+        try {
+            const response = await fetch('/testapp/checks/sign/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    checks: Array.from(checks).map(c => $(c).data('check-id')),
+                    signature: signature
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to sign checks');
+            location.reload();
+        } catch (error) {
+            console.error('Error signing checks:', error);
+        }
+    }
+};
 
 
 $(document).ready(() => {
     CheckerModal.init();
     CheckerFilters.init();
+    SignatureHandler.init();
 });
 </script>
 {% endblock %}

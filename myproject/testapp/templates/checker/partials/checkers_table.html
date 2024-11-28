@@ -334,48 +334,58 @@ const PaymentSystem = {
     },
 
     setupValidation() {
-    let lastValidAmount = 0;
+        let lastValidAmount = 0;
 
-    this.amountInput.on('input blur', (e) => {
-        const $input = $(e.target);
-        const rawValue = $input.val();
-        const amount = parseFloat(rawValue) || 0;
+        this.amountInput.on('input blur', (e) => {
+            const $input = $(e.target);
+            const rawValue = $input.val(); // Get the raw input value
+            console.log("Raw input value:", rawValue); // Debug
+            
+            
+            console.log("Sanitized value:", rawValue); // Debug
 
-        const availableText = $('#amount-available').text();
-        if (availableText === '-') {
-            lastValidAmount = 0;
-            $input.val('0');
-            return;
-        }
+            const amount = parseFloat(rawValue) || 0; // Parse sanitized input
+            console.log("Parsed amount:", amount); // Debug
 
-        const available = parseFloat(
-            availableText
-                .replace(/[^0-9,-]+/g, '')
-                .replace(/\s|(?<=\d)\./g, '')
-                .replace(',', '.')
-        ) || 0;
+            const availableText = $('#amount-available').text();
+            const available = parseFloat(
+                availableText
+                    .replace(/[^0-9,-]+/g, '') // Clean non-numeric characters
+                    .replace(/\s|(?<=\d)\./g, '') // Remove thousand separators
+                    .replace(',', '.') // Normalize decimal separator
+            ) || 0;
 
-        if (e.type === 'input') {
-            $('#save-payment, #save-and-clone').prop('disabled', true);
-            if (amount <= 0) {
-                $input.addClass('is-invalid');
-                $('.invalid-feedback').text('Amount must be greater than 0');
-            } else if (amount > available) {
-                $input.addClass('is-invalid');
-                $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
-            } else {
-                $input.removeClass('is-invalid');
-                $('.invalid-feedback').empty();
-                lastValidAmount = amount;
+            console.log("Available amount (parsed):", available); // Debug
+
+            if (e.type === 'input') {
+                if (amount <= 0) {
+                    // Real-time feedback for zero or negative values
+                    $input.addClass('is-invalid');
+                    $('.invalid-feedback').text('Amount must be greater than 0');
+                    $('#save-payment').prop('disabled', true);
+                } else if (amount > available) {
+                    // Real-time feedback for exceeding available amount
+                    $input.addClass('is-invalid');
+                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
+                    $('#save-payment').prop('disabled', true);
+                } else {
+                    // Valid input
+                    $input.removeClass('is-invalid');
+                    $('.invalid-feedback').empty();
+                    $('#save-payment').prop('disabled', false);
+                    lastValidAmount = amount; // Update last valid amount
+                }
+            } else if (e.type === 'blur') {
+                // On blur, revert to last valid amount if input is invalid
+                if (amount <= 0 || amount > available) {
+                    console.log("Reverting to last valid amount:", lastValidAmount); // Debug
+                    $input.val(lastValidAmount.toFixed(2)); // Reset input
+                    $input.removeClass('is-invalid');
+                    $('#save-payment').prop('disabled', false);
+                }
             }
-        } else if (e.type === 'blur' && available > 0) {
-            if (amount <= 0 || amount > available) {
-                $input.val(lastValidAmount.toFixed(2));
-                $input.removeClass('is-invalid');
-            }
-        }
-    });
-},
+        });
+    },
 
     updateSaveButtons(enabled) {
         $('#save-payment, #save-and-clone').prop('disabled', !enabled);
