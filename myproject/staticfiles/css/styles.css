@@ -401,3 +401,27 @@
 .badge-paid { background-color: #28a745; color: white; }
 .badge-rejected { background-color: #ffc107; color: black; }
 .badge-cancelled { background-color: #dc3545; color: white; }
+
+
+.exclamation {
+    font-size: 18px;
+    color: red;
+    animation: bounce 1.5s infinite;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+}
+
+.exclamation:hover {
+    transform: scale(1.5);
+}
+
+/* Keyframes for the bouncing animation */
+@keyframes bounce {
+    0%, 100% {
+        transform: translateY(0);
+    }
+    50% {
+        transform: translateY(-10px);
+    }
+}
+

@@ -1,3 +1,5 @@
+{% load custom_filters %}
+
 <!-- checkers_table.html -->
 {% for checker in checkers %}
 <tr>
@@ -14,12 +16,31 @@
    </td>
    <td>{{ checker.get_type_display }}</td>
    <td>
-       {{ checker.index }}{{ checker.starting_page }} - {{ checker.index }}{{ checker.final_page }}
-       <small class="text-muted">({{ checker.num_pages }} pages)</small>
-   </td>
+       [{{ checker.index }}] {{ checker.starting_page }} - {{ checker.final_page }}
+        <small class="text-muted">
+            <div class="progress-container" style="display: flex; align-items: center; gap: 10px;">
+                <div class="progress" style="height: 20px; width: 100px;"title="Remaining checkers: {{ checker.remaining_pages }}">
+                    <div 
+                        class="progress-bar {% if checker.remaining_percentage < 20 %}bg-danger{% elif checker.remaining_percentage < 50 %}bg-warning{% else %}bg-success{% endif %}" 
+                        role="progressbar" 
+                        style="width: {{ checker.remaining_percentage }}%;" 
+                        aria-valuenow="{{ checker.remaining_percentage }}" 
+                        aria-valuemin="0" 
+                        aria-valuemax="100">
+                        {{ checker.remaining_ratio }}
+                    </div>
+                </div>
+                {% if checker.remaining_percentage < 25  %}
+                    <span class="exclamation" title="Low remaining pages!">⚠️</span>
+                {% endif %}
+            </div>
+        </small>
+    </td>
+
+
    <td>
        <div class="position-info">
-           {{ checker.index }}{{ checker.current_position }}
+           {{ checker.index }}  {{ checker.current_position }}
            <div class="progress" style="height: 4px;">
                <div class="progress-bar" role="progressbar" 
                     style="width: {{ checker.get_progress_percentage }}%">
@@ -227,7 +248,17 @@ const PaymentSystem = {
                 $('#invoice_id').val('');
                 this.resetPaymentInfo();
                 return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    this.beneficiaryInput.val('');
+                    $('#supplier_id').val('');
+                    this.invoiceInput.prop('disabled', true).val('');
+                    $('#invoice_id').val('');
+                    this.resetPaymentInfo();
+                }
             }
+
         });
 
         // Invoice Autocomplete
@@ -257,6 +288,15 @@ const PaymentSystem = {
             select: (_, ui) => {
                 this.handleInvoiceSelect(ui.item);
                 return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    this.invoiceInput.val('');
+                    $('#invoice_id').val('');
+                    $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
+                    this.amountInput.val('').removeClass('is-invalid');
+                    $('#save-payment, #save-and-clone').prop('disabled', true);
+                }
             }
         });
     },
@@ -279,6 +319,12 @@ const PaymentSystem = {
             .trigger('input');
 
         this.updateSaveButtons(true);
+
+        this.updateSaveButtons(
+            $('#supplier_id').val() && 
+            item.value && 
+            Utils.validateAmount(parseFloat(this.amountInput.val()), info.available_amount)
+        );
     },
 
     resetPaymentInfo() {
@@ -288,58 +334,48 @@ const PaymentSystem = {
     },
 
     setupValidation() {
-        let lastValidAmount = 0;
+    let lastValidAmount = 0;
 
-        this.amountInput.on('input blur', (e) => {
-            const $input = $(e.target);
-            const rawValue = $input.val(); // Get the raw input value
-            console.log("Raw input value:", rawValue); // Debug
-            
-            
-            console.log("Sanitized value:", rawValue); // Debug
+    this.amountInput.on('input blur', (e) => {
+        const $input = $(e.target);
+        const rawValue = $input.val();
+        const amount = parseFloat(rawValue) || 0;
 
-            const amount = parseFloat(rawValue) || 0; // Parse sanitized input
-            console.log("Parsed amount:", amount); // Debug
+        const availableText = $('#amount-available').text();
+        if (availableText === '-') {
+            lastValidAmount = 0;
+            $input.val('0');
+            return;
+        }
 
-            const availableText = $('#amount-available').text();
-            const available = parseFloat(
-                availableText
-                    .replace(/[^0-9,-]+/g, '') // Clean non-numeric characters
-                    .replace(/\s|(?<=\d)\./g, '') // Remove thousand separators
-                    .replace(',', '.') // Normalize decimal separator
-            ) || 0;
+        const available = parseFloat(
+            availableText
+                .replace(/[^0-9,-]+/g, '')
+                .replace(/\s|(?<=\d)\./g, '')
+                .replace(',', '.')
+        ) || 0;
 
-            console.log("Available amount (parsed):", available); // Debug
-
-            if (e.type === 'input') {
-                if (amount <= 0) {
-                    // Real-time feedback for zero or negative values
-                    $input.addClass('is-invalid');
-                    $('.invalid-feedback').text('Amount must be greater than 0');
-                    $('#save-payment').prop('disabled', true);
-                } else if (amount > available) {
-                    // Real-time feedback for exceeding available amount
-                    $input.addClass('is-invalid');
-                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
-                    $('#save-payment').prop('disabled', true);
-                } else {
-                    // Valid input
-                    $input.removeClass('is-invalid');
-                    $('.invalid-feedback').empty();
-                    $('#save-payment').prop('disabled', false);
-                    lastValidAmount = amount; // Update last valid amount
-                }
-            } else if (e.type === 'blur') {
-                // On blur, revert to last valid amount if input is invalid
-                if (amount <= 0 || amount > available) {
-                    console.log("Reverting to last valid amount:", lastValidAmount); // Debug
-                    $input.val(lastValidAmount.toFixed(2)); // Reset input
-                    $input.removeClass('is-invalid');
-                    $('#save-payment').prop('disabled', false);
-                }
+        if (e.type === 'input') {
+            $('#save-payment, #save-and-clone').prop('disabled', true);
+            if (amount <= 0) {
+                $input.addClass('is-invalid');
+                $('.invalid-feedback').text('Amount must be greater than 0');
+            } else if (amount > available) {
+                $input.addClass('is-invalid');
+                $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
+            } else {
+                $input.removeClass('is-invalid');
+                $('.invalid-feedback').empty();
+                lastValidAmount = amount;
             }
-        });
-    },
+        } else if (e.type === 'blur' && available > 0) {
+            if (amount <= 0 || amount > available) {
+                $input.val(lastValidAmount.toFixed(2));
+                $input.removeClass('is-invalid');
+            }
+        }
+    });
+},
 
     updateSaveButtons(enabled) {
         $('#save-payment, #save-and-clone').prop('disabled', !enabled);
@@ -347,7 +383,7 @@ const PaymentSystem = {
 
     openPaymentModal(checkerData) {
         this.currentCheckerData = checkerData;
-        
+        const position = `${checkerData.bank}-${checkerData.index || ''}${checkerData.position}`;
         // Set checker info
         $('#payment-checker-info').html(
             `Payment for ${checkerData.bank}-${checkerData.position} (${checkerData.type})`
@@ -358,6 +394,7 @@ const PaymentSystem = {
         console.log("Checker position: ", checkerData.position);
         
         this.resetForm();
+        this.updateSaveButtons(false);
         this.modal.modal('show');
     },
 
@@ -367,8 +404,22 @@ const PaymentSystem = {
         this.invoiceInput.val('').prop('disabled', true);
         $('#supplier_id, #invoice_id').val('');
         this.resetPaymentInfo();
+        this.amountInput.removeClass('is-invalid');
         $('[name="creation_date"]').val(new Date().toISOString().split('T')[0]);
+
+        // Preserve the position value
+        if (this.currentCheckerData) {
+            const position = `${this.currentCheckerData.bank}-${this.currentCheckerData.index || ''}${this.currentCheckerData.position}`;
+            $('#position').val(position);
+        }
     },
+
+    resetPaymentInfo() {
+        $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
+        this.amountInput.val('').removeClass('is-invalid');
+        this.updateSaveButtons(false);
+    },
+
 
     async createPayment(cloneAfter = false) {
         if (!this.validateForm()) return;

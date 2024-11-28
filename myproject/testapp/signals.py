@@ -18,3 +18,10 @@ def create_or_update_profile(sender, instance, created, **kwargs):
 def update_invoice_payment_status(sender, instance, **kwargs):
     if instance.cause:
         instance.cause.update_payment_status()
+
+
+@receiver(post_save, sender=Check)
+def update_checker_status(sender, instance, **kwargs):
+    if instance.checker:
+        instance.checker.update_status()
+

@@ -36,6 +36,14 @@ class CheckerListView(ListView):
             is_active=True,
             account_type='national'
         )
+
+        # Precompute additional fields for checkers
+        for checker in context['checkers']:
+            checker.remaining_ratio = f"{checker.remaining_pages}/{checker.num_pages}"
+            checker.remaining_percentage = (
+                (checker.remaining_pages / checker.num_pages) * 100 if checker.num_pages > 0 else 0
+            )
+            
         print("Banks available:", context['banks'])
         return context
 
