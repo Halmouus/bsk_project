@@ -33,38 +33,34 @@
     <td>
         <div class="btn-group">
             {% if check.status == 'pending' and not check.cancelled_at %}
-                <button class="btn btn-sm btn-danger check-action" 
-                        data-action="cancel" 
-                        data-check-id="{{ check.id }}">
+                <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
                     <i class="fas fa-ban"></i>
                 </button>
-                <button class="btn btn-sm btn-success check-action" 
-                        data-action="deliver" 
-                        data-check-id="{{ check.id }}">
+                <button class="btn btn-sm btn-success check-action" data-action="deliver" data-check-id="{{ check.id }}">
                     <i class="fas fa-truck"></i>
                 </button>
             {% elif check.status == 'delivered' and not check.cancelled_at %}
-                <button class="btn btn-sm btn-danger check-action" 
-                        data-action="cancel" 
-                        data-check-id="{{ check.id }}">
+                <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
                     <i class="fas fa-ban"></i>
                 </button>
-                <button class="btn btn-sm btn-warning check-action" 
-                        data-action="reject" 
-                        data-check-id="{{ check.id }}">
+                <button class="btn btn-sm btn-warning check-action" data-action="reject" data-check-id="{{ check.id }}">
                     <i class="fas fa-times"></i>
                 </button>
-                <button class="btn btn-sm btn-success check-action" 
-                        data-action="pay" 
-                        data-check-id="{{ check.id }}">
+                <button class="btn btn-sm btn-success check-action" data-action="pay" data-check-id="{{ check.id }}">
                     <i class="fas fa-check"></i>
                 </button>
-            {% elif check.status in 'rejected,cancelled' %}
-                {% if not check.has_replacement %}
-                    <button class="btn btn-sm btn-info check-action" 
-                            data-action="replace" 
-                            data-check-id="{{ check.id }}">
-                        <i class="fas fa-sync"></i>
+            {% elif check.status == 'rejected' %}
+                {% if check.is_received %}
+                <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
+                    <i class="fas fa-ban"></i>
+                </button>
+                {% elif not check.is_received %}
+                    <button class="btn btn-sm btn-info check-action" data-action="receive" data-check-id="{{ check.id }}">
+                        <i class="fas fa-hand-holding"></i> Receive
+                    </button>
+                {% elif not check.has_replacement %}
+                    <button class="btn btn-sm btn-primary check-action" data-action="replace" data-check-id="{{ check.id }}">
+                        <i class="fas fa-sync"></i> Replace
                     </button>
                 {% endif %}
             {% endif %}

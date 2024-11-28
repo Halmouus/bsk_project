@@ -181,6 +181,16 @@ const CheckFilters = {
             console.log("Reject confirm clicked");
             this.handleReject();
         });
+        
+        $(document).on('click', '#confirm-receive', (e) => {
+            e.preventDefault();
+            this.handleReceiveAction();
+        });
+
+        $(document).on('click', '#create-replacement', (e) => {
+            e.preventDefault();
+            this.handleCreateReplacement();
+        });
     },
 
     async handleCheckAction(action, checkId) {
@@ -190,10 +200,22 @@ const CheckFilters = {
                 $('#cancelModal').modal('show');
                 $('#confirm-cancel').data('check-id', checkId);
                 break;
+
             case 'reject':
                 console.log("Opening reject modal for check:", checkId);
                 $('#rejectModal').modal('show');
                 $('#confirm-reject').data('check-id', checkId);
+                break;
+
+            case 'receive':
+                console.log("Opening receive modal for check:", checkId);
+                $('#receiveModal').modal('show');
+                $('#confirm-receive').data('check-id', checkId);
+                break;
+                
+            case 'replace':
+                console.log("Opening replace modal for check:", checkId);
+                await this.handleReplaceAction(checkId);
                 break;
             case 'deliver':
             case 'pay':
@@ -275,6 +297,109 @@ const CheckFilters = {
         }
     },
 
+    async handleReceiveAction() {
+        const checkId = $('#confirm-receive').data('check-id');
+        const notes = $('#receive-notes').val();
+
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    action: 'receive',
+                    notes: notes
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to receive check');
+            
+            $('#receiveModal').modal('hide');
+            $('#receive-notes').val('');
+            await this.applyFilters();
+            await this.showCheckDetails(checkId);
+        } catch (error) {
+            console.error('Error receiving check:', error);
+            alert('Failed to receive check: ' + error.message);
+        }
+    },
+
+    async handleReplaceAction(checkId) {
+        try {
+            // Load available checkers
+            const checkerResponse = await fetch('/testapp/checkers/available/');
+            if (!checkerResponse.ok) throw new Error('Failed to fetch available checkers');
+            const checkerData = await checkerResponse.json();
+            
+            // Populate checker dropdown
+            const select = $('#replacement-checker');
+            select.empty().append('<option value="">Select a checker...</option>');
+            checkerData.checkers.forEach(checker => {
+                select.append(`<option value="${checker.id}">${checker.label}</option>`);
+            });
+            
+            // Load check details
+            const checkResponse = await fetch(`/testapp/checks/${checkId}/details/`);
+            if (!checkResponse.ok) throw new Error('Failed to fetch check details');
+            const checkData = await checkResponse.json();
+            
+            // Populate form
+            $('#originalCheckRef').text(checkData.reference);
+            $('#replacement-amount').val(checkData.amount);
+            
+            // Set default due date to today+30
+            const defaultDueDate = new Date();
+            defaultDueDate.setDate(defaultDueDate.getDate() + 30);
+            $('#replacement-due-date').val(defaultDueDate.toISOString().split('T')[0]);
+            
+            // Show modal and store check ID
+            $('#replacementModal').modal('show');
+            $('#create-replacement').data('original-check-id', checkId);
+            
+        } catch (error) {
+            console.error('Error preparing replacement:', error);
+            alert('Failed to prepare replacement: ' + error.message);
+        }
+    },
+
+    async handleCreateReplacement() {
+        const checkId = $('#create-replacement').data('original-check-id');
+        const data = {
+            action: 'replace',
+            checker_id: $('#replacement-checker').val(),
+            amount: $('#replacement-amount').val(),
+            payment_due: $('#replacement-due-date').val(),
+            observation: $('#replacement-observation').val()
+        };
+        
+        if (!data.checker_id) {
+            alert('Please select a checker');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Failed to create replacement');
+            
+            $('#replacementModal').modal('hide');
+            await this.applyFilters();
+            
+        } catch (error) {
+            console.error('Error creating replacement:', error);
+            alert('Failed to create replacement: ' + error.message);
+        }
+    },
+
     async updateCheckStatus(checkId, action) {
         try {
             const response = await fetch(`/testapp/checks/${checkId}/action/`, {
@@ -315,6 +440,20 @@ const CheckFilters = {
         
         // Creation
         content += this.createTimelineEntry('Created', data.creation_date, 'plus', 'info');
+
+        // Show if this check replaces another
+        if (data.replacement_info.replaces) {
+            const replaces = data.replacement_info.replaces;
+            content += this.createTimelineEntry(
+                'Replaces Check', 
+                replaces.rejection_date, 
+                'sync', 
+                'info',
+                `<p>Replaces: ${replaces.reference}</p>
+                <p>Original Amount: ${formatMoney(replaces.amount)}</p>
+                <p>Rejection Reason: ${replaces.rejection_reason}</p>`
+            );
+        }
         
         // Delivered
         if (data.delivered_at) {
@@ -331,6 +470,30 @@ const CheckFilters = {
             content += this.createTimelineEntry('Rejected', data.rejected_at, 'times', 'warning', 
                 `<p><strong>Reason:</strong> ${data.rejection_reason}</p>
                  ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}`
+            );
+        }
+
+         // Show received status if applicable
+         if (data.received_at) {
+            content += this.createTimelineEntry(
+                'Received Back', 
+                data.received_at, 
+                'hand-holding', 
+                'info',
+                data.received_notes ? `<p><strong>Notes:</strong> ${data.received_notes}</p>` : ''
+            );
+        }
+
+        // Show replacement if exists
+        if (data.replacement_info.replaced_by) {
+            const replacement = data.replacement_info.replaced_by;
+            content += this.createTimelineEntry(
+                'Replaced', 
+                replacement.date, 
+                'sync', 
+                'success',
+                `<p><strong>New Check:</strong> ${replacement.reference}</p>
+                 <p><strong>Amount:</strong> ${formatMoney(replacement.amount)}</p>`
             );
         }
         

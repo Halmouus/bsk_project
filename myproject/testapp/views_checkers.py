@@ -17,6 +17,7 @@ from django.utils import timezone
 from dateutil.parser import parse
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from decimal import Decimal
 
 
 
@@ -104,6 +105,43 @@ class CheckerDeleteView(View):
             checker.delete()
             return JsonResponse({'message': 'Checker deleted successfully'})
         except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+        
+class AvailableCheckersView(View):
+    def get(self, request):
+        try:
+            # Add debug print
+            print("Starting AvailableCheckersView get request")
+            
+            checkers = Checker.objects.filter(
+                is_active=True
+            ).exclude(
+                status='completed'
+            ).select_related('bank_account')
+            
+            # Debug print the queryset
+            print(f"Found {checkers.count()} checkers")
+            
+            checker_data = [{
+                'id': str(checker.id),
+                'bank': checker.bank_account.get_bank_display(),
+                'account': checker.bank_account.account_number,
+                'remaining_pages': checker.remaining_pages,
+                'label': f"{checker.bank_account.get_bank_display()} - {checker.bank_account.account_number} ({checker.remaining_pages} pages)"
+            } for checker in checkers]
+            
+            print(f"Processed {len(checker_data)} checkers into data")
+
+            return JsonResponse({
+                'checkers': checker_data
+            })
+
+        except Exception as e:
+            # Enhanced error reporting
+            print(f"Exception type: {type(e)}")
+            print(f"Exception args: {e.args}")
+            import traceback
+            print(f"Full traceback: {traceback.format_exc()}")
             return JsonResponse({'error': str(e)}, status=400)
 
 
@@ -344,6 +382,24 @@ class CheckActionView(View):
                     check.status = 'rejected'
                     print(f"Check status after update: {check.status}")  # Debug
 
+                elif action == 'receive':
+                    check.receive(notes=data.get('notes', ''))
+
+                elif action == 'replace':
+                    if not check.can_be_replaced:
+                        raise ValidationError("Cannot replace this check")
+                    
+                    # Get the new checker
+                    checker = get_object_or_404(Checker, pk=data.get('checker_id'))
+                    
+                    # Pass checker as a named argument
+                    replacement = check.create_replacement(
+                    checker=checker,  # Fix is here - pass checker as named arg
+                    amount=Decimal(data.get('amount')),
+                    payment_due=data.get('payment_due') or None,  # Handle empty string
+                    observation=data.get('observation', '')
+                            )
+
                 elif action == 'cancel':
                     reason = data.get('reason')
                     if not reason:
@@ -461,6 +517,26 @@ class CheckDetailView(View):
                 "rejection_note": check.rejection_note,
                 "cancelled_at": check.cancelled_at.strftime("%Y-%m-%d") if check.cancelled_at else None,
                 "cancellation_reason": check.cancellation_reason,
+                "received_at": check.received_at.strftime("%Y-%m-d") if check.received_at else None,
+                "received_notes": check.received_notes,
+                "reference": f"{check.checker.bank_account.bank}-{check.position}",
+                "amount": float(check.amount),
+                "replacement_info": {
+                "replaces": {
+                    "id": str(check.replaces.id),
+                    "reference": f"{check.replaces.checker.bank_account.bank}-{check.replaces.position}",
+                    "amount": float(check.replaces.amount),
+                    "rejection_reason": check.replaces.rejection_reason,
+                    "rejection_date": check.replaces.rejected_at.strftime("%Y-%m-%d") if check.replaces.rejected_at else None
+                } if check.replaces else None,
+                "replaced_by": {
+                    "id": str(check.replaced_by.first().id),
+                    "reference": f"{check.replaced_by.first().checker.bank_account.bank}-{check.replaced_by.first().position}",
+                    "amount": float(check.replaced_by.first().amount),
+                    "date": check.replaced_by.first().created_at.strftime("%Y-%m-%d")
+                } if check.replaced_by.exists() else None
+            }
+                
             }
             return JsonResponse(data)
         except Check.DoesNotExist:

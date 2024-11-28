@@ -576,7 +576,7 @@ class Checker(BaseModel):
 
     @property
     def remaining_pages(self):
-        print(f"Calculating remaining pages for {self.bank}")
+        print(f"Calculating remaining pages for {self.bank_account.bank}")
         print(f"final_page: {self.final_page}")
         print(f"current_position: {self.current_position}")
         return self.final_page - self.current_position + 1
@@ -655,6 +655,9 @@ class Check(BaseModel):
 
     replaces = models.ForeignKey('self', null=True, blank=True, related_name='replaced_by', on_delete=models.PROTECT)
 
+    received_at = models.DateTimeField(null=True, blank=True)
+    received_notes = models.TextField(blank=True)
+
     
     def save(self, *args, **kwargs):
         print(f"New creation at:  {self.checker.current_position}")
@@ -696,3 +699,53 @@ class Check(BaseModel):
     def replace_with(self, new_check):
         new_check.replaces = self
         new_check.save()
+
+    @property
+    def is_received(self):
+        """Check if we have physical possession of the check"""
+        return bool(self.received_at)
+
+    @property
+    def can_be_replaced(self):
+        """Can only replace rejected checks that we physically have"""
+        return (
+            self.status == 'rejected' and 
+            self.is_received and 
+            not self.has_replacement
+        )
+
+    def receive(self, notes=''):
+        """Mark check as physically received"""
+        if self.status not in ['delivered', 'rejected']:
+            raise ValidationError("Only delivered or rejected checks can be received")
+        
+        self.received_at = timezone.now()
+        self.received_notes = notes
+        self.save()
+
+    def create_replacement(self, checker, **kwargs):
+        """
+        Create a replacement check after validating state
+        
+        Args:
+            checker (Checker): The checker to use for the new check
+            **kwargs: Additional fields to override (amount, due date, etc.)
+        """
+        if not self.can_be_replaced:
+            raise ValidationError(
+                "Cannot replace: Check must be rejected and received, with no existing replacement"
+            )
+
+        if not checker.is_active or checker.status == 'completed':
+            raise ValidationError("Selected checker is not available for new checks")
+
+        # Create new check with same base properties but new checker and details
+        replacement = Check.objects.create(
+            checker=checker,  # Use the provided checker
+            beneficiary=self.beneficiary,
+            cause=self.cause,
+            amount_due=self.amount_due,
+            replaces=self,
+            **kwargs  # Allow overriding specific fields like amount, due date
+        )
+        return replacement

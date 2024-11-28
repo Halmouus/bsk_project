@@ -44,37 +44,6 @@
     </div>
 </div>
 
-<div class="modal fade" id="replacementModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Replace Check</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="alert alert-info">
-                    <strong>Original Check:</strong> <span id="originalRef"></span>
-                </div>
-                <div class="form-group">
-                    <label>Amount</label>
-                    <input type="number" class="form-control" id="newAmount" step="0.01">
-                </div>
-                <div class="form-group">
-                    <label>Payment Due</label>
-                    <input type="date" class="form-control" id="newPaymentDue">
-                </div>
-                <div class="form-group">
-                    <label>Notes</label>
-                    <textarea class="form-control" id="newNotes" rows="2"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmReplace">Create Replacement</button>
-            </div>
-        </div>
-    </div>
-</div>
 
 <!-- Cancel Modal -->
 <div class="modal fade" id="cancelModal">
@@ -98,3 +67,71 @@
     </div>
 </div>
 
+<!-- Replacement Modal -->
+<div class="modal fade" id="replacementModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Replace Check Baby!!</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong>Original Check:</strong> <span id="originalCheckRef"></span>
+                </div>
+
+                <form id="replacement-form">
+                    <div class="form-group">
+                        <label>Select Checker</label>
+                        <select class="form-control" id="replacement-checker" required>
+                            <option value="">Select a checker...</option>
+                        </select>
+                        <small class="text-muted">Shows available pages in parentheses</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Amount</label>
+                        <input type="number" class="form-control" id="replacement-amount" step="0.01" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Payment Due Date</label>
+                        <input type="date" class="form-control" id="replacement-due-date">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Observation</label>
+                        <textarea class="form-control" id="replacement-observation" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="create-replacement">Create Replacement</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receive Check Modal -->
+<div class="modal fade" id="receiveModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Receive Check</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea class="form-control" id="receive-notes" rows="3" 
+                              placeholder="Add any notes about receiving this check..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-receive">Confirm Receipt</button>
+            </div>
+        </div>
+    </div>
+</div>
