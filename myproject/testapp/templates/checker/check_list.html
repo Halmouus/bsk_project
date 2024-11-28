@@ -1,91 +1,50 @@
 {% extends 'base.html' %}
 {% load check_tags %}
+
 {% block content %}
+{% csrf_token %}
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>Checks</h2>
-        <button class="btn btn-outline-secondary" id="toggle-filters">
-            <i class="fas fa-filter"></i> Filters
-            <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
-        </button>
+        <div class="btn-group">
+            <button class="btn btn-primary" id="toggle-filters">
+                <i class="fas fa-filter"></i> Filters
+                <span class="badge badge-light ml-2 active-filters-count" style="display:none">0</span>
+            </button>
+        </div>
     </div>
 
-    <!-- Filter Section -->
-    <div class="filter-section mb-4">
-        <div class="card filter-panel" {% if not active_filters %}style="display:none"{% endif %}>
-            <div class="card-body">
-                <form id="filter-form">
-                    <div class="row">
-                        <!-- Date Range Filter -->
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <label>Creation Date Range</label>
-                            <div class="input-group">
-                                <input type="date" class="form-control" name="date_from" id="date-from">
-                                <div class="input-group-prepend input-group-append">
-                                    <span class="input-group-text">to</span>
-                                </div>
-                                <input type="date" class="form-control" name="date_to" id="date-to">
-                            </div>
-                        </div>
-
-                        <!-- Bank Filter -->
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <label>Bank</label>
-                            <select class="form-control select2" name="bank" id="bank-filter">
-                                <option value="">All Banks</option>
-                                {% for checker in checkers %}
-                                    <option value="{{ checker.bank_account.bank }}">
-                                        {{ checker.bank_account.get_bank_display }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        </div>
-
-                        <!-- Status Filter -->
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <label>Status</label>
-                            <select class="form-control" name="status" id="status-filter">
-                                <option value="">All Statuses</option>
-                                <option value="pending">Pending</option>
-                                <option value="delivered">Delivered</option>
-                                <option value="paid">Paid</option>
-                                <option value="rejected">Rejected</option>
-                                <option value="cancelled">Cancelled</option>
-                            </select>
-                        </div>
-
-                        <!-- Beneficiary Filter -->
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <label>Beneficiary</label>
-                            <select class="form-control select2" name="beneficiary" id="beneficiary-filter">
-                                <option value="">All Beneficiaries</option>
-                            </select>
-                        </div>
-
-                        <!-- Amount Range Filter -->
-                        <div class="col-md-6 col-lg-4 mb-3">
-                            <label>Amount Range</label>
-                            <div class="input-group">
-                                <input type="number" class="form-control" name="amount_min" id="amount-min" placeholder="Min">
-                                <div class="input-group-prepend input-group-append">
-                                    <span class="input-group-text">to</span>
-                                </div>
-                                <input type="number" class="form-control" name="amount_max" id="amount-max" placeholder="Max">
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Filter Buttons -->
-                    <div class="d-flex justify-content-end mt-3">
-                        <button type="button" id="reset-filters" class="btn btn-outline-danger mr-2">
-                            <i class="fas fa-times-circle"></i> Reset
-                        </button>
-                        <button type="button" id="apply-filters" class="btn btn-primary">
-                            <i class="fas fa-check-circle"></i> Apply Filters
-                        </button>
-                    </div>
-                </form>
+    <!-- Filter Panel -->
+    <div class="filter-panel card mb-4" style="display:none">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <select class="form-control" id="bankFilter">
+                        <option value="">All Banks</option>
+                        {% for bank in banks %}
+                            <option value="{{ bank.bank }}">{{ bank.get_bank_display }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="statusFilter">
+                        <option value="">All Status</option>
+                        <option value="pending">Pending</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="paid">Paid</option>
+                        <option value="rejected">Rejected</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control select2" id="beneficiaryFilter">
+                        <option value="">All Beneficiaries</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <input type="text" class="form-control" id="searchCheck" placeholder="Search...">
+                </div>
             </div>
         </div>
     </div>
@@ -117,301 +76,135 @@
 {% include 'checker/partials/check_action_modals.html' %}
 
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const CheckSystem = {
-        init() {
-            this.setupSelect2();
-            this.setupFilters();
-            this.bindEvents();
-            this.initializeTooltips();
-        },
+function formatMoney(amount) {
+    return new Intl.NumberFormat('fr-FR', {
+        style: 'currency',
+        currency: 'MAD',
+        minimumFractionDigits: 2
+    }).format(amount);
+}
 
-        setupSelect2() {
-            $('#beneficiary-filter').select2({
-                placeholder: 'Search beneficiary...',
-                allowClear: true,
-                ajax: {
-                    url: "{% url 'supplier-autocomplete' %}",
-                    dataType: 'json',
-                    delay: 250,
-                    processResults: function(data) {
-                        return {
-                            results: data.map(item => ({
-                                id: item.value,
-                                text: item.label
-                            }))
-                        };
-                    }
-                }
-            });
+const CheckFilters = {
+    init() {
+        console.log("Initializing check filters");
+        this.bindFilters();
+        this.setupSelect2();
+        this.setupActionHandlers();
+    },
 
-            $('#bank-filter').select2({
-                placeholder: 'Select bank',
-                allowClear: true,
-                minimumResultsForSearch: Infinity
-            });
-        },
-
-        initializeTooltips() {
-            $('[data-toggle="tooltip"]').tooltip();
-        },
-
-        setupFilters() {
-            const urlParams = new URLSearchParams(window.location.search);
-            for (let [key, value] of urlParams.entries()) {
-                const input = document.querySelector(`[name="${key}"]`);
-                if (input) {
-                    if (input.type === 'select-one') {
-                        $(input).val(value).trigger('change');
-                    } else {
-                        input.value = value;
-                    }
-                }
-            }
-
-            if (urlParams.toString() !== '') {
-                $('.filter-panel').show();
-            }
-        },
-
-        bindEvents() {
-            // Ensure modal elements are present
-            if ($('#confirm-reject').length) {
-                $('#confirm-reject').off('click').on('click', () => this.handleReject());
-            }
-            if ($('#confirm-cancel').length) {
-                $('#confirm-cancel').off('click').on('click', () => this.handleCancel());
-            }
-            // Toggle filters
-            $('#toggle-filters').click(() => {
-                $('.filter-panel').slideToggle();
-            });
-
-            // Apply filters
-            $('#apply-filters').click(() => this.applyFilters());
-
-            // Reset filters
-            $('#reset-filters').click(() => this.resetFilters());
-
-            // Check actions
-            $(document).on('click', '.check-action', (e) => {
-                const button = $(e.currentTarget);
-                this.handleCheckAction(
-                    button.data('action'),
-                    button.data('check-id')
-                );
-            });
-
-            // Status badge clicks
-            $(document).on('click', '.check-status', (e) => {
-                const checkId = $(e.currentTarget).data('check-id');
-                this.showCheckDetails(checkId);
-            });
-
-            // Modal confirmations
-            $('#confirm-reject').click(() => this.handleReject());
-            $('#confirm-cancel').click(() => this.handleCancel());
-        },
-
-        async showCheckDetails(checkId) {
-            try {
-                const response = await fetch(`/testapp/checks/${checkId}/details/`);
-                if (!response.ok) throw new Error('Failed to fetch check details');
-                
-                const data = await response.json();
-                this.updateTimelineModal(data);
-                $('#statusInfoModal').modal('show');
-            } catch (error) {
-                console.error('Error loading check details:', error);
-                alert('Failed to load check details');
-            }
-        },
-
-        updateTimelineModal(data) {
-            let timelineHtml = '<div class="timeline">';
-            
-            // Creation
-            timelineHtml += this.createTimelineItem(
-                'Created',
-                data.creation_date,
-                'plus',
-                'info'
-            );
-
-            // Delivered
-            if (data.delivered_at) {
-                timelineHtml += this.createTimelineItem(
-                    'Delivered',
-                    data.delivered_at,
-                    'truck',
-                    'primary'
-                );
-            }
-
-            // Paid
-            if (data.paid_at) {
-                timelineHtml += this.createTimelineItem(
-                    'Paid',
-                    data.paid_at,
-                    'check',
-                    'success'
-                );
-            }
-
-            // Rejected
-            if (data.rejected_at) {
-                timelineHtml += this.createTimelineItem(
-                    'Rejected',
-                    data.rejected_at,
-                    'times',
-                    'warning',
-                    `<p><strong>Reason:</strong> ${data.rejection_reason}</p>
-                     ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}`
-                );
-            }
-
-            // Cancelled
-            if (data.cancelled_at) {
-                timelineHtml += this.createTimelineItem(
-                    'Cancelled',
-                    data.cancelled_at,
-                    'ban',
-                    'danger',
-                    `<p><strong>Reason:</strong> ${data.cancellation_reason}</p>`
-                );
-            }
-
-            timelineHtml += '</div>';
-            $('#statusInfoModal .modal-body').html(timelineHtml);
-        },
-
-        createTimelineItem(title, date, icon, color, extraContent = '') {
-            return `
-                <div class="timeline-item">
-                    <div class="timeline-badge bg-${color}">
-                        <i class="fas fa-${icon} text-white"></i>
-                    </div>
-                    <div class="timeline-content">
-                        <h6>${title}</h6>
-                        <p>${date}</p>
-                        ${extraContent}
-                    </div>
-                </div>
-            `;
-        },
-
-        async applyFilters() {
-            const filters = {};
-            $('#filter-form').serializeArray().forEach(item => {
-                if (item.value) filters[item.name] = item.value;
-            });
-
-            try {
-                const response = await fetch(
-                    `/testapp/checks/filter/?${new URLSearchParams(filters)}`,
-                    {
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        }
-                    }
-                );
-                
-                if (!response.ok) throw new Error('Filter request failed');
-                
-                const data = await response.json();
-                $('#checksTableBody').html(data.html);
-                
-                // Update URL without page reload
-                history.pushState({}, '', `?${new URLSearchParams(filters)}`);
-                
-                // Update filter count
-                const filterCount = Object.keys(filters).length;
-                const badge = $('.active-filters-count');
-                if (filterCount > 0) {
-                    badge.text(filterCount).show();
-                } else {
-                    badge.hide();
-                }
-
-                this.initializeTooltips();
-            } catch (error) {
-                console.error('Error applying filters:', error);
-            }
-        },
-
-        resetFilters() {
-            $('#filter-form')[0].reset();
-            $('.select2-hidden-accessible').val(null).trigger('change');
-            history.pushState({}, '', window.location.pathname);
+    bindFilters() {
+        console.log("Binding filter events");
+        $('#bankFilter, #statusFilter').on('change', () => {
+            console.log("Filter changed");
             this.applyFilters();
-        },
+        });
 
-        handleCheckAction(action, checkId) {
-            switch (action) {
-                case 'cancel':
-                    $('#cancelModal').modal('show');
-                    $('#confirm-cancel').data('check-id', checkId);
-                    break;
-                case 'reject':
-                    $('#rejectModal').modal('show');
-                    $('#confirm-reject').data('check-id', checkId);
-                    break;
-                case 'deliver':
-                case 'pay':
-            this.updateCheckStatus(checkId, action);
-            break;
-        case 'replace':
-            $('#replacementModal').modal('show');
-            $('#create-replacement').data('check-id', checkId);
-            break;
+        let timeout;
+        $('#searchCheck').on('input', () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => this.applyFilters(), 300);
+        });
+    },
+
+    setupSelect2() {
+        $('#beneficiaryFilter').select2({
+            placeholder: 'Search beneficiary...',
+            allowClear: true,
+            ajax: {
+                url: "{% url 'supplier-autocomplete' %}",
+                dataType: 'json',
+                delay: 250,
+                processResults: function(data) {
+                    return {
+                        results: data.map(item => ({
+                            id: item.value,
+                            text: item.label
+                        }))
+                    };
+                }
+            }
+        }).on('change', () => this.applyFilters());
+    },
+
+
+    async applyFilters() {
+        console.log("Applying filters");
+        const filters = {
+            bank: $('#bankFilter').val(),
+            status: $('#statusFilter').val(),
+            beneficiary: $('#beneficiaryFilter').val(),
+            search: $('#searchCheck').val()
+        };
+
+        try {
+            const response = await fetch(`/testapp/checks/filter/?${new URLSearchParams(filters)}`);
+            if (!response.ok) throw new Error('Filter request failed');
+            
+            const data = await response.json();
+            $('#checksTableBody').html(data.html);
+            
+            // Update filter count badge
+            const activeFilters = Object.values(filters).filter(Boolean).length;
+            const badge = $('.active-filters-count');
+            activeFilters > 0 ? badge.show().text(activeFilters) : badge.hide();
+            
+        } catch (error) {
+            console.error('Error applying filters:', error);
         }
     },
 
-    async handleReject() {
-        const checkId = $('#confirm-reject').data('check-id');
-        const reason = $('#rejection-reason').val();
-        const notes = $('#rejection-notes').val();
-        
-        if (!reason) {
-            console.log('Cancellation reason element not found');
-            alert('Please select a rejection reason');
-            return;
-        }
+    setupActionHandlers() {
+        // Handle check actions (deliver, pay, etc.)
+        $(document).on('click', '.check-action', (e) => {
+            const button = $(e.currentTarget);
+            this.handleCheckAction(
+                button.data('action'),
+                button.data('check-id')
+            );
+        });
 
-        try {
-            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify({
-                    action: 'reject',
-                    rejection_reason: reason,
-                    rejection_note: notes
-                })
-            });
+        // Handle status badge clicks
+        $(document).on('click', '.status-badge', (e) => {
+            const checkId = $(e.currentTarget).data('check-id');
+            this.showCheckDetails(checkId);
+        });
 
-            if (!response.ok) throw new Error('Failed to reject check');
-            
-            $('#rejectModal').modal('hide');
-            $('#rejection-reason').val('');
-            $('#rejection-notes').val('');
-            this.applyFilters();
-        } catch (error) {
-            console.error('Error rejecting check:', error);
-            alert('Failed to reject check: ' + error.message);
+        // Use delegate events for modal buttons
+        $(document).on('click', '#confirm-cancel', (e) => {
+            e.preventDefault();
+            console.log("Cancel confirm clicked");
+            this.handleCancel();
+        });
+
+        $(document).on('click', '#confirm-reject', (e) => {
+            e.preventDefault();
+            console.log("Reject confirm clicked");
+            this.handleReject();
+        });
+    },
+
+    async handleCheckAction(action, checkId) {
+        switch (action) {
+            case 'cancel':
+                console.log("Opening cancel modal for check:", checkId);
+                $('#cancelModal').modal('show');
+                $('#confirm-cancel').data('check-id', checkId);
+                break;
+            case 'reject':
+                console.log("Opening reject modal for check:", checkId);
+                $('#rejectModal').modal('show');
+                $('#confirm-reject').data('check-id', checkId);
+                break;
+            case 'deliver':
+            case 'pay':
+                await this.updateCheckStatus(checkId, action);
+                break;
         }
     },
 
     async handleCancel() {
-
-        const reasonElement = document.querySelector('#cancellation-reason');
-            if (!reasonElement || !reasonElement.value) {
-                alert('Please provide a cancellation reason');
-                return;
-            }
-            
+        console.log("Cancel button:", $('#confirm-cancel').length);
+        console.log("Cancel reason field:", $('#cancellation-reason').length);
         const checkId = $('#confirm-cancel').data('check-id');
         const reason = $('#cancellation-reason').val();
         
@@ -437,10 +230,48 @@ document.addEventListener('DOMContentLoaded', function() {
             
             $('#cancelModal').modal('hide');
             $('#cancellation-reason').val('');
-            this.applyFilters();
+            await this.applyFilters();
+            await this.showCheckDetails(checkId);
         } catch (error) {
             console.error('Error cancelling check:', error);
             alert('Failed to cancel check: ' + error.message);
+        }
+    },
+
+    async handleReject() {
+        const checkId = $('#confirm-reject').data('check-id');
+        const reason = $('#rejection-reason').val();
+        const notes = $('#rejection-notes').val();
+        
+        if (!reason) {
+            alert('Please select a rejection reason');
+            return;
+        }
+
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    action: 'reject',
+                    rejection_reason: reason,
+                    rejection_note: notes
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to reject check');
+            
+            $('#rejectModal').modal('hide');
+            $('#rejection-reason').val('');
+            $('#rejection-notes').val('');
+            await this.applyFilters();
+            await this.showCheckDetails(checkId);
+        } catch (error) {
+            console.error('Error rejecting check:', error);
+            alert('Failed to reject check: ' + error.message);
         }
     },
 
@@ -462,11 +293,83 @@ document.addEventListener('DOMContentLoaded', function() {
             console.error('Error updating check status:', error);
             alert('Failed to update check status: ' + error.message);
         }
+    },
+
+    async showCheckDetails(checkId) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/details/`);
+            if (!response.ok) throw new Error('Failed to fetch check details');
+            
+            const data = await response.json();
+            console.log("Check details data:", data);
+            this.updateStatusModal(data);
+            $('#statusInfoModal').modal('show');
+        } catch (error) {
+            console.error('Error loading check details:', error);
+            alert('Failed to load check details');
+        }
+    },
+
+    updateStatusModal(data) {
+        let content = `<div class="timeline">`;
+        
+        // Creation
+        content += this.createTimelineEntry('Created', data.creation_date, 'plus', 'info');
+        
+        // Delivered
+        if (data.delivered_at) {
+            content += this.createTimelineEntry('Delivered', data.delivered_at, 'truck', 'primary');
+        }
+        
+        // Paid
+        if (data.paid_at) {
+            content += this.createTimelineEntry('Paid', data.paid_at, 'check', 'success');
+        }
+        
+        // Rejected
+        if (data.rejected_at) {
+            content += this.createTimelineEntry('Rejected', data.rejected_at, 'times', 'warning', 
+                `<p><strong>Reason:</strong> ${data.rejection_reason}</p>
+                 ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}`
+            );
+        }
+        
+        // Cancelled
+        if (data.cancelled_at) {
+            content += this.createTimelineEntry('Cancelled', data.cancelled_at, 'ban', 'danger',
+                `<p><strong>Reason:</strong> ${data.cancellation_reason}</p>`
+            );
+        }
+        
+        content += '</div>';
+        $('#statusInfoModal .modal-body').html(content);
+    },
+
+    createTimelineEntry(title, date, icon, color, extraContent = '') {
+        return `
+            <div class="timeline-item">
+                <div class="timeline-badge bg-${color}">
+                    <i class="fas fa-${icon} text-white"></i>
+                </div>
+                <div class="timeline-content">
+                    <h6>${title}</h6>
+                    <p>${date}</p>
+                    ${extraContent}
+                </div>
+            </div>
+        `;
     }
 };
 
-// Initialize the system
-CheckSystem.init();
-})
+// Initialize filters
+$(document).ready(() => {
+    CheckFilters.init();
+    
+    // Toggle filter panel
+    $('#toggle-filters').click(function() {
+        $('.filter-panel').slideToggle();
+        $(this).find('i').toggleClass('fa-filter fa-filter-slash');
+    });
+});
 </script>
 {% endblock %}

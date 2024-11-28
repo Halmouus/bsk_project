@@ -215,6 +215,16 @@ class CheckListView(ListView):
             'cause'
         )
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Get distinct banks that have checks
+        context['banks'] = BankAccount.objects.filter(
+            checker__checks__isnull=False
+        ).distinct()
+        context['rejection_reasons'] = Check.REJECTION_REASONS
+        return context
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckStatusView(View):
@@ -316,62 +326,52 @@ class CheckCancelView(View):
 
 class CheckActionView(View):
     def post(self, request, pk):
-        check = get_object_or_404(Check, id=pk)
-        data = json.loads(request.body)
-        
-        if data['action'] == 'deliver':
-            self._handle_delivery(check)
-        elif data['action'] == 'pay':
-            self._handle_payment(check)
-        elif data['action'] == 'reject':
-            self._handle_rejection(check, data)
-        elif data['action'] == 'replace':
-            return self._handle_replacement(check, data)
+            try:
+                check = get_object_or_404(Check, pk=pk)
+                data = json.loads(request.body)
+                action = data.get('action')
+                print(f"Action received: {action}")  # Debug
+                print(f"Request data: {data}")  # Debug
 
-        return JsonResponse({'status': 'success'})
+                if action == 'reject':
+                    reason = data.get('rejection_reason')
+                    notes = data.get('rejection_note')
+                    print(f"Rejection reason: {reason}")  # Debug
+                    print(f"Rejection notes: {notes}")  # Debug
+                    check.rejected_at = timezone.now()
+                    check.rejection_reason = reason
+                    check.rejection_note = notes
+                    check.status = 'rejected'
+                    print(f"Check status after update: {check.status}")  # Debug
 
-    def _handle_delivery(self, check):
-        if check.status != 'pending':
-            raise ValidationError("Only pending checks can be delivered")
-        check.status = 'delivered'
-        check.delivered_at = timezone.now()
-        check.save()
+                elif action == 'cancel':
+                    reason = data.get('reason')
+                    if not reason:
+                        return JsonResponse({'error': 'Reason is required'}, status=400)
+                    check.cancelled_at = timezone.now()
+                    check.cancellation_reason = reason
+                    check.status = 'cancelled'
 
-    def _handle_payment(self, check):
-        if check.status != 'delivered':
-            raise ValidationError("Only delivered checks can be paid")
-        check.status = 'paid'
-        check.paid_at = timezone.now()
-        check.save()
-        check.cause.update_payment_status()
+                elif action == 'deliver':
+                    check.delivered_at = timezone.now()
+                    check.status = 'delivered'
 
-    def _handle_rejection(self, check, data):
-        if check.status != 'delivered':
-            raise ValidationError("Only delivered checks can be rejected")
-        check.reject(
-            reason=data.get('rejection_reason'),
-            note=data.get('rejection_note', '')
-        )
-        check.cause.update_payment_status()
+                elif action == 'pay':
+                    if not check.delivered_at:
+                        return JsonResponse({'error': 'Check must be delivered first'}, status=400)
+                    check.paid_at = timezone.now()
+                    check.status = 'paid'
 
-    def _handle_replacement(self, check, data):
-        if check.status not in ['rejected', 'cancelled']:
-            raise ValidationError("Only rejected or cancelled checks can be replaced")
-        if check.has_replacement:
-            raise ValidationError("Check already replaced")
+                check.save()
+                return JsonResponse({'status': 'success'})
 
-        with transaction.atomic():
-            new_check = Check.objects.create(
-                checker=check.checker,
-                beneficiary=check.beneficiary,
-                cause=check.cause,
-                amount=data['amount'],
-                payment_due=data['payment_due'],
-                observation=data.get('observation', ''),
-                replaces=check
-            )
-            check.cause.update_payment_status()
-            return JsonResponse({'new_check_id': str(new_check.id)})
+            except Check.DoesNotExist:
+                return JsonResponse({'error': 'Check not found'}, status=404)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'Invalid JSON'}, status=400)
+            except Exception as e:
+                print(f"Error handling check action: {str(e)}")  # Debug
+                return JsonResponse({'error': str(e)}, status=500)
 
 class CheckerFilterView(View):
     def get(self, request):
@@ -410,42 +410,32 @@ class CheckFilterView(View):
     def get(self, request):
         try:
             queryset = Check.objects.select_related(
-                'checker__bank_account', 
-                'beneficiary', 
+                'checker__bank_account',
+                'beneficiary',
                 'cause'
-            ).all()
-            
+            )
+
             # Apply bank filter
-            bank = request.GET.get('bank')
-            if bank:
+            if bank := request.GET.get('bank'):
                 queryset = queryset.filter(checker__bank_account__bank=bank)
                 
             # Apply status filter
-            status = request.GET.get('status')
-            if status:
+            if status := request.GET.get('status'):
                 queryset = queryset.filter(status=status)
                 
             # Apply beneficiary filter
-            beneficiary = request.GET.get('beneficiary')
-            if beneficiary:
+            if beneficiary := request.GET.get('beneficiary'):
                 queryset = queryset.filter(beneficiary_id=beneficiary)
                 
-            # Apply date range filter
-            date_from = request.GET.get('date_from')
-            date_to = request.GET.get('date_to')
-            if date_from:
-                queryset = queryset.filter(creation_date__gte=date_from)
-            if date_to:
-                queryset = queryset.filter(creation_date__lte=date_to)
-                
-            # Apply amount range filter
-            amount_min = request.GET.get('amount_min')
-            amount_max = request.GET.get('amount_max')
-            if amount_min:
-                queryset = queryset.filter(amount__gte=amount_min)
-            if amount_max:
-                queryset = queryset.filter(amount__lte=amount_max)
+            # Apply search
+            if search := request.GET.get('search'):
+                queryset = queryset.filter(
+                    Q(position__icontains=search) |
+                    Q(beneficiary__name__icontains=search) |
+                    Q(cause__ref__icontains=search)
+                )
 
+            # Render partial template
             html = render_to_string(
                 'checker/partials/checks_table.html',
                 {'checks': queryset},
@@ -455,7 +445,6 @@ class CheckFilterView(View):
             return JsonResponse({'html': html})
             
         except Exception as e:
-            print("Error in check filter view:", str(e))  # Debug log
             return JsonResponse({'error': str(e)}, status=500)
         
 
