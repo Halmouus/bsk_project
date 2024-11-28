@@ -264,3 +264,12 @@
     max-height: 0;
     padding: 0;
 }
+
+.check-status {
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.check-status:hover {
+    transform: translateY(-2px);
+}

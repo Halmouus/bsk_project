@@ -1,457 +1,472 @@
 {% extends 'base.html' %}
-
 {% load check_tags %}
-
 {% block content %}
-<div class="container-fluid mt-4">
-    <h2>Checks List</h2>
-    <div class="container-fluid px-1">  <!-- Add padding -->
-        <div class="table-responsive">  <!-- Make table responsive -->
-            <table class="table table-hover">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>Checker Code</th>
-                        <th>Bank</th>
-                        <th>Owner</th>
-                        <th>Type</th>
-                        <th>Position</th>
-                        <th>Creation Date</th>
-                        <th>Beneficiary</th>
-                        <th>Invoice Ref</th>
-                        <th>Payment Due</th>
-                        <th>Amount Due</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for check in checks %}
-                    <tr class="{% if check.status == 'paid' %}table-success{% elif check.status == 'cancelled' %}table-danger{% elif check.status == 'delivered' %}table-warning{% endif %}"
-                        {% if check.cancelled_at %}data-cancelled="true" data-cancel-reason="{{ check.cancellation_reason }}"{% endif %}
-                        {% if check.status == 'paid' %}data-paid="true"{% endif %}>
-
-                        <td>{{ check.checker.code }}</td>
-                        <td>{{ check.checker.get_bank_display }}</td>
-                        <td>{{ check.checker.owner }}</td>
-                        <td>{{ check.checker.get_type_display }}</td>
-                        <td>{{ check.position }}</td>
-                        <td>{{ check.creation_date|date:"Y-m-d" }}</td>
-                        <td>{{ check.beneficiary.name }}</td>
-                        <td>{{ check.cause.ref }}</td>
-                        <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
-                        <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
-                        <td class="text-right">{{ check.amount|floatformat:2 }}</td>
-                        <td>
-                            <span class="badge {% if check.status == 'paid' %}badge-success
-                                {% elif check.status == 'delivered' %}badge-warning
-                                {% elif check.status == 'rejected' %}badge-danger
-                                {% elif check.status == 'cancelled' %}badge-secondary
-                                {% else %}badge-info{% endif %}">
-                                {{ check.get_status_display }}
-                            </span>
-                            
-                            {% if check.status == 'rejected' %}
-                                <button class="btn btn-link btn-sm p-0 ml-1 show-rejection"
-                                        data-toggle="tooltip"
-                                        data-reason="{{ check.get_rejection_reason_display }}"
-                                        data-note="{{ check.rejection_note }}">
-                                    <i class="fas fa-info-circle"></i>
-                                </button>
-                            {% endif %}
-
-                            {% if check.replaces %}
-                                <button class="btn btn-link btn-sm p-0 ml-1"
-                                        data-toggle="tooltip"
-                                        title="Replaces check {{ check.replaces.reference }}">
-                                    <i class="fas fa-exchange-alt"></i>
-                                </button>
-                            {% endif %}
-
-                            {% if check.replaced_by.exists %}
-                                <button class="btn btn-link btn-sm p-0 ml-1"
-                                        data-toggle="tooltip" 
-                                        title="Replaced by check {{ check.replaced_by.first.reference }}">
-                                    <i class="fas fa-arrow-right"></i>
-                                </button>
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="btn-group">
-                                {% if check.status == 'pending' %}
-                                    <button class="btn btn-sm btn-success check-action" 
-                                            data-action="deliver" 
-                                            data-check-id="{{ check.id }}">
-                                        <i class="fas fa-check"></i> Deliver
-                                    </button>
-                                {% elif check.status == 'delivered' %}
-                                    <button class="btn btn-sm btn-success check-action"
-                                            data-action="pay"
-                                            data-check-id="{{ check.id }}">
-                                        <i class="fas fa-dollar-sign"></i> Pay
-                                    </button>
-                                    <button class="btn btn-sm btn-danger check-action"
-                                            data-action="reject"
-                                            data-check-id="{{ check.id }}">
-                                        <i class="fas fa-times"></i> Reject
-                                    </button>
-                                {% endif %}
-                         
-                                {% if check.status in 'rejected,cancelled' and not check.has_replacement %}
-                                    <button class="btn btn-sm btn-info check-action"
-                                            data-action="replace"
-                                            data-check-id="{{ check.id }}">
-                                        <i class="fas fa-sync"></i> Replace
-                                    </button>
-                                {% endif %}
-                            </div>        
-                        </td>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Checks</h2>
+        <button class="btn btn-outline-secondary" id="toggle-filters">
+            <i class="fas fa-filter"></i> Filters
+            <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
+        </button>
     </div>
-</div>
 
-<div class="modal fade" id="editCheckModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Edit Check</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <form id="edit-check-form">
-                    <div class="form-group">
-                        <label>Status: <span class="badge" id="check-status-badge"></span></label>
+    <!-- Filter Section -->
+    <div class="filter-section mb-4">
+        <div class="card filter-panel" {% if not active_filters %}style="display:none"{% endif %}>
+            <div class="card-body">
+                <form id="filter-form">
+                    <div class="row">
+                        <!-- Date Range Filter -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Creation Date Range</label>
+                            <div class="input-group">
+                                <input type="date" class="form-control" name="date_from" id="date-from">
+                                <div class="input-group-prepend input-group-append">
+                                    <span class="input-group-text">to</span>
+                                </div>
+                                <input type="date" class="form-control" name="date_to" id="date-to">
+                            </div>
+                        </div>
+
+                        <!-- Bank Filter -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Bank</label>
+                            <select class="form-control select2" name="bank" id="bank-filter">
+                                <option value="">All Banks</option>
+                                {% for checker in checkers %}
+                                    <option value="{{ checker.bank_account.bank }}">
+                                        {{ checker.bank_account.get_bank_display }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <!-- Status Filter -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Status</label>
+                            <select class="form-control" name="status" id="status-filter">
+                                <option value="">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="delivered">Delivered</option>
+                                <option value="paid">Paid</option>
+                                <option value="rejected">Rejected</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+
+                        <!-- Beneficiary Filter -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Beneficiary</label>
+                            <select class="form-control select2" name="beneficiary" id="beneficiary-filter">
+                                <option value="">All Beneficiaries</option>
+                            </select>
+                        </div>
+
+                        <!-- Amount Range Filter -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Amount Range</label>
+                            <div class="input-group">
+                                <input type="number" class="form-control" name="amount_min" id="amount-min" placeholder="Min">
+                                <div class="input-group-prepend input-group-append">
+                                    <span class="input-group-text">to</span>
+                                </div>
+                                <input type="number" class="form-control" name="amount_max" id="amount-max" placeholder="Max">
+                            </div>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="delivered_at">Delivered At:</label>
-                        <input type="datetime-local" id="delivered_at" class="form-control">
-                    </div>
-                    <div class="form-group">
-                        <label for="paid_at">Paid At:</label>
-                        <input type="datetime-local" id="paid_at" class="form-control">
-                    </div>
-                    
-                    <!-- Cancel Check Button (only shown if not paid) -->
-                    <div class="form-group" id="cancel-check-section">
-                        <button type="button" class="btn btn-danger" id="cancel-check-btn">
-                            Cancel Check
+
+                    <!-- Filter Buttons -->
+                    <div class="d-flex justify-content-end mt-3">
+                        <button type="button" id="reset-filters" class="btn btn-outline-danger mr-2">
+                            <i class="fas fa-times-circle"></i> Reset
+                        </button>
+                        <button type="button" id="apply-filters" class="btn btn-primary">
+                            <i class="fas fa-check-circle"></i> Apply Filters
                         </button>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" id="save-check-btn">Save Changes</button>
-            </div>
         </div>
+    </div>
+
+    <!-- Checks Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Reference</th>
+                    <th>Bank</th>
+                    <th>Creation Date</th>
+                    <th>Beneficiary</th>
+                    <th>Invoice Ref</th>
+                    <th>Amount Due</th>
+                    <th>Amount</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="checksTableBody">
+                {% include 'checker/partials/checks_table.html' %}
+            </tbody>
+        </table>
     </div>
 </div>
 
-<!-- Cancellation Modal -->
-<div class="modal fade" id="cancelCheckModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cancel Check</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label for="cancellation_reason">Reason for Cancellation:</label>
-                    <textarea id="cancellation_reason" class="form-control" placeholder="Reason for cancellation" rows="2" required ></textarea>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-danger" id="confirm-cancel-btn">Confirm Cancellation</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Cancellation Detail Modal -->
-<div class="modal fade" id="cancellationDetailModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Cancellation Reason</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p id="cancellationReason"></p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Payment Details Modal -->
-<div class="modal fade" id="paymentDetailsModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Payment Details</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="payment-info"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<style>
-    .cancellation-info {
-        cursor: pointer;
-    }
-    .cancellation-info:hover {
-        opacity: 0.8;
-    }
-    
-    /* Make buttons more refined */
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.375rem 0.75rem;
-        border-radius: 0.25rem;
-        transition: all 0.2s;
-    }
-    
-    .btn i {
-        font-size: 0.875rem;
-    }
-    
-    .btn:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    
-    /* Space out buttons in button groups */
-    .btn-group .btn {
-        margin-right: 0.25rem;
-    }
-    .btn-group .btn:last-child {
-        margin-right: 0;
-    }
-
-    .table-responsive {
-    margin-left: auto;
-    margin-right: auto;
-    padding: 0 15px; /* Minor borders on the left and right */
-    max-width: 100%; /* Ensure it takes the entire width */
-    }
-
-
-    .table-hover tbody tr {
-    height: 3rem; /* Increase row height */
-    }
-
-    .btn-secondary {
-    background-color: #d6d6d6;
-    color: #555;
-    cursor: not-allowed;
-    }
-
-    .btn-secondary i {
-        margin-right: 5px; /* Adds spacing between icon and text */
-    }
-
-</style>
+{% include 'checker/partials/check_action_modals.html' %}
 
 <script>
-$(document).ready(function() {
-    let currentCheckId;
+document.addEventListener('DOMContentLoaded', function() {
+    const CheckSystem = {
+        init() {
+            this.setupSelect2();
+            this.setupFilters();
+            this.bindEvents();
+            this.initializeTooltips();
+        },
 
-    // Disable controls for cancelled checks
-    $('tr[data-cancelled="true"]').each(function() {
-        const reason = $(this).data('cancel-reason');
-        $(this).find('button').prop('disabled', true)
-            .attr('title', `Check cancelled: ${reason}`);
-    });
-
-    $('.mark-delivered').click(function() {
-        const checkId = $(this).data('check');
-        if (confirm('Mark this check as delivered?')) {
-            $.ajax({
-                url: `/testapp/checks/${checkId}/mark-delivered/`,
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                success: function() {
-                    location.reload();
-                },
-                error: function(xhr) {
-                    alert('Error marking check as delivered');
+        setupSelect2() {
+            $('#beneficiary-filter').select2({
+                placeholder: 'Search beneficiary...',
+                allowClear: true,
+                ajax: {
+                    url: "{% url 'supplier-autocomplete' %}",
+                    dataType: 'json',
+                    delay: 250,
+                    processResults: function(data) {
+                        return {
+                            results: data.map(item => ({
+                                id: item.value,
+                                text: item.label
+                            }))
+                        };
+                    }
                 }
             });
-        }
-    });
 
-    $('.mark-paid').click(function() {
-        const checkId = $(this).data('check');
-        if (confirm('Mark this check as paid?')) {
-            $.ajax({
-                url: `/testapp/checks/${checkId}/mark-paid/`,
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                },
-                success: function() {
-                    location.reload();
-                },
-                error: function(xhr) {
-                    alert('Error marking check as paid');
-                }
+            $('#bank-filter').select2({
+                placeholder: 'Select bank',
+                allowClear: true,
+                minimumResultsForSearch: Infinity
             });
-        }
-    });
+        },
 
-     // Edit Check Modal
-    $('.edit-check-btn').click(function() {
-        const $row = $(this).closest('tr');
-        if ($row.data('cancelled')) {
-            alert(`Check cancelled: ${$row.data('cancel-reason')}`);
-            return;
-        }
+        initializeTooltips() {
+            $('[data-toggle="tooltip"]').tooltip();
+        },
 
-        currentCheckId = $(this).data('check-id');
-        console.log("Opening edit modal for check:", currentCheckId);
-        
-        $.ajax({
-            url: `/testapp/checks/${currentCheckId}/`,
-            method: 'GET',
-            success: function(data) {
-                console.log("Received data:", data); // Debug
-                $('#delivered_at').val(data.delivered_at)
-                    .prop('readonly', data.delivered_at != null);
-                $('#paid_at').val(data.paid_at)
-                    .prop('readonly', data.paid_at != null);
+        setupFilters() {
+            const urlParams = new URLSearchParams(window.location.search);
+            for (let [key, value] of urlParams.entries()) {
+                const input = document.querySelector(`[name="${key}"]`);
+                if (input) {
+                    if (input.type === 'select-one') {
+                        $(input).val(value).trigger('change');
+                    } else {
+                        input.value = value;
+                    }
+                }
+            }
+
+            if (urlParams.toString() !== '') {
+                $('.filter-panel').show();
+            }
+        },
+
+        bindEvents() {
+            // Ensure modal elements are present
+            if ($('#confirm-reject').length) {
+                $('#confirm-reject').off('click').on('click', () => this.handleReject());
+            }
+            if ($('#confirm-cancel').length) {
+                $('#confirm-cancel').off('click').on('click', () => this.handleCancel());
+            }
+            // Toggle filters
+            $('#toggle-filters').click(() => {
+                $('.filter-panel').slideToggle();
+            });
+
+            // Apply filters
+            $('#apply-filters').click(() => this.applyFilters());
+
+            // Reset filters
+            $('#reset-filters').click(() => this.resetFilters());
+
+            // Check actions
+            $(document).on('click', '.check-action', (e) => {
+                const button = $(e.currentTarget);
+                this.handleCheckAction(
+                    button.data('action'),
+                    button.data('check-id')
+                );
+            });
+
+            // Status badge clicks
+            $(document).on('click', '.check-status', (e) => {
+                const checkId = $(e.currentTarget).data('check-id');
+                this.showCheckDetails(checkId);
+            });
+
+            // Modal confirmations
+            $('#confirm-reject').click(() => this.handleReject());
+            $('#confirm-cancel').click(() => this.handleCancel());
+        },
+
+        async showCheckDetails(checkId) {
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/details/`);
+                if (!response.ok) throw new Error('Failed to fetch check details');
                 
-                // Update status badge
-                const badgeClass = {
-                    'pending': 'badge-warning',
-                    'delivered': 'badge-info',
-                    'paid': 'badge-success',
-                    'cancelled': 'badge-danger'
-                }[data.status];
+                const data = await response.json();
+                this.updateTimelineModal(data);
+                $('#statusInfoModal').modal('show');
+            } catch (error) {
+                console.error('Error loading check details:', error);
+                alert('Failed to load check details');
+            }
+        },
+
+        updateTimelineModal(data) {
+            let timelineHtml = '<div class="timeline">';
             
-                
-                $('#check-status-badge')
-                    .text(data.status.toUpperCase())
-                    .removeClass()
-                    .addClass(`badge ${badgeClass}`);
-                
-                // Show/hide cancel section based on status
-                $('#cancel-section').toggle(!data.paid_at);
-                $('#save-check-btn').prop('disabled', data.cancelled_at);
-                
-                $('#editCheckModal').modal('show');
-            },
-            error: function(xhr) {
-                alert("Error loading check details");
-            }
-        });
-    });
-    
-    // Save Check Changes
-    $('#save-check-btn').click(function() {
-        console.log("Saving changes for check:", currentCheckId);   
+            // Creation
+            timelineHtml += this.createTimelineItem(
+                'Created',
+                data.creation_date,
+                'plus',
+                'info'
+            );
 
-        $.ajax({
-            url: `/testapp/checks/${currentCheckId}/`,
-            method: 'POST',
-            data: JSON.stringify({
-                delivered_at: $('#delivered_at').val(),
-                paid_at: $('#paid_at').val()
-            }),
-            contentType: 'application/json',
-            success: function() {
-                $('#editCheckModal').modal('hide');
-                location.reload();
-            },
-            error: function(xhr) {
-                alert(xhr.responseJSON.error|| "Error saving changes");
+            // Delivered
+            if (data.delivered_at) {
+                timelineHtml += this.createTimelineItem(
+                    'Delivered',
+                    data.delivered_at,
+                    'truck',
+                    'primary'
+                );
             }
-        });
-    });
-    
-    // Cancel Check
-    $('#cancel-check-btn').click(function() {
-        $('#editCheckModal').modal('hide');
-        $('#cancelCheckModal').modal('show');
-    });
-    
-    // Confirm Cancellation
-    $('#confirm-cancel-btn').click(function() {
-        const reason = $('#cancellation_reason').val();
+
+            // Paid
+            if (data.paid_at) {
+                timelineHtml += this.createTimelineItem(
+                    'Paid',
+                    data.paid_at,
+                    'check',
+                    'success'
+                );
+            }
+
+            // Rejected
+            if (data.rejected_at) {
+                timelineHtml += this.createTimelineItem(
+                    'Rejected',
+                    data.rejected_at,
+                    'times',
+                    'warning',
+                    `<p><strong>Reason:</strong> ${data.rejection_reason}</p>
+                     ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}`
+                );
+            }
+
+            // Cancelled
+            if (data.cancelled_at) {
+                timelineHtml += this.createTimelineItem(
+                    'Cancelled',
+                    data.cancelled_at,
+                    'ban',
+                    'danger',
+                    `<p><strong>Reason:</strong> ${data.cancellation_reason}</p>`
+                );
+            }
+
+            timelineHtml += '</div>';
+            $('#statusInfoModal .modal-body').html(timelineHtml);
+        },
+
+        createTimelineItem(title, date, icon, color, extraContent = '') {
+            return `
+                <div class="timeline-item">
+                    <div class="timeline-badge bg-${color}">
+                        <i class="fas fa-${icon} text-white"></i>
+                    </div>
+                    <div class="timeline-content">
+                        <h6>${title}</h6>
+                        <p>${date}</p>
+                        ${extraContent}
+                    </div>
+                </div>
+            `;
+        },
+
+        async applyFilters() {
+            const filters = {};
+            $('#filter-form').serializeArray().forEach(item => {
+                if (item.value) filters[item.name] = item.value;
+            });
+
+            try {
+                const response = await fetch(
+                    `/testapp/checks/filter/?${new URLSearchParams(filters)}`,
+                    {
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        }
+                    }
+                );
+                
+                if (!response.ok) throw new Error('Filter request failed');
+                
+                const data = await response.json();
+                $('#checksTableBody').html(data.html);
+                
+                // Update URL without page reload
+                history.pushState({}, '', `?${new URLSearchParams(filters)}`);
+                
+                // Update filter count
+                const filterCount = Object.keys(filters).length;
+                const badge = $('.active-filters-count');
+                if (filterCount > 0) {
+                    badge.text(filterCount).show();
+                } else {
+                    badge.hide();
+                }
+
+                this.initializeTooltips();
+            } catch (error) {
+                console.error('Error applying filters:', error);
+            }
+        },
+
+        resetFilters() {
+            $('#filter-form')[0].reset();
+            $('.select2-hidden-accessible').val(null).trigger('change');
+            history.pushState({}, '', window.location.pathname);
+            this.applyFilters();
+        },
+
+        handleCheckAction(action, checkId) {
+            switch (action) {
+                case 'cancel':
+                    $('#cancelModal').modal('show');
+                    $('#confirm-cancel').data('check-id', checkId);
+                    break;
+                case 'reject':
+                    $('#rejectModal').modal('show');
+                    $('#confirm-reject').data('check-id', checkId);
+                    break;
+                case 'deliver':
+                case 'pay':
+            this.updateCheckStatus(checkId, action);
+            break;
+        case 'replace':
+            $('#replacementModal').modal('show');
+            $('#create-replacement').data('check-id', checkId);
+            break;
+        }
+    },
+
+    async handleReject() {
+        const checkId = $('#confirm-reject').data('check-id');
+        const reason = $('#rejection-reason').val();
+        const notes = $('#rejection-notes').val();
         
-        if (!reason.trim()) {
-            alert('Please provide a reason for cancellation');
+        if (!reason) {
+            console.log('Cancellation reason element not found');
+            alert('Please select a rejection reason');
             return;
         }
 
-        console.log("Cancelling check:", currentCheckId);
-        $.ajax({
-            url: `/testapp/checks/${currentCheckId}/cancel/`,
-            method: 'POST',
-            data: JSON.stringify({ reason: reason }),
-            contentType: 'application/json',
-            success: function() {
-                $('#cancelCheckModal').modal('hide');
-                location.reload();
-            },
-            error: function(xhr) {
-                alert(xhr.responseJSON.error || "Error cancelling check");
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    action: 'reject',
+                    rejection_reason: reason,
+                    rejection_note: notes
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to reject check');
+            
+            $('#rejectModal').modal('hide');
+            $('#rejection-reason').val('');
+            $('#rejection-notes').val('');
+            this.applyFilters();
+        } catch (error) {
+            console.error('Error rejecting check:', error);
+            alert('Failed to reject check: ' + error.message);
+        }
+    },
+
+    async handleCancel() {
+
+        const reasonElement = document.querySelector('#cancellation-reason');
+            if (!reasonElement || !reasonElement.value) {
+                alert('Please provide a cancellation reason');
+                return;
             }
-        });
-    });
+            
+        const checkId = $('#confirm-cancel').data('check-id');
+        const reason = $('#cancellation-reason').val();
+        
+        if (!reason) {
+            alert('Please provide a cancellation reason');
+            return;
+        }
 
-    // Display cancellation reason
-    $('.cancellation-info').click(function() {
-        const reason = $(this).data('reason');
-        $('#cancellationReason').text(reason);
-    });
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    action: 'cancel',
+                    reason: reason
+                })
+            });
 
-    // Reset modals on close
-    $('#editCheckModal, #cancelCheckModal').on('hidden.bs.modal', function() {
-        $('#cancellation_reason').val('');
-    });
+            if (!response.ok) throw new Error('Failed to cancel check');
+            
+            $('#cancelModal').modal('hide');
+            $('#cancellation-reason').val('');
+            this.applyFilters();
+        } catch (error) {
+            console.error('Error cancelling check:', error);
+            alert('Failed to cancel check: ' + error.message);
+        }
+    },
 
-    // Payment details popup
-    $('.payment-info').click(function() {
-        const checkId = $(this).data('check');
-        $.ajax({
-            url: `/testapp/checks/${checkId}/payment-details/`,
-            success: function(data) {
-                $('.payment-info').html(`
-                    <div class="card">
-                        <div class="card-body">
-                            <h6 class="card-subtitle mb-3">Payment Information</h6>
-                            <p><strong>Paid Amount:</strong> ${formatMoney(data.amount)}</p>
-                            <p><strong>Payment Date:</strong> ${data.paid_at}</p>
-                            <p><strong>Payment Reference:</strong> ${data.reference}</p>
-                            <hr>
-                            <h6 class="card-subtitle mb-3">Invoice Information</h6>
-                            <p><strong>Invoice Ref:</strong> ${data.invoice_ref}</p>
-                            <p><strong>Beneficiary:</strong> ${data.beneficiary}</p>
-                            <p><strong>Original Amount:</strong> ${formatMoney(data.invoice_amount)}</p>
-                        </div>
-                    </div>
-                `);
-            }
-        });
-    });
-    
-});
+    async updateCheckStatus(checkId, action) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ action })
+            });
+
+            if (!response.ok) throw new Error('Failed to update check status');
+            
+            this.applyFilters();
+        } catch (error) {
+            console.error('Error updating check status:', error);
+            alert('Failed to update check status: ' + error.message);
+        }
+    }
+};
+
+// Initialize the system
+CheckSystem.init();
+})
 </script>
-{% include 'checker/partials/check_action_modals.html' %}
 {% endblock %}

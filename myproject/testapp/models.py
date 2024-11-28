@@ -648,6 +648,7 @@ class Check(BaseModel):
         ('other', 'Other')
     ]
 
+    rejected_at = models.DateTimeField(null=True, blank=True)
     rejection_reason = models.CharField(max_length=50, choices=REJECTION_REASONS, null=True, blank=True)
     rejection_note = models.TextField(blank=True)
     rejection_date = models.DateTimeField(null=True, blank=True)

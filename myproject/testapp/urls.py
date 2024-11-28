@@ -10,7 +10,7 @@ from .views_invoice import (
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
-    CheckerFilterView
+    CheckerFilterView, CheckFilterView, CheckDetailView
 )
 
 from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
@@ -65,10 +65,12 @@ urlpatterns = [
     path('checks/<uuid:pk>/mark-paid/', 
         CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
     path('checks/<uuid:pk>/action/', CheckActionView.as_view(), name='check-action'),
+    path('checks/<uuid:check_id>/details/', CheckDetailView.as_view(), name='check-details'),
 
     path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
+    path('checks/filter/', CheckFilterView.as_view(), name='check-filter'),
 
     path('invoices/<str:invoice_id>/credit-note-details/', CreditNoteDetailsView.as_view(), name='credit-note-details'),
 

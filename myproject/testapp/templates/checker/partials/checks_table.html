@@ -1,0 +1,98 @@
+<!-- checks_table.html -->
+{% load check_tags %}
+{% for check in checks %}
+<tr class="{% if check.status == 'paid' %}table-success{% elif check.status == 'cancelled' %}table-danger{% elif check.status == 'rejected' %}table-warning{% elif check.status == 'delivered' %}table-info{% endif %}">
+    <td>
+        <span class="font-monospace">{{ check.checker.bank_account.bank }}-{{ check.position }}</span>
+    </td>
+    <td>
+        <div class="d-flex align-items-center">
+            <span class="bank-logo {{ check.checker.bank_account.bank|lower }}"></span>
+            <span class="ml-2">{{ check.checker.bank_account.get_bank_display }}</span>
+        </div>
+    </td>
+    <td>{{ check.creation_date|date:"Y-m-d" }}</td>
+    <td>{{ check.beneficiary.name }}</td>
+    <td>{{ check.cause.ref }}</td>
+    <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
+    <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+    <td>{{ check.payment_due|date:"Y-m-d"|default:"-" }}</td>
+    <td>
+        <span class="check-status badge badge-{{ check.status|status_badge }} cursor-pointer" 
+                data-check-id="{{ check.id }}"
+                data-toggle="tooltip"
+                title="Click for details">
+            <i class="fas fa-{% if check.status == 'paid' %}check-circle
+                            {% elif check.status == 'cancelled' %}ban
+                            {% elif check.status == 'rejected' %}times-circle
+                            {% elif check.status == 'delivered' %}truck
+                            {% else %}clock{% endif %}"></i>
+            {{ check.get_status_display }}
+        </span>
+    </td>
+    <td>
+        <div class="btn-group">
+            {% if check.status == 'pending' and not check.cancelled_at %}
+                <button class="btn btn-sm btn-danger check-action" 
+                        data-action="cancel" 
+                        data-check-id="{{ check.id }}"
+                        data-toggle="tooltip"
+                        title="Cancel check">
+                    <i class="fas fa-ban"></i>
+                </button>
+                <button class="btn btn-sm btn-success check-action" 
+                        data-action="deliver" 
+                        data-check-id="{{ check.id }}"
+                        data-toggle="tooltip"
+                        title="Mark as delivered">
+                    <i class="fas fa-truck"></i>
+                </button>
+            {% elif check.status == 'delivered' and not check.cancelled_at %}
+                <button class="btn btn-sm btn-danger check-action" 
+                        data-action="cancel" 
+                        data-check-id="{{ check.id }}"
+                        data-toggle="tooltip"
+                        title="Cancel check">
+                    <i class="fas fa-ban"></i>
+                </button>
+                <button class="btn btn-sm btn-warning check-action" 
+                        data-action="reject" 
+                        data-check-id="{{ check.id }}"
+                        data-toggle="tooltip"
+                        title="Reject check">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button class="btn btn-sm btn-success check-action" 
+                        data-action="pay" 
+                        data-check-id="{{ check.id }}"
+                        data-toggle="tooltip"
+                        title="Mark as paid">
+                    <i class="fas fa-check"></i>
+                </button>
+            {% elif check.status in 'rejected,cancelled' %}
+                {% if not check.has_replacement %}
+                    <button class="btn btn-sm btn-info check-action" 
+                            data-action="replace" 
+                            data-check-id="{{ check.id }}"
+                            data-toggle="tooltip"
+                            title="Create replacement check">
+                        <i class="fas fa-sync"></i>
+                    </button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="10" class="text-center py-4">
+        <div class="empty-state">
+            <i class="fas fa-search fa-3x text-muted mb-3"></i>
+            <p class="text-muted mb-0">No checks found matching your criteria</p>
+            {% if request.GET %}
+                <button type="button" class="btn btn-link" id="clear-filters">Clear all filters</button>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% endfor %}

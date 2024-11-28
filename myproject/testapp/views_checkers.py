@@ -209,7 +209,11 @@ class CheckListView(ListView):
     context_object_name = 'checks'
 
     def get_queryset(self):
-        return Check.objects.select_related('checker', 'beneficiary', 'cause')
+        return Check.objects.select_related(
+            'checker__bank_account', 
+            'beneficiary', 
+            'cause'
+        )
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -401,3 +405,74 @@ class CheckerFilterView(View):
         )
         
         return JsonResponse({'html': html})
+
+class CheckFilterView(View):
+    def get(self, request):
+        try:
+            queryset = Check.objects.select_related(
+                'checker__bank_account', 
+                'beneficiary', 
+                'cause'
+            ).all()
+            
+            # Apply bank filter
+            bank = request.GET.get('bank')
+            if bank:
+                queryset = queryset.filter(checker__bank_account__bank=bank)
+                
+            # Apply status filter
+            status = request.GET.get('status')
+            if status:
+                queryset = queryset.filter(status=status)
+                
+            # Apply beneficiary filter
+            beneficiary = request.GET.get('beneficiary')
+            if beneficiary:
+                queryset = queryset.filter(beneficiary_id=beneficiary)
+                
+            # Apply date range filter
+            date_from = request.GET.get('date_from')
+            date_to = request.GET.get('date_to')
+            if date_from:
+                queryset = queryset.filter(creation_date__gte=date_from)
+            if date_to:
+                queryset = queryset.filter(creation_date__lte=date_to)
+                
+            # Apply amount range filter
+            amount_min = request.GET.get('amount_min')
+            amount_max = request.GET.get('amount_max')
+            if amount_min:
+                queryset = queryset.filter(amount__gte=amount_min)
+            if amount_max:
+                queryset = queryset.filter(amount__lte=amount_max)
+
+            html = render_to_string(
+                'checker/partials/checks_table.html',
+                {'checks': queryset},
+                request=request
+            )
+            
+            return JsonResponse({'html': html})
+            
+        except Exception as e:
+            print("Error in check filter view:", str(e))  # Debug log
+            return JsonResponse({'error': str(e)}, status=500)
+        
+
+class CheckDetailView(View):
+    def get(self, request, check_id):
+        try:
+            check = Check.objects.get(id=check_id)
+            data = {
+                "creation_date": check.creation_date.strftime("%Y-%m-%d") if check.creation_date else None,
+                "delivered_at": check.delivered_at.strftime("%Y-%m-%d") if check.delivered_at else None,
+                "paid_at": check.paid_at.strftime("%Y-%m-%d") if check.paid_at else None,
+                "rejected_at": check.rejected_at.strftime("%Y-%m-%d") if check.rejected_at else None,
+                "rejection_reason": check.rejection_reason,
+                "rejection_note": check.rejection_note,
+                "cancelled_at": check.cancelled_at.strftime("%Y-%m-%d") if check.cancelled_at else None,
+                "cancellation_reason": check.cancellation_reason,
+            }
+            return JsonResponse(data)
+        except Check.DoesNotExist:
+            return JsonResponse({"error": "Check not found"}, status=404)
