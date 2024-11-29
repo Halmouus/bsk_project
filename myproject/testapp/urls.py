@@ -10,7 +10,7 @@ from .views_invoice import (
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
-    CheckerFilterView, CheckFilterView, CheckDetailView, AvailableCheckersView, SignChecksView
+    CheckerFilterView, CheckFilterView, CheckDetailView, AvailableCheckersView, CheckerSignatureView, CheckerPositionStatusView
 )
 
 from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
@@ -73,8 +73,11 @@ urlpatterns = [
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
     path('checks/filter/', CheckFilterView.as_view(), name='check-filter'),
-    path('checks/sign/', SignChecksView.as_view(), name='sign-checks'),
-
+    path('checkers/<uuid:pk>/signatures/', CheckerSignatureView.as_view(), name='checker-signatures'),
+    path('checkers/<uuid:pk>/sign/', CheckerSignatureView.as_view(), name='checker-sign'),
+    path('checkers/<uuid:checker_id>/position-status/<int:position>/',
+    CheckerPositionStatusView.as_view(),
+    name='checker-position-status'),
 
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
     path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),

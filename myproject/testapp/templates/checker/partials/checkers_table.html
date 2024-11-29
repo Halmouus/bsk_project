@@ -59,14 +59,18 @@
    <td class="actions">
     {% if checker.status != 'completed' and checker.is_active %}
         <div class="btn-group">
-            <button class="btn btn-sm btn-info view-checks" data-checker="{{ checker.id }}">
-                <i class="fas fa-eye"></i>
+            <button class="btn btn-sm btn-info view-signatures" data-checker="{{ checker.id }}"
+                data-start="{{ checker.starting_page }}" 
+                data-end="{{ checker.final_page }}">
+                <i class="fas fa-signature"></i>
             </button>
             <button class="btn btn-sm btn-success add-payment" 
-                    data-checker="{{ checker.id }}"
-                    data-position="{{ checker.current_position }}"
-                    data-bank="{{ checker.bank_account.bank }}"
-                    data-type="{{ checker.type }}">
+                data-checker="{{ checker.id }}" 
+                data-start="{{ checker.starting_page }}"
+                data-end="{{ checker.final_page }}"
+                data-position="{{ checker.current_position }}"
+                data-bank="{{ checker.bank_account.bank }}" 
+                data-type="{{ checker.type }}">
                 <i class="fas fa-money-check-alt"></i> Add Payment
             </button>
         </div>
@@ -129,8 +133,14 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Check Position</label>
-                                <input type="text" class="form-control" id="position" readonly>
+                                <label for="position">Position</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" id="position" name="position">
+                                    <div class="input-group-append">
+                                        <div id="signature-badges" class="input-group-text"></div>
+                                    </div>
+                                </div>
+                                <div class="invalid-feedback"></div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -198,6 +208,34 @@
     </div>
 </div>
 
+<!-- Signature Modal -->
+<div class="modal fade" id="signatureModal">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Checker Signatures</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Position</th>
+                                <th>Status</th>
+                                <th>Signatures</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="signature-positions">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 
 function formatMoney(amount) {
@@ -217,9 +255,99 @@ const PaymentSystem = {
         this.amountInput = $('[name="amount"]');
         this.currentCheckerData = null;
 
+        this.setupPositionValidation();
         this.setupAutoComplete();
         this.setupValidation();
         this.bindEvents();
+    },
+
+    setupPositionValidation() {
+        console.log("Setting up position validation");
+        const positionInput = $('[name="position"]');
+        
+        // Set default value
+        positionInput.val(this.currentCheckerData?.position);
+        console.log("Set default position:", this.currentCheckerData?.position);
+        
+        positionInput.on('input', async (e) => {
+            const position = parseInt(e.target.value);
+            console.log("Position changed:", {
+                value: position,
+                checkerStart: this.currentCheckerData?.start,
+                checkerEnd: this.currentCheckerData?.end
+            });
+            
+            if (!this.currentCheckerData) {
+                console.error("No checker data available");
+                return;
+            }
+
+            const isValid = this.validatePosition(position);
+            console.log("Position validation result:", isValid);
+            
+            if (isValid) {
+                await this.loadSignatureInfo(this.currentCheckerData.id, position);
+            }
+        });
+    },
+
+
+    validatePosition(position) {
+        const input = $('[name="position"]');
+        const feedback = input.siblings('.invalid-feedback');
+        
+        console.log("Validating position:", {
+            position,
+            start: this.currentCheckerData.start,
+            end: this.currentCheckerData.end
+        });
+
+        if (!position) {
+            this.setPositionInvalid("Position is required", input, feedback);
+            return false;
+        }
+
+        if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
+            this.setPositionInvalid(
+                `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`, 
+                input, 
+                feedback
+            );
+            return false;
+        }
+
+        input.removeClass('is-invalid').addClass('is-valid');
+        return true;
+    },
+
+    async loadSignatureInfo(checkerId, position) {
+        console.log(`Loading signature info for position ${position}`);
+        try {
+            const response = await fetch(`/testapp/checkers/${checkerId}/signatures/?position=${position}`);
+            const data = await response.json();
+            console.log("Signature data:", data);
+
+            const badges = $('#signature-badges');
+            badges.empty();
+
+            const posInfo = data.positions[position] || { signatures: [], timestamps: [] };
+            posInfo.signatures.forEach((sig, idx) => {
+                badges.append(`
+                    <span class="badge badge-primary ml-1" 
+                        title="Signed on ${new Date(posInfo.timestamps[idx]).toLocaleDateString()}">
+                        ${sig}
+                    </span>
+                `);
+            });
+        } catch (error) {
+            console.error("Error loading signature info:", error);
+        }
+    },
+
+    setPositionInvalid(message, input, feedback) {
+        input.removeClass('is-valid').addClass('is-invalid');
+        feedback.text(message);
+        $('#signature-badges').empty();
     },
 
     setupAutoComplete() {
@@ -392,19 +520,23 @@ const PaymentSystem = {
     },
 
     openPaymentModal(checkerData) {
-        this.currentCheckerData = checkerData;
-        const position = `${checkerData.bank}-${checkerData.index || ''}${checkerData.position}`;
-        // Set checker info
-        $('#payment-checker-info').html(
-            `Payment for ${checkerData.bank}-${checkerData.position} (${checkerData.type})`
-        );
+        console.log("Raw checker data:", checkerData);
+
+        this.currentCheckerData = {
+            id: checkerData.id,
+            start: parseInt(checkerData.position), // Use data-start instead
+            end: parseInt(checkerData.end), // Use data-end instead
+            position: parseInt(checkerData.position),
+            bank: checkerData.bank,
+            type: checkerData.type
+        };
         
-        $('#checker_id').val(checkerData.id);
-        $('#position').val(checkerData.position);
-        console.log("Checker position: ", checkerData.position);
-        
+        console.log("Processed checker data:", this.currentCheckerData);
+
+        // Reset form
         this.resetForm();
-        this.updateSaveButtons(false);
+        $('#position').val(this.currentCheckerData.position).trigger('input');
+        
         this.modal.modal('show');
     },
 
@@ -432,46 +564,45 @@ const PaymentSystem = {
 
 
     async createPayment(cloneAfter = false) {
-        if (!this.validateForm()) return;
+    console.log("Creating payment with data:", {
+        checker_id: this.currentCheckerData?.id,
+        invoice_id: $('#invoice_id').val(),
+        amount: $('[name="amount"]').val(),
+        position: $('#position').val()
+    });
 
-        const data = {
-            checker_id: $('#checker_id').val(),
-            invoice_id: $('#invoice_id').val(),
-            amount: parseFloat(this.amountInput.val()),
-            payment_due: $('[name="payment_due"]').val() || null,
-            observation: $('[name="observation"]').val(),
-            creation_date: $('[name="creation_date"]').val()
-        };
+    const data = {
+        checker_id: this.currentCheckerData.id,
+        invoice_id: $('#invoice_id').val(),
+        amount: $('[name="amount"]').val(),
+        payment_due: $('[name="payment_due"]').val() || null,
+        observation: $('[name="observation"]').val(),
+        creation_date: $('[name="creation_date"]').val()
+    };
 
-        try {
-            const response = await fetch('/testapp/checks/create/', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-                },
-                body: JSON.stringify(data)
-            });
+    try {
+        const response = await fetch('/testapp/checks/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+            },
+            body: JSON.stringify(data)
+        });
 
-            if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Payment creation failed');
-            }
+        if (!response.ok) throw new Error(await response.text());
 
-            if (cloneAfter) {
-                // Keep modal open and reset only amount
-                const available = parseFloat(
-                    $('#amount-available').text().replace(/[^\d.-]/g, '')
-                );
-                this.amountInput.val(available.toFixed(2)).trigger('input');
-            } else {
-                this.modal.modal('hide');
-                location.reload();
-            }
-        } catch (error) {
-            Utils.showError(error.message);
+        if (cloneAfter) {
+            const available = parseFloat($('#amount-available').text().replace(/[^\d.-]/g, ''));
+            $('[name="amount"]').val(available.toFixed(2)).trigger('input');
+        } else {
+            this.modal.modal('hide');
+            location.reload();
         }
-    },
+    } catch (error) {
+        console.error("Error creating check:", error);
+    }
+},
 
     validateForm() {
         // Basic validation
@@ -515,10 +646,142 @@ const PaymentSystem = {
     
 };
 
+const SignatureSystem = {
+    init() {
+        this.modal = $('#signatureModal');
+        this.bindEvents();
+    },
+
+    bindEvents() {
+        $(document).on('click', '.view-signatures', (e) => {
+            const button = $(e.currentTarget);
+            this.openSignatureModal({
+                id: button.data('checker'),
+                start: button.data('start'),
+                end: button.data('end')
+            });
+        });
+
+        $(document).on('click', '.add-signature', (e) => {
+            const btn = $(e.currentTarget);
+            this.addSignature(
+                btn.data('checker'),
+                btn.data('position'),
+                btn.data('signature')
+            );
+        });
+    },
+
+    async loadPositions(checkerId, start, end) {
+        console.log("Fetching signature data...");
+        try {
+            const response = await fetch(`/testapp/checkers/${checkerId}/signatures/?start=${start}&end=${end}`);
+            const data = await response.json();
+            console.log("Received signature data:", data);
+            this.updateSignatureTable(data, checkerId, start, end);
+        } catch (error) {
+            console.error("Error loading signatures:", error);
+        }
+    },
+
+    updateSignatureTable(data, checkerId, start, end) {
+        const tbody = $('#signature-positions');
+        tbody.empty();
+        
+        for (let position = start; position <= end; position++) {
+            const posInfo = data.positions[position] || { signatures: [], timestamps: [] };
+            const isUsed = data.used_positions.hasOwnProperty(position);
+            
+            tbody.append(this.createPositionRow(position, posInfo, isUsed, checkerId));
+        }
+    },
+
+    createPositionRow(position, posInfo, isUsed, checkerId) {
+        const row = $('<tr>');
+        row.append(`<td>${position}</td>`);
+        row.append(`<td>${isUsed ? 'Used' : 'Available'}</td>`);
+        row.append(this.createSignaturesBadges(posInfo));
+        
+        if (!isUsed) {
+            row.append(this.createSignatureButtons(position, posInfo, checkerId));
+        } else {
+            row.append('<td></td>');
+        }
+        
+        return row;
+    },
+
+    createSignaturesBadges(posInfo) {
+        const badges = posInfo.signatures.map((sig, idx) => 
+            `<span class="badge badge-primary mr-1" title="${posInfo.timestamps[idx]}">${sig}</span>`
+        ).join('');
+        return $('<td>').html(badges);
+    },
+
+    createSignatureButtons(position, posInfo, checkerId) {
+        const td = $('<td>');
+        
+        if (!posInfo.signatures.includes('OUK')) {
+            td.append(this.createSignatureButton('OUK', checkerId, position));
+        }
+        if (!posInfo.signatures.includes('KEZ')) {
+            td.append(this.createSignatureButton('KEZ', checkerId, position));
+        }
+        
+        return td;
+    },
+
+    createSignatureButton(signature, checkerId, position) {
+        return $(`
+            <button class="btn btn-sm btn-outline-primary mr-1 add-signature" 
+                data-checker="${checkerId}" 
+                data-position="${position}"
+                data-signature="${signature}">
+                Sign ${signature}
+            </button>
+        `);
+    },
+
+    async addSignature(checkerId, position, signature) {
+        console.log(`Adding signature ${signature} to position ${position}`);
+        try {
+            const formData = new FormData();
+            formData.append('position', position);
+            formData.append('signature', signature);
+            
+            const response = await fetch(`/testapp/checkers/${checkerId}/sign/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: formData
+            });
+            
+            if (!response.ok) throw new Error('Signature failed');
+            
+            await this.loadPositions(
+                checkerId, 
+                this.currentStart, 
+                this.currentEnd
+            );
+        } catch (error) {
+            console.error("Error adding signature:", error);
+        }
+    },
+
+    openSignatureModal(checkerData) {
+        this.currentStart = checkerData.start;
+        this.currentEnd = checkerData.end;
+        this.loadPositions(checkerData.id, checkerData.start, checkerData.end);
+        this.modal.modal('show');
+    }
+};
+
 // Initialize everything
 $(document).ready(() => {
     CheckerModal.init();
     CheckerFilters.init();
     PaymentSystem.init();
+    SignatureSystem.init();
 });
 </script>

@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator
@@ -582,12 +582,12 @@ class Checker(BaseModel):
         return self.final_page - self.current_position + 1
     
     def clean(self):
-        super().clean()
         if self.bank_account:
             if not self.bank_account.is_active:
                 raise ValidationError("Cannot create checker for inactive bank account")
             if self.bank_account.account_type != 'national':
                 raise ValidationError("Can only create checkers for national accounts")
+        super().clean()
 
     def save(self, *args, **kwargs):
         if not self.code:
@@ -601,6 +601,53 @@ class Checker(BaseModel):
     def generate_code(self):
         # Generate random alphanumeric code
         return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    #signature part#
+    position_signatures = models.JSONField(default=dict)
+
+    def get_position_signature_status(self, position):
+        print(f"Getting signature status for position {position}")
+        print(f"Current signatures: {self.position_signatures}")
+        return self.position_signatures.get(str(position), {
+            'signatures': [],
+            'timestamps': []
+        })
+
+    def add_signature(self, position, signature):
+        print(f"Adding signature {signature} to position {position}")
+        position = str(position)
+        if position not in self.position_signatures:
+            print(f"Position {position} not found, initializing")
+            self.position_signatures[position] = {
+                'signatures': [],
+                'timestamps': []
+            }
+        
+        if signature not in self.position_signatures[position]['signatures']:
+            print(f"Adding new signature {signature}")
+            self.position_signatures[position]['signatures'].append(signature)
+            self.position_signatures[position]['timestamps'].append(
+                timezone.now().isoformat()
+            )
+            print(f"Updated signatures: {self.position_signatures}")
+            self.save()
+        else:
+            print(f"Signature {signature} already exists for position {position}")
+        
+    
+    def get_last_issued_check(self):
+        """Get the last issued check."""
+        return self.checks.exclude(status="available").order_by('-position').first()
+
+    def get_next_available_position(self):
+        """Calculate the next available position."""
+        last_check = self.get_last_issued_check()
+        if last_check:
+            last_position = int(last_check.position[len(self.index):])
+            next_position = last_position + 1
+            if next_position <= self.final_page:
+                return next_position
+        return self.starting_page
 
     def __str__(self):
         return f'Checker {self.index}'
@@ -610,7 +657,7 @@ class Checker(BaseModel):
 
 class Check(BaseModel):
     checker = models.ForeignKey(Checker, on_delete=models.PROTECT, related_name='checks')
-    position = models.CharField(max_length=10)  # Will store "INDEX + position number"
+    position = models.CharField(max_length=10, unique=True)  # Will store "INDEX + position number"
     creation_date = models.DateField(default=timezone.now)
     beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
     cause = models.ForeignKey(Invoice, on_delete=models.PROTECT)
@@ -684,8 +731,22 @@ class Check(BaseModel):
             self.checker.save()
 
     def clean(self):
+                
+        # Ensure no duplicate positions
+        if self.objects.filter(checker=self.checker, position=self.position).exists():
+            raise ValidationError("This position is already used.")
+        
+        # Ensure the position is within the valid range
+        if int(self.position[len(self.checker.index):]) < self.checker.starting_page or \
+           int(self.position[len(self.checker.index):]) > self.checker.final_page:
+            raise ValidationError(
+                f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
+            )
+        
         if self.paid_at and not self.delivered_at:
             raise ValidationError("Check cannot be marked as paid before delivery")
+        
+        super().clean()
 
     class Meta:
         ordering = ['-creation_date']
@@ -751,7 +812,7 @@ class Check(BaseModel):
             raise ValidationError("Selected checker is not available for new checks")
 
         # Create new check with same base properties but new checker and details
-        replacement = Check.objects.create(
+        replacement = heck.objects.create(
             checker=checker,  # Use the provided checker
             beneficiary=self.beneficiary,
             cause=self.cause,

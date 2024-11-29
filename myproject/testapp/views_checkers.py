@@ -217,17 +217,51 @@ def invoice_autocomplete(request):
     
     return JsonResponse(invoice_list, safe=False)
 
-class SignChecksView(View):
-    def post(self, request):
-        data = json.loads(request.body)
-        checks = Check.objects.filter(id__in=data['checks'])
-        signature = data['signature']
+class CheckerSignatureView(View):
+    def get(self, request, pk):
+        checker = get_object_or_404(Checker, pk=pk)
+        print(f"Getting signatures for checker {pk}")
         
-        for check in checks:
-            if check.can_be_signed(signature):
-                check.add_signature(signature)
+        used_positions = {
+            str(check.position): {
+                'ref': check.position,
+                'beneficiary': check.beneficiary.name if check.beneficiary else None,
+                'amount': float(check.amount) if check.amount else None
+            }
+            for check in checker.checks.exclude(status='available')
+        }
+        print(f"Used positions: {used_positions}")
+        
+        return JsonResponse({
+            'positions': checker.position_signatures,
+            'used_positions': used_positions
+        })
+
+    def post(self, request, pk):
+        checker = get_object_or_404(Checker, pk=pk)
+        position = request.POST.get('position')
+        signature = request.POST.get('signature')
+        
+        print(f"Adding signature {signature} to position {position}")
+        checker.add_signature(position, signature)
         
         return JsonResponse({'status': 'success'})
+    
+class CheckerPositionStatusView(View):
+    def get(self, request, checker_id, position):
+        print(f"Checking status for position {position} in checker {checker_id}")
+        checker = get_object_or_404(Checker, pk=checker_id)
+        
+        is_used = checker.checks.filter(
+            position=position
+        ).exclude(
+            status='available'
+        ).exists()
+        
+        print(f"Position {position} used status: {is_used}")
+        return JsonResponse({
+            'is_used': is_used
+        })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckCreateView(View):
