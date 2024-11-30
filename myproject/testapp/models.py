@@ -1,7 +1,7 @@
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator
 from .base import BaseModel
 from datetime import timedelta 
 import random
@@ -9,8 +9,9 @@ import string
 from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Q
+import logging
 
-
+logger = logging.getLogger(__name__)
 
 
 class item(BaseModel):
@@ -854,3 +855,147 @@ class Check(BaseModel):
             elif self.status == 'printed':
                 self.status = 'ready_to_sign'
             self.save()
+
+class Client(BaseModel):
+    """
+    Client model with manually entered client code.
+    Inherits UUID from BaseModel but maintains a separate client_code field.
+    """
+    name = models.CharField(
+        max_length=255, 
+        null=False, 
+        blank=False,
+        validators=[
+            RegexValidator(
+                regex=r'^[a-zA-Z\s]*$',
+                message='Name can only contain letters and spaces'
+            )
+        ]
+    )
+    
+    client_code = models.CharField(
+        max_length=10,
+        unique=True,
+        validators=[
+            MinLengthValidator(5, 'Client code must be at least 5 digits'),
+            MaxLengthValidator(10, 'Client code cannot exceed 10 digits'),
+            RegexValidator(
+                regex=r'^\d+$',
+                message='Client code must contain only digits'
+            )
+        ],
+        help_text='Enter a unique 5-10 digit code'
+    )
+
+    def clean(self):
+        """Additional model validation"""
+        logger.debug(f"Validating Client: name={self.name}, code={self.client_code}")
+        
+        if self.client_code:
+            try:
+                code_length = len(self.client_code)
+                if code_length < 5 or code_length > 10:
+                    raise ValidationError({
+                        'client_code': 'Client code must be between 5 and 10 digits'
+                    })
+            except Exception as e:
+                logger.error(f"Validation error for client_code: {e}")
+                raise
+
+    def save(self, *args, **kwargs):
+        """Override save to ensure validation runs"""
+        logger.info(f"Saving Client: {self.name}")
+        self.full_clean()
+        super().save(*args, **kwargs)
+        logger.info(f"Successfully saved Client: {self.name} with code {self.client_code}")
+
+    def __str__(self):
+        return f"{self.name} ({self.client_code})"
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Client'
+        verbose_name_plural = 'Clients'
+
+
+class Entity(BaseModel):
+    """
+    Entity model with strict validation for ICE and accounting codes.
+    """
+    name = models.CharField(
+        max_length=255,
+        null=False,
+        blank=False,
+        validators=[
+            RegexValidator(
+                regex=r'^[a-zA-Z\s]*$',
+                message='Name can only contain letters and spaces'
+            )
+        ]
+    )
+    
+    ice_code = models.CharField(
+        max_length=15,
+        unique=True,
+        validators=[
+            RegexValidator(
+                regex=r'^\d{15}$',
+                message='ICE code must be exactly 15 digits'
+            )
+        ],
+        help_text='Enter exactly 15 digits'
+    )
+    
+    accounting_code = models.CharField(
+        max_length=7,
+        unique=True,
+        validators=[
+            RegexValidator(
+                regex=r'^3\d{4,6}$',
+                message='Accounting code must start with 3 and be 5-7 digits long'
+            )
+        ],
+        help_text='Enter 5-7 digits starting with 3'
+    )
+    
+    # Optional fields
+    city = models.CharField(max_length=100, blank=True, null=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+
+    def clean(self):
+        """Additional model validation"""
+        logger.debug(f"Validating Entity: name={self.name}, ice={self.ice_code}, accounting={self.accounting_code}")
+        
+        # Validate ICE code
+        if self.ice_code and not self.ice_code.isdigit():
+            raise ValidationError({
+                'ice_code': 'ICE code must contain only digits'
+            })
+            
+        # Validate accounting code
+        if self.accounting_code:
+            if not self.accounting_code.startswith('3'):
+                raise ValidationError({
+                    'accounting_code': 'Accounting code must start with 3'
+                })
+            if not self.accounting_code.isdigit():
+                raise ValidationError({
+                    'accounting_code': 'Accounting code must contain only digits'
+                })
+
+    def save(self, *args, **kwargs):
+        """Override save to ensure validation runs"""
+        logger.info(f"Saving Entity: {self.name}")
+        self.full_clean()
+        super().save(*args, **kwargs)
+        logger.info(f"Successfully saved Entity: {self.name}")
+
+    def __str__(self):
+        return f"{self.name} ({self.ice_code})"
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Entity'
+        verbose_name_plural = 'Entities'

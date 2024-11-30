@@ -1,4 +1,4 @@
-from django.urls import path
+from django.urls import path, include
 from . import views
 from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
 from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
@@ -19,6 +19,22 @@ from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
     BankAccountDeactivateView, BankAccountFilterView
 )
+
+from .views_client import (
+    client_management,
+    list_clients,
+    create_client,
+    update_client,
+    delete_client,
+    validate_field
+)
+from .views_entity import (
+    list_entities,
+    create_entity,
+    update_entity,
+    delete_entity
+)
+
 
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
@@ -85,5 +101,21 @@ urlpatterns = [
          BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
     path('bank-accounts/filter/', 
          BankAccountFilterView.as_view(), name='bank-account-filter'),
+
+    # Client Management Page
+    path('client-management/', client_management, name='client_management'),
+    
+    # Client API endpoints
+    path('api/clients/', list_clients, name='list_clients'),
+    path('api/clients/create/', create_client, name='create_client'),
+    path('api/clients/<uuid:client_id>/update/', update_client, name='update_client'),
+    path('api/clients/<uuid:client_id>/delete/', delete_client, name='delete_client'),
+    path('api/validate/<str:field>/<str:value>/', validate_field, name='validate-field'),
+    
+    # Entity API endpoints
+    path('api/entities/', list_entities, name='list_entities'),
+    path('api/entities/create/', create_entity, name='create_entity'),
+    path('api/entities/<uuid:entity_id>/update/', update_entity, name='update_entity'),
+    path('api/entities/<uuid:entity_id>/delete/', delete_entity, name='delete_entity'),
 
 ]
