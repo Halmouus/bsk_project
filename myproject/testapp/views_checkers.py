@@ -85,24 +85,38 @@ class CheckerCreateView(View):
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckerDetailsView(View):
-        def get(self, request, pk):
-            try:
-                checker = get_object_or_404(Checker, pk=pk)
-                return JsonResponse({
-                    'code': checker.code,
-                    'type': checker.type,
-                    'bank': checker.get_bank_display(),
-                    'account_number': checker.account_number,
-                    'city': checker.city,
-                    'num_pages': checker.num_pages,
-                    'index': checker.index,
-                    'starting_page': checker.starting_page,
-                    'final_page': checker.final_page,
-                    'current_position': checker.current_position,
-                    'remaining_pages': checker.final_page - checker.current_position + 1
-                })
-            except Exception as e:
-                return JsonResponse({'error': str(e)}, status=400)
+    def get(self, request, pk):
+        try:
+            checker = get_object_or_404(Checker, pk=pk)
+            
+            # Get all used positions
+            used_positions = set(
+                checker.checks.values_list('position', flat=True)
+            )
+            
+            # Calculate available positions
+            available_positions = [
+                pos for pos in range(checker.starting_page, checker.final_page + 1)
+                if str(pos) not in used_positions
+            ]
+            
+            # Find first available position
+            next_available = min(available_positions) if available_positions else None
+            
+            return JsonResponse({
+                'id': str(checker.id),
+                'starting_page': checker.starting_page,
+                'final_page': checker.final_page,
+                'current_position': checker.current_position,
+                'remaining_pages': checker.remaining_pages,
+                'used_positions': list(used_positions),
+                'available_positions': available_positions,
+                'next_available': next_available,
+                'status': checker.status
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 
 class CheckerDeleteView(View):
     def post(self, request, pk):
@@ -252,22 +266,30 @@ class CheckerPositionStatusView(View):
         print(f"Checking status for position {position} in checker {checker_id}")
         checker = get_object_or_404(Checker, pk=checker_id)
         
+        # Format full position with index
+        full_position = position
+        print(f"Checking full position: {full_position}")
+        
         is_used = checker.checks.filter(
-            position=position
-        ).exclude(
-            status='available'
+            position=full_position
         ).exists()
         
-        print(f"Position {position} used status: {is_used}")
+        print(f"Position {full_position} used status: {is_used}")
         return JsonResponse({
-            'is_used': is_used
+            'is_used': is_used,
+            'full_position': full_position
         })
 
 @method_decorator(csrf_exempt, name='dispatch')
 class CheckCreateView(View):
     def post(self, request):
         try:
+            print("Raw request body:", request.body)  # Debug raw request
             data = json.loads(request.body)
+            print("Parsed JSON data:", data)  # Debug parsed data
+            
+            position = data.get('position')
+            print("Position value:", position, "Type:", type(position))
             checker = get_object_or_404(Checker, pk=data['checker_id'])
             invoice = get_object_or_404(Invoice, pk=data['invoice_id'])
 
@@ -276,6 +298,7 @@ class CheckCreateView(View):
                 payment_due = None
             
             check = Check.objects.create(
+                position= position,
                 checker=checker,
                 creation_date=data.get('creation_date', timezone.now().date()),
                 beneficiary=invoice.supplier,

@@ -577,10 +577,18 @@ class Checker(BaseModel):
     @property
     def remaining_pages(self):
         print(f"Calculating remaining pages for {self.bank_account.bank}")
-        print(f"final_page: {self.final_page}")
-        print(f"current_position: {self.current_position}")
-        return self.final_page - self.current_position + 1
-    
+        
+        # Get all used positions (excluding cancelled checks)
+        used_positions = set(
+            self.checks.values_list('position', flat=True)
+        )
+        used_positions_count = self.checks.count()
+        # Count available positions
+        available_count = self.final_page - self.starting_page + 1 - used_positions_count
+        print(f"Used positions: {used_positions}")
+        print(f"Available positions count: {available_count}")
+        
+        return available_count
     def clean(self):
         if self.bank_account:
             if not self.bank_account.is_active:
@@ -720,13 +728,13 @@ class Check(BaseModel):
     def save(self, *args, **kwargs):
         print(f"New creation at:  {self.checker.current_position}")
         if not self.position:
-            self.position = f"{self.checker.index}{self.checker.current_position}"
+            self.position = self.checker.current_position
         if not self.amount_due:
             self.amount_due = self.cause.total_amount
         super().save(*args, **kwargs)
         
         # Update checker's current position
-        if self.checker.current_position == int(self.position[len(self.checker.index):]):
+        if self.checker.current_position == self.checker.current_position:
             self.checker.current_position += 1
             self.checker.save()
 

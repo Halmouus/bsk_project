@@ -246,8 +246,110 @@ function formatMoney(amount) {
         }).format(amount);
     }
 
+const PaymentValidation = {
+  setupPositionValidation() {
+    
+    console.log("Setting up position validation"); 
+    const positionInput = $('[name="position"]');
+    let lastValidPosition = this.currentCheckerData?.next_available;
+    console.log("Initial lastValidPosition:", lastValidPosition);
+
+    // Real-time validation on input
+    positionInput.on('input', async (e) => {
+      const position = parseInt(e.target.value);
+      console.log("Position changed:", {
+        value: position,
+        start: this.currentCheckerData?.start,
+        end: this.currentCheckerData?.end,
+        currentPosition: this.currentCheckerData?.position
+      });
+
+      if (!this.currentCheckerData) {
+        console.error("No checker data available");
+        return;
+      }
+
+      // Check range and used positions
+      const isValid = await this.validatePosition(position);
+      console.log("Position validation result:", isValid);
+
+
+      if (isValid) {
+        lastValidPosition = position;
+        await this.loadSignatureInfo(this.currentCheckerData.id, position);
+      }
+    });
+
+    // Revert to last valid position on blur
+    positionInput.on('blur', function() {
+      if ($(this).hasClass('is-invalid')) {
+        console.log("Reverting to last valid position:", lastValidPosition);
+        $(this).val(lastValidPosition);
+        $(this).removeClass('is-invalid');
+      }
+    });
+  },
+
+  async validatePosition(position) {
+    const input = $('[name="position"]');
+    const feedback = input.siblings('.invalid-feedback');
+    console.log("Validating position:", {
+      position,
+      start: this.currentCheckerData.start,
+      end: this.currentCheckerData.end
+    });
+
+    // Basic validation
+    if (!position) {
+      this.setPositionInvalid("Position is required", input, feedback);
+      return false;
+    }
+
+    // Range validation
+    if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
+      this.setPositionInvalid(
+        `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`,
+        input, feedback
+      );
+      return false;
+    }
+
+    // Check if position is already used
+    try {
+      const response = await fetch(
+        `/testapp/checkers/${this.currentCheckerData.id}/position-status/${position}/`
+      );
+      const data = await response.json();
+      console.log("Position status check result:", data);
+
+      if (data.is_used) {
+        this.setPositionInvalid(
+          `Position ${position} is already used`,
+          input, feedback
+        );
+        return false;
+      }
+    } catch (error) {
+      console.error("Error checking position status:", error);
+      return false;
+    }
+
+    input.removeClass('is-invalid').addClass('is-valid');
+    return true;
+  },
+
+
+  setPositionInvalid(message, input, feedback) {
+    console.log("Setting position invalid:", message);
+    input.removeClass('is-valid').addClass('is-invalid');
+    feedback.text(message);
+    $('#signature-badges').empty();
+  }
+};
+
 const PaymentSystem = {
     init() {
+        Object.assign(this, PaymentValidation);
         this.modal = $('#paymentModal');
         this.form = $('#payment-form');
         this.beneficiaryInput = $('#beneficiary');
@@ -255,70 +357,15 @@ const PaymentSystem = {
         this.amountInput = $('[name="amount"]');
         this.currentCheckerData = null;
 
+        this.setupValidation();
         this.setupPositionValidation();
         this.setupAutoComplete();
         this.setupValidation();
         this.bindEvents();
     },
 
-    setupPositionValidation() {
-        console.log("Setting up position validation");
-        const positionInput = $('[name="position"]');
-        
-        // Set default value
-        positionInput.val(this.currentCheckerData?.position);
-        console.log("Set default position:", this.currentCheckerData?.position);
-        
-        positionInput.on('input', async (e) => {
-            const position = parseInt(e.target.value);
-            console.log("Position changed:", {
-                value: position,
-                checkerStart: this.currentCheckerData?.start,
-                checkerEnd: this.currentCheckerData?.end
-            });
-            
-            if (!this.currentCheckerData) {
-                console.error("No checker data available");
-                return;
-            }
-
-            const isValid = this.validatePosition(position);
-            console.log("Position validation result:", isValid);
-            
-            if (isValid) {
-                await this.loadSignatureInfo(this.currentCheckerData.id, position);
-            }
-        });
-    },
 
 
-    validatePosition(position) {
-        const input = $('[name="position"]');
-        const feedback = input.siblings('.invalid-feedback');
-        
-        console.log("Validating position:", {
-            position,
-            start: this.currentCheckerData.start,
-            end: this.currentCheckerData.end
-        });
-
-        if (!position) {
-            this.setPositionInvalid("Position is required", input, feedback);
-            return false;
-        }
-
-        if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
-            this.setPositionInvalid(
-                `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`, 
-                input, 
-                feedback
-            );
-            return false;
-        }
-
-        input.removeClass('is-invalid').addClass('is-valid');
-        return true;
-    },
 
     async loadSignatureInfo(checkerId, position) {
         console.log(`Loading signature info for position ${position}`);
@@ -519,25 +566,52 @@ const PaymentSystem = {
         $('#save-payment, #save-and-clone').prop('disabled', !enabled);
     },
 
-    openPaymentModal(checkerData) {
-        console.log("Raw checker data:", checkerData);
+    async openPaymentModal(checkerData) {
+    console.log("Opening payment modal with data:", checkerData);
+    
+    try {
+        // First get checker details
+        const response = await fetch(`/testapp/checkers/${checkerData.id}/details/`);
+        const checkerDetails = await response.json();
+        console.log("Checker details:", checkerDetails);
+        console.log("Checker details next available:", checkerDetails.next_available);
+        if (!checkerDetails.next_available) {
+            alert("No available positions in this checker");
+            return;
+        }
 
+        // Set up the checker data AFTER we have details
         this.currentCheckerData = {
             id: checkerData.id,
-            start: parseInt(checkerData.position), // Use data-start instead
-            end: parseInt(checkerData.end), // Use data-end instead
-            position: parseInt(checkerData.position),
+            start: checkerDetails.starting_page,
+            end: checkerDetails.final_page,
+            position: checkerDetails.next_available,
             bank: checkerData.bank,
             type: checkerData.type
         };
-        
-        console.log("Processed checker data:", this.currentCheckerData);
 
-        // Reset form
-        this.resetForm();
-        $('#position').val(this.currentCheckerData.position).trigger('input');
+        // Reset form first
         
+        // Now set position explicitly
+        $('#position').val(this.currentCheckerData.position);
+
+        // Show modal last
         this.modal.modal('show');
+
+        // Trigger validation after modal is shown
+        $('#position').trigger('input');
+
+    } catch (error) {
+        console.error("Error opening payment modal:", error);
+        alert("Error loading checker details");
+    }
+},
+
+    setPositionInvalid(message, input, feedback) {
+        console.log("Setting position invalid:", message);
+        input.removeClass('is-valid').addClass('is-invalid');
+        feedback.text(message);
+        $('#signature-badges').empty();
     },
 
     resetForm() {
@@ -550,10 +624,9 @@ const PaymentSystem = {
         $('[name="creation_date"]').val(new Date().toISOString().split('T')[0]);
 
         // Preserve the position value
-        if (this.currentCheckerData) {
-            const position = `${this.currentCheckerData.bank}-${this.currentCheckerData.index || ''}${this.currentCheckerData.position}`;
-            $('#position').val(position);
-        }
+        if (this.currentCheckerData?.position) {
+        $('#position').val(this.currentCheckerData.position);
+    }
     },
 
     resetPaymentInfo() {
@@ -575,6 +648,7 @@ const PaymentSystem = {
         checker_id: this.currentCheckerData.id,
         invoice_id: $('#invoice_id').val(),
         amount: $('[name="amount"]').val(),
+        position: $('[name="position"]').val(),
         payment_due: $('[name="payment_due"]').val() || null,
         observation: $('[name="observation"]').val(),
         creation_date: $('[name="creation_date"]').val()
@@ -776,6 +850,8 @@ const SignatureSystem = {
         this.modal.modal('show');
     }
 };
+
+
 
 // Initialize everything
 $(document).ready(() => {
