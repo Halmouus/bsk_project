@@ -999,3 +999,246 @@ class Entity(BaseModel):
         ordering = ['name']
         verbose_name = 'Entity'
         verbose_name_plural = 'Entities'
+
+
+
+class Receipt(BaseModel):
+    """Base class for all receipt types."""
+    client = models.ForeignKey('Client', on_delete=models.PROTECT)
+    entity = models.ForeignKey('Entity', on_delete=models.PROTECT)
+    operation_date = models.DateField(default=timezone.now)
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    client_year = models.IntegerField()
+    client_month = models.IntegerField()
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        abstract = True
+
+    def save(self, *args, **kwargs):
+        if not self.client_year:
+            self.client_year = timezone.now().year
+        if not self.client_month:
+            self.client_month = timezone.now().month
+        super().save(*args, **kwargs)
+
+class NegotiableReceipt(Receipt):
+    """Base class for checks and LCNs."""
+    STATUS_PORTFOLIO = 'PORTFOLIO'
+    STATUS_PRESENTED_COLLECTION = 'PRESENTED_COLLECTION'
+    STATUS_PRESENTED_DISCOUNT = 'PRESENTED_DISCOUNT'
+    STATUS_DISCOUNTED = 'DISCOUNTED'
+    STATUS_PAID = 'PAID'
+    STATUS_REJECTED = 'REJECTED'
+    STATUS_COMPENSATED = 'COMPENSATED'
+
+    RECEIPT_STATUS = [
+        (STATUS_PORTFOLIO, 'In Portfolio'),
+        (STATUS_PRESENTED_COLLECTION, 'Presented for Collection'),
+        (STATUS_PRESENTED_DISCOUNT, 'Presented for Discount'),
+        (STATUS_DISCOUNTED, 'Discounted'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_REJECTED, 'Rejected'),
+        (STATUS_COMPENSATED, 'Compensated')
+    ]
+
+    due_date = models.DateField()
+    status = models.CharField(
+        max_length=20, 
+        choices=RECEIPT_STATUS,
+        default=STATUS_PORTFOLIO
+    )
+    compensates = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='compensated_by'
+    )
+
+    class Meta:
+        abstract = True
+
+    def can_be_presented(self):
+        return self.status == self.STATUS_PORTFOLIO
+
+    def present_for_collection(self):
+        if not self.can_be_presented():
+            raise ValidationError("Receipt cannot be presented")
+        self.status = self.STATUS_PRESENTED_COLLECTION
+        self.save()
+
+    def present_for_discount(self):
+        if not self.can_be_presented():
+            raise ValidationError("Receipt cannot be presented")
+        self.status = self.STATUS_PRESENTED_DISCOUNT
+        self.save()
+
+class CheckReceipt(NegotiableReceipt):
+    """Check-specific implementation."""
+    check_number = models.CharField(max_length=50)
+    bank_name = models.CharField(max_length=100)
+    branch = models.CharField(max_length=100, blank=True)
+    
+    def __str__(self):
+        return f"Check {self.check_number} - {self.amount}"
+
+    class Meta:
+        verbose_name = "Check"
+        verbose_name_plural = "Checks"
+
+class LCN(NegotiableReceipt):
+    """LCN-specific implementation."""
+    lcn_number = models.CharField(max_length=50)
+    issuing_bank = models.CharField(max_length=100)
+
+    def __str__(self):
+        return f"LCN {self.lcn_number} - {self.amount}"
+
+    def clean(self):
+        super().clean()
+        if not self.due_date:
+            raise ValidationError("Due date is required for LCN")
+
+    class Meta:
+        verbose_name = "LCN"
+        verbose_name_plural = "LCNs"
+
+class CashReceipt(Receipt):
+    """Cash receipt implementation."""
+    reference_number = models.CharField(max_length=50, blank=True)
+    credited_account = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='cash_receipts'
+    )
+
+    def __str__(self):
+        return f"Cash Receipt {self.id} - {self.amount}"
+
+    class Meta:
+        verbose_name = "Cash Receipt"
+        verbose_name_plural = "Cash Receipts"
+
+class TransferReceipt(Receipt):
+    """Bank transfer implementation."""
+    transfer_reference = models.CharField(max_length=100)
+    credited_account = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='transfer_receipts'
+    )
+    transfer_date = models.DateField(default=timezone.now)
+
+    def __str__(self):
+        return f"Transfer {self.transfer_reference} - {self.amount}"
+
+    class Meta:
+        verbose_name = "Transfer"
+        verbose_name_plural = "Transfers"
+
+class Presentation(BaseModel):
+    """Represents a collection/discount presentation of negotiable receipts."""
+    TYPE_COLLECTION = 'COLLECTION'
+    TYPE_DISCOUNT = 'DISCOUNT'
+    
+    PRESENTATION_TYPES = [
+        (TYPE_COLLECTION, 'Collection'),
+        (TYPE_DISCOUNT, 'Discount')
+    ]
+
+    presentation_type = models.CharField(max_length=10, choices=PRESENTATION_TYPES)
+    date = models.DateField()
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    notes = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"{self.get_presentation_type_display()} - {self.date}"
+
+    @property
+    def receipt_count(self):
+        return self.presentation_receipts.count()
+
+    def update_total(self):
+        self.total_amount = sum(
+            pr.amount for pr in self.presentation_receipts.all()
+        )
+        self.save()
+
+    def clean(self):
+        super().clean()
+        self.validate_receipts()
+
+    def validate_receipts(self):
+        invalid_receipts = self.presentation_receipts.exclude(
+            receipt__status=NegotiableReceipt.STATUS_PORTFOLIO
+        )
+        if invalid_receipts.exists():
+            raise ValidationError('All receipts must be in portfolio status')
+
+    class Meta:
+        verbose_name = "Presentation"
+        verbose_name_plural = "Presentations"
+        ordering = ['-date', '-created_at']
+
+class PresentationReceipt(BaseModel):
+    """Links receipts to presentations."""
+    presentation = models.ForeignKey(
+        Presentation, 
+        on_delete=models.CASCADE,
+        related_name='presentation_receipts'
+    )
+    checkreceipt = models.ForeignKey(
+        CheckReceipt, 
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='check_presentations'
+    )
+    lcn = models.ForeignKey(
+        LCN, 
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='lcn_presentations'
+    )
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+
+    def __str__(self):
+        receipt = self.check or self.lcn
+        return f"Presentation {self.presentation.id} - Receipt {receipt.id}"
+
+    def clean(self):
+        super().clean()
+        if self.check and self.lcn:
+            raise ValidationError("Cannot have both check and LCN")
+        if not self.check and not self.lcn:
+            raise ValidationError("Must have either check or LCN")
+        
+        receipt = self.check or self.lcn
+        if receipt.status != NegotiableReceipt.STATUS_PORTFOLIO:
+            raise ValidationError(
+                'Only receipts in portfolio status can be presented'
+            )
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+        self.presentation.update_total()
+
+        # Update receipt status
+        receipt = self.check or self.lcn
+        if self.presentation.presentation_type == Presentation.TYPE_COLLECTION:
+            receipt.present_for_collection()
+        else:
+            receipt.present_for_discount()
+
+    class Meta:
+        verbose_name = "Presentation Receipt"
+        verbose_name_plural = "Presentation Receipts"
+        unique_together = [
+            ('presentation', 'checkreceipt'),
+            ('presentation', 'lcn')
+        ]

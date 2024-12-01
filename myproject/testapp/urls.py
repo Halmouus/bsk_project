@@ -20,6 +20,9 @@ from .views_bank import (
     BankAccountDeactivateView, BankAccountFilterView
 )
 
+from .views_receipts import (
+    ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete, entity_autocomplete)
+
 from .views_client import (
     client_management,
     list_clients,
@@ -118,4 +121,16 @@ urlpatterns = [
     path('api/entities/<uuid:entity_id>/update/', update_entity, name='update_entity'),
     path('api/entities/<uuid:entity_id>/delete/', delete_entity, name='delete_entity'),
 
+    # Receipt URLs
+    path('receipts/', ReceiptListView.as_view(), name='receipt-list'),
+    path('receipts/create/<str:receipt_type>/', ReceiptCreateView.as_view(), name='receipt-create'),
+    path('receipts/edit/<str:receipt_type>/<uuid:pk>/', ReceiptUpdateView.as_view(), name='receipt-edit'),
+    path('receipts/delete/<str:receipt_type>/<uuid:pk>/', ReceiptDeleteView.as_view(), name='receipt-delete'),
+    path('receipts/details/<str:receipt_type>/<uuid:pk>/', ReceiptDetailView.as_view(), name='receipt-detail'),
+
+    # Autocomplete endpoints for form fields
+    path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
+    path('receipts/entity/autocomplete', entity_autocomplete, name='entity-autocomplete'),
+
 ]
+

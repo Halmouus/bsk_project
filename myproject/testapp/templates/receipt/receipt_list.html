@@ -1,0 +1,537 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid px-4">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">
+            <i class="fas fa-receipt text-primary me-2"></i>Receipts Management
+        </h2>
+        <div class="btn-group">
+            <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
+                <i class="fas fa-plus-circle"></i> New Receipt
+            </button>
+            <div class="dropdown-menu">
+                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check">
+                    <i class="fas fa-money-check"></i> Check
+                </a>
+                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn">
+                    <i class="fas fa-file-invoice-dollar"></i> LCN
+                </a>
+                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash">
+                    <i class="fas fa-money-bill"></i> Cash
+                </a>
+                <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer">
+                    <i class="fas fa-exchange-alt"></i> Transfer
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs" id="receiptTabs" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab">
+                <i class="fas fa-money-check"></i> Checks
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab">
+                <i class="fas fa-file-invoice-dollar"></i> LCNs
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab">
+                <i class="fas fa-money-bill"></i> Cash
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab">
+                <i class="fas fa-exchange-alt"></i> Transfers
+            </a>
+        </li>
+    </ul>
+
+    <!-- Tab Content -->
+    <div class="tab-content mt-4" id="receiptTabsContent">
+        <!-- Checks Tab -->
+        <div class="tab-pane fade show active" id="checks" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Check Number</th>
+                            <th>Bank</th>
+                            <th>Due Date</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for check in receipts.checks %}
+                        <tr>
+                            <td>{{ check.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ check.client.name }}</td>
+                            <td>{{ check.check_number }}</td>
+                            <td>{{ check.bank_name }}</td>
+                            <td>{{ check.due_date|date:"Y-m-d" }}</td>
+                            <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+                            <td>
+                                <span class="badge {% if check.status == 'PORTFOLIO' %}badge-primary{% elif check.status == 'PAID' %}badge-success{% elif check.status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
+                                    {{ check.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="check" data-action="edit" data-id="{{ check.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">No checks found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- LCNs Tab -->
+        <div class="tab-pane fade" id="lcns" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>LCN Number</th>
+                            <th>Issuing Bank</th>
+                            <th>Due Date</th>
+                            <th>Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lcn in receipts.lcns %}
+                        <tr>
+                            <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ lcn.client.name }}</td>
+                            <td>{{ lcn.lcn_number }}</td>
+                            <td>{{ lcn.issuing_bank }}</td>
+                            <td>{{ lcn.due_date|date:"Y-m-d" }}</td>
+                            <td class="text-right">{{ lcn.amount|floatformat:2 }}</td>
+                            <td>
+                                <span class="badge {% if lcn.status == 'PORTFOLIO' %}badge-primary{% elif lcn.status == 'PAID' %}badge-success{% elif lcn.status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
+                                    {{ lcn.get_status_display }}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="lcn" data-action="edit" data-id="{{ lcn.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center">No LCNs found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Cash Tab -->
+        <div class="tab-pane fade" id="cash" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Reference</th>
+                            <th>Credited Account</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for cash in receipts.cash %}
+                        <tr>
+                            <td>{{ cash.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ cash.client.name }}</td>
+                            <td>{{ cash.reference_number }}</td>
+                            <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td>
+                            <td class="text-right">{{ cash.amount|floatformat:2 }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center">No cash receipts found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Transfers Tab -->
+        <div class="tab-pane fade" id="transfers" role="tabpanel">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Transfer Reference</th>
+                            <th>Transfer Date</th>
+                            <th>Credited Account</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for transfer in receipts.transfers %}
+                        <tr>
+                            <td>{{ transfer.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ transfer.client.name }}</td>
+                            <td>{{ transfer.transfer_reference }}</td>
+                            <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
+                            <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td>
+                            <td class="text-right">{{ transfer.amount|floatformat:2 }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No transfers found</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        </div>
+    </div>
+</div>
+
+<!-- Receipt Modal -->
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <!-- Modal content will be loaded dynamically -->
+        </div>
+    </div>
+</div>
+
+
+<script>
+    console.log("Extra JS loaded");
+$(document).ready(function() {
+
+    $('#receiptModal').on('show.bs.modal', function(e) {
+        const button = $(e.relatedTarget);
+        const type = button.data('type');
+        const action = button.data('action');
+        const id = button.data('id');
+        
+        let url = '';
+        if (action === 'edit') {
+            url += `edit/${type}/${id}/`;
+        } else {
+            url += `create/${type}/`;
+        }
+
+        // Load modal content
+        $.get(url, function(data) {
+            $('#receiptModal .modal-content').html(data);
+            initializeForm();
+
+            if (action === 'edit') {
+                // Set form action URL for edit
+                $('#receiptForm').attr('action', url);
+                
+                // Initialize Select2 with pre-selected values
+                if (data.client) {
+                    const clientOption = new Option(data.client.text, data.client.id, true, true);
+                    $('#client').append(clientOption).trigger('change');
+                }
+                if (data.entity) {
+                    const entityOption = new Option(data.entity.text, data.entity.id, true, true);
+                    $('#entity').append(entityOption).trigger('change');
+                }
+            }
+        });
+    });
+
+        // Handle form submission for both create and edit
+        $(document).on('submit', '#receiptForm', function(e) {
+            e.preventDefault();
+            const form = $(this);
+            const url = form.attr('action');
+            const isEdit = url.includes('/edit/');
+            
+            $.ajax({
+                url: url,
+                type: 'POST',
+                data: form.serialize(),
+                success: function(response) {
+                    if (response.status === 'success') {
+                        $('#receiptModal').modal('hide');
+                        showToast(response.message, 'success');
+                        location.reload(); // Refresh to show updated data
+                    } else {
+                        showFormErrors(form, response.errors);
+                    }
+                },
+                error: function(xhr) {
+                    try {
+                        const errors = JSON.parse(xhr.responseText);
+                        showFormErrors(form, errors);
+                    } catch (e) {
+                        showToast('An error occurred while saving the receipt.', 'error');
+                    }
+                }
+            });
+        });
+
+        function showFormErrors(form, errors) {
+            // Clear previous errors
+            form.find('.is-invalid').removeClass('is-invalid');
+            form.find('.invalid-feedback').remove();
+
+            // Show new errors
+            Object.keys(errors).forEach(field => {
+                const input = form.find(`[name="${field}"]`);
+                const error = errors[field].join(' ');
+                input.addClass('is-invalid');
+                input.after(`<div class="invalid-feedback">${error}</div>`);
+            });
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = `
+                <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+                    <div class="toast-header bg-${type} text-white">
+                        <strong class="mr-auto">Notification</strong>
+                        <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                    <div class="toast-body">${message}</div>
+                </div>
+            `;
+
+            const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>');
+            toastContainer.html(toast);
+            $('body').append(toastContainer);
+
+            $('.toast').toast('show');
+            
+            // Remove toast after it's hidden
+            $('.toast').on('hidden.bs.toast', function() {
+                $(this).closest('.toast-container').remove();
+            });
+        }
+    });
+
+    // Initialize form elements after modal load
+    function initializeForm() {
+        console.log('Initializing form with autocomplete...');
+        console.log('Client input exists:', $('#client').length);
+        console.log('Entity input exists:', $('#entity').length);
+
+    // Initialize client autocomplete
+    $("#client").autocomplete({
+                minLength: 2,
+            source: function(request, response) {
+                console.log('Client search term:', request.term);
+                $.ajax({
+                    url: "{% url 'client-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        console.log('Client data received:', data);
+                        response($.map(data.results, function(item) {
+                            return {
+                                label: item.text,
+                                value: item.id
+                            };
+                        }));
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Client autocomplete error:', error);
+                    }
+                });
+            },
+            select: function(event, ui) {
+                console.log('Client selected:', ui.item);
+                $("#client").val(ui.item.label);
+                $("#client_id").val(ui.item.value);
+                return false;
+            }
+        }).on('focus', function() {
+            console.log('Client input focused');
+        });
+
+        // Initialize entity autocomplete
+        $("#entity").autocomplete({
+            minLength: 2,
+            source: function(request, response) {
+                console.log('Entity search term:', request.term);
+                $.ajax({
+                    url: "{% url 'entity-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        console.log('Entity data received:', data);
+                        response($.map(data.results, function(item) {
+                            return {
+                                label: item.text,
+                                value: item.id
+                            };
+                        }));
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Entity autocomplete error:', error);
+                    }
+                });
+            },
+            select: function(event, ui) {
+                console.log('Entity selected:', ui.item);
+                $("#entity").val(ui.item.label);
+                $("#entity_id").val(ui.item.value);
+                return false;
+            }
+        }).on('focus', function() {
+            console.log('Entity input focused');
+        });
+
+        // Add some basic styling to autocomplete dropdown
+        $(".ui-autocomplete").addClass("dropdown-menu").css({
+            'max-height': '200px',
+            'overflow-y': 'auto',
+            'overflow-x': 'hidden',
+            'z-index': '9999'
+        });
+    }
+    
+
+    // Handle delete
+    $('.delete-receipt').click(function() {
+        if (confirm('Are you sure you want to delete this receipt?')) {
+            const type = $(this).data('type');
+            const id = $(this).data('id');
+            
+            $.ajax({
+                url: `/testapp/receipts/delete/${type}/${id}/`,
+                type: 'POST',
+                headers: {
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                success: function() {
+                    location.reload();
+                },
+                error: function() {
+                    alert('Error deleting receipt');
+                }
+            });
+        }
+    });
+
+// Keyboard shortcuts
+$(document).keydown(function(e) {
+    // Only trigger if no modal is open and no input is focused
+    if ($('.modal:visible').length === 0 && !$(document.activeElement).is('input, textarea, select')) {
+        let receiptType = null;
+        
+        if (e.altKey) {
+            switch(e.key.toLowerCase()) {
+                case 'c': // Alt + C for Check
+                    receiptType = 'check';
+                    break;
+                case 'l': // Alt + L for LCN
+                    receiptType = 'lcn';
+                    break;
+                case 'm': // Alt + M for Cash (Money)
+                    receiptType = 'cash';
+                    break;
+                case 't': // Alt + T for Transfer
+                    receiptType = 'transfer';
+                    break;
+            }
+            
+            if (receiptType) {
+                e.preventDefault();
+                const url = "{% url 'receipt-create' 'TYPE' %}".replace('TYPE', receiptType);
+                const modal = $('#receiptModal');
+                modal.modal('show');
+                modal.find('.modal-content').load(url, function() {
+                    setTimeout(function() {
+                        initializeForm();
+                    }, 100);
+                });
+            }
+        }
+    }
+});
+
+// Add tooltip hints for shortcuts
+$('[data-toggle="modal"][data-target="#receiptModal"]').each(function() {
+    const type = $(this).data('type');
+    let shortcut = '';
+    switch(type) {
+        case 'check':
+            shortcut = 'Alt+C';
+            break;
+        case 'lcn':
+            shortcut = 'Alt+L';
+            break;
+        case 'cash':
+            shortcut = 'Alt+M';
+            break;
+        case 'transfer':
+            shortcut = 'Alt+T';
+            break;
+    }
+    if (shortcut) {
+        $(this).attr('title', `${$(this).text().trim()} (${shortcut})`);
+    }
+});
+</script>
+{% endblock %}

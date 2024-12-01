@@ -1,5 +1,7 @@
 from django import forms
-from .models import Invoice, InvoiceProduct, Product, BankAccount
+from django.core.exceptions import ValidationError
+from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, TransferReceipt, 
+    Presentation, PresentationReceipt)
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
 
@@ -72,3 +74,114 @@ class ProductForm(forms.ModelForm):
                 ('20.00', '20%')
             ])
         }
+
+class CheckReceiptForm(forms.ModelForm):
+    class Meta:
+        model = CheckReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'due_date', 'check_number', 'bank_name', 'branch',
+            'compensates', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit compensates to rejected, uncompensated checks
+        self.fields['compensates'].queryset = Check.objects.filter(
+            status=Check.STATUS_REJECTED
+        ).exclude(
+            status=Check.STATUS_COMPENSATED
+        )
+
+class LCNForm(forms.ModelForm):
+    class Meta:
+        model = LCN
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'due_date', 'lcn_number', 'issuing_bank',
+            'compensates', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit compensates to rejected, uncompensated LCNs
+        self.fields['compensates'].queryset = LCN.objects.filter(
+            status=LCN.STATUS_REJECTED
+        ).exclude(
+            status=LCN.STATUS_COMPENSATED
+        )
+
+class CashReceiptForm(forms.ModelForm):
+    class Meta:
+        model = CashReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'reference_number', 'credited_account', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class TransferReceiptForm(forms.ModelForm):
+    class Meta:
+        model = TransferReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'transfer_reference', 'credited_account', 
+            'transfer_date', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'transfer_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class PresentationForm(forms.ModelForm):
+    class Meta:
+        model = Presentation
+        fields = ['presentation_type', 'date', 'bank_account', 'notes']
+        widgets = {
+            'date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class PresentationReceiptForm(forms.ModelForm):
+    receipt_type = forms.ChoiceField(choices=[('check', 'Check'), ('lcn', 'LCN')])
+    receipt_id = forms.UUIDField()
+
+    class Meta:
+        model = PresentationReceipt
+        fields = ['amount']
+
+    def clean(self):
+        cleaned_data = super().clean()
+        receipt_type = cleaned_data.get('receipt_type')
+        receipt_id = cleaned_data.get('receipt_id')
+
+        if receipt_type and receipt_id:
+            try:
+                if receipt_type == 'check':
+                    receipt = CheckReceipt.objects.get(id=receipt_id)
+                else:
+                    receipt = LCN.objects.get(id=receipt_id)
+
+                if not receipt.can_be_presented():
+                    raise ValidationError(
+                        f"Receipt {receipt} cannot be presented"
+                    )
+
+                cleaned_data['receipt'] = receipt
+            except (CheckReceipt.DoesNotExist, LCN.DoesNotExist):
+                raise ValidationError("Receipt not found")
+
+        return cleaned_data
