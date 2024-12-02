@@ -17,7 +17,8 @@ from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
 
 from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
-    BankAccountDeactivateView, BankAccountFilterView
+    BankAccountDeactivateView, BankAccountFilterView,
+    bank_account_autocomplete
 )
 
 from .views_receipts import (
@@ -29,7 +30,10 @@ from .views_client import (
     create_client,
     update_client,
     delete_client,
-    validate_field
+    validate_field,
+    ClientSaleListView,
+    create_sale,
+    ClientCardView
 )
 from .views_entity import (
     list_entities,
@@ -104,6 +108,7 @@ urlpatterns = [
          BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
     path('bank-accounts/filter/', 
          BankAccountFilterView.as_view(), name='bank-account-filter'),
+    path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -121,6 +126,11 @@ urlpatterns = [
     path('api/entities/<uuid:entity_id>/update/', update_entity, name='update_entity'),
     path('api/entities/<uuid:entity_id>/delete/', delete_entity, name='delete_entity'),
 
+    path('client/sales/', ClientSaleListView.as_view(), name='sale-list'),
+    path('client/sales/create/', create_sale, name='create-sale'),
+    path('clients/<uuid:pk>/card/', ClientCardView.as_view(), name='client-card'),
+    path('client/autocomplete/', client_autocomplete, name='client-autocomplete'),
+
     # Receipt URLs
     path('receipts/', ReceiptListView.as_view(), name='receipt-list'),
     path('receipts/create/<str:receipt_type>/', ReceiptCreateView.as_view(), name='receipt-create'),
@@ -131,6 +141,10 @@ urlpatterns = [
     # Autocomplete endpoints for form fields
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
     path('receipts/entity/autocomplete', entity_autocomplete, name='entity-autocomplete'),
+
+
+
+    
 
 ]
 

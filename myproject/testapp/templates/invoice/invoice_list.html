@@ -10,30 +10,17 @@
     document.addEventListener('DOMContentLoaded', function() {
         console.log("DOM loaded");
     
-        // Initialize Select2
-        try {
-            $('#supplier-filter').select2({
-                placeholder: 'Select supplier',
-                allowClear: true,
-                ajax: {
-                    url: "{% url 'supplier-autocomplete' %}",
-                    dataType: 'json',
-                    delay: 250,
-                    processResults: function(data) {
-                        return {
-                            results: data.map(item => ({
-                                id: item.value,
-                                text: item.label
-                            }))
-                        };
-                    }
-                }
-            });
-            console.log("Select2 initialized");
-        } catch (e) {
-            console.error("Error initializing Select2:", e);
-        }
-    
+        // Initialize supplier autocomplete
+        $('#supplier-filter').autocomplete({
+            source: "{% url 'supplier-autocomplete' %}",
+            minLength: 2,
+            select: function(event, ui) {
+                $(this).val(ui.item.label);
+                $('#supplier-filter-id').val(ui.item.value);
+                return false;
+            }
+        });
+
         // Filter functionality
         const applyButton = document.getElementById('apply-filters');
         if (applyButton) {
@@ -54,7 +41,7 @@
                 console.log("Form data before processing:", Object.fromEntries(formData));
 
                 // Process each form element
-                $('#filter-form').find('input, select').each(function() {
+                $('#filter-form').find('input').each(function() {
                     const input = $(this);
                     const name = input.attr('name');
                     
@@ -65,11 +52,17 @@
                         if (input.is(':checked')) {
                             filters[name] = input.val();
                         }
-                    } else if (input.hasClass('select2-hidden-accessible')) {
-                        // Handle Select2 inputs
-                        const value = input.val();
-                        if (value) {
-                            filters[name] = value;
+                    } else if (name === 'supplier') {
+                        // Use the hidden supplier_id field instead of the display name
+                        const supplierId = $('#supplier-filter-id').val();
+                        if (supplierId) {
+                            filters['supplier'] = supplierId;
+                        }
+                    } else if (name === 'product') {
+                        // Use the hidden product_id field instead of the display name
+                        const productId = $('#product-filter-id').val();
+                        if (productId) {
+                            filters['product'] = productId;
                         }
                     } else {
                         // Handle regular inputs
@@ -90,8 +83,7 @@
         } else {
             console.error("Apply button not found");
         }
-            // Update URL without refreshing page
-            
+        
         // Reset filters
         const resetButton = document.getElementById('reset-filters');
         if (resetButton) {
@@ -102,8 +94,8 @@
                 // Reset form
                 document.getElementById('filter-form').reset();
                 
-                // Reset Select2 fields
-                $('.select2-hidden-accessible').val(null).trigger('change');
+                // Reset supplier filter
+                $('#supplier-filter, #supplier-filter-id').val('');
                 
                 // Uncheck all checkboxes
                 $('input[type="checkbox"]').prop('checked', false);
@@ -123,10 +115,6 @@
             if (input) {
                 if (input.type === 'checkbox') {
                     input.checked = value === '1';
-                } else if ($(input).hasClass('select2-hidden-accessible')) {
-                    // For Select2, we need to create the option and set it
-                    const select2Input = $(input);
-                    select2Input.append(new Option(value, value, true, true)).trigger('change');
                 } else {
                     input.value = value;
                 }
@@ -204,9 +192,8 @@
                     <!-- Supplier Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Supplier</label>
-                        <select class="form-control w-100" name="supplier" id="supplier-filter" style="width: 100%;">
-                            <option value="">All Suppliers</option>
-                        </select>
+                        <input type="text" class="form-control" id="supplier-filter" name="supplier" placeholder="Search supplier...">
+                        <input type="hidden" id="supplier-filter-id" name="supplier_id">
                     </div>
 
                     <!-- Payment Status Filter -->
@@ -255,9 +242,8 @@
                     <!-- Product Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Product</label>
-                        <select class="form-control w-100" name="product" id="product-filter" style="width: 100%;">
-                            <option value="">All Products</option>
-                        </select>
+                        <input type="text" class="form-control" id="product-filter" name="product" placeholder="Search product...">
+                        <input type="hidden" id="product-filter-id" name="product_id">
                     </div>
 
                     <!-- Payment Status Checks -->
@@ -1201,7 +1187,7 @@
 
         resetFilters: function() {
             $('#filter-form')[0].reset();
-            $('#supplier-filter').val(null).trigger('change');
+            $('#supplier-filter, #supplier-filter-id').val('');
             window.location.search = '';
         }
     };
@@ -1406,7 +1392,7 @@
             this.resetFilters();
         });
 
-        this.initSelect2();
+        this.initAutocomplete();
         this.initializeFromURL();
     },
 
@@ -1431,91 +1417,65 @@
 
     resetFilters() {
         $('#filter-form')[0].reset();
-        $('.select2-hidden-accessible').val(null).trigger('change');
+        $('#supplier-filter, #supplier-filter-id').val('');
         history.pushState({}, '', window.location.pathname);
         this.applyFilters();
     },
 
-    initSelect2() {
-        $('#supplier-filter').select2({
-            placeholder: 'Select supplier',
-            allowClear: true,
-            ajax: {
-                url: "{% url 'supplier-autocomplete' %}",
-                dataType: 'json',
-                delay: 250,
-                processResults: (data) => ({
-                    results: data.map(item => ({
-                        id: item.value,
-                        text: item.label
-                    }))
-                })
+    initAutocomplete() {
+        // Initialize supplier autocomplete
+        $('#supplier-filter').autocomplete({
+            source: "{% url 'supplier-autocomplete' %}",
+            minLength: 2,
+            select: function(event, ui) {
+                $(this).val(ui.item.label);
+                $('#supplier-filter-id').val(ui.item.value);
+                return false;
             }
         });
 
-        $('#product-filter').select2({
-            placeholder: 'Select product',
-            allowClear: true,
-            ajax: {
-                url: "{% url 'product-autocomplete' %}",
-                dataType: 'json',
-                delay: 250,
-                processResults: (data) => ({
-                    results: data.map(item => ({
-                        id: item.value,
-                        text: item.label
-                    }))
-                })
+        // Initialize product filter
+        $('#product-filter').autocomplete({
+            source: "{% url 'product-autocomplete' %}",
+            minLength: 2,
+            select: function(event, ui) {
+                $(this).val(ui.item.label);
+                $('#product-filter-id').val(ui.item.value);
+                return false;
             }
         });
     },
 
     initializeFromURL() {
-        // Initialize Select2
-    const initializeSelect2WithRestore = (selector, endpoint) => {
-        const selectElement = $(selector);
-        
-        // Initialize Select2
-        selectElement.select2({
-            placeholder: 'Select an option',
-            allowClear: true,
-            ajax: {
-                url: endpoint,
-                dataType: 'json',
-                delay: 250,
-                processResults: function (data) {
-                    return {
-                        results: data.map(item => ({
-                            id: item.value,
-                            text: item.label,
-                        })),
-                    };
-                },
-            },
-        });
-
-        // Restore name if value exists in URL
-        const paramValue = new URLSearchParams(window.location.search).get(selectElement.attr('name'));
-        if (paramValue) {
-            // Fetch name from the server using the ID
-            fetch(`${endpoint}?id=${paramValue}`)
+        // Initialize supplier filter
+        const supplierValue = new URLSearchParams(window.location.search).get('supplier');
+        if (supplierValue) {
+            fetch(`{% url 'supplier-autocomplete' %}?id=${supplierValue}`)
                 .then(response => response.json())
                 .then(data => {
                     if (data && data.length > 0) {
                         const selectedOption = data[0];
-                        const newOption = new Option(selectedOption.label, selectedOption.value, true, true);
-                        selectElement.append(newOption).trigger('change'); // Append and select it
+                        $('#supplier-filter').val(selectedOption.label);
+                        $('#supplier-filter-id').val(selectedOption.value);
                     }
                 })
-                .catch(error => console.error(`Failed to restore ${selector}:`, error));
+                .catch(error => console.error('Failed to restore supplier:', error));
         }
-    };
 
-    // Supplier filter
-    initializeSelect2WithRestore('#supplier-filter', '{% url "supplier-autocomplete" %}');
-
-    // Product filter
-    initializeSelect2WithRestore('#product-filter', '{% url "product-autocomplete" %}');
+        // Initialize product filter
+        const productValue = new URLSearchParams(window.location.search).get('product');
+        if (productValue) {
+            fetch(`{% url 'product-autocomplete' %}?id=${productValue}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const selectedOption = data[0];
+                        $('#product-filter').val(selectedOption.label);
+                        $('#product-filter-id').val(selectedOption.value);
+                    }
+                })
+                .catch(error => console.error('Failed to restore product:', error));
+        }
     },
 
     updateActiveFilters() {

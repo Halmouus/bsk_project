@@ -154,3 +154,18 @@ class BankAccountFilterView(View):
         except Exception as e:
             print("Error in filter view:", str(e))  # Debug log
             return JsonResponse({'error': str(e)}, status=500)
+
+
+
+def bank_account_autocomplete(request):
+    search_term = request.GET.get('search', '')
+    accounts = BankAccount.objects.filter(account_number__icontains=search_term)[:10]
+    results = [
+        {
+            "label": f"{account.bank} [{account.account_number}]",
+            "value": account.id,
+            "bank": account.bank
+        }
+        for account in accounts
+    ]
+    return JsonResponse(results, safe=False)

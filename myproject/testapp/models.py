@@ -3,7 +3,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator
 from .base import BaseModel
-from datetime import timedelta 
+from datetime import timedelta
+import datetime
 import random
 import string
 from django.utils import timezone
@@ -821,7 +822,7 @@ class Check(BaseModel):
             raise ValidationError("Selected checker is not available for new checks")
 
         # Create new check with same base properties but new checker and details
-        replacement = heck.objects.create(
+        replacement = Check.objects.create(
             checker=checker,  # Use the provided checker
             beneficiary=self.beneficiary,
             cause=self.cause,
@@ -901,6 +902,180 @@ class Client(BaseModel):
             except Exception as e:
                 logger.error(f"Validation error for client_code: {e}")
                 raise
+    
+    # Add to Client model
+
+    def get_transactions(self, year=None, month=None):
+        """
+        Get all transactions for the client with optional year/month filter.
+        For sales: Uses the actual date
+        For receipts: Uses the client_year and client_month fields
+        """
+        transactions = []
+        
+        # Get sales for the specified period (using actual date)
+        sales_query = self.clientsale_set.all()
+        if year:
+            sales_query = sales_query.filter(date__year=year)
+            if month:
+                sales_query = sales_query.filter(date__month=month)
+                
+        for sale in sales_query:
+            transactions.append({
+                'date': sale.date,
+                'type': 'SALE',
+                'description': f'Sales of {sale.date.strftime("%m-%Y")}',
+                'debit': sale.amount,
+                'credit': None,
+                'actual_date': sale.date  # Store actual date for sorting
+            })
+
+        # Calculate previous balance using client_year and client_month for receipts
+        if year and month:
+            current_date = datetime.date(int(year), int(month), 1)
+            previous_balance = 0
+            
+            # Previous Sales (by actual date)
+            prev_sales = self.clientsale_set.filter(date__lt=current_date)
+            for sale in prev_sales:
+                previous_balance += sale.amount
+
+            # Previous Checks (by client year/month)
+            prev_checks = CheckReceipt.objects.filter(
+                client=self
+            ).filter(
+                Q(client_year__lt=year) | 
+                Q(client_year=year, client_month__lt=month)
+            )
+            for check in prev_checks:
+                previous_balance -= check.amount
+
+            # Previous LCNs (by client year/month)
+            prev_lcns = LCN.objects.filter(
+                client=self
+            ).filter(
+                Q(client_year__lt=year) | 
+                Q(client_year=year, client_month__lt=month)
+            )
+            for lcn in prev_lcns:
+                previous_balance -= lcn.amount
+
+            # Previous Transfers (by client year/month)
+            prev_transfers = TransferReceipt.objects.filter(
+                client=self
+            ).filter(
+                Q(client_year__lt=year) | 
+                Q(client_year=year, client_month__lt=month)
+            )
+            for transfer in prev_transfers:
+                previous_balance -= transfer.amount
+
+            # Previous Cash (by client year/month)
+            prev_cash = CashReceipt.objects.filter(
+                client=self
+            ).filter(
+                Q(client_year__lt=year) | 
+                Q(client_year=year, client_month__lt=month)
+            )
+            for cash in prev_cash:
+                previous_balance -= cash.amount
+
+            if previous_balance != 0:
+                transactions.append({
+                    'date': current_date,
+                    'type': 'BALANCE',
+                    'description': 'Previous Balance',
+                    'debit': previous_balance if previous_balance > 0 else None,
+                    'credit': abs(previous_balance) if previous_balance < 0 else None,
+                    'balance': previous_balance,
+                    'actual_date': current_date
+                })
+
+        # Get receipts for the specified period (using client_year/month)
+        if year and month:
+            # Checks for this period
+            checks_query = CheckReceipt.objects.filter(
+                client=self,
+                client_year=year,
+                client_month=month
+            )
+            for check in checks_query:
+                transactions.append({
+                    'date': check.operation_date,
+                    'type': 'CHECK',
+                    'description': (f'CHQ {check.check_number} {check.entity.name} '
+                                f'(received on {check.operation_date.strftime("%Y-%m-%d")})'),
+                    'debit': None,
+                    'credit': check.amount,
+                    'actual_date': check.operation_date
+                })
+
+            # LCNs for this period
+            lcns_query = LCN.objects.filter(
+                client=self,
+                client_year=year,
+                client_month=month
+            )
+            for lcn in lcns_query:
+                transactions.append({
+                    'date': lcn.operation_date,
+                    'type': 'LCN',
+                    'description': (f'LCN {lcn.lcn_number} {lcn.entity.name} '
+                                f'(received on {lcn.operation_date.strftime("%Y-%m-%d")}, '
+                                f'due on {lcn.due_date.strftime("%Y-%m-%d")})'),
+                    'debit': None,
+                    'credit': lcn.amount,
+                    'actual_date': lcn.operation_date
+                })
+
+            # Similar updates for Transfer and Cash receipts...
+            transfers_query = TransferReceipt.objects.filter(
+                client=self,
+                client_year=year,
+                client_month=month
+            )
+            for transfer in transfers_query:
+                transactions.append({
+                    'date': transfer.operation_date,
+                    'type': 'TRANSFER',
+                    'description': (f'Transfer from {transfer.entity.name} '
+                                f'(received on {transfer.operation_date.strftime("%Y-%m-%d")})'),
+                    'debit': None,
+                    'credit': transfer.amount,
+                    'actual_date': transfer.operation_date
+                })
+
+            cash_query = CashReceipt.objects.filter(
+                client=self,
+                client_year=year,
+                client_month=month
+            )
+            for cash in cash_query:
+                transactions.append({
+                    'date': cash.operation_date,
+                    'type': 'CASH',
+                    'description': f'Cash (received on {cash.operation_date.strftime("%Y-%m-%d")})',
+                    'debit': None,
+                    'credit': cash.amount,
+                    'actual_date': cash.operation_date
+                })
+
+        # Sort transactions:
+        # 1. Balance entries first
+        # 2. Then by actual date
+        transactions.sort(key=lambda x: (
+            x['type'] != 'BALANCE',  # Balance entries first
+            x['actual_date']  # Then by actual date
+        ))
+
+        # Calculate running balance
+        balance = previous_balance if year and month else 0
+        for t in transactions:
+            if t['type'] != 'BALANCE':  # Skip balance entries
+                balance += (t['debit'] or 0) - (t['credit'] or 0)
+            t['balance'] = balance
+
+        return transactions
 
     def save(self, *args, **kwargs):
         """Override save to ensure validation runs"""
@@ -1242,3 +1417,21 @@ class PresentationReceipt(BaseModel):
             ('presentation', 'checkreceipt'),
             ('presentation', 'lcn')
         ]
+
+class ClientSale(BaseModel):
+    client = models.ForeignKey(Client, on_delete=models.PROTECT)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    year = models.IntegerField()  # For easy filtering
+    month = models.IntegerField()  # For easy filtering
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+    def save(self, *args, **kwargs):
+        if not self.year:
+            self.year = self.date.year
+        if not self.month:
+            self.month = self.date.month
+        super().save(*args, **kwargs)

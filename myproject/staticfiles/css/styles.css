@@ -425,3 +425,41 @@
     }
 }
 
+
+/* Checker Modal Autocomplete Styles */
+.checker-autocomplete {
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    z-index: 1051; /* Higher than modal's z-index */
+}
+
+.checker-autocomplete .ui-menu-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e9ecef;
+    cursor: pointer;
+    font-size: 0.9rem;
+}
+
+.checker-autocomplete .ui-menu-item:last-child {
+    border-bottom: none;
+}
+
+.checker-autocomplete .ui-menu-item-wrapper {
+    padding: 6px 10px;
+}
+
+.checker-autocomplete .ui-menu-item-wrapper.ui-state-active {
+    margin: 0;
+    background-color: #f8f9fa;
+    border: none;
+    color: #000;
+}
+
+.ui-helper-hidden-accessible {
+    display: none;
+}

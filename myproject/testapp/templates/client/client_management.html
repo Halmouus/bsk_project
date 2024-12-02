@@ -413,10 +413,14 @@
                                         onclick="window.clientManagement.editClient('${client.id}', '${client.name}', '${client.client_code}')">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-outline-danger" 
+                                <button class="btn btn-sm btn-outline-danger me-2" 
                                         onclick="window.clientManagement.deleteClient('${client.id}')">
                                     <i class="fas fa-trash"></i>
                                 </button>
+                                <a href="/testapp/clients/${client.id}/card/" 
+                                   class="btn btn-sm btn-outline-info">
+                                    <i class="fas fa-chart-line me-1"></i> Sales Card
+                                </a>
                             </td>
                         </tr>
                     `);

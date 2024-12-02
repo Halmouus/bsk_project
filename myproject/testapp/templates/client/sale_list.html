@@ -1,0 +1,138 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Client Sales</h2>
+        <button class="btn btn-primary" data-toggle="modal" data-target="#saleModal">
+            <i class="fas fa-plus"></i> New Sale
+        </button>
+    </div>
+
+    <!-- Sales Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Client</th>
+                    <th>Amount</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>{{ sale.date|date:"Y-m-d" }}</td>
+                    <td>{{ sale.client.name }}</td>
+                    <td class="text-right">{{ sale.amount|floatformat:2 }}</td>
+                    <td>{{ sale.notes }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="4" class="text-center">No sales recorded yet</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Sale Modal -->
+<div class="modal fade" id="saleModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Record New Sale</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="saleForm">
+                    {% csrf_token %}
+                    <div class="form-group">
+                        <label for="client">Client</label>
+                        <input type="text" class="form-control" id="client" placeholder="Search client..." required>
+                        <input type="hidden" id="client_id" name="client" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="date">Date</label>
+                        <input type="date" class="form-control" id="date" name="date" 
+                               value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount</label>
+                        <input type="number" class="form-control" id="amount" name="amount" 
+                               step="0.01" min="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="notes">Notes</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveSale">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize client autocomplete
+    $("#client").autocomplete({
+            minLength: 2,
+            source: function(request, response) {
+                console.log('Client search term:', request.term);
+                $.ajax({
+                    url: "{% url 'client-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        console.log('Client data received:', data);
+                        response($.map(data.results, function(item) {
+                            return {
+                                label: item.text,
+                                value: item.id
+                            };
+                        }));
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Client autocomplete error:', error);
+                    }
+                });
+            },
+            select: function(event, ui) {
+                console.log('Client selected:', ui.item);
+                $("#client").val(ui.item.label);
+                $("#client_id").val(ui.item.value);
+                return false;
+            }
+        }).on('focus', function() {
+            console.log('Client input focused');
+        });
+
+    // Handle form submission
+    $('#saveSale').click(function() {
+        const form = $('#saleForm');
+        $.ajax({
+            url: "{% url 'create-sale' %}",
+            method: 'POST',
+            data: form.serialize(),
+            success: function(response) {
+                $('#saleModal').modal('hide');
+                showToast('Sale recorded successfully');
+                location.reload();
+            },
+            error: function(xhr) {
+                showToast(xhr.responseJSON.message, 'error');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

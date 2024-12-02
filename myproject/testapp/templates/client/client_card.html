@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>{{ client.name }} - Client Card</h2>
+        
+        <!-- Period Selection -->
+        <div class="d-flex gap-2">
+            <form class="form-inline" method="get">
+                <select name="year" class="form-control mr-2">
+                    {% for year_choice in years %}
+                    <option value="{{ year_choice }}" {% if year_choice == selected_year %}selected{% endif %}>
+                        {{ year_choice }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <select name="month" class="form-control mr-2">
+                    {% for month_num, month_name in months %}
+                    <option value="{{ month_num }}" {% if month_num == selected_month %}selected{% endif %}>
+                        {{ month_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-primary">Apply</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Debit</h5>
+                    <p class="card-text text-danger h4">{{ total_debit|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Credit</h5>
+                    <p class="card-text text-success h4">{{ total_credit|floatformat:2 }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Balance</h5>
+                    <p class="card-text h4 {% if final_balance > 0 %}text-danger{% else %}text-success{% endif %}">
+                        {{ final_balance|floatformat:2 }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transactions Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th class="text-right">Debit</th>
+                    <th class="text-right">Credit</th>
+                    <th class="text-right">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in transactions %}
+                <tr {% if t.type == 'BALANCE' %}class="table-info"{% endif %}>
+                    <td>{{ t.date|date:"Y-m-d" }}</td>
+                    <td>{{ t.description }}</td>
+                    <td class="text-right text-danger">
+                        {% if t.debit %}{{ t.debit|floatformat:2 }}{% endif %}
+                    </td>
+                    <td class="text-right text-success">
+                        {% if t.credit %}{{ t.credit|floatformat:2 }}{% endif %}
+                    </td>
+                    <td class="text-right {% if t.balance > 0 %}text-danger{% else %}text-success{% endif %}">
+                        {{ t.balance|floatformat:2 }}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">No transactions found for this period</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Auto-submit form when selection changes
+    $('select[name="year"], select[name="month"]').change(function() {
+        $(this).closest('form').submit();
+    });
+});
+</script>
+{% endblock %}

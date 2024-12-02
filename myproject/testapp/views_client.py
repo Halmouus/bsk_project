@@ -2,9 +2,13 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404, render
 from django.core.exceptions import ValidationError
-from .models import Client, Entity
+from .models import Client, Entity, ClientSale
 import json
 import logging
+from django.views.generic import ListView, DetailView
+from django.utils import timezone
+import calendar
+from django.db.models import Q
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -146,4 +150,93 @@ def validate_field(request, field, value):
     except Exception as e:
         logger.error(f"Error validating {field}: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+    
+class ClientSaleListView(ListView):
+    template_name = 'client/sale_list.html'
+    model = ClientSale
+    context_object_name = 'sales'
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['current_year'] = timezone.now().year
+        context['current_month'] = timezone.now().month
+        context['month_choices'] = [
+            (i, calendar.month_name[i]) for i in range(1, 13)
+        ]
+        return context
+
+@require_http_methods(["POST"])
+def create_sale(request):
+    try:
+        data = request.POST
+        sale = ClientSale.objects.create(
+            client_id=data['client'],
+            date=data['date'],
+            amount=data['amount'],
+            year=int(data.get('year') or data['date'][:4]),
+            month=int(data.get('month') or data['date'][5:7]),
+            notes=data.get('notes', '')
+        )
+        return JsonResponse({
+            'status': 'success',
+            'message': 'Sale recorded successfully',
+            'id': str(sale.id)
+        })
+    except Exception as e:
+        return JsonResponse({
+            'status': 'error',
+            'message': str(e)
+        }, status=400)
+
+class ClientCardView(DetailView):
+    model = Client
+    template_name = 'client/client_card.html'
+    context_object_name = 'client'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Get year and month from query params or use current
+        year = int(self.request.GET.get('year', timezone.now().year))
+        month = int(self.request.GET.get('month', timezone.now().month))
+        
+        try:
+            year = int(year)
+            month = int(month)
+        except (TypeError, ValueError):
+            year = timezone.now().year
+            month = timezone.now().month
+
+        # Get transactions for period
+        transactions = self.object.get_transactions(year, month)
+        
+        context.update({
+            'transactions': transactions,
+            'selected_year': year,
+            'selected_month': month,
+            'years': range(2024, timezone.now().year + 1),
+            'months': [
+                (i, calendar.month_name[i]) 
+                for i in range(1, 13)
+            ],
+            'total_debit': sum(t['debit'] or 0 for t in transactions),
+            'total_credit': sum(t['credit'] or 0 for t in transactions),
+            'final_balance': transactions[-1]['balance'] if transactions else 0,
+        })
+        
+        return context
+    
+def client_autocomplete(request):
+    term = request.GET.get('term', '')
+    clients = Client.objects.filter(
+        Q(name__icontains=term) |
+        Q(client_code__icontains=term)
+    )[:10]
+
+    results = [{
+        'id': str(client.id),
+        'value': str(client.id),
+        'label': f"{client.name} ({client.client_code})"
+    } for client in clients]
+
+    return JsonResponse(results, safe=False)

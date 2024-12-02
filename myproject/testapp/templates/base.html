@@ -1,187 +1,409 @@
-{% load static %}
 <!DOCTYPE html>
 <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{% block title %}MyProject{% endblock %}</title>
-        
-        <!-- In the head section, update the bootstrap CSS -->
-        <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet">
-        <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BSK Management{% endblock %}</title>
     
-        <!-- Font Awesome -->
-        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    
-        <!-- Scripts -->
-        <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script>
-        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+   <!-- CSS -->
+   <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet">
+   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
+   <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+   <link href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" rel="stylesheet">
         
-        <!-- Custom CSS -->
-        <link rel="stylesheet" href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css">
-        <link rel="stylesheet" href="{% static 'css/styles.css' %}">
-    </head>
+    <!-- Custom Styles -->
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --sidebar-width: 250px;
+            --topbar-height: 60px;
+            --transition-speed: 0.3s;
+        }
+
+        body {
+            min-height: 100vh;
+            background-color: #f8fafc;
+            padding-top: var(--topbar-height)
+        }
+
+        /* Sidebar Styling */
+        #sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            left: 0;
+            top: 0;
+            background: #1e293b;
+            transition: transform var(--transition-speed);
+            z-index: 1000;
+        }
+
+        #sidebar.collapsed {
+            transform: translateX(-100%);
+        }
+
+        #sidebar .nav-link {
+            color: #e2e8f0;
+            padding: 0.8rem 1rem;
+            transition: all var(--transition-speed);
+        }
+
+        #sidebar .nav-link:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateX(5px);
+        }
+
+        #sidebar .nav-link.active {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* Dropdown menu styling */
+        .nav-dropdown {
+            background: rgba(255, 255, 255, 0.05);
+        }
+
+        .nav-dropdown .nav-link {
+            padding-left: 2.5rem !important;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+
+        .nav-item-parent > .nav-link {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-item-parent > .nav-link::after {
+            content: '\f107';
+            font-family: 'Font Awesome 5 Free';
+            font-weight: 900;
+            transition: transform 0.3s;
+        }
+
+        .nav-item-parent > .nav-link[aria-expanded="true"]::after {
+            transform: rotate(180deg);
+        }
+
+        .collapse {
+            transition: all 0.3s ease;
+        }
+
+        /* Main Content */
+        #main-content {
+            margin-left: var(--sidebar-width);
+            padding-top: var(--topbar-height);
+            transition: margin var(--transition-speed);
+            padding: 20px;
+            margin-top: 0;
+        }
+
+        #main-content.expanded {
+            margin-left: 0;
+        }
+
+        /* Topbar */
+        #topbar {
+            height: var(--topbar-height);
+            background: white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            position: fixed;
+            top: 0;
+            right: 0;
+            left: var(--sidebar-width);
+            z-index: 999;
+            transition: left var(--transition-speed);
+        }
+
+        #topbar.expanded {
+            left: 0;
+        }
+
+        /* Modal Animations */
+        .modal.fade .modal-dialog {
+            transform: scale(0.8);
+            transition: transform var(--transition-speed);
+        }
+
+        .modal.show .modal-dialog {
+            transform: scale(1);
+        }
+
+        .modal {
+            z-index: 1050;
+        }
+
+        /* Toast Animations */
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1050;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        /* Card Hover Effects */
+        .card {
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        /* Button Hover Effects */
+        .btn {
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        /* Table Row Hover */
+        .table-hover tbody tr {
+            transition: background-color 0.2s;
+        }
+
+        /* Select2 Styling */
+        .select2-container--default .select2-selection--single {
+            height: 38px;
+            border: 1px solid #ced4da;
+            border-radius: 0.375rem;
+        }
+
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 38px;
+        }
+
+                /* Ensure dropdowns appear above other elements */
+                .dropdown-menu {
+            z-index: 1000;
+        }
+
+        /* Keep autocomplete dropdown above other elements */
+        .ui-autocomplete {
+            z-index: 2000;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script>
+</head>
 <body>
-    <!-- Header / Navigation Bar -->
-<header>
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-        <a class="navbar-brand" href="{% url 'login' %}">MyProject</a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav ml-auto">
-                {% if user.is_authenticated %}
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle hover-trigger" href="#" id="supplierDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                            Supplier
+    <!-- Sidebar -->
+    <nav id="sidebar">
+        <div class="d-flex flex-column h-100">
+            <div class="p-3 text-center">
+                <h5 class="text-white mb-0">BSK Management</h5>
+            </div>
+            
+            <ul class="nav flex-column mt-2">
+                <li class="nav-item">
+                    <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
+                       href="{% url 'home' %}">
+                        <i class="fas fa-home me-2"></i> Dashboard
+                    </a>
+                </li>
+
+                <!-- Business Operations Section -->
+                <li class="nav-item nav-item-parent">
+                    <a class="nav-link {% if 'business' in request.path %}active{% endif %}" 
+                    data-toggle="collapse" 
+                    href="#businessSubmenu" 
+                    role="button" 
+                    aria-expanded="false" 
+                    aria-controls="businessSubmenu">
+                        <span><i class="fas fa-briefcase me-2"></i> Business Operations</span>
+                    </a>
+                    <div class="collapse nav-dropdown" id="businessSubmenu">
+                        <a class="nav-link {% if 'supplier' in request.path %}active{% endif %}" 
+                        href="{% url 'supplier-list' %}">
+                            <i class="fas fa-truck me-2"></i> Suppliers
                         </a>
-                        <div class="dropdown-menu dropdown-hover" aria-labelledby="supplierDropdown">
-                            <a class="dropdown-item hover-highlight" href="{% url 'supplier-list' %}">Suppliers</a>
-                            <a class="dropdown-item hover-highlight" href="{% url 'product-list' %}">Products</a>
-                            <a class="dropdown-item hover-highlight" href="{% url 'invoice-list' %}">Invoices</a>
-                        </div>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle hover-trigger" href="#" id="clientDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                            Clients
+                        <a class="nav-link {% if 'product' in request.path %}active{% endif %}" 
+                        href="{% url 'product-list' %}">
+                            <i class="fas fa-box-open me-2"></i> Products
                         </a>
-                        <div class="dropdown-menu dropdown-hover" aria-labelledby="clientDropdown">
-                            <a class="dropdown-item hover-highlight" href="{% url 'client_management' %}">Client Management</a>
-                        </div>
-                        <div class="dropdown-menu dropdown-hover" aria-labelledby="clientDropdown">
-                            <a class="dropdown-item hover-highlight" href="{% url 'receipt-list' %}">Receipts</a>
-                        </div>
-                    </li>
-                    <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle hover-trigger" href="#" id="checkDropdown" role="button" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
-                            Check/Checkers
+                        <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" 
+                        href="{% url 'invoice-list' %}">
+                            <i class="fas fa-file-invoice-dollar me-2"></i> Invoices
                         </a>
-                        <div class="dropdown-menu dropdown-hover" aria-labelledby="checkDropdown">
-                            <a class="dropdown-item hover-highlight" href="{% url 'checker-list' %}">Checkers</a>
-                            <a class="dropdown-item hover-highlight" href="{% url 'check-list' %}">Checks</a>
-                            <a class="dropdown-item hover-highlight" href="{% url 'bank-account-list' %}">Banks</a>
-                        </div>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link hover-trigger" href="{% url 'profile' %}">Profile</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link hover-trigger" href="{% url 'logout' %}">Logout</a>
-                    </li>
-                {% else %}
-                    <li class="nav-item">
-                        <a class="nav-link hover-trigger" href="{% url 'login' %}">Login</a>
-                    </li>
-                {% endif %}
-            </ul>
+                    </div>
+                </li>
+
+                <!-- Clients Section -->
+                <li class="nav-item nav-item-parent">
+                    <a class="nav-link {% if 'client' in request.path %}active{% endif %}" 
+                       data-toggle="collapse" 
+                       href="#clientSubmenu" 
+                       role="button" 
+                       aria-expanded="false" 
+                       aria-controls="clientSubmenu">
+                        <span><i class="fas fa-users me-2"></i> Clients</span>
+                    </a>
+                    <div class="collapse nav-dropdown" id="clientSubmenu">
+                        <a class="nav-link {% if 'receipt' in request.path %}active{% endif %}" 
+                           href="{% url 'receipt-list' %}">
+                            <i class="fas fa-receipt me-2"></i> Receipts
+                        </a>
+                        <a class="nav-link {% if 'client_management' in request.path %}active{% endif %}" 
+                           href="{% url 'client_management' %}">
+                            <i class="fas fa-address-card me-2"></i> Clients
+                        </a>
+                        <a class="nav-link {% if 'sale-list' in request.path %}active{% endif %}" 
+                           href="{% url 'sale-list' %}">
+                            <i class="fas fa-shopping-cart me-2"></i> Sales
+                        </a>
+                    </div>
+                </li>
+
+                <!-- Financial Management Section -->
+                <li class="nav-item nav-item-parent">
+                    <a class="nav-link {% if 'financial' in request.path %}active{% endif %}" 
+                    data-toggle="collapse" 
+                    href="#financialSubmenu" 
+                    role="button" 
+                    aria-expanded="false" 
+                    aria-controls="financialSubmenu">
+                        <span><i class="fas fa-money-bill-wave me-2"></i> Financial Management</span>
+                    </a>
+                    <div class="collapse nav-dropdown" id="financialSubmenu">
+                        <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" 
+                        href="{% url 'bank-account-list' %}">
+                            <i class="fas fa-university me-2"></i> Bank Accounts
+                        </a>
+                        <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" 
+                        href="{% url 'check-list' %}">
+                            <i class="fas fa-money-check me-2"></i> Checks
+                        </a>
+                        <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" 
+                        href="{% url 'checker-list' %}">
+                            <i class="fas fa-user-shield me-2"></i> Checkers
+                        </a>
+                    </div>
+                </li>
+
+            
+
+            <!-- Bottom Section -->
+            <div class="mt-auto p-3">
+                <div class="dropdown">
+                    <button class="btn btn-dark dropdown-toggle w-100" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-user-circle me-2"></i>
+                        {{ request.user.username }}
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-dark w-100">
+                        <li>
+                            <a class="dropdown-item" href="{% url 'profile' %}">
+                                <i class="fas fa-id-card me-2"></i> Profile
+                            </a>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger" href="{% url 'logout' %}">
+                                <i class="fas fa-sign-out-alt me-2"></i> Logout
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
         </div>
     </nav>
-</header>
 
-    <!-- Message Alerts -->
-    <div id="alerts-container" class="container mt-4">
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{{ message.tags|default:'info' }} alert-dismissible fade show" role="alert">
-                    {% if message.tags == 'error' %}
-                        <i class="fas fa-exclamation-triangle"></i>
-                    {% endif %}
-                    <strong>{{ message|safe }}</strong>
-                    <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+    <!-- Topbar -->
+    <nav id="topbar" class="px-4 d-flex align-items-center">
+        <button id="sidebar-toggle" class="btn btn-link">
+            <i class="fas fa-bars"></i>
+        </button>
+        <div class="ms-auto d-flex align-items-center">
+            <div class="dropdown">
+                <button class="btn btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="fas fa-bell"></i>
+                    <span class="badge bg-danger">3</span>
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><h6 class="dropdown-header">Notifications</h6></li>
+                    <li><a class="dropdown-item" href="#">New invoice added</a></li>
+                    <li><a class="dropdown-item" href="#">Payment received</a></li>
+                    <li><a class="dropdown-item" href="#">Check due today</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content" class="p-4">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+
+  <script>
+    $(document).ready(function() {
+        // Sidebar Toggle
+        $('#sidebar-toggle').click(function() {
+            $('#sidebar').toggleClass('collapsed');
+            $('#main-content').toggleClass('expanded');
+            $('#topbar').toggleClass('expanded');
+        });
+
+        // Initialize Select2
+        $('.select2').select2({
+            theme: 'bootstrap'
+        });
+
+        // Initialize tooltips
+        $('[data-toggle="tooltip"]').tooltip();
+
+        // Keep submenu open if a child is active
+        if ($('#clientSubmenu .nav-link.active').length) {
+            $('#clientSubmenu').addClass('show');
+            $('#clientSubmenu').prev('.nav-link').attr('aria-expanded', 'true');
+        }
+    });
+
+    // Toast function
+    function showToast(message, type = 'success') {
+        const toast = `
+            <div class="toast align-items-center text-white bg-${type}" role="alert">
+                <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="close ml-2 mb-1" data-dismiss="toast">
                         <span aria-hidden="true">&times;</span>
                     </button>
                 </div>
-            {% endfor %}
-        {% endif %}
-    </div>
-
-    <!-- Main Content Block -->
-    <main class="container-fluid mt-4">
-        {% block content %}
-        <!-- Page-specific content goes here -->
-        {% endblock %}
-    </main>
-
-    <!-- Footer -->
-    <footer class="footer mt-auto py-3 bg-light">
-        <div class="container text-center">
-            <span class="text-muted">&copy; 2024 MyProject. All rights reserved.</span>
-            <div>
-                <a href="#" class="text-muted mx-2">Privacy</a>
-                <a href="#" class="text-muted mx-2">Terms</a>
-                <a href="#" class="text-muted mx-2">Support</a>
             </div>
-        </div>
-    </footer>
-
-    <!-- Custom JavaScript -->
-    <script src="{% static 'js/scripts.js' %}"></script>
-
-    <script>
-        // Fading Alerts
-        $(document).ready(function() {
-            setTimeout(function() {
-                $(".alert").fadeOut("slow");
-            }, 5000);
-
-            // Dropdown on Hover
-            $(".hover-trigger").hover(function() {
-                $(this).parent().addClass('show');
-                $(this).siblings('.dropdown-menu').addClass('show').stop(true, true).slideDown(200);
-            }, function() {
-                $(this).parent().removeClass('show');
-                $(this).siblings('.dropdown-menu').removeClass('show').stop(true, true).slideUp(200);
-            });
-
-            $(".dropdown-menu").hover(function() {
-                $(this).addClass('show').stop(true, true).slideDown(200);
-            }, function() {
-                $(this).removeClass('show').stop(true, true).slideUp(200);
-            });
+        `;
+        
+        const toastContainer = $('<div>', {
+            class: 'position-fixed',
+            style: 'top: 20px; right: 20px; z-index: 1060;'
+        }).html(toast);
+        
+        $('body').append(toastContainer);
+        toastContainer.find('.toast').toast({ delay: 3000 }).toast('show');
+        toastContainer.find('.toast').on('hidden.bs.toast', function() {
+            toastContainer.remove();
         });
-    </script>
+    }
+</script>
 
-    <style>
-        /* Alert Styling */
-        .alert {
-            border-left: 5px solid;
-        }
-        .alert-danger {
-            border-left-color: #dc3545;
-        }
-        .alert i {
-            margin-right: 10px;
-        }
-
-        /* Navbar Hover Effects */
-        .hover-trigger:hover {
-            background-color: rgba(159, 165, 174, 0.2);
-            transition: background-color 0.3s ease;
-            text-decoration:underline;
-        }
-
-        /* Dropdown Menu Styling */
-        .dropdown-menu {
-            display: none;
-        }
-        .hover-highlight:hover {
-            background-color: rgba(200, 52, 203, 0.1);
-            transition: background-color 0.3s ease;
-        }
-
-        /* Footer Styling */
-        .footer a {
-            margin: 0 5px;
-            color: inherit;
-            text-decoration: none;
-        }
-        .footer a:hover {
-            text-decoration: underline;
-        }
-    </style>
+    {% block extra_js %}{% endblock %}
 </body>
 </html>
