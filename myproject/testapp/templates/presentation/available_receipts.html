@@ -1,0 +1,88 @@
+<div class="receipt-container">
+    <!-- Summary info -->
+    <div class="alert alert-info">
+        <strong>Selected:</strong> 
+        <span id="selectedCount">0</span> receipts
+        <strong class="ml-3">Total Amount:</strong> 
+        <span id="selectedAmount">0.00</span> MAD
+    </div>
+
+    <!-- Receipts table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="selectAll">
+                            <label class="custom-control-label" for="selectAll"></label>
+                        </div>
+                    </th>
+                    <th>Reference</th>
+                    <th>Client</th>
+                    <th>Issue Date</th>
+                    <th>Due Date</th>
+                    <th>Amount</th>
+                    <th>Days to Due</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for receipt in receipts %}
+                <tr>
+                    <td>
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input receipt-checkbox" 
+                                   id="receipt{{ receipt.id }}"
+                                   value="{{ receipt.id }}"
+                                   data-amount="{{ receipt.amount }}">
+                            <label class="custom-control-label" for="receipt{{ receipt.id }}"></label>
+                        </div>
+                    </td>
+                    <td>{{ receipt.get_receipt_number }}</td>
+                    <td>{{ receipt.client.name }}</td>
+                    <td>{{ receipt.operation_date|date:"Y-m-d" }}</td>
+                    <td>{{ receipt.due_date|date:"Y-m-d" }}</td>
+                    <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
+                    <td>{{ receipt.due_date|timeuntil }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center">
+                        No available receipts found in portfolio status
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+$(document).ready(function() {
+    // Handle select all checkbox
+    $('#selectAll').change(function() {
+        $('.receipt-checkbox').prop('checked', $(this).prop('checked'));
+        updateSelection();
+    });
+
+    // Handle individual checkboxes
+    $('.receipt-checkbox').change(function() {
+        updateSelection();
+        // Update select all checkbox state
+        $('#selectAll').prop('checked', 
+            $('.receipt-checkbox').length === $('.receipt-checkbox:checked').length);
+    });
+
+    function updateSelection() {
+        const selected = $('.receipt-checkbox:checked');
+        $('#selectedCount').text(selected.length);
+        
+        const totalAmount = selected.toArray()
+            .reduce((sum, checkbox) => sum + parseFloat($(checkbox).data('amount')), 0);
+        $('#selectedAmount').text(totalAmount.toFixed(2));
+        
+        // Enable/disable save button based on selection
+        $('#savePresentation').prop('disabled', selected.length === 0);
+    }
+});
+</script>

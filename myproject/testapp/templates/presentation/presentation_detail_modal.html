@@ -1,0 +1,120 @@
+<div class="modal-header">
+    <h5 class="modal-title">
+        {{ presentation.get_presentation_type_display }} Presentation Details
+    </h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button>
+</div>
+<div class="modal-body">
+    <!-- Presentation Info -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p>
+                    <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p>
+                    <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Status:</strong> 
+                        <span class="badge badge-{{ presentation.status|status_badge }}">
+                            {{ presentation.get_status_display }}
+                        </span>
+                    </p>
+                    <p><strong>Bank Reference:</strong> {{ presentation.bank_reference|default:"Not yet assigned" }}</p>
+                    <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipts Table -->
+    <h6>Presented Receipts</h6>
+    <div class="table-responsive">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Reference</th>
+                    <th>Client</th>
+                    <th>Due Date</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for receipt in presentation.presentation_receipts.all %}
+                <tr>
+                    <td>
+                        {% if receipt.checkreceipt %}
+                        <i class="fas fa-money-check"></i> Check
+                        {% else %}
+                        <i class="fas fa-file-invoice-dollar"></i> LCN
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if receipt.checkreceipt %}
+                        {{ receipt.checkreceipt.check_number }}
+                        {% else %}
+                        {{ receipt.lcn.lcn_number }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if receipt.checkreceipt %}
+                        {{ receipt.checkreceipt.client.name }}
+                        {% else %}
+                        {{ receipt.lcn.client.name }}
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if receipt.checkreceipt %}
+                        {{ receipt.checkreceipt.due_date|date:"Y-m-d" }}
+                        {% else %}
+                        {{ receipt.lcn.due_date|date:"Y-m-d" }}
+                        {% endif %}
+                    </td>
+                    <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="font-weight-bold">
+                    <td colspan="4" class="text-right">Total:</td>
+                    <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    {% if presentation.status == 'pending' %}
+    <!-- Update Status Form -->
+    <div class="mt-4">
+        <hr>
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Bank Reference</label>
+                    <input type="text" class="form-control" id="bankReference" 
+                           value="{{ presentation.bank_reference }}">
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label>Update Status</label>
+                    <select class="form-control" id="presentationStatus">
+                        <option value="presented">Mark as Presented</option>
+                        <option value="paid">Mark as Paid</option>
+                        <option value="rejected">Mark as Rejected</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+    {% if presentation.status == 'pending' %}
+    <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')">
+        Update
+    </button>
+    {% endif %}
+</div>

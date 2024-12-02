@@ -36,10 +36,11 @@ from .views_client import (
     ClientCardView
 )
 from .views_entity import (
-    list_entities,
-    create_entity,
-    update_entity,
-    delete_entity
+    list_entities, create_entity, update_entity, delete_entity
+)
+from .views_presentation import (
+    PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
+    PresentationDetailView, AvailableReceiptsView
 )
 
 
@@ -142,8 +143,13 @@ urlpatterns = [
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
     path('receipts/entity/autocomplete', entity_autocomplete, name='entity-autocomplete'),
 
-
-
+    # Presentation URLs
+    path('presentations/', PresentationListView.as_view(), name='presentation-list'),
+    path('presentations/create/', PresentationCreateView.as_view(), name='presentation-create'),
+    path('presentations/<uuid:pk>/', PresentationDetailView.as_view(), name='presentation-detail'),
+    path('presentations/<uuid:pk>/edit/', PresentationUpdateView.as_view(), name='presentation-edit'),
+    path('presentations/<uuid:pk>/delete/', PresentationDeleteView.as_view(), name='presentation-delete'),
+    path('presentations/available-receipts/', AvailableReceiptsView.as_view(), name='available-receipts'),
     
 
 ]

@@ -267,6 +267,10 @@
                            href="{% url 'sale-list' %}">
                             <i class="fas fa-shopping-cart me-2"></i> Sales
                         </a>
+                        <a class="nav-link {% if 'presentation' in request.path %}active{% endif %}" 
+                            href="{% url 'presentation-list' %}">
+                            <i class="fas fa-file-powerpoint me-2"></i> Presentations
+                        </a>
                     </div>
                 </li>
 

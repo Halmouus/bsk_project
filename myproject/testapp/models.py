@@ -1250,6 +1250,48 @@ class NegotiableReceipt(Receipt):
         self.status = self.STATUS_PRESENTED_DISCOUNT
         self.save()
 
+    def get_receipt_number(self):
+        """
+        Returns the appropriate receipt number based on the receipt type.
+        """
+        if hasattr(self, 'check_number'):
+            return self.check_number
+        elif hasattr(self, 'lcn_number'):
+            return self.lcn_number
+        return ''
+    
+    def get_presentation_info(self):
+        """Returns formatted presentation information if receipt is presented"""
+        if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT','DISCOUNTED', 'PAID', 'REJECTED']:
+            # Get the presentation through the reverse relation
+            presentation_receipt = (
+                self.check_presentations.first() if hasattr(self, 'check_presentations') 
+                else self.lcn_presentations.first()
+            )
+            if presentation_receipt and presentation_receipt.presentation:
+                pres = presentation_receipt.presentation
+                return {
+                    'date': pres.date.strftime('%Y-%m-%d'),
+                    'ref': f"Presentation #{pres.id}",
+                    'bank': pres.bank_account.bank,
+                    'type': pres.get_presentation_type_display()
+                }
+        return None
+
+    def get_status_display_with_details(self):
+        """Enhanced status display with presentation details"""
+        status_display = self.get_status_display()
+        pres_info = self.get_presentation_info()
+        
+        if pres_info:
+            details = (
+                f"{pres_info['type']} on {pres_info['date']}\n"
+                f"Ref: {pres_info['ref']}\n"
+                f"Bank: {pres_info['bank']}"
+            )
+            return status_display, details
+        return status_display, None
+
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
     check_number = models.CharField(max_length=50)
@@ -1326,8 +1368,21 @@ class Presentation(BaseModel):
     presentation_type = models.CharField(max_length=10, choices=PRESENTATION_TYPES)
     date = models.DateField()
     bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    bank_reference = models.CharField(max_length=100, blank=True)
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pending'),
+            ('presented', 'Presented'),
+            ('paid', 'Paid'),
+            ('rejected', 'Rejected')
+        ],
+        default='pending'
+    )
+    # Optional: Add document field
+    document = models.FileField(upload_to='presentations/', null=True, blank=True)
 
     def __str__(self):
         return f"{self.get_presentation_type_display()} - {self.date}"
@@ -1381,19 +1436,30 @@ class PresentationReceipt(BaseModel):
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
 
+    class Meta:
+        unique_together = [
+            ('presentation', 'checkreceipt'),
+            ('presentation', 'lcn')
+        ]
+
     def __str__(self):
-        receipt = self.check or self.lcn
-        return f"Presentation {self.presentation.id} - Receipt {receipt.id}"
+        receipt = self.checkreceipt or self.lcn
+        if receipt:
+            return f"Presentation {self.presentation.id} - Receipt {receipt.id}"
+        return f"Presentation {self.presentation.id} - No receipt attached"
 
     def clean(self):
         super().clean()
-        if self.check and self.lcn:
+        if self.checkreceipt and self.lcn:
             raise ValidationError("Cannot have both check and LCN")
-        if not self.check and not self.lcn:
+        if not self.checkreceipt and not self.lcn:
             raise ValidationError("Must have either check or LCN")
         
-        receipt = self.check or self.lcn
-        if receipt.status != NegotiableReceipt.STATUS_PORTFOLIO:
+        # Get the actual receipt object
+        receipt = self.checkreceipt or self.lcn
+        
+        # Check the status on the actual object
+        if getattr(receipt, 'status', None) != 'PORTFOLIO':
             raise ValidationError(
                 'Only receipts in portfolio status can be presented'
             )
@@ -1403,12 +1469,14 @@ class PresentationReceipt(BaseModel):
         super().save(*args, **kwargs)
         self.presentation.update_total()
 
-        # Update receipt status
-        receipt = self.check or self.lcn
-        if self.presentation.presentation_type == Presentation.TYPE_COLLECTION:
-            receipt.present_for_collection()
-        else:
-            receipt.present_for_discount()
+        # Update receipt status based on presentation type
+        receipt = self.checkreceipt or self.lcn
+        if receipt:  # Add check to ensure receipt exists
+            if self.presentation.presentation_type == Presentation.TYPE_COLLECTION:
+                receipt.status = 'PRESENTED_COLLECTION'
+            else:
+                receipt.status = 'PRESENTED_DISCOUNT'
+            receipt.save()
 
     class Meta:
         verbose_name = "Presentation Receipt"

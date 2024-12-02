@@ -80,7 +80,7 @@
                             <td class="text-right">{{ check.amount|floatformat:2 }}</td>
                             <td>
                                 <span class="badge {% if check.status == 'PORTFOLIO' %}badge-primary{% elif check.status == 'PAID' %}badge-success{% elif check.status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
-                                    {{ check.get_status_display }}
+                                    {{ check.get_status_display_with_details }}
                                 </span>
                             </td>
                             <td>

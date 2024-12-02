@@ -463,3 +463,14 @@
 .ui-helper-hidden-accessible {
     display: none;
 }
+
+.presentation-details {
+    display: block;
+    margin-top: 0.5rem;
+    white-space: pre-line;
+    color: #6c757d;
+}
+
+.presentation-details::before {
+    content: '📄 ';
+}
