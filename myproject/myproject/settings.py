@@ -70,9 +70,28 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
+            'libraries': {
+                'presentation_filters': 'testapp.templatetags.presentation_filters',
+            }
         },
     },
 ]
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'loggers': {
+        'testapp.templatetags': {
+            'handlers': ['console'],
+            'level': 'DEBUG',
+        },
+    }
+}
 
 WSGI_APPLICATION = 'myproject.wsgi.application'
 

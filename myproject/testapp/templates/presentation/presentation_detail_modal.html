@@ -1,3 +1,17 @@
+{% load presentation_filters %}
+
+<!-- Debug info -->
+{% comment %}
+Available filters:
+{{ presentation_filters }}
+{% endcomment %}
+
+<!-- Test filter directly -->
+{% with test_status='pending' %}
+    Raw status: {{ test_status }}
+    Filtered status: {{ test_status|status_badge }}
+{% endwith %}
+
 <div class="modal-header">
     <h5 class="modal-title">
         {{ presentation.get_presentation_type_display }} Presentation Details
@@ -113,8 +127,8 @@
 <div class="modal-footer">
     <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
     {% if presentation.status == 'pending' %}
-    <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')">
-        Update
+    <button type="button" class="btn btn-primary" onclick="editPresentation('{{ presentation.id }}')">
+        Edit
     </button>
     {% endif %}
 </div>

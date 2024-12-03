@@ -95,54 +95,124 @@ class PresentationCreateView(View):
             }, status=400)
 
 class PresentationDetailView(View):
-    """
-    Display detailed information about a presentation, including all its receipts.
-    """
     def get(self, request, pk):
-        presentation = get_object_or_404(Presentation, pk=pk)
-        context = {
-            'presentation': presentation,
-            'receipts': presentation.presentation_receipts.all()
-        }
-        return render(request, 'presentation/presentation_detail_modal.html', context)
+        print("\n=== Starting PresentationDetailView.get ===")
+        try:
+            print(f"Looking for presentation with pk: {pk}")
+            presentation = get_object_or_404(Presentation, pk=pk)
+            print(f"Found presentation: {presentation}")
+            
+            print("Fetching related receipts...")
+            receipts = presentation.presentation_receipts.all().select_related(
+                'checkreceipt__client',
+                'lcn__client',
+                'checkreceipt__bank_account',
+                'lcn__bank_account'
+            )
+            print(f"Found {receipts.count()} receipts")
+
+            # Debug template loading
+            print("\nChecking template tags:")
+            from django.template import engines
+            django_engine = engines['django']
+            try:
+                print("Available template tag libraries:", django_engine.template_libraries)
+            except Exception as e:
+                print(f"Error accessing template libraries: {e}")
+
+            context = {
+                'presentation': presentation,
+                'receipts': receipts,
+                'total_amount': sum(receipt.amount for receipt in receipts)
+            }
+            print("\nContext prepared:", context)
+            
+            try:
+                print("\nAttempting to render template...")
+                rendered = render(
+                    request, 
+                    'presentation/presentation_detail_modal.html',
+                    context
+                )
+                print("Template rendered successfully")
+                return rendered
+            except Exception as template_error:
+                import traceback
+                print("\nTemplate rendering error:")
+                print(traceback.format_exc())
+                raise template_error
+
+        except Exception as e:
+            import traceback
+            print("\n=== Error in PresentationDetailView ===")
+            print(traceback.format_exc())
+            print("=======================================")
+            return JsonResponse({
+                'status': 'error',
+                'message': f"Detail view error: {str(e)}",
+                'traceback': traceback.format_exc()
+            }, status=400)
 
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationUpdateView(View):
-    """
-    Handle updates to presentation status and bank reference.
-    """
     def post(self, request, pk):
+        print("\n=== Starting presentation edit ===")
         try:
-            presentation = get_object_or_404(Presentation, pk=pk)
+            print(f"Raw request body: {request.body}")
             data = json.loads(request.body)
+            print(f"Parsed data: {data}")
+            
+            presentation = get_object_or_404(Presentation, pk=pk)
+            print(f"Found presentation: {presentation}")
 
             with transaction.atomic():
+                if 'bank_reference' in data:
+                    print(f"Updating bank reference to: {data['bank_reference']}")
+                    presentation.bank_reference = data['bank_reference']
+                
                 if 'status' in data:
+                    print(f"Updating status to: {data['status']}")
                     presentation.status = data['status']
-                    # Update status of all receipts in the presentation
+                    
+                    # Handle receipt status updates
                     for pr in presentation.presentation_receipts.all():
                         receipt = pr.checkreceipt or pr.lcn
                         if receipt:
+                            print(f"Updating receipt status: {receipt}")
                             if data['status'] == 'paid':
-                                receipt.status = receipt.STATUS_PAID
+                                receipt.status = 'PAID'
                             elif data['status'] == 'rejected':
-                                receipt.status = receipt.STATUS_REJECTED
+                                receipt.status = 'REJECTED'
+                            elif data['status'] == 'presented':
+                                receipt.status = (
+                                    'PRESENTED_COLLECTION' 
+                                    if presentation.presentation_type == 'COLLECTION'
+                                    else 'PRESENTED_DISCOUNT'
+                                )
                             receipt.save()
+                            print(f"Updated receipt status to: {receipt.status}")
 
-                if 'bank_reference' in data:
-                    presentation.bank_reference = data['bank_reference']
-                
                 presentation.save()
+                print("Presentation saved successfully")
 
             return JsonResponse({
                 'status': 'success',
                 'message': 'Presentation updated successfully'
             })
 
-        except Exception as e:
+        except json.JSONDecodeError as e:
+            print(f"JSON Decode error: {str(e)}")
             return JsonResponse({
                 'status': 'error',
-                'message': str(e)
+                'message': f'Invalid JSON: {str(e)}'
+            }, status=400)
+        except Exception as e:
+            import traceback
+            print("=== Error in presentation edit ===")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Edit failed: {str(e)}'
             }, status=400)
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -151,29 +221,51 @@ class PresentationDeleteView(View):
     Handle deletion of presentations, resetting the status of associated receipts.
     """
     def post(self, request, pk):
-        try:
-            presentation = get_object_or_404(Presentation, pk=pk)
-            
-            with transaction.atomic():
-                # Reset status of all receipts back to portfolio
-                for pr in presentation.presentation_receipts.all():
-                    receipt = pr.checkreceipt or pr.lcn
-                    if receipt:
-                        receipt.status = receipt.STATUS_PORTFOLIO
-                        receipt.save()
-                
-                presentation.delete()
+            print(f"Delete request received for presentation {pk}")
+            try:
+                with transaction.atomic():
+                    presentation = get_object_or_404(Presentation, pk=pk)
+                    
+                    # Only allow deletion of pending presentations
+                    if presentation.status != 'pending':
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': 'Only pending presentations can be deleted'
+                        }, status=400)
 
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Presentation deleted successfully'
-            })
+                    # Reset status of all receipts back to portfolio
+                    for pr in presentation.presentation_receipts.all():
+                        print(f"Processing receipt in presentation: {pr}")
+                        receipt = pr.checkreceipt or pr.lcn
+                        if receipt:
+                            print(f"Resetting status for receipt: {receipt}")
+                            receipt.status = 'PORTFOLIO'
+                            receipt.save()
+                            print(f"Receipt status reset to PORTFOLIO")
+                    
+                    # Delete the presentation
+                    presentation.delete()
+                    print(f"Presentation {pk} deleted successfully")
 
-        except Exception as e:
-            return JsonResponse({
-                'status': 'error',
-                'message': str(e)
-            }, status=400)
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': 'Presentation deleted successfully'
+                    })
+
+            except Presentation.DoesNotExist:
+                print(f"Presentation {pk} not found")
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Presentation not found'
+                }, status=404)
+            except Exception as e:
+                print(f"Error deleting presentation {pk}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Failed to delete presentation: {str(e)}'
+                }, status=500)
 
 class AvailableReceiptsView(View):
     """

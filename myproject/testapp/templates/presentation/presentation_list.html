@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
-{% load status_badge %}
+{% load presentation_filters %}
 
 {% block content %}
+{% csrf_token %}
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -229,6 +230,10 @@ function showError(error) {
     console.error(error);
     alert('An error occurred: ' + error);
 }
+function showSuccess(message) {
+    console.log(message);
+    alert('Succes!: ' + message);
+}
 const PresentationManager = {
     currentStep: 1,
     totalSteps: 3,
@@ -449,40 +454,77 @@ async function viewPresentation(id) {
 
 async function editPresentation(id) {
     try {
-        const response = await $.get(`/testapp/presentations/${id}/edit/`);
-        if (response.status === 'pending') {
-            $('#editPresentationModal .modal-content').html(response.html);
-            $('#editPresentationModal').modal('show');
-        } else {
-            showError('Only pending presentations can be edited');
+        const data = {
+            bank_reference: $('#bankReference').val(),
+            status: $('#presentationStatus').val(),
+            notes: $('#presentationNotes').val()  // If you have this field
+        };
+        
+        console.log('Sending edit request:', {
+            id: id,
+            data: data,
+            url: `/testapp/presentations/${id}/edit/`
+        });
+
+        const response = await fetch(`/testapp/presentations/${id}/edit/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        });
+
+        const responseData = await response.json();
+        console.log('Edit response:', responseData);
+
+        if (!response.ok) {
+            throw new Error(responseData.message || 'Failed to edit presentation');
         }
+
+        showSuccess('Presentation updated successfully');
+        $('#viewPresentationModal').modal('hide');
+        location.reload();
+
     } catch (error) {
-        showError('Failed to load presentation for editing');
+        console.error('Edit error:', error);
+        showError(error.message || 'Failed to edit presentation');
     }
 }
 
 async function deletePresentation(id) {
-    if (!confirm('Are you sure you want to delete this presentation?')) {
-        return;
-    }
+    console.log('Delete initiated for presentation:', id);
 
     try {
-        const response = await $.ajax({
-            url: `/testapp/presentations/${id}/delete/`,
+        if (!confirm('Are you sure you want to delete this presentation?')) {
+            console.log('Delete cancelled by user');
+            return;
+        }
+        
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+        console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No');
+
+        const response = await fetch(`/testapp/presentations/${id}/delete/`, {
             method: 'POST',
             headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json'
             }
         });
 
-        if (response.status === 'success') {
+        console.log('Delete response status:', response.status);
+        const data = await response.json();
+        console.log('Delete response data:', data);
+
+        if (response.ok) {
             showSuccess('Presentation deleted successfully');
             location.reload();
         } else {
-            showError(response.message);
+            throw new Error(data.message || 'Failed to delete presentation');
         }
     } catch (error) {
-        showError('Failed to delete presentation');
+        console.error('Delete error:', error);
+        showError(error.message || 'Failed to delete presentation');
     }
 }
 
