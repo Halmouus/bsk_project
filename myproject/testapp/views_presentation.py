@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount
 import json
+import traceback
 
 class PresentationListView(ListView):
     """
@@ -153,6 +154,13 @@ class PresentationDetailView(View):
                 'traceback': traceback.format_exc()
             }, status=400)
 
+def handle_receipt_status(receipt, new_status):
+        if new_status == 'paid':
+            receipt.status = 'PAID'
+        elif new_status == 'unpaid':
+            receipt.status = 'UNPAID'
+        receipt.save()
+
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationUpdateView(View):
     def post(self, request, pk):
@@ -162,59 +170,69 @@ class PresentationUpdateView(View):
             data = json.loads(request.body)
             print(f"Parsed data: {data}")
             
-            presentation = get_object_or_404(Presentation, pk=pk)
-            print(f"Found presentation: {presentation}")
-
             with transaction.atomic():
-                if 'bank_reference' in data:
-                    print(f"Updating bank reference to: {data['bank_reference']}")
-                    presentation.bank_reference = data['bank_reference']
-                
-                if 'status' in data:
-                    print(f"Updating status to: {data['status']}")
-                    presentation.status = data['status']
+                presentation = get_object_or_404(Presentation, pk=pk)
+                print(f"Found presentation: {presentation}")
+
+                if presentation.status == 'pending':
+                    # Handle initial status change
+                    if not data.get('bank_reference'):
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': 'Bank reference is required'
+                        }, status=400)
                     
+                    print(f"Updating presentation status from pending to {data['status']}")
+                    presentation.bank_reference = data['bank_reference']
+                    presentation.status = data['status']
+                    presentation.save()
+
+                elif presentation.status == 'presented' and 'receipt_statuses' in data:
                     # Handle receipt status updates
-                    for pr in presentation.presentation_receipts.all():
-                        receipt = pr.checkreceipt or pr.lcn
-                        if receipt:
-                            print(f"Updating receipt status: {receipt}")
-                            if data['status'] == 'paid':
-                                receipt.status = 'PAID'
-                            elif data['status'] == 'rejected':
-                                receipt.status = 'REJECTED'
-                            elif data['status'] == 'presented':
-                                receipt.status = (
-                                    'PRESENTED_COLLECTION' 
-                                    if presentation.presentation_type == 'COLLECTION'
-                                    else 'PRESENTED_DISCOUNT'
-                                )
-                            receipt.save()
-                            print(f"Updated receipt status to: {receipt.status}")
+                    receipt_statuses = data['receipt_statuses']
+                    print(f"Updating {len(receipt_statuses)} receipt statuses")
+                    
+                    for receipt_id, new_status in receipt_statuses.items():
+                        print(f"Processing receipt {receipt_id} -> {new_status}")
+                        try:
+                            presentation_receipt = PresentationReceipt.objects.get(
+                                id=receipt_id,
+                                presentation=presentation
+                            )
+                            receipt = presentation_receipt.checkreceipt or presentation_receipt.lcn
+                            
+                            if receipt and receipt.status not in ['PAID', 'UNPAID']:
+                                print(f"Updating receipt {receipt_id} status to {new_status}")
+                                receipt.status = 'PAID' if new_status == 'paid' else 'UNPAID'
+                                receipt.save()
+                                print(f"Receipt status updated successfully")
+                            else:
+                                print(f"Receipt {receipt_id} already has final status: {receipt.status}")
+                        
+                        except PresentationReceipt.DoesNotExist:
+                            print(f"Receipt {receipt_id} not found in presentation {pk}")
+                            continue
+                
+                print("Presentation update completed successfully")
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Presentation updated successfully'
+                })
 
-                presentation.save()
-                print("Presentation saved successfully")
-
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Presentation updated successfully'
-            })
-
-        except json.JSONDecodeError as e:
-            print(f"JSON Decode error: {str(e)}")
+        except json.JSONDecodeError:
+            print("Invalid JSON in request body")
             return JsonResponse({
                 'status': 'error',
-                'message': f'Invalid JSON: {str(e)}'
+                'message': 'Invalid request format'
             }, status=400)
         except Exception as e:
-            import traceback
             print("=== Error in presentation edit ===")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
-                'message': f'Edit failed: {str(e)}'
+                'message': str(e)
             }, status=400)
-
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
     """

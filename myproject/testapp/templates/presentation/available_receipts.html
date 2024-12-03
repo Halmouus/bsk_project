@@ -19,7 +19,7 @@
                         </div>
                     </th>
                     <th>Reference</th>
-                    <th>Client</th>
+                    <th>Entity</th>
                     <th>Issue Date</th>
                     <th>Due Date</th>
                     <th>Amount</th>
@@ -39,7 +39,7 @@
                         </div>
                     </td>
                     <td>{{ receipt.get_receipt_number }}</td>
-                    <td>{{ receipt.client.name }}</td>
+                    <td>{{ receipt.entity.name }}</td>
                     <td>{{ receipt.operation_date|date:"Y-m-d" }}</td>
                     <td>{{ receipt.due_date|date:"Y-m-d" }}</td>
                     <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>

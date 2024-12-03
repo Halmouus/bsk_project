@@ -8,7 +8,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 import calendar
-from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity
+from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity,MOROCCAN_BANKS
 from django.db.models import Q
 
 class ReceiptListView(ListView):
@@ -16,11 +16,33 @@ class ReceiptListView(ListView):
     context_object_name = 'receipts'
 
     def get_queryset(self):
+        print("\n=== Getting Receipt Queryset ===")
+        checks = CheckReceipt.objects.select_related(
+            'client', 'entity'
+        ).prefetch_related(
+            'check_presentations__presentation__bank_account'
+        ).all()
+        print(f"Fetched {checks.count()} checks")
+        
+        lcns = LCN.objects.select_related(
+            'client', 'entity'
+        ).prefetch_related(
+            'lcn_presentations__presentation__bank_account'
+        ).all()
+        print(f"Fetched {lcns.count()} LCNs")
+
+        # Debug presentation info
+        for check in checks:
+            pres = check.check_presentations.first()
+            if pres:
+                print(f"Check {check.id} presentation: {pres.presentation.id}")
+                print(f"Bank: {pres.presentation.bank_account}")
+
         return {
-            'checks': CheckReceipt.objects.select_related('client', 'entity', 'bank_account').all(),
-            'lcns': LCN.objects.select_related('client', 'entity', 'bank_account').all(),
-            'cash': CashReceipt.objects.select_related('client', 'entity', 'bank_account', 'credited_account').all(),
-            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'bank_account', 'credited_account').all()
+            'checks': checks,
+            'lcns': lcns,
+            'cash': CashReceipt.objects.select_related('client', 'entity', 'credited_account').all(),
+            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'credited_account').all()
         }
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -52,12 +74,16 @@ class ReceiptCreateView(View):
             'month_choices': month_choices,
             'current_year': current_year,
             'current_month': current_month,
-            'bank_accounts': bank_accounts
+            'bank_accounts': bank_accounts,
+            'bank_choices': MOROCCAN_BANKS, 
         }
 
         return render(request, 'receipt/receipt_form_modal.html', context)
     
     def post(self, request, receipt_type):
+        print("POST request received:")
+        print("Receipt type:", receipt_type)
+        print("POST data:", request.POST)
         try:
             data = request.POST.dict()
             
@@ -69,25 +95,24 @@ class ReceiptCreateView(View):
                 'amount': data['amount'],
                 'client_year': data['client_year'],
                 'client_month': data['client_month'],
-                'bank_account_id': data['bank_account'],
                 'notes': data.get('notes', '')
             }
 
             if receipt_type == 'check':
                 receipt = CheckReceipt.objects.create(
                     **common_fields,
+                    issuing_bank=data['issuing_bank'],
                     due_date=data['due_date'],
                     check_number=data['check_number'],
-                    bank_name=data['bank_name'],
                     branch=data.get('branch', '')
                 )
             
             elif receipt_type == 'lcn':
                 receipt = LCN.objects.create(
                     **common_fields,
+                    issuing_bank=data['issuing_bank'],
                     due_date=data['due_date'],
                     lcn_number=data['lcn_number'],
-                    issuing_bank=data['issuing_bank']
                 )
             
             elif receipt_type == 'cash':
@@ -117,6 +142,8 @@ class ReceiptCreateView(View):
             })
 
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
@@ -134,6 +161,7 @@ class ReceiptUpdateView(View):
         
         try:
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
             
             # Get current date info for form
             today = timezone.now()
@@ -164,80 +192,90 @@ class ReceiptUpdateView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
     def post(self, request, receipt_type, pk):
-            try:
-                data = request.POST.dict()
-                model_map = {
-                    'check': CheckReceipt,
-                    'lcn': LCN,
-                    'cash': CashReceipt,
-                    'transfer': TransferReceipt
-                }
-                
-                receipt = get_object_or_404(model_map[receipt_type], pk=pk)
-                
-                # Update common fields
-                receipt.client_id = data['client']
-                receipt.entity_id = data['entity']
-                receipt.operation_date = data['operation_date']
-                receipt.amount = data['amount']
-                receipt.client_year = data['client_year']
-                receipt.client_month = data['client_month']
-                receipt.bank_account_id = data['bank_account']
-                receipt.notes = data.get('notes', '')
+        import traceback
+        try:
+            data = request.POST.dict()
+            print(f"Received data for {receipt_type} update:", data)
+            
+            model_map = {
+                'check': CheckReceipt,
+                'lcn': LCN,
+                'cash': CashReceipt,
+                'transfer': TransferReceipt
+            }
+            
+            receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
+            # Update common fields
+            receipt.client_id = data['client']
+            receipt.entity_id = data['entity']
+            receipt.operation_date = data['operation_date']
+            receipt.amount = data['amount']
+            receipt.client_year = data['client_year']
+            receipt.client_month = data['client_month']
+            receipt.notes = data.get('notes', '')
 
-                # Update type-specific fields
+            # Update type-specific fields
+            if receipt_type in ['check', 'lcn']:
+                receipt.issuing_bank = data['issuing_bank']  # Set issuing bank
+                receipt.due_date = data['due_date']
                 if receipt_type == 'check':
-                    receipt.due_date = data['due_date']
                     receipt.check_number = data['check_number']
-                    receipt.bank_name = data['bank_name']
                     receipt.branch = data.get('branch', '')
-                
-                elif receipt_type == 'lcn':
-                    receipt.due_date = data['due_date']
+                else:
                     receipt.lcn_number = data['lcn_number']
-                    receipt.issuing_bank = data['issuing_bank']
-                
-                elif receipt_type == 'cash':
-                    receipt.credited_account_id = data['credited_account']
-                    receipt.reference_number = data.get('reference_number', '')
-                
-                elif receipt_type == 'transfer':
-                    receipt.credited_account_id = data['credited_account']
-                    receipt.transfer_reference = data['transfer_reference']
+            else:  # cash or transfer
+                receipt.bank_account_id = data['bank_account']
+                if receipt_type == 'transfer':
+                    receipt.transfer_reference = data['transfer_reference'] 
                     receipt.transfer_date = data['transfer_date']
 
-                receipt.save()
+            receipt.save()
+            print(f"{receipt_type} updated successfully:", receipt)
 
-                return JsonResponse({
-                    'status': 'success',
-                    'message': f'{receipt_type.title()} updated successfully',
-                    'id': str(receipt.id)
-                })
+            return JsonResponse({
+                'status': 'success',
+                'message': f'{receipt_type.title()} updated successfully',
+                'id': str(receipt.id)
+            })
 
-            except Exception as e:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': str(e)
-                }, status=400)
+        except Exception as e:
+            print("Error in receipt update:")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+    
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptDeleteView(View):
     def post(self, request, receipt_type, pk):
-        model_map = {
-            'check': CheckReceipt,
-            'lcn': LCN,
-            'cash': CashReceipt,
-            'transfer': TransferReceipt
-        }
-        
         try:
+            model_map = {
+                'check': CheckReceipt,
+                'lcn': LCN,
+                'cash': CashReceipt,
+                'transfer': TransferReceipt
+            }
+            
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
+            # Check if receipt can be deleted
+            if not receipt.can_delete():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Cannot delete receipt that is part of a presentation'
+                }, status=400)
+
             receipt.delete()
             return JsonResponse({
                 'status': 'success',
                 'message': f'{receipt_type.title()} deleted successfully'
             })
         except Exception as e:
+            print("Error in receipt deletion:")
+            print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)

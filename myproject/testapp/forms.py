@@ -1,7 +1,7 @@
 from django import forms
 from django.core.exceptions import ValidationError
 from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, TransferReceipt, 
-    Presentation, PresentationReceipt)
+    Presentation, PresentationReceipt, MOROCCAN_BANKS)
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
 
@@ -80,22 +80,24 @@ class CheckReceiptForm(forms.ModelForm):
         model = CheckReceipt
         fields = [
             'client', 'entity', 'operation_date', 'amount',
-            'client_year', 'client_month', 'bank_account',
-            'due_date', 'check_number', 'bank_name', 'branch',
-            'compensates', 'notes'
+            'client_year', 'client_month',
+            'due_date', 'check_number', 'issuing_bank', 'branch',
+            'notes'
         ]
         widgets = {
             'operation_date': forms.DateInput(attrs={'type': 'date'}),
             'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'issuing_bank': forms.Select(choices=MOROCCAN_BANKS)
         }
+
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Limit compensates to rejected, uncompensated checks
-        self.fields['compensates'].queryset = Check.objects.filter(
-            status=Check.STATUS_REJECTED
+        self.fields['compensates'].queryset = CheckReceipt.objects.filter(
+            status=CheckReceipt.STATUS_REJECTED
         ).exclude(
-            status=Check.STATUS_COMPENSATED
+            status=CheckReceipt.STATUS_COMPENSATED
         )
 
 class LCNForm(forms.ModelForm):
@@ -103,13 +105,14 @@ class LCNForm(forms.ModelForm):
         model = LCN
         fields = [
             'client', 'entity', 'operation_date', 'amount',
-            'client_year', 'client_month', 'bank_account',
+            'client_year', 'client_month',
             'due_date', 'lcn_number', 'issuing_bank',
-            'compensates', 'notes'
+            'notes'
         ]
         widgets = {
             'operation_date': forms.DateInput(attrs={'type': 'date'}),
             'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'issuing_bank': forms.Select(choices=MOROCCAN_BANKS)
         }
 
     def __init__(self, *args, **kwargs):

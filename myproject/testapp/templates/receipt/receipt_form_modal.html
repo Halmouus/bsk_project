@@ -83,18 +83,7 @@
                            step="0.01" min="0.01" required>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="bank_account">Bank Account</label>
-                    <select class="form-control" id="bank_account" name="bank_account" required>
-                        {% for account in bank_accounts %}
-                        <option value="{{ account.id }}" {% if receipt and receipt.bank_account.id == account.id %}selected{% endif %}>
-                            {{ account.bank }} - {{ account.account_number }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
+
         </div>
 
         {% if receipt_type == 'check' %}
@@ -114,15 +103,19 @@
                            value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required>
                 </div>
             </div>
-        </div>          
-        <div class="row">
+        </div>
+        <div class="col-md-6">
             <div class="col-md-6">
                 <div class="form-group">
-                    <label for="bank_name">Bank Name</label>
-                    <input type="text" class="form-control" id="bank_name" name="bank_name" 
-                           value="{% if receipt %}{{ receipt.bank_name }}{% endif %}" required>
+                    <label for="issuingBank">Issuing Bank</label>
+                    <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
+                           value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                    <input type="hidden" id="issuingBankCode" name="issuing_bank" 
+                           value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                 </div>
             </div>
+        </div>          
+        <div class="row">
             <div class="col-md-6">
                 <div class="form-group">
                     <label for="branch">Branch</label>
@@ -150,13 +143,14 @@
                            value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required>
                 </div>
             </div>
-        </div>
-        <div class="row">
-            <div class="col-md-12">
-                <div class="form-group">
-                    <label for="issuing_bank">Issuing Bank</label>
-                    <input type="text" class="form-control" id="issuing_bank" name="issuing_bank" 
-                           value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}" required>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="issuingBank">Issuing Bank</label>
+                        <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
+                               value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                        <input type="hidden" id="issuingBankCode" name="issuing_bank" 
+                               value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
+                    </div>
                 </div>
             </div>
         </div>
@@ -282,12 +276,71 @@ $("#client").autocomplete({
             console.log('Entity input focused');
         });
 
-        // Add some basic styling to autocomplete dropdown
-        $(".ui-autocomplete").addClass("dropdown-menu").css({
-            'max-height': '200px',
-            'overflow-y': 'auto',
-            'overflow-x': 'hidden',
-            'z-index': '9999'
+        // Bank selection using jQuery UI autocomplete
+        const banksList = [
+            {% for code, name in bank_choices %}
+                { label: '{{ name }}', value: '{{ code }}' },
+            {% endfor %}
+        ];
+
+        $("#issuingBank").autocomplete({
+            source: banksList,
+            minLength: 0, // Show all options even without typing
+            select: function(event, ui) {
+                $("#issuingBank").val(ui.item.label);
+                $("#issuingBankCode").val(ui.item.value);
+                return false;
+            }
+        }).focus(function() {
+            // Show all options when field is focused
+            $(this).autocomplete("search", "");
         });
+
+        // Add dropdown indicator and click handler
+        $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>');
+        $(".bank-dropdown-toggle").click(function() {
+            $("#issuingBank").focus();
+        });
+
 });
 </script>
+
+<style>
+    .bank-dropdown-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+    }
+    
+    .ui-autocomplete {
+        max-height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 9999;
+
+        /* Scrollbar styles */
+        scrollbar-width: thin;
+        scrollbar-color: #0b4d71 #f1f1f1;
+        -webkit-overflow-scrolling: touch;
+        -ms-overflow-style: -ms-autohiding-scrollbar;
+        
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-thumb {
+        background: #888;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+    </style>

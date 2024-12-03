@@ -14,6 +14,20 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+MOROCCAN_BANKS = [
+    ('ATW', 'Attijariwafa Bank'),
+    ('BCP', 'Banque Populaire'),
+    ('BOA', 'Bank of Africa'),
+    ('CAM', 'Crédit Agricole du Maroc'),
+    ('CIH', 'CIH Bank'),
+    ('BMCI', 'BMCI'),
+    ('SGM', 'Société Générale Maroc'),
+    ('CDM', 'Crédit du Maroc'),
+    ('ABB', 'Al Barid Bank'),
+    ('CFG', 'CFG Bank'),
+    ('ABM', 'Arab Bank Maroc'),
+    ('CTB', 'Citibank Maghreb')
+]
 
 class item(BaseModel):
     name = models.CharField(max_length=100)
@@ -1217,7 +1231,16 @@ class NegotiableReceipt(Receipt):
         (STATUS_REJECTED, 'Rejected'),
         (STATUS_COMPENSATED, 'Compensated')
     ]
-
+    bank_account = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+    issuing_bank = models.CharField(
+        max_length=4,
+        choices=MOROCCAN_BANKS
+    )
     due_date = models.DateField()
     status = models.CharField(
         max_length=20, 
@@ -1263,7 +1286,6 @@ class NegotiableReceipt(Receipt):
     def get_presentation_info(self):
         """Returns formatted presentation information if receipt is presented"""
         if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT','DISCOUNTED', 'PAID', 'REJECTED']:
-            # Get the presentation through the reverse relation
             presentation_receipt = (
                 self.check_presentations.first() if hasattr(self, 'check_presentations') 
                 else self.lcn_presentations.first()
@@ -1271,12 +1293,21 @@ class NegotiableReceipt(Receipt):
             if presentation_receipt and presentation_receipt.presentation:
                 pres = presentation_receipt.presentation
                 return {
-                    'date': pres.date.strftime('%Y-%m-%d'),
+                    'date': pres.date,
                     'ref': f"Presentation #{pres.id}",
-                    'bank': pres.bank_account.bank,
-                    'type': pres.get_presentation_type_display()
+                    'bank': pres.bank_account,
+                    'type': pres.get_presentation_type_display(),
+                    'status': pres.status
                 }
         return None
+
+    def can_edit(self):
+        """Check if receipt can be edited"""
+        return not hasattr(self, 'presentation') or self.presentation is None
+
+    def can_delete(self):
+        """Check if receipt can be deleted"""
+        return self.can_edit()
 
     def get_status_display_with_details(self):
         """Enhanced status display with presentation details"""
@@ -1291,11 +1322,16 @@ class NegotiableReceipt(Receipt):
             )
             return status_display, details
         return status_display, None
+    
+    def save(self, *args, **kwargs):
+        if hasattr(self, 'presentation') and self.presentation:
+            # Update bank_account from presentation when presented
+            self.bank_account = self.presentation.bank_account
+        super().save(*args, **kwargs)
 
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
     check_number = models.CharField(max_length=50)
-    bank_name = models.CharField(max_length=100)
     branch = models.CharField(max_length=100, blank=True)
     
     def __str__(self):
@@ -1308,7 +1344,7 @@ class CheckReceipt(NegotiableReceipt):
 class LCN(NegotiableReceipt):
     """LCN-specific implementation."""
     lcn_number = models.CharField(max_length=50)
-    issuing_bank = models.CharField(max_length=100)
+    branch = models.CharField(max_length=100, blank=True)
 
     def __str__(self):
         return f"LCN {self.lcn_number} - {self.amount}"

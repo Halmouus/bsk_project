@@ -537,5 +537,38 @@ $(document).ready(function() {
 function startPresentation(type) {
     PresentationManager.startPresentation(type);
 }
+
+// Handle receipt status updates
+$(document).on('click', '.update-receipt-status', function() {
+    const $button = $(this);
+    const receiptId = $button.data('receipt-id');
+    
+    if (!confirm('This action cannot be undone. Continue?')) {
+        return;
+    }
+
+    console.log('Updating receipt status:', receiptId);
+    
+    $.ajax({
+        url: `/testapp/presentations/${presentationId}/edit/`,
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        },
+        contentType: 'application/json',
+        data: JSON.stringify({
+            receipt_id: receiptId,
+            receipt_status: 'paid'
+        }),
+        success: function(response) {
+            console.log('Status updated:', response);
+            $button.prop('disabled', true).text('Paid');
+        },
+        error: function(xhr) {
+            console.error('Update failed:', xhr.responseText);
+            showToast('Failed to update status', 'error');
+        }
+    });
+});
 </script>
 {% endblock %}

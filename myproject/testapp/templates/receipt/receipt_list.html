@@ -1,4 +1,13 @@
 {% extends 'base.html' %}
+
+{% load presentation_filters %}
+
+<!-- Debug info -->
+{% comment %}
+Available filters:
+{{ presentation_filters }}
+{% endcomment %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <!-- Header Section -->
@@ -53,18 +62,21 @@
 
     <!-- Tab Content -->
     <div class="tab-content mt-4" id="receiptTabsContent">
-        <!-- Checks Tab -->
+        <!-- Checks Tab Content -->
         <div class="tab-pane fade show active" id="checks" role="tabpanel">
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Entity</th>
                             <th>Client</th>
                             <th>Check Number</th>
-                            <th>Bank</th>
+                            <th>Issuing Bank</th>
                             <th>Due Date</th>
                             <th>Amount</th>
+                            <th>Bank Issued To</th>
+                            <th>Presentation</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -73,31 +85,67 @@
                         {% for check in receipts.checks %}
                         <tr>
                             <td>{{ check.operation_date|date:"Y-m-d" }}</td>
-                            <td>{{ check.client.name }}</td>
+                            <td>
+                                <strong>{{ check.entity.name }}</strong><br>
+                                <small class="text-muted">{{ check.entity.ice_code }}</small>
+                            </td>
+                            <td>
+                                <small>{{ check.client.name }}</small>
+                            </td>
                             <td>{{ check.check_number }}</td>
-                            <td>{{ check.bank_name }}</td>
+                            <td>{{ check.get_issuing_bank_display }}</td>
                             <td>{{ check.due_date|date:"Y-m-d" }}</td>
                             <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+
+                            <!-- Bank Issued To column -->
                             <td>
-                                <span class="badge {% if check.status == 'PORTFOLIO' %}badge-primary{% elif check.status == 'PAID' %}badge-success{% elif check.status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
+                                {% with pres=check.check_presentations.first %}
+                                    {% if pres %}
+                                        {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                {% with pres=check.check_presentations.first %}
+                                    {% if pres %}
+                                        {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br>
+                                        <span class="badge badge-{{ pres.presentation.status|status_badge }}">
+                                            {{ pres.presentation.get_status_display }}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ check.status|status_badge }}">
                                     {{ check.get_status_display }}
                                 </span>
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="check" data-action="edit" data-id="{{ check.id }}">
-                                        <i class="fas fa-edit"></i>
+                                    <button class="btn btn-sm btn-info" onclick="viewReceipt('check', '{{ check.id }}')">
+                                        <i class="fas fa-eye"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    {% with pres=check.check_presentations.first %}
+                                        {% if not pres %}
+                                            <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
+                                                    data-type="check" data-action="edit" data-id="{{ check.id }}">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                    {% endwith %}
                                 </div>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center">No checks found</td>
+                            <td colspan="11" class="text-center">No checks found</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -105,18 +153,21 @@
             </div>
         </div>
 
-        <!-- LCNs Tab -->
+        <!-- LCNs Tab Content -->
         <div class="tab-pane fade" id="lcns" role="tabpanel">
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Entity</th>
                             <th>Client</th>
                             <th>LCN Number</th>
                             <th>Issuing Bank</th>
                             <th>Due Date</th>
                             <th>Amount</th>
+                            <th>Bank Issued To</th>
+                            <th>Presentation</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -125,31 +176,69 @@
                         {% for lcn in receipts.lcns %}
                         <tr>
                             <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
-                            <td>{{ lcn.client.name }}</td>
+                            <td>
+                                <strong>{{ lcn.entity.name }}</strong><br>
+                                <small class="text-muted">{{ lcn.entity.ice_code }}</small>
+                            </td>
+                            <td>
+                                <small>{{ lcn.client.name }}</small>
+                            </td>
                             <td>{{ lcn.lcn_number }}</td>
-                            <td>{{ lcn.issuing_bank }}</td>
+                            <td>{{ lcn.get_issuing_bank_display }}</td>
                             <td>{{ lcn.due_date|date:"Y-m-d" }}</td>
                             <td class="text-right">{{ lcn.amount|floatformat:2 }}</td>
                             <td>
-                                <span class="badge {% if lcn.status == 'PORTFOLIO' %}badge-primary{% elif lcn.status == 'PAID' %}badge-success{% elif lcn.status == 'REJECTED' %}badge-danger{% else %}badge-warning{% endif %}">
+                                {% if lcn.presentation %}
+                                    {{ lcn.presentation.bank_account.bank }} -
+                                    {{ lcn.presentation.bank_account.account_number }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lcn.presentation %}
+                                    <span class="d-block">Date: {{ lcn.presentation.date|date:"Y-m-d" }}</span>
+                                    <span class="d-block">Ref: #{{ lcn.presentation.id }}</span>
+                                    <span class="d-block small text-muted">
+                                        {{ lcn.presentation.get_presentation_type_display }}
+                                    </span>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <span class="badge badge-{{ lcn.status|status_badge }}">
                                     {{ lcn.get_status_display }}
                                 </span>
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="lcn" data-action="edit" data-id="{{ lcn.id }}">
-                                        <i class="fas fa-edit"></i>
+                                    <button class="btn btn-sm btn-info" 
+                                            onclick="viewReceipt('lcn', '{{ lcn.id }}')"
+                                            {% if lcn.presentation %}title="View Details"{% endif %}>
+                                        <i class="fas fa-eye"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
+                                    {% if not lcn.presentation %}
+                                        <button class="btn btn-sm btn-primary" 
+                                                data-toggle="modal" 
+                                                data-target="#receiptModal" 
+                                                data-type="lcn" 
+                                                data-action="edit" 
+                                                data-id="{{ lcn.id }}">
+                                            <i class="fas fa-edit"></i>
+                                        </button>
+                                        <button class="btn btn-sm btn-danger delete-receipt" 
+                                                data-type="lcn" 
+                                                data-id="{{ lcn.id }}">
+                                            <i class="fas fa-trash"></i>
+                                        </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="8" class="text-center">No LCNs found</td>
+                            <td colspan="11" class="text-center">No LCNs found</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -306,20 +395,33 @@ $(document).ready(function() {
             const url = form.attr('action');
             const isEdit = url.includes('/edit/');
             
+            console.log("Form being submitted:", {
+                url: url,
+                isEdit: isEdit,
+                formData: form.serialize(),
+                formElements: form.serializeArray()
+            });
+
             $.ajax({
                 url: url,
                 type: 'POST',
                 data: form.serialize(),
                 success: function(response) {
+                    console.log("Success response:", response);
                     if (response.status === 'success') {
                         $('#receiptModal').modal('hide');
                         showToast(response.message, 'success');
-                        location.reload(); // Refresh to show updated data
+                        location.reload();
                     } else {
+                        console.log("Form errors:", response.errors);
                         showFormErrors(form, response.errors);
                     }
                 },
                 error: function(xhr) {
+                    console.error("Error response:", {
+                        status: xhr.status,
+                        responseText: xhr.responseText
+                    });
                     try {
                         const errors = JSON.parse(xhr.responseText);
                         showFormErrors(form, errors);
@@ -510,6 +612,77 @@ $(document).keydown(function(e) {
         }
     }
 });
+
+// Handle presentation status update
+function updatePresentation(id) {
+    const bankRef = $('#bankReference').val();
+    if (!bankRef) {
+        showError('Bank reference is required');
+        return;
+    }
+
+    $.ajax({
+        url: `/testapp/presentations/${id}/edit/`,
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+        data: JSON.stringify({
+            bank_reference: bankRef,
+            status: $('#presentationStatus').val()
+        }),
+        success: () => location.reload(),
+        error: xhr => showError(xhr.responseJSON?.message || 'Update failed')
+    });
+}
+
+// Handle receipt status update
+$(document).on('change', '.receipt-status', function() {
+    const $select = $(this);
+    const receiptId = $select.data('receipt-id');
+    const newStatus = $select.val();
+
+    if (!confirm('This status change is irreversible. Continue?')) {
+        $select.val($select.find('option').not(':selected').val());
+        return;
+    }
+
+    $.ajax({
+        url: `/testapp/presentations/${presentationId}/edit/`,
+        method: 'POST',
+        contentType: 'application/json',
+        headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },
+        data: JSON.stringify({
+            receipt_id: receiptId,
+            receipt_status: newStatus
+        }),
+        success: () => {
+            $select.prop('disabled', true);
+            location.reload();
+        },
+        error: xhr => {
+            showError(xhr.responseJSON?.message || 'Status update failed');
+            $select.val($select.find('option').not(':selected').val());
+        }
+    });
+});
+
+function showError(message) {
+    const toast = `
+        <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+            <div class="toast-header bg-danger text-white">
+                <strong class="mr-auto">Error</strong>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+            </div>
+            <div class="toast-body">${message}</div>
+        </div>
+    `;
+    
+    const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>')
+        .append(toast)
+        .appendTo('body');
+    
+    $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
+}
 
 // Add tooltip hints for shortcuts
 $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() {
