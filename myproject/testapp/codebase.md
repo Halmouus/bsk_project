@@ -171,7 +171,6 @@ class TransferReceiptForm(forms.ModelForm):
             'operation_date': forms.DateInput(attrs={'type': 'date'}),
             'transfer_date': forms.DateInput(attrs={'type': 'date'}),
         }
-
 ```
 
 # models.py
@@ -260,335 +259,6 @@ class BankAccount(BaseModel):
     def __str__(self):
         type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
         return f"{self.bank} [{self.account_number}] - {type_indicator}"
-    
-class Checker(BaseModel):
-    TYPE_CHOICES = [
-        ('CHQ', 'Cheque'),
-        ('LCN', 'LCN')
-    ]
-    
-    PAGE_CHOICES = [
-        (25, '25'),
-        (50, '50'),
-        (100, '100')
-    ]
-
-    STATUS_CHOICES = [
-        ('new', 'New'),
-        ('in_use', 'In Use'), 
-        ('completed', 'Completed')
-    ]
-
-    code = models.CharField(max_length=10, unique=True, blank=True)
-    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
-    bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
-    num_pages = models.IntegerField(choices=PAGE_CHOICES)
-    index = models.CharField(
-        max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
-    )
-    starting_page = models.IntegerField(validators=[MinValueValidator(1)])
-    final_page = models.IntegerField(blank=True)
-    current_position = models.IntegerField(blank=True)
-    is_active = models.BooleanField(default=True)
-    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
-
-    def update_status(self):
-        if self.current_position > self.starting_page:
-            self.status = 'in_use'
-        if self.current_position >= self.final_page:
-            self.status = 'completed'
-        self.save()
-
-    def get_status(self):
-        STATUS_STYLES = {
-            'new': {'label': 'New', 'color': 'primary'},
-            'in_use': {'label': 'In Use', 'color': 'warning'},
-            'completed': {'label': 'Completed', 'color': 'success'},
-        }
-        return STATUS_STYLES.get(self.status, {'label': 'Unknown', 'color': 'secondary'})
-
-    @property
-    def remaining_pages(self):
-        print(f"Calculating remaining pages for {self.bank_account.bank}")
-        
-        # Get all used positions (excluding cancelled checks)
-        used_positions = set(
-            self.checks.values_list('position', flat=True)
-        )
-        used_positions_count = self.checks.count()
-        # Count available positions
-        available_count = self.final_page - self.starting_page + 1 - used_positions_count
-        print(f"Used positions: {used_positions}")
-        print(f"Available positions count: {available_count}")
-        
-        return available_count
-    def clean(self):
-        if self.bank_account:
-            if not self.bank_account.is_active:
-                raise ValidationError("Cannot create checker for inactive bank account")
-            if self.bank_account.account_type != 'national':
-                raise ValidationError("Can only create checkers for national accounts")
-        super().clean()
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = self.generate_code()
-        if not self.final_page:
-            self.final_page = self.starting_page + self.num_pages - 1
-        if not self.current_position:
-            self.current_position = self.starting_page
-        super().save(*args, **kwargs)
-
-    def generate_code(self):
-        # Generate random alphanumeric code
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    
-    #signature part#
-    position_signatures = models.JSONField(default=dict)
-
-    def get_position_signature_status(self, position):
-        print(f"Getting signature status for position {position}")
-        print(f"Current signatures: {self.position_signatures}")
-        return self.position_signatures.get(str(position), {
-            'signatures': [],
-            'timestamps': []
-        })
-
-    def add_signature(self, position, signature):
-        print(f"Adding signature {signature} to position {position}")
-        position = str(position)
-        if position not in self.position_signatures:
-            print(f"Position {position} not found, initializing")
-            self.position_signatures[position] = {
-                'signatures': [],
-                'timestamps': []
-            }
-        
-        if signature not in self.position_signatures[position]['signatures']:
-            print(f"Adding new signature {signature}")
-            self.position_signatures[position]['signatures'].append(signature)
-            self.position_signatures[position]['timestamps'].append(
-                timezone.now().isoformat()
-            )
-            print(f"Updated signatures: {self.position_signatures}")
-            self.save()
-        else:
-            print(f"Signature {signature} already exists for position {position}")
-        
-    
-    def get_last_issued_check(self):
-        """Get the last issued check."""
-        return self.checks.exclude(status="available").order_by('-position').first()
-
-    def get_next_available_position(self):
-        """Calculate the next available position."""
-        last_check = self.get_last_issued_check()
-        if last_check:
-            last_position = int(last_check.position[len(self.index):])
-            next_position = last_position + 1
-            if next_position <= self.final_page:
-                return next_position
-        return self.starting_page
-
-    def __str__(self):
-        return f'Checker {self.index}'
-
-    class Meta:
-        ordering = ['-created_at']
-
-class Check(BaseModel):
-    checker = models.ForeignKey(Checker, on_delete=models.PROTECT, related_name='checks')
-    position = models.CharField(max_length=10, unique=True)  # Will store "INDEX + position number"
-    creation_date = models.DateField(default=timezone.now)
-    beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
-    cause = models.ForeignKey(Invoice, on_delete=models.PROTECT)
-    payment_due = models.DateField(null=True, blank=True)
-    amount_due = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
-    amount = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))]
-    )
-    observation = models.TextField(blank=True)
-    delivered = models.BooleanField(default=False)
-    paid = models.BooleanField(default=False)
-    delivered_at = models.DateTimeField(null=True, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
-    cancelled_at = models.DateTimeField(null=True, blank=True)
-    cancellation_reason = models.TextField(null=True, blank=True)
-    status = models.CharField(
-        max_length=20,
-        choices=[
-            ('draft', 'Draft'),
-            ('printed', 'Printed'),
-            ('ready_to_sign', 'Ready to Sign'),
-            ('pending', 'Pending'),
-            ('delivered', 'Delivered'),
-            ('paid', 'Paid'),
-            ('rejected', 'Rejected'),
-            ('cancelled', 'Cancelled')
-        ],
-        default='draft'
-    )
-
-    REJECTION_REASONS = [
-        ('insufficient_funds', 'Insufficient Funds'),
-        ('signature_mismatch', 'Signature Mismatch'),
-        ('amount_error', 'Amount Error'),
-        ('date_error', 'Date Error'),
-        ('other', 'Other')
-    ]
-
-    SIGNATURE_CHOICES = [
-        ('OUK', 'OUK'),
-        ('KEZ', 'KEZ')
-    ]
-    
-
-    rejected_at = models.DateTimeField(null=True, blank=True)
-    rejection_reason = models.CharField(max_length=50, choices=REJECTION_REASONS, null=True, blank=True)
-    rejection_note = models.TextField(blank=True)
-    rejection_date = models.DateTimeField(null=True, blank=True)
-
-    replaces = models.ForeignKey('self', null=True, blank=True, related_name='replaced_by', on_delete=models.PROTECT)
-
-    received_at = models.DateTimeField(null=True, blank=True)
-    received_notes = models.TextField(blank=True)
-
-    signatures = models.JSONField(default=list)
-
-    
-    def save(self, *args, **kwargs):
-        print(f"New creation at:  {self.checker.current_position}")
-        if not self.position:
-            self.position = self.checker.current_position
-        if not self.amount_due:
-            self.amount_due = self.cause.total_amount
-        super().save(*args, **kwargs)
-        
-        # Update checker's current position
-        if self.checker.current_position == self.checker.current_position:
-            self.checker.current_position += 1
-            self.checker.save()
-
-    def clean(self):
-                
-        # Ensure no duplicate positions
-        if self.objects.filter(checker=self.checker, position=self.position).exists():
-            raise ValidationError("This position is already used.")
-        
-        # Ensure the position is within the valid range
-        if int(self.position[len(self.checker.index):]) < self.checker.starting_page or \
-           int(self.position[len(self.checker.index):]) > self.checker.final_page:
-            raise ValidationError(
-                f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
-            )
-        
-        if self.paid_at and not self.delivered_at:
-            raise ValidationError("Check cannot be marked as paid before delivery")
-        
-        super().clean()
-
-    class Meta:
-        ordering = ['-creation_date']
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(amount__lte=models.F('amount_due')),
-                name='check_amount_cannot_exceed_due'
-            )
-        ]
-    
-    @property
-    def has_replacement(self):
-        return hasattr(self, 'replaced_by') and self.replaced_by.exists()
-
-    def reject(self, reason, note=''):
-        self.status = 'rejected'
-        self.rejection_reason = reason
-        self.rejection_note = note
-        self.rejection_date = timezone.now()
-        self.save()
-
-    def replace_with(self, new_check):
-        new_check.replaces = self
-        new_check.save()
-
-    @property
-    def is_received(self):
-        """Check if we have physical possession of the check"""
-        return bool(self.received_at)
-
-    @property
-    def can_be_replaced(self):
-        """Can only replace rejected checks that we physically have"""
-        return (
-            self.status == 'rejected' and 
-            self.is_received and 
-            not self.has_replacement
-        )
-
-    def receive(self, notes=''):
-        """Mark check as physically received"""
-        if self.status not in ['delivered', 'rejected']:
-            raise ValidationError("Only delivered or rejected checks can be received")
-        
-        self.received_at = timezone.now()
-        self.received_notes = notes
-        self.save()
-
-    def create_replacement(self, checker, **kwargs):
-        """
-        Create a replacement check after validating state
-        
-        Args:
-            checker (Checker): The checker to use for the new check
-            **kwargs: Additional fields to override (amount, due date, etc.)
-        """
-        if not self.can_be_replaced:
-            raise ValidationError(
-                "Cannot replace: Check must be rejected and received, with no existing replacement"
-            )
-
-        if not checker.is_active or checker.status == 'completed':
-            raise ValidationError("Selected checker is not available for new checks")
-
-        # Create new check with same base properties but new checker and details
-        replacement = Check.objects.create(
-            checker=checker,  # Use the provided checker
-            beneficiary=self.beneficiary,
-            cause=self.cause,
-            amount_due=self.amount_due,
-            replaces=self,
-            **kwargs  # Allow overriding specific fields like amount, due date
-        )
-        return replacement
-
-    @property
-    def signature_status(self):
-        sig_count = len(self.signatures)
-        if sig_count == 0:
-            return 'unsigned'
-        elif sig_count == 1:
-            return 'mono-signed'
-        return 'double-signed'
-
-    def can_be_signed(self, signature):
-        return (
-            signature in dict(self.SIGNATURE_CHOICES) and
-            signature not in self.signatures and
-            len(self.signatures) < 2
-        )
-
-    def add_signature(self, signature):
-        if self.can_be_signed(signature):
-            self.signatures.append(signature)
-            if len(self.signatures) == 2:
-                self.status = 'pending'
-            elif self.status == 'printed':
-                self.status = 'ready_to_sign'
-            self.save()
 
 class Client(BaseModel):
     """
@@ -1005,7 +675,6 @@ class NegotiableReceipt(Receipt):
     def get_presentation_info(self):
         """Returns formatted presentation information if receipt is presented"""
         if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT','DISCOUNTED', 'PAID', 'REJECTED']:
-            # Get the presentation through the reverse relation
             presentation_receipt = (
                 self.check_presentations.first() if hasattr(self, 'check_presentations') 
                 else self.lcn_presentations.first()
@@ -1013,12 +682,21 @@ class NegotiableReceipt(Receipt):
             if presentation_receipt and presentation_receipt.presentation:
                 pres = presentation_receipt.presentation
                 return {
-                    'date': pres.date.strftime('%Y-%m-%d'),
+                    'date': pres.date,
                     'ref': f"Presentation #{pres.id}",
-                    'bank': pres.bank_account.bank,
-                    'type': pres.get_presentation_type_display()
+                    'bank': pres.bank_account,
+                    'type': pres.get_presentation_type_display(),
+                    'status': pres.status
                 }
         return None
+
+    def can_edit(self):
+        """Check if receipt can be edited"""
+        return not hasattr(self, 'presentation') or self.presentation is None
+
+    def can_delete(self):
+        """Check if receipt can be deleted"""
+        return self.can_edit()
 
     def get_status_display_with_details(self):
         """Enhanced status display with presentation details"""
@@ -1283,7 +961,8 @@ def update_checker_status(sender, instance, **kwargs):
         instance.checker.update_status()
 
 
-
+```
+K
 # templates/base.html
 
 ```html
@@ -1320,36 +999,46 @@ def update_checker_status(sender, instance, **kwargs):
 {% extends 'base.html' %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Client Sales</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#saleModal"> <i class="fas fa-plus"></i> New Sale </button> </div> <!-- Sales Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Amount</th> <th>Notes</th> </tr> </thead> <tbody> {% for sale in sales %} <tr> <td>{{ sale.date|date:"Y-m-d" }}</td> <td>{{ sale.client.name }}</td> <td class="text-right">{{ sale.amount|floatformat:2 }}</td> <td>{{ sale.notes }}</td> </tr> {% empty %} <tr> <td colspan="4" class="text-center">No sales recorded yet</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Sale Modal --> <div class="modal fade" id="saleModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Record New Sale</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="saleForm"> {% csrf_token %} <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" placeholder="Search client..." required> <input type="hidden" id="client_id" name="client" required> </div> <div class="form-group"> <label for="date">Date</label> <input type="date" class="form-control" id="date" name="date" value="{% now 'Y-m-d' %}" required> </div> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01" required> </div> <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2"></textarea> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveSale">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Handle form submission $('#saveSale').click(function() { const form = $('#saleForm'); $.ajax({ url: "{% url 'create-sale' %}", method: 'POST', data: form.serialize(), success: function(response) { $('#saleModal').modal('hide'); showToast('Sale recorded successfully'); location.reload(); }, error: function(xhr) { showToast(xhr.responseJSON.message, 'error'); } }); }); }); </script> {% endblock %}
 ```
 
+# templates/home.html
+
+```html
+{% extends 'base.html' %} {% block title %}Home - MyProject{% endblock %} {% block content %} <h1>Welcome to MyProject!</h1> <p>This is the home page.</p> {% endblock %}
+```
+
+# templates/login.html
+
+```html
+{% extends 'base.html' %} {% block title %}Login - MyProject{% endblock %} {% block content %} <div class="container"> <h2>Login</h2> <form method="post"> {% csrf_token %} <div class="form-group"> <label for="username">Username:</label> <input type="text" id="username" name="username" class="form-control" required> </div> <div class="form-group"> <label for="password">Password:</label> <input type="password" id="password" name="password" class="form-control" required> </div> <button type="submit" class="btn btn-primary">Login</button> </form> </div> {% endblock %}
+```
+
 # templates/presentation/available_receipts.html
 
 ```html
-<div class="receipt-container"> <!-- Summary info --> <div class="alert alert-info"> <strong>Selected:</strong> <span id="selectedCount">0</span> receipts <strong class="ml-3">Total Amount:</strong> <span id="selectedAmount">0.00</span> MAD </div> <!-- Receipts table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input" id="selectAll"> <label class="custom-control-label" for="selectAll"></label> </div> </th> <th>Reference</th> <th>Client</th> <th>Issue Date</th> <th>Due Date</th> <th>Amount</th> <th>Days to Due</th> </tr> </thead> <tbody> {% for receipt in receipts %} <tr> <td> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input receipt-checkbox" id="receipt{{ receipt.id }}" value="{{ receipt.id }}" data-amount="{{ receipt.amount }}"> <label class="custom-control-label" for="receipt{{ receipt.id }}"></label> </div> </td> <td>{{ receipt.get_receipt_number }}</td> <td>{{ receipt.client.name }}</td> <td>{{ receipt.operation_date|date:"Y-m-d" }}</td> <td>{{ receipt.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td>{{ receipt.due_date|timeuntil }}</td> </tr> {% empty %} <tr> <td colspan="7" class="text-center"> No available receipts found in portfolio status </td> </tr> {% endfor %} </tbody> </table> </div> </div> <script> $(document).ready(function() { // Handle select all checkbox $('#selectAll').change(function() { $('.receipt-checkbox').prop('checked', $(this).prop('checked')); updateSelection(); }); // Handle individual checkboxes $('.receipt-checkbox').change(function() { updateSelection(); // Update select all checkbox state $('#selectAll').prop('checked', $('.receipt-checkbox').length === $('.receipt-checkbox:checked').length); }); function updateSelection() { const selected = $('.receipt-checkbox:checked'); $('#selectedCount').text(selected.length); const totalAmount = selected.toArray() .reduce((sum, checkbox) => sum + parseFloat($(checkbox).data('amount')), 0); $('#selectedAmount').text(totalAmount.toFixed(2)); // Enable/disable save button based on selection $('#savePresentation').prop('disabled', selected.length === 0); } }); </script>
+<div class="receipt-container"> <!-- Summary info --> <div class="alert alert-info"> <strong>Selected:</strong> <span id="selectedCount">0</span> receipts <strong class="ml-3">Total Amount:</strong> <span id="selectedAmount">0.00</span> MAD </div> <!-- Receipts table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input" id="selectAll"> <label class="custom-control-label" for="selectAll"></label> </div> </th> <th>Reference</th> <th>Entity</th> <th>Issue Date</th> <th>Due Date</th> <th>Amount</th> <th>Days to Due</th> </tr> </thead> <tbody> {% for receipt in receipts %} <tr> <td> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input receipt-checkbox" id="receipt{{ receipt.id }}" value="{{ receipt.id }}" data-amount="{{ receipt.amount }}"> <label class="custom-control-label" for="receipt{{ receipt.id }}"></label> </div> </td> <td>{{ receipt.get_receipt_number }}</td> <td>{{ receipt.entity.name }}</td> <td>{{ receipt.operation_date|date:"Y-m-d" }}</td> <td>{{ receipt.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td>{{ receipt.due_date|timeuntil }}</td> </tr> {% empty %} <tr> <td colspan="7" class="text-center"> No available receipts found in portfolio status </td> </tr> {% endfor %} </tbody> </table> </div> </div> <script> $(document).ready(function() { // Handle select all checkbox $('#selectAll').change(function() { $('.receipt-checkbox').prop('checked', $(this).prop('checked')); updateSelection(); }); // Handle individual checkboxes $('.receipt-checkbox').change(function() { updateSelection(); // Update select all checkbox state $('#selectAll').prop('checked', $('.receipt-checkbox').length === $('.receipt-checkbox:checked').length); }); function updateSelection() { const selected = $('.receipt-checkbox:checked'); $('#selectedCount').text(selected.length); const totalAmount = selected.toArray() .reduce((sum, checkbox) => sum + parseFloat($(checkbox).data('amount')), 0); $('#selectedAmount').text(totalAmount.toFixed(2)); // Enable/disable save button based on selection $('#savePresentation').prop('disabled', selected.length === 0); } }); </script>
 ```
 
 # templates/presentation/presentation_detail_modal.html
 
 ```html
-{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6"> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> <p><strong>Bank Reference:</strong> {{ presentation.bank_reference|default:"Not yet assigned" }}</p> <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br> <small class="text-muted"> {{ receipt.checkreceipt.get_issuing_bank_display }} </small> {% else %} {{ receipt.lcn.lcn_number }} <br> <small class="text-muted"> {{ receipt.lcn.get_issuing_bank_display }} </small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% endif %} </td> </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="4" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> </tr> </tfoot> </table> </div> {% if presentation.status == 'pending' %} <!-- Update Status Form --> <div class="mt-4"> <hr> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}"> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Update Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Mark as Presented</option> <option value="paid">Mark as Paid</option> <option value="rejected">Mark as Rejected</option> </select> </div> </div> </div> </div> {% endif %} </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="editPresentation('{{ presentation.id }}')"> Edit </button> {% endif %} </div>
+{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div id="presentation-container" data-presentation-id="{{ presentation.id }}"> <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6 d-flex flex-column"> {% if presentation.status == 'pending' %} <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required> </div> <div class="form-group"> <label>Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Presented</option> <option value="discounted">Discounted</option> <option value="rejected">Rejected</option> </select> </div> {% else %} <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> {% endif %} <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> {% if presentation.status == 'presented' %} <th>New Status</th> {% endif %} </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small> {% else %} {{ receipt.lcn.lcn_number }} <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% endif %} </td> {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <td> <select class="form-control form-control-sm receipt-status" data-receipt-id="{{ receipt.id }}" {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}> <option value="">Pending</option> <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option> <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option> </select> </td> {% endif %} </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="5" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td colspan="2"></td> </tr> </tfoot> </table> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')"> Update Status </button> {% endif %} {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')"> Update Statuses </button> {% endif %} </div> </div> <script> const presentationId = '{{ presentation.id }}'; console.log("Presentation ID:", presentationId); function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } const data = { bank_reference: bankRef, status: $('#presentationStatus').val() }; $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify(data), success: function(response) { location.reload(); }, error: function(xhr) { showError(xhr.responseJSON?.message || 'Update failed'); } }); } // Handle receipt status changes function updateReceiptStatuses(presentationId) { console.log('Updating receipt statuses for presentation:', presentationId); // Collect all receipt statuses that are not pending const receiptStatuses = {}; let hasChanges = false; $('.receipt-status').each(function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const status = $select.val(); receiptStatuses[receiptId] = status; hasChanges = true; // Consider all selections as potential updates }); if (!hasChanges) { showToast('No status changes to update', 'info'); return; } console.log('Updating statuses:', receiptStatuses); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_statuses: receiptStatuses }), success: function(response) { console.log('Status update response:', response); // Disable dropdowns and show success feedback after update Object.keys(receiptStatuses).forEach(receiptId => { const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`); $select.prop('disabled', true); // Disable updated dropdown $select.closest('tr').addClass('updated-row'); // Optional: Highlight updated rows }); showToast('Receipt statuses updated successfully', 'success'); }, error: function(xhr) { console.error('Status update failed:', xhr.responseText); showToast('Failed to update statuses', 'error'); } }); } function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .html(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', function() { container.remove(); }); } </script>
 ```
 
 # templates/presentation/presentation_list.html
 
 ```html
-{% extends 'base.html' %} {% load presentation_filters %} {% block content %} {% csrf_token %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Presentations</h2> <div class="btn-group"> <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus"></i> New Presentation </button> <div class="dropdown-menu dropdown-menu-right"> <a class="dropdown-item" href="#" onclick="startPresentation('check')"> <i class="fas fa-money-check"></i> Present Checks </a> <a class="dropdown-item" href="#" onclick="startPresentation('lcn')"> <i class="fas fa-file-invoice-dollar"></i> Present LCNs </a> </div> </div> </div> <!-- Filter Section --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-3"> <select class="form-control" id="typeFilter"> <option value="">All Types</option> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="statusFilter"> <option value="">All Status</option> <option value="pending">Pending</option> <option value="presented">Presented</option> <option value="paid">Paid</option> <option value="rejected">Rejected</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="bankFilter"> <option value="">All Banks</option> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> <div class="col-md-3"> <input type="text" class="form-control" id="searchPresentation" placeholder="Search by reference..."> </div> </div> </div> </div> <!-- Presentations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Type</th> <th>Bank Account</th> <th>Bank Reference</th> <th>Total Amount</th> <th>Receipt Count</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for presentation in presentations %} <tr> <td>{{ presentation.date|date:"Y-m-d" }}</td> <td>{{ presentation.get_presentation_type_display }}</td> <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td> <td>{{ presentation.bank_reference|default:"-" }}</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td class="text-center">{{ presentation.receipt_count }}</td> <td> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')"> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')" {% if presentation.status == 'paid' %}disabled{% endif %}> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')" {% if presentation.status != 'pending' %}disabled{% endif %}> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No presentations found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Create/Edit Presentation Modal --> <div class="modal fade" id="presentationModal" tabindex="-1"> <div class="modal-dialog modal-xl"> <!-- Made larger for better receipt selection view --> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <span id="modalTitleText">Create Presentation</span> </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="presentationForm"> <!-- Step indicator --> <div class="mb-4"> <div class="progress"> <div class="progress-bar" role="progressbar" style="width: 0%"></div> </div> <div class="d-flex justify-content-between mt-2"> <span class="step-indicator active">1. Basic Info</span> <span class="step-indicator">2. Select Receipts</span> <span class="step-indicator">3. Review</span> </div> </div> <!-- Step 1: Basic Info --> <div id="step1" class="step-content"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Presentation Type</label> <select class="form-control" id="presentationType" required> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Bank Account</label> <select class="form-control" id="bankAccount" required> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="presentationDate" value="{% now 'Y-m-d' %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Notes</label> <textarea class="form-control" id="presentationNotes" rows="1"></textarea> </div> </div> </div> </div> <!-- Step 2: Receipt Selection --> <div id="step2" class="step-content d-none"> <div class="receipt-selection-container"> <!-- Receipts will be loaded here --> </div> </div> <!-- Step 3: Review --> <div id="step3" class="step-content d-none"> <div class="review-summary"> <!-- Summary will be populated dynamically --> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-info" id="prevStep" style="display: none"> <i class="fas fa-arrow-left"></i> Previous </button> <button type="button" class="btn btn-primary" id="nextStep"> Next <i class="fas fa-arrow-right"></i> </button> <button type="button" class="btn btn-success" id="savePresentation" style="display: none"> <i class="fas fa-save"></i> Create Presentation </button> </div> </div> </div> </div> <!-- View Presentation Modal --> <div class="modal fade" id="viewPresentationModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> {% endblock %} {% block extra_js %} <script> function showError(error) { console.error(error); alert('An error occurred: ' + error); } function showSuccess(message) { console.log(message); alert('Succes!: ' + message); } const PresentationManager = { currentStep: 1, totalSteps: 3, receiptType: null, selectedReceipts: [], init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#nextStep').on('click', () => this.nextStep()); $('#prevStep').on('click', () => this.previousStep()); $('#savePresentation').on('click', () => this.savePresentation()); }, setupValidation() { // Add validation for required fields $('#presentationForm input[required], #presentationForm select[required]') .on('input change', () => this.validateCurrentStep()); }, startPresentation(type) { this.receiptType = type; this.currentStep = 1; this.selectedReceipts = []; // Update modal title $('#modalTitleText').text(`Create ${type.toUpperCase()} Presentation`); // Reset form $('#presentationForm')[0].reset(); // Show first step this.showStep(1); // Show modal $('#presentationModal').modal('show'); }, async loadAvailableReceipts() { try { const response = await $.get('/testapp/presentations/available-receipts/', { type: this.receiptType }); $('.receipt-selection-container').html(response.html); this.initializeReceiptSelection(); } catch (error) { showError('Failed to load available receipts'); } }, initializeReceiptSelection() { // Initialize receipt selection handlers $('.receipt-checkbox').on('change', () => this.updateSelectionSummary()); $('#selectAll').on('change', (e) => { $('.receipt-checkbox').prop('checked', e.target.checked); this.updateSelectionSummary(); }); }, updateSelectionSummary() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); $('#selectedCount').text(count); $('#selectedAmount').text(total.toFixed(2)); // Enable/disable next button based on selection $('#nextStep').prop('disabled', count === 0); }, validateCurrentStep() { let isValid = true; if (this.currentStep === 1) { // Check required fields in step 1 $('#step1 [required]').each(function() { if (!$(this).val()) { isValid = false; return false; // break } }); } else if (this.currentStep === 2) { // Check if at least one receipt is selected isValid = $('.receipt-checkbox:checked').length > 0; } $('#nextStep').prop('disabled', !isValid); return isValid; }, updateProgressBar() { const progress = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100; $('.progress-bar').css('width', `${progress}%`); // Update step indicators $('.step-indicator').removeClass('active'); $(`.step-indicator:nth-child(${this.currentStep})`).addClass('active'); }, showStep(step) { $('.step-content').addClass('d-none'); $(`#step${step}`).removeClass('d-none'); // Update buttons $('#prevStep').toggle(step > 1); $('#nextStep').toggle(step < this.totalSteps); $('#savePresentation').toggle(step === this.totalSteps); // Load receipts if moving to step 2 if (step === 2) { this.loadAvailableReceipts(); } else if (step === 3) { this.showReviewStep(); } this.currentStep = step; this.updateProgressBar(); this.validateCurrentStep(); }, showReviewStep() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); const summary = ` <div class="card"> <div class="card-body"> <h6 class="card-subtitle mb-2 text-muted">Presentation Summary</h6> <dl class="row mb-0"> <dt class="col-sm-4">Type</dt> <dd class="col-sm-8">${$('#presentationType option:selected').text()}</dd> <dt class="col-sm-4">Bank Account</dt> <dd class="col-sm-8">${$('#bankAccount option:selected').text()}</dd> <dt class="col-sm-4">Date</dt> <dd class="col-sm-8">${$('#presentationDate').val()}</dd> <dt class="col-sm-4">Receipts</dt> <dd class="col-sm-8">${count} ${this.receiptType}(s)</dd> <dt class="col-sm-4">Total Amount</dt> <dd class="col-sm-8">${total.toFixed(2)} MAD</dd> </dl> </div> </div> `; $('.review-summary').html(summary); }, nextStep() { if (this.validateCurrentStep()) { this.showStep(this.currentStep + 1); } }, previousStep() { if (this.currentStep > 1) { this.showStep(this.currentStep - 1); } }, async savePresentation() { try { const data = { presentation_type: $('#presentationType').val(), date: $('#presentationDate').val(), bank_account: $('#bankAccount').val(), notes: $('#presentationNotes').val(), receipt_type: this.receiptType, receipt_ids: $('.receipt-checkbox:checked').map(function() { return $(this).val(); }).get() }; console.log('Sending data:', data); const response = await $.ajax({ url: '/testapp/presentations/create/', method: 'POST', contentType: 'application/json', data: JSON.stringify(data) }); if (response.status === 'success') { $('#presentationModal').modal('hide'); showSuccess('Presentation created successfully'); location.reload(); } else { showError(response.message); } } catch (error) { console.error('Creation error:', error); const errorMessage = error.responseJSON?.message || 'Failed to create presentation'; showError(errorMessage); } } }; // Add these functions after PresentationManager async function viewPresentation(id) { try { const response = await $.get(`/testapp/presentations/${id}/`); $('#viewPresentationModal .modal-content').html(response); $('#viewPresentationModal').modal('show'); } catch (error) { showError('Failed to load presentation details'); } } async function editPresentation(id) { try { const data = { bank_reference: $('#bankReference').val(), status: $('#presentationStatus').val(), notes: $('#presentationNotes').val() // If you have this field }; console.log('Sending edit request:', { id: id, data: data, url: `/testapp/presentations/${id}/edit/` }); const response = await fetch(`/testapp/presentations/${id}/edit/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const responseData = await response.json(); console.log('Edit response:', responseData); if (!response.ok) { throw new Error(responseData.message || 'Failed to edit presentation'); } showSuccess('Presentation updated successfully'); $('#viewPresentationModal').modal('hide'); location.reload(); } catch (error) { console.error('Edit error:', error); showError(error.message || 'Failed to edit presentation'); } } async function deletePresentation(id) { console.log('Delete initiated for presentation:', id); try { if (!confirm('Are you sure you want to delete this presentation?')) { console.log('Delete cancelled by user'); return; } const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No'); const response = await fetch(`/testapp/presentations/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' } }); console.log('Delete response status:', response.status); const data = await response.json(); console.log('Delete response data:', data); if (response.ok) { showSuccess('Presentation deleted successfully'); location.reload(); } else { throw new Error(data.message || 'Failed to delete presentation'); } } catch (error) { console.error('Delete error:', error); showError(error.message || 'Failed to delete presentation'); } } // Initialize on document ready $(document).ready(function() { PresentationManager.init(); }); // Global function to start presentation creation function startPresentation(type) { PresentationManager.startPresentation(type); } </script> {% endblock %}
+{% extends 'base.html' %} {% load presentation_filters %} {% block content %} {% csrf_token %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Presentations</h2> <div class="btn-group"> <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus"></i> New Presentation </button> <div class="dropdown-menu dropdown-menu-right"> <a class="dropdown-item" href="#" onclick="startPresentation('check')"> <i class="fas fa-money-check"></i> Present Checks </a> <a class="dropdown-item" href="#" onclick="startPresentation('lcn')"> <i class="fas fa-file-invoice-dollar"></i> Present LCNs </a> </div> </div> </div> <!-- Filter Section --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-3"> <select class="form-control" id="typeFilter"> <option value="">All Types</option> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="statusFilter"> <option value="">All Status</option> <option value="pending">Pending</option> <option value="presented">Presented</option> <option value="paid">Paid</option> <option value="rejected">Rejected</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="bankFilter"> <option value="">All Banks</option> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> <div class="col-md-3"> <input type="text" class="form-control" id="searchPresentation" placeholder="Search by reference..."> </div> </div> </div> </div> <!-- Presentations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Type</th> <th>Bank Account</th> <th>Bank Reference</th> <th>Total Amount</th> <th>Receipt Count</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for presentation in presentations %} <tr> <td>{{ presentation.date|date:"Y-m-d" }}</td> <td>{{ presentation.get_presentation_type_display }}</td> <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td> <td>{{ presentation.bank_reference|default:"-" }}</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td class="text-center">{{ presentation.receipt_count }}</td> <td> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')"> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')" {% if presentation.status == 'paid' %}disabled{% endif %}> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')" {% if presentation.status != 'pending' %}disabled{% endif %}> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No presentations found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Create/Edit Presentation Modal --> <div class="modal fade" id="presentationModal" tabindex="-1"> <div class="modal-dialog modal-xl"> <!-- Made larger for better receipt selection view --> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <span id="modalTitleText">Create Presentation</span> </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="presentationForm"> <!-- Step indicator --> <div class="mb-4"> <div class="progress"> <div class="progress-bar" role="progressbar" style="width: 0%"></div> </div> <div class="d-flex justify-content-between mt-2"> <span class="step-indicator active">1. Basic Info</span> <span class="step-indicator">2. Select Receipts</span> <span class="step-indicator">3. Review</span> </div> </div> <!-- Step 1: Basic Info --> <div id="step1" class="step-content"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Presentation Type</label> <select class="form-control" id="presentationType" required> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Bank Account</label> <select class="form-control" id="bankAccount" required> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="presentationDate" value="{% now 'Y-m-d' %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Notes</label> <textarea class="form-control" id="presentationNotes" rows="1"></textarea> </div> </div> </div> </div> <!-- Step 2: Receipt Selection --> <div id="step2" class="step-content d-none"> <div class="receipt-selection-container"> <!-- Receipts will be loaded here --> </div> </div> <!-- Step 3: Review --> <div id="step3" class="step-content d-none"> <div class="review-summary"> <!-- Summary will be populated dynamically --> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-info" id="prevStep" style="display: none"> <i class="fas fa-arrow-left"></i> Previous </button> <button type="button" class="btn btn-primary" id="nextStep"> Next <i class="fas fa-arrow-right"></i> </button> <button type="button" class="btn btn-success" id="savePresentation" style="display: none"> <i class="fas fa-save"></i> Create Presentation </button> </div> </div> </div> </div> <!-- View Presentation Modal --> <div class="modal fade" id="viewPresentationModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> {% endblock %} {% block extra_js %} <script> function showError(error) { console.error(error); alert('An error occurred: ' + error); } function showSuccess(message) { console.log(message); alert('Succes!: ' + message); } const PresentationManager = { currentStep: 1, totalSteps: 3, receiptType: null, selectedReceipts: [], init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#nextStep').on('click', () => this.nextStep()); $('#prevStep').on('click', () => this.previousStep()); $('#savePresentation').on('click', () => this.savePresentation()); }, setupValidation() { // Add validation for required fields $('#presentationForm input[required], #presentationForm select[required]') .on('input change', () => this.validateCurrentStep()); }, startPresentation(type) { this.receiptType = type; this.currentStep = 1; this.selectedReceipts = []; // Update modal title $('#modalTitleText').text(`Create ${type.toUpperCase()} Presentation`); // Reset form $('#presentationForm')[0].reset(); // Show first step this.showStep(1); // Show modal $('#presentationModal').modal('show'); }, async loadAvailableReceipts() { try { const response = await $.get('/testapp/presentations/available-receipts/', { type: this.receiptType }); $('.receipt-selection-container').html(response.html); this.initializeReceiptSelection(); } catch (error) { showError('Failed to load available receipts'); } }, initializeReceiptSelection() { // Initialize receipt selection handlers $('.receipt-checkbox').on('change', () => this.updateSelectionSummary()); $('#selectAll').on('change', (e) => { $('.receipt-checkbox').prop('checked', e.target.checked); this.updateSelectionSummary(); }); }, updateSelectionSummary() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); $('#selectedCount').text(count); $('#selectedAmount').text(total.toFixed(2)); // Enable/disable next button based on selection $('#nextStep').prop('disabled', count === 0); }, validateCurrentStep() { let isValid = true; if (this.currentStep === 1) { // Check required fields in step 1 $('#step1 [required]').each(function() { if (!$(this).val()) { isValid = false; return false; // break } }); } else if (this.currentStep === 2) { // Check if at least one receipt is selected isValid = $('.receipt-checkbox:checked').length > 0; } $('#nextStep').prop('disabled', !isValid); return isValid; }, updateProgressBar() { const progress = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100; $('.progress-bar').css('width', `${progress}%`); // Update step indicators $('.step-indicator').removeClass('active'); $(`.step-indicator:nth-child(${this.currentStep})`).addClass('active'); }, showStep(step) { $('.step-content').addClass('d-none'); $(`#step${step}`).removeClass('d-none'); // Update buttons $('#prevStep').toggle(step > 1); $('#nextStep').toggle(step < this.totalSteps); $('#savePresentation').toggle(step === this.totalSteps); // Load receipts if moving to step 2 if (step === 2) { this.loadAvailableReceipts(); } else if (step === 3) { this.showReviewStep(); } this.currentStep = step; this.updateProgressBar(); this.validateCurrentStep(); }, showReviewStep() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); const summary = ` <div class="card"> <div class="card-body"> <h6 class="card-subtitle mb-2 text-muted">Presentation Summary</h6> <dl class="row mb-0"> <dt class="col-sm-4">Type</dt> <dd class="col-sm-8">${$('#presentationType option:selected').text()}</dd> <dt class="col-sm-4">Bank Account</dt> <dd class="col-sm-8">${$('#bankAccount option:selected').text()}</dd> <dt class="col-sm-4">Date</dt> <dd class="col-sm-8">${$('#presentationDate').val()}</dd> <dt class="col-sm-4">Receipts</dt> <dd class="col-sm-8">${count} ${this.receiptType}(s)</dd> <dt class="col-sm-4">Total Amount</dt> <dd class="col-sm-8">${total.toFixed(2)} MAD</dd> </dl> </div> </div> `; $('.review-summary').html(summary); }, nextStep() { if (this.validateCurrentStep()) { this.showStep(this.currentStep + 1); } }, previousStep() { if (this.currentStep > 1) { this.showStep(this.currentStep - 1); } }, async savePresentation() { try { const data = { presentation_type: $('#presentationType').val(), date: $('#presentationDate').val(), bank_account: $('#bankAccount').val(), notes: $('#presentationNotes').val(), receipt_type: this.receiptType, receipt_ids: $('.receipt-checkbox:checked').map(function() { return $(this).val(); }).get() }; console.log('Sending data:', data); const response = await $.ajax({ url: '/testapp/presentations/create/', method: 'POST', contentType: 'application/json', data: JSON.stringify(data) }); if (response.status === 'success') { $('#presentationModal').modal('hide'); showSuccess('Presentation created successfully'); location.reload(); } else { showError(response.message); } } catch (error) { console.error('Creation error:', error); const errorMessage = error.responseJSON?.message || 'Failed to create presentation'; showError(errorMessage); } } }; // Add these functions after PresentationManager async function viewPresentation(id) { try { const response = await $.get(`/testapp/presentations/${id}/`); $('#viewPresentationModal .modal-content').html(response); $('#viewPresentationModal').modal('show'); } catch (error) { showError('Failed to load presentation details'); } } async function editPresentation(id) { try { const data = { bank_reference: $('#bankReference').val(), status: $('#presentationStatus').val(), notes: $('#presentationNotes').val() // If you have this field }; console.log('Sending edit request:', { id: id, data: data, url: `/testapp/presentations/${id}/edit/` }); const response = await fetch(`/testapp/presentations/${id}/edit/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const responseData = await response.json(); console.log('Edit response:', responseData); if (!response.ok) { throw new Error(responseData.message || 'Failed to edit presentation'); } showSuccess('Presentation updated successfully'); $('#viewPresentationModal').modal('hide'); location.reload(); } catch (error) { console.error('Edit error:', error); showError(error.message || 'Failed to edit presentation'); } } async function deletePresentation(id) { console.log('Delete initiated for presentation:', id); try { if (!confirm('Are you sure you want to delete this presentation?')) { console.log('Delete cancelled by user'); return; } const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No'); const response = await fetch(`/testapp/presentations/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' } }); console.log('Delete response status:', response.status); const data = await response.json(); console.log('Delete response data:', data); if (response.ok) { showSuccess('Presentation deleted successfully'); location.reload(); } else { throw new Error(data.message || 'Failed to delete presentation'); } } catch (error) { console.error('Delete error:', error); showError(error.message || 'Failed to delete presentation'); } } // Initialize on document ready $(document).ready(function() { PresentationManager.init(); }); // Global function to start presentation creation function startPresentation(type) { PresentationManager.startPresentation(type); } // Handle receipt status updates $(document).on('click', '.update-receipt-status', function() { const $button = $(this); const receiptId = $button.data('receipt-id'); if (!confirm('This action cannot be undone. Continue?')) { return; } console.log('Updating receipt status:', receiptId); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_id: receiptId, receipt_status: 'paid' }), success: function(response) { console.log('Status updated:', response); $button.prop('disabled', true).text('Paid'); }, error: function(xhr) { console.error('Update failed:', xhr.responseText); showToast('Failed to update status', 'error'); } }); }); </script> {% endblock %}
 ```
-
 
 # templates/receipt/receipt_form_modal.html
 
 ```html
-<!-- Modal Header --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt_type == 'check' %} <i class="fas fa-money-check"></i> {% elif receipt_type == 'lcn' %} <i class="fas fa-file-invoice-dollar"></i> {% elif receipt_type == 'cash' %} <i class="fas fa-money-bill"></i> {% else %} <i class="fas fa-exchange-alt"></i> {% endif %} {{ title }} </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <!-- Modal Body --> <div class="modal-body"> <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}"> {% csrf_token %} <!-- Common Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" name="client_display" placeholder="Search for a client..." required value="{% if receipt %}{{ receipt.client.name }}{% endif %}"> <input type="hidden" id="client_id" name="client" value="{% if receipt %}{{ receipt.client.id }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="entity">Entity</label> <input type="text" class="form-control" id="entity" name="entity_display" placeholder="Search for an entity..." required value="{% if receipt %}{{ receipt.entity.name }}{% endif %}"> <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label for="operation_date">Operation Date</label> <input type="date" class="form-control" id="operation_date" name="operation_date" value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_year">Year</label> <select class="form-control" id="client_year" name="client_year" required> {% for year in year_choices %} <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>{{ year }}</option> {% endfor %} </select> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_month">Month</label> <select class="form-control" id="client_month" name="client_month" required> {% for month in month_choices %} <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>{{ month.1 }}</option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" value="{% if receipt %}{{ receipt.amount }}{% endif %}" step="0.01" min="0.01" required> </div> </div> <div class="col-md-6"> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required> <input type="hidden" id="issuingBankCode" name="issuing_bank"> </div> </div> </div> </div> {% if receipt_type == 'check' %} <!-- Check-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="check_number">Check Number</label> <input type="text" class="form-control" id="check_number" name="check_number" value="{% if receipt %}{{ receipt.check_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="branch">Branch</label> <input type="text" class="form-control" id="branch" name="branch" value="{% if receipt %}{{ receipt.branch }}{% endif %}"> </div> </div> </div> {% endif %} {% if receipt_type == 'lcn' %} <!-- LCN-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="lcn_number">LCN Number</label> <input type="text" class="form-control" id="lcn_number" name="lcn_number" value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-12"> <div class="form-group"> <label for="issuing_bank">Issuing Bank</label> <input type="text" class="form-control" id="issuing_bank" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}" required> </div> </div> </div> {% endif %} {% if receipt_type == 'cash' or receipt_type == 'transfer' %} <!-- Cash/Transfer-specific fields --> <div class="row"> <div class="col-md-12"> <div class="form-group"> <label for="credited_account">Credited Account</label> <select class="form-control" id="credited_account" name="credited_account" required> {% for account in bank_accounts %} <option value="{{ account.id }}" {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> {% endif %} {% if receipt_type == 'transfer' %} <!-- Transfer-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="transfer_reference">Transfer Reference</label> <input type="text" class="form-control" id="transfer_reference" name="transfer_reference" value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="transfer_date">Transfer Date</label> <input type="date" class="form-control" id="transfer_date" name="transfer_date" value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> </div> {% endif %} <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea> </div> </form> </div> <!-- Modal Footer --> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="submit" class="btn btn-primary" form="receiptForm">Save Receipt</button> </div> <!-- Initialize autocomplete --> <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 2, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Bank selection using jQuery UI autocomplete const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, // Show all options even without typing select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { // Show all options when field is focused $(this).autocomplete("search", ""); }); // Add dropdown indicator and click handler $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); }); </script> <style> .bank-dropdown-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; } .ui-autocomplete { max-height: 200px; overflow-y: auto; overflow-x: hidden; z-index: 9999; /* Scrollbar styles */ scrollbar-width: thin; scrollbar-color: #0b4d71 #f1f1f1; -webkit-overflow-scrolling: touch; -ms-overflow-style: -ms-autohiding-scrollbar; } .ui-autocomplete::-webkit-scrollbar { width: 6px; } .ui-autocomplete::-webkit-scrollbar-track { background: #f1f1f1; } .ui-autocomplete::-webkit-scrollbar-thumb { background: #888; } .ui-autocomplete::-webkit-scrollbar-thumb:hover { background: #555; } </style>
+<!-- Modal Header --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt_type == 'check' %} <i class="fas fa-money-check"></i> {% elif receipt_type == 'lcn' %} <i class="fas fa-file-invoice-dollar"></i> {% elif receipt_type == 'cash' %} <i class="fas fa-money-bill"></i> {% else %} <i class="fas fa-exchange-alt"></i> {% endif %} {{ title }} </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <!-- Modal Body --> <div class="modal-body"> <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}"> {% csrf_token %} <!-- Common Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" name="client_display" placeholder="Search for a client..." required value="{% if receipt %}{{ receipt.client.name }}{% endif %}"> <input type="hidden" id="client_id" name="client" value="{% if receipt %}{{ receipt.client.id }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="entity">Entity</label> <input type="text" class="form-control" id="entity" name="entity_display" placeholder="Search for an entity..." required value="{% if receipt %}{{ receipt.entity.name }}{% endif %}"> <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label for="operation_date">Operation Date</label> <input type="date" class="form-control" id="operation_date" name="operation_date" value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_year">Year</label> <select class="form-control" id="client_year" name="client_year" required> {% for year in year_choices %} <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>{{ year }}</option> {% endfor %} </select> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_month">Month</label> <select class="form-control" id="client_month" name="client_month" required> {% for month in month_choices %} <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>{{ month.1 }}</option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" value="{% if receipt %}{{ receipt.amount }}{% endif %}" step="0.01" min="0.01" required> </div> </div> </div> {% if receipt_type == 'check' %} <!-- Check-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="check_number">Check Number</label> <input type="text" class="form-control" id="check_number" name="check_number" value="{% if receipt %}{{ receipt.check_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> </div> <div class="col-md-6"> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="branch">Branch</label> <input type="text" class="form-control" id="branch" name="branch" value="{% if receipt %}{{ receipt.branch }}{% endif %}"> </div> </div> </div> {% endif %} {% if receipt_type == 'lcn' %} <!-- LCN-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="lcn_number">LCN Number</label> <input type="text" class="form-control" id="lcn_number" name="lcn_number" value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> </div> </div> {% endif %} {% if receipt_type == 'cash' or receipt_type == 'transfer' %} <!-- Cash/Transfer-specific fields --> <div class="row"> <div class="col-md-12"> <div class="form-group"> <label for="credited_account">Credited Account</label> <select class="form-control" id="credited_account" name="credited_account" required> {% for account in bank_accounts %} <option value="{{ account.id }}" {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> {% endif %} {% if receipt_type == 'transfer' %} <!-- Transfer-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="transfer_reference">Transfer Reference</label> <input type="text" class="form-control" id="transfer_reference" name="transfer_reference" value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="transfer_date">Transfer Date</label> <input type="date" class="form-control" id="transfer_date" name="transfer_date" value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> </div> {% endif %} <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea> </div> </form> </div> <!-- Modal Footer --> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="submit" class="btn btn-primary" form="receiptForm">Save Receipt</button> </div> <!-- Initialize autocomplete --> <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 2, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Bank selection using jQuery UI autocomplete const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, // Show all options even without typing select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { // Show all options when field is focused $(this).autocomplete("search", ""); }); // Add dropdown indicator and click handler $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); }); </script> <style> .bank-dropdown-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; } .ui-autocomplete { max-height: 200px; overflow-y: auto; overflow-x: hidden; z-index: 9999; /* Scrollbar styles */ scrollbar-width: thin; scrollbar-color: #0b4d71 #f1f1f1; -webkit-overflow-scrolling: touch; -ms-overflow-style: -ms-autohiding-scrollbar; } .ui-autocomplete::-webkit-scrollbar { width: 6px; } .ui-autocomplete::-webkit-scrollbar-track { background: #f1f1f1; } .ui-autocomplete::-webkit-scrollbar-thumb { background: #888; } .ui-autocomplete::-webkit-scrollbar-thumb:hover { background: #555; } </style>
 ```
 
 # templates/receipt/receipt_list.html
 
 ```html
-{% extends 'base.html' %} {% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-receipt text-primary me-2"></i>Receipts Management </h2> <div class="btn-group"> <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus-circle"></i> New Receipt </button> <div class="dropdown-menu"> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check"> <i class="fas fa-money-check"></i> Check </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn"> <i class="fas fa-file-invoice-dollar"></i> LCN </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash"> <i class="fas fa-money-bill"></i> Cash </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer"> <i class="fas fa-exchange-alt"></i> Transfer </a> </div> </div> </div> <!-- Tabs Navigation --> <ul class="nav nav-tabs" id="receiptTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab"> <i class="fas fa-money-check"></i> Checks </a> </li> <li class="nav-item"> <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab"> <i class="fas fa-file-invoice-dollar"></i> LCNs </a> </li> <li class="nav-item"> <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab"> <i class="fas fa-money-bill"></i> Cash </a> </li> <li class="nav-item"> <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab"> <i class="fas fa-exchange-alt"></i> Transfers </a> </li> </ul> <!-- Tab Content --> <div class="tab-content mt-4" id="receiptTabsContent"> <!-- Checks Tab --> <div class="tab-pane fade show active" id="checks" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>Check Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for check in receipts.checks %} <tr> <td>{{ check.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ check.entity.name }}</strong> <br> <small class="text-muted">{{ check.entity.ice_code }}</small> </td> <td> <small>{{ check.client.name }}</small> </td> <td>{{ check.check_number }}</td> <td>{{ check.get_issuing_bank_display }}</td> <td>{{ check.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ check.amount|floatformat:2 }}</td> <td> <span class="badge badge-{{ check.status|status_badge }}"> {{ check.get_status_display }} </span> {% if check.presentation %} <br> <small class="text-muted"> In presentation #{{ check.presentation.id }} </small> {% endif %} </td> <td> <div class="btn-group"> <!-- Disable controls if in presentation --> <button class="btn btn-sm btn-info" onclick="viewReceipt('check', '{{ check.id }}')" {% if check.presentation %}disabled{% endif %}> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="check" data-action="edit" data-id="{{ check.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No checks found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- LCNs Tab --> <div class="tab-pane fade" id="lcns" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>LCN Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for lcn in receipts.lcns %} <tr> <td>{{ lcn.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ lcn.entity.name }}</strong> <br> <small class="text-muted">{{ lcn.entity.ice_code }}</small> </td> <td> <small>{{ lcn.client.name }}</small> </td> <td>{{ lcn.lcn_number }}</td> <td>{{ lcn.get_issuing_bank_display }}</td> <td>{{ lcn.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ lcn.amount|floatformat:2 }}</td> <td> <span class="badge badge-{{ lcn.status|status_badge }}"> {{ lcn.get_status_display }} </span> {% if lcn.presentation %} <br> <small class="text-muted"> In presentation #{{ lcn.presentation.id }} </small> {% endif %} </td> <td> <div class="btn-group"> <!-- Disable controls if in presentation --> <button class="btn btn-sm btn-info" onclick="viewReceipt('lcn', '{{ lcn.id }}')" {% if lcn.presentation %}disabled{% endif %}> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="lcn" data-action="edit" data-id="{{ lcn.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No LCNs found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Cash Tab --> <div class="tab-pane fade" id="cash" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Reference</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for cash in receipts.cash %} <tr> <td>{{ cash.operation_date|date:"Y-m-d" }}</td> <td>{{ cash.client.name }}</td> <td>{{ cash.reference_number }}</td> <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td> <td class="text-right">{{ cash.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="cash" data-action="edit" data-id="{{ cash.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="6" class="text-center">No cash receipts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Transfers Tab --> <div class="tab-pane fade" id="transfers" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Transfer Reference</th> <th>Transfer Date</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for transfer in receipts.transfers %} <tr> <td>{{ transfer.operation_date|date:"Y-m-d" }}</td> <td>{{ transfer.client.name }}</td> <td>{{ transfer.transfer_reference }}</td> <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td> <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td> <td class="text-right">{{ transfer.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="transfer" data-action="edit" data-id="{{ transfer.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="7" class="text-center">No transfers found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> </div> <!-- Receipt Modal --> <div class="modal fade" id="receiptModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Modal content will be loaded dynamically --> </div> </div> </div> <script> console.log("Extra JS loaded"); $(document).ready(function() { $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url += `edit/${type}/${id}/`; } else { url += `create/${type}/`; } // Load modal content $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); if (action === 'edit') { // Set form action URL for edit $('#receiptForm').attr('action', url); // Initialize Select2 with pre-selected values if (data.client) { const clientOption = new Option(data.client.text, data.client.id, true, true); $('#client').append(clientOption).trigger('change'); } if (data.entity) { const entityOption = new Option(data.entity.text, data.entity.id, true, true); $('#entity').append(entityOption).trigger('change'); } } }); }); // Handle form submission for both create and edit $(document).on('submit', '#receiptForm', function(e) { e.preventDefault(); const form = $(this); const url = form.attr('action'); const isEdit = url.includes('/edit/'); console.log("Form being submitted:", { url: url, isEdit: isEdit, formData: form.serialize(), formElements: form.serializeArray() }); $.ajax({ url: url, type: 'POST', data: form.serialize(), success: function(response) { console.log("Success response:", response); if (response.status === 'success') { $('#receiptModal').modal('hide'); showToast(response.message, 'success'); location.reload(); } else { console.log("Form errors:", response.errors); showFormErrors(form, response.errors); } }, error: function(xhr) { console.error("Error response:", { status: xhr.status, responseText: xhr.responseText }); try { const errors = JSON.parse(xhr.responseText); showFormErrors(form, errors); } catch (e) { showToast('An error occurred while saving the receipt.', 'error'); } } }); }); function showFormErrors(form, errors) { // Clear previous errors form.find('.is-invalid').removeClass('is-invalid'); form.find('.invalid-feedback').remove(); // Show new errors Object.keys(errors).forEach(field => { const input = form.find(`[name="${field}"]`); const error = errors[field].join(' '); input.addClass('is-invalid'); input.after(`<div class="invalid-feedback">${error}</div>`); }); } function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">Notification</strong> <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>'); toastContainer.html(toast); $('body').append(toastContainer); $('.toast').toast('show'); // Remove toast after it's hidden $('.toast').on('hidden.bs.toast', function() { $(this).closest('.toast-container').remove(); }); } }); // Initialize form elements after modal load function initializeForm() { console.log('Initializing form with autocomplete...'); console.log('Client input exists:', $('#client').length); console.log('Entity input exists:', $('#entity').length); // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 2, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Add some basic styling to autocomplete dropdown $(".ui-autocomplete").addClass("dropdown-menu").css({ 'max-height': '200px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'z-index': '9999' }); } // Handle delete $('.delete-receipt').click(function() { if (confirm('Are you sure you want to delete this receipt?')) { const type = $(this).data('type'); const id = $(this).data('id'); $.ajax({ url: `/testapp/receipts/delete/${type}/${id}/`, type: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, success: function() { location.reload(); }, error: function() { alert('Error deleting receipt'); } }); } }); // Keyboard shortcuts $(document).keydown(function(e) { // Only trigger if no modal is open and no input is focused if ($('.modal:visible').length === 0 && !$(document.activeElement).is('input, textarea, select')) { let receiptType = null; if (e.altKey) { switch(e.key.toLowerCase()) { case 'c': // Alt + C for Check receiptType = 'check'; break; case 'l': // Alt + L for LCN receiptType = 'lcn'; break; case 'm': // Alt + M for Cash (Money) receiptType = 'cash'; break; case 't': // Alt + T for Transfer receiptType = 'transfer'; break; } if (receiptType) { e.preventDefault(); const url = "{% url 'receipt-create' 'TYPE' %}".replace('TYPE', receiptType); const modal = $('#receiptModal'); modal.modal('show'); modal.find('.modal-content').load(url, function() { setTimeout(function() { initializeForm(); }, 100); }); } } } }); // Add tooltip hints for shortcuts $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() { const type = $(this).data('type'); let shortcut = ''; switch(type) { case 'check': shortcut = 'Alt+C'; break; case 'lcn': shortcut = 'Alt+L'; break; case 'cash': shortcut = 'Alt+M'; break; case 'transfer': shortcut = 'Alt+T'; break; } if (shortcut) { $(this).attr('title', `${$(this).text().trim()} (${shortcut})`); } }); </script> {% endblock %}
-```
+{% extends 'base.html' %} {% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-receipt text-primary me-2"></i>Receipts Management </h2> <div class="btn-group"> <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus-circle"></i> New Receipt </button> <div class="dropdown-menu"> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check"> <i class="fas fa-money-check"></i> Check </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn"> <i class="fas fa-file-invoice-dollar"></i> LCN </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash"> <i class="fas fa-money-bill"></i> Cash </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer"> <i class="fas fa-exchange-alt"></i> Transfer </a> </div> </div> </div> <!-- Tabs Navigation --> <ul class="nav nav-tabs" id="receiptTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab"> <i class="fas fa-money-check"></i> Checks </a> </li> <li class="nav-item"> <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab"> <i class="fas fa-file-invoice-dollar"></i> LCNs </a> </li> <li class="nav-item"> <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab"> <i class="fas fa-money-bill"></i> Cash </a> </li> <li class="nav-item"> <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab"> <i class="fas fa-exchange-alt"></i> Transfers </a> </li> </ul> <!-- Tab Content --> <div class="tab-content mt-4" id="receiptTabsContent"> <!-- Checks Tab Content --> <div class="tab-pane fade show active" id="checks" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>Check Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for check in receipts.checks %} <tr> <td>{{ check.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ check.entity.name }}</strong><br> <small class="text-muted">{{ check.entity.ice_code }}</small> </td> <td> <small>{{ check.client.name }}</small> </td> <td>{{ check.check_number }}</td> <td>{{ check.get_issuing_bank_display }}</td> <td>{{ check.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ check.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ check.status|status_badge }}"> {{ check.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceipt('check', '{{ check.id }}')"> <i class="fas fa-eye"></i> </button> {% with pres=check.check_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="check" data-action="edit" data-id="{{ check.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No checks found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- LCNs Tab Content --> <div class="tab-pane fade" id="lcns" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>LCN Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for lcn in receipts.lcns %} <tr> <td>{{ lcn.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ lcn.entity.name }}</strong><br> <small class="text-muted">{{ lcn.entity.ice_code }}</small> </td> <td> <small>{{ lcn.client.name }}</small> </td> <td>{{ lcn.lcn_number }}</td> <td>{{ lcn.get_issuing_bank_display }}</td> <td>{{ lcn.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ lcn.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ lcn.status|status_badge }}"> {{ lcn.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceipt('lcn', '{{ lcn.id }}')"> <i class="fas fa-eye"></i> </button> {% with pres=lcn.lcn_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="lcn" data-action="edit" data-id="{{ lcn.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No LCNs found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Cash Tab --> <div class="tab-pane fade" id="cash" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Reference</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for cash in receipts.cash %} <tr> <td>{{ cash.operation_date|date:"Y-m-d" }}</td> <td>{{ cash.client.name }}</td> <td>{{ cash.reference_number }}</td> <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td> <td class="text-right">{{ cash.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="cash" data-action="edit" data-id="{{ cash.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="6" class="text-center">No cash receipts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Transfers Tab --> <div class="tab-pane fade" id="transfers" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Transfer Reference</th> <th>Transfer Date</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for transfer in receipts.transfers %} <tr> <td>{{ transfer.operation_date|date:"Y-m-d" }}</td> <td>{{ transfer.client.name }}</td> <td>{{ transfer.transfer_reference }}</td> <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td> <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td> <td class="text-right">{{ transfer.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="transfer" data-action="edit" data-id="{{ transfer.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="7" class="text-center">No transfers found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> </div> <!-- Receipt Modal --> <div class="modal fade" id="receiptModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Modal content will be loaded dynamically --> </div> </div> </div> <script> console.log("Extra JS loaded"); $(document).ready(function() { $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url += `edit/${type}/${id}/`; } else { url += `create/${type}/`; } // Load modal content $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); if (action === 'edit') { // Set form action URL for edit $('#receiptForm').attr('action', url); // Initialize Select2 with pre-selected values if (data.client) { const clientOption = new Option(data.client.text, data.client.id, true, true); $('#client').append(clientOption).trigger('change'); } if (data.entity) { const entityOption = new Option(data.entity.text, data.entity.id, true, true); $('#entity').append(entityOption).trigger('change'); } } }); }); // Handle form submission for both create and edit $(document).on('submit', '#receiptForm', function(e) { e.preventDefault(); const form = $(this); const url = form.attr('action'); const isEdit = url.includes('/edit/'); console.log("Form being submitted:", { url: url, isEdit: isEdit, formData: form.serialize(), formElements: form.serializeArray() }); $.ajax({ url: url, type: 'POST', data: form.serialize(), success: function(response) { console.log("Success response:", response); if (response.status === 'success') { $('#receiptModal').modal('hide'); showToast(response.message, 'success'); location.reload(); } else { console.log("Form errors:", response.errors); showFormErrors(form, response.errors); } }, error: function(xhr) { console.error("Error response:", { status: xhr.status, responseText: xhr.responseText }); try { const errors = JSON.parse(xhr.responseText); showFormErrors(form, errors); } catch (e) { showToast('An error occurred while saving the receipt.', 'error'); } } }); }); function showFormErrors(form, errors) { // Clear previous errors form.find('.is-invalid').removeClass('is-invalid'); form.find('.invalid-feedback').remove(); // Show new errors Object.keys(errors).forEach(field => { const input = form.find(`[name="${field}"]`); const error = errors[field].join(' '); input.addClass('is-invalid'); input.after(`<div class="invalid-feedback">${error}</div>`); }); } function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">Notification</strong> <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>'); toastContainer.html(toast); $('body').append(toastContainer); $('.toast').toast('show'); // Remove toast after it's hidden $('.toast').on('hidden.bs.toast', function() { $(this).closest('.toast-container').remove(); }); } }); // Initialize form elements after modal load function initializeForm() { console.log('Initializing form with autocomplete...'); console.log('Client input exists:', $('#client').length); console.log('Entity input exists:', $('#entity').length); // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 2, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Add some basic styling to autocomplete dropdown $(".ui-autocomplete").addClass("dropdown-menu").css({ 'max-height': '200px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'z-index': '9999' }); } // Handle delete $('.delete-receipt').click(function() { if (confirm('Are you sure you want to delete this receipt?')) { const type = $(this).data('type'); const id = $(this).data('id'); $.ajax({ url: `/testapp/receipts/delete/${type}/${id}/`, type: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, success: function() { location.reload(); }, error: function() { alert('Error deleting receipt'); } }); } }); // Keyboard shortcuts $(document).keydown(function(e) { // Only trigger if no modal is open and no input is focused if ($('.modal:visible').length === 0 && !$(document.activeElement).is('input, textarea, select')) { let receiptType = null; if (e.altKey) { switch(e.key.toLowerCase()) { case 'c': // Alt + C for Check receiptType = 'check'; break; case 'l': // Alt + L for LCN receiptType = 'lcn'; break; case 'm': // Alt + M for Cash (Money) receiptType = 'cash'; break; case 't': // Alt + T for Transfer receiptType = 'transfer'; break; } if (receiptType) { e.preventDefault(); const url = "{% url 'receipt-create' 'TYPE' %}".replace('TYPE', receiptType); const modal = $('#receiptModal'); modal.modal('show'); modal.find('.modal-content').load(url, function() { setTimeout(function() { initializeForm(); }, 100); }); } } } }); // Handle presentation status update function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ bank_reference: bankRef, status: $('#presentationStatus').val() }), success: () => location.reload(), error: xhr => showError(xhr.responseJSON?.message || 'Update failed') }); } // Handle receipt status update $(document).on('change', '.receipt-status', function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const newStatus = $select.val(); if (!confirm('This status change is irreversible. Continue?')) { $select.val($select.find('option').not(':selected').val()); return; } $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ receipt_id: receiptId, receipt_status: newStatus }), success: () => { $select.prop('disabled', true); location.reload(); }, error: xhr => { showError(xhr.responseJSON?.message || 'Status update failed'); $select.val($select.find('option').not(':selected').val()); } }); }); function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } // Add tooltip hints for shortcuts $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() { const type = $(this).data('type'); let shortcut = ''; switch(type) { case 'check': shortcut = 'Alt+C'; break; case 'lcn': shortcut = 'Alt+L'; break; case 'cash': shortcut = 'Alt+M'; break; case 'transfer': shortcut = 'Alt+T'; break; } if (shortcut) { $(this).attr('title', `${$(this).text().trim()} (${shortcut})`); } }); </script> {% endblock %}
 ```
 
 # templatetags/__init__.py
@@ -1400,6 +1089,23 @@ def space_thousands(value):
         int_with_spaces = digit + int_with_spaces
 
     return f'{int_with_spaces}.{decimal_part}'
+```
+
+# templatetags/check_tags.py
+
+```py
+from django import template
+
+register = template.Library()
+
+@register.filter
+def status_badge(status):
+    return {
+        'pending': 'secondary',
+        'delivered': 'warning',
+        'paid': 'success',
+        'cancelled': 'danger'
+    }.get(status, 'secondary')
 ```
 
 # templatetags/custom_filters.py
@@ -1517,6 +1223,71 @@ from .views_presentation import (
 
 
 urlpatterns = [
+    path('', views.home, name='home'),  # Home view
+    path('profile/', views.profile, name='profile'),  # Profile view
+
+    path('suppliers/', SupplierListView.as_view(), name='supplier-list'),  # List all suppliers
+    path('suppliers/create/', SupplierCreateView.as_view(), name='supplier-create'),  # Create a new supplier
+    path('suppliers/<uuid:pk>/update/', SupplierUpdateView.as_view(), name='supplier-update'),  # Update a supplier
+    path('suppliers/<uuid:pk>/delete/', SupplierDeleteView.as_view(), name='supplier-delete'),  # Delete a supplier
+    path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
+
+    path('products/', ProductListView.as_view(), name='product-list'),  # List all products
+    path('products/create/', ProductCreateView.as_view(), name='product-create'),  # Create a new product
+    path('products/<uuid:pk>/update/', ProductUpdateView.as_view(), name='product-update'),  # Update a product
+    path('products/<uuid:pk>/delete/', ProductDeleteView.as_view(), name='product-delete'),  # Delete a product
+    path('products/<uuid:pk>/details/', ProductDetailsView.as_view(), name='product-details'),  # Details for a specific product
+    path('products/ajax-create/', ProductAjaxCreateView.as_view(), name='product-ajax-create'),  # AJAX view for creating a new Product
+
+    path('invoices/', InvoiceListView.as_view(), name='invoice-list'),  # List all invoices
+    path('invoices/create/', InvoiceCreateView.as_view(), name='invoice-create'),  # Create a new invoice
+    path('invoices/<uuid:pk>/update/', InvoiceUpdateView.as_view(), name='invoice-update'),  # Update an invoice
+    path('invoices/<uuid:pk>/delete/', InvoiceDeleteView.as_view(), name='invoice-delete'),  # Delete an invoice
+    path('products/autocomplete/', product_autocomplete, name='product-autocomplete'),  # Autocomplete for products
+    path('invoices/details/', InvoiceDetailsView.as_view(), name='invoice-details'),  # Details for a specific invoice
+    path('invoices/add-product/', AddProductToInvoiceView.as_view(), name='add-product-to-invoice'),  # Add a product to an invoice
+    path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
+    path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
+    path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
+    path('invoices/<str:pk>/payment-details/', InvoicePaymentDetailsView.as_view(), name='invoice-payment-details'),
+    path('invoices/<str:invoice_id>/accounting-summary/', InvoiceAccountingSummaryView.as_view(), name='invoice-accounting-summary'),
+    path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
+    path('invoices/<str:invoice_id>/credit-note-details/', CreditNoteDetailsView.as_view(), name='credit-note-details'),
+    path('invoices/create-credit-note/', 
+         CreateCreditNoteView.as_view(), 
+         name='create-credit-note'),
+
+    path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
+    path('checkers/filter/', CheckerFilterView.as_view(), name='checker-filter'),
+    path('checkers/create/', CheckerCreateView.as_view(), name='checker-create'),
+    path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
+    path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
+    path('checkers/available/', AvailableCheckersView.as_view(), name='available-checkers'),
+
+    path('checks/create/', CheckCreateView.as_view(), name='check-create'),
+    path('checks/', CheckListView.as_view(), name='check-list'),
+    path('checks/<uuid:pk>/mark-delivered/', 
+        CheckStatusView.as_view(), {'action': 'delivered'}, name='check-mark-delivered'),
+    path('checks/<uuid:pk>/mark-paid/', 
+        CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
+    path('checks/<uuid:pk>/action/', CheckActionView.as_view(), name='check-action'),
+    path('checks/<uuid:check_id>/details/', CheckDetailView.as_view(), name='check-details'),
+    path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
+    path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
+    path('checks/filter/', CheckFilterView.as_view(), name='check-filter'),
+    path('checkers/<uuid:pk>/signatures/', CheckerSignatureView.as_view(), name='checker-signatures'),
+    path('checkers/<uuid:pk>/sign/', CheckerSignatureView.as_view(), name='checker-sign'),
+    path('checkers/<uuid:checker_id>/position-status/<int:position>/',
+    CheckerPositionStatusView.as_view(),
+    name='checker-position-status'),
+
+    path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
+    path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
+    path('bank-accounts/<uuid:pk>/deactivate/', 
+         BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
+    path('bank-accounts/filter/', 
+         BankAccountFilterView.as_view(), name='bank-account-filter'),
+    path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -1561,6 +1332,184 @@ urlpatterns = [
 
 ]
 
+
+```
+
+# views_bank.py
+
+```py
+from django.views.generic import ListView, View
+from django.http import JsonResponse
+from django.template.loader import render_to_string
+from .models import BankAccount
+from django.contrib import messages
+import json
+from django.core.exceptions import ValidationError
+
+class BankAccountListView(ListView):
+    model = BankAccount
+    template_name = 'bank/bank_list.html'
+    context_object_name = 'accounts'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['bank_choices'] = BankAccount.BANK_CHOICES
+        return context
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Apply filters if any
+        bank = self.request.GET.get('bank')
+        if bank:
+            queryset = queryset.filter(bank=bank)
+            
+        account_type = self.request.GET.get('type')
+        if account_type:
+            queryset = queryset.filter(account_type=account_type)
+            
+        status = self.request.GET.get('status')
+        if status:
+            queryset = queryset.filter(is_active=status == 'active')
+            
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(account_number__icontains=search)
+            
+        return queryset
+
+class BankAccountCreateView(View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            # Basic validation
+            required_fields = ['bank', 'account_number', 'accounting_number', 
+                             'journal_number', 'city', 'account_type']
+            
+            for field in required_fields:
+                if not data.get(field):
+                    return JsonResponse(
+                        {'error': f'{field.replace("_", " ").title()} is required'}, 
+                        status=400
+                    )
+            
+            # Specific validations
+            if not data['account_number'].isdigit() or len(data['account_number']) < 10:
+                return JsonResponse(
+                    {'error': 'Account number must be at least 10 digits'}, 
+                    status=400
+                )
+                
+            if not data['accounting_number'].isdigit() or len(data['accounting_number']) < 5:
+                return JsonResponse(
+                    {'error': 'Accounting number must be at least 5 digits'}, 
+                    status=400
+                )
+                
+            if not data['journal_number'].isdigit() or len(data['journal_number']) != 2:
+                return JsonResponse(
+                    {'error': 'Journal number must be exactly 2 digits'}, 
+                    status=400
+                )
+
+            # Create account
+            account = BankAccount.objects.create(**data)
+            
+            return JsonResponse({
+                'message': 'Bank account created successfully',
+                'id': str(account.id)
+            })
+            
+        except ValidationError as e:
+            return JsonResponse({'error': str(e)}, status=400)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+class BankAccountDeactivateView(View):
+    def post(self, request, pk):
+        try:
+            account = BankAccount.objects.get(pk=pk)
+            
+            # Check for active checkers
+            if account.checker_set.filter(is_active=True).exists():
+                return JsonResponse(
+                    {'error': 'Cannot deactivate account with active checkers'}, 
+                    status=400
+                )
+            
+            account.is_active = False
+            account.save()
+            
+            return JsonResponse({'message': 'Account deactivated successfully'})
+            
+        except BankAccount.DoesNotExist:
+            return JsonResponse({'error': 'Account not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+class BankAccountFilterView(View):
+    def get(self, request):
+        try:
+            # Start with all accounts
+            queryset = BankAccount.objects.all()
+            print("Initial QuerySet Count:", queryset.count())  # Debug log
+            
+            # Apply bank filter
+            bank = request.GET.get('bank')
+            if bank:
+                print("Filter by bank:", bank)  # Debug log
+                queryset = queryset.filter(bank=bank)
+
+            # Apply account type filter
+            account_type = request.GET.get('type')
+            if account_type:
+                print("Filter by account type:", account_type)  # Debug log
+                queryset = queryset.filter(account_type=account_type)
+
+            # Apply status filter
+            status = request.GET.get('status')
+            if status:
+                print("Filter by status:", status)  # Debug log
+                queryset = queryset.filter(is_active=status == 'active')
+
+            # Apply search filter
+            search = request.GET.get('search')
+            if search:
+                print("Filter by search term:", search)  # Debug log
+                queryset = queryset.filter(account_number__icontains=search)
+
+            # Final count before rendering
+            print("Filtered QuerySet Count:", queryset.count())  # Debug log
+
+            # Render rows
+            html = render_to_string(
+                'bank/partials/accounts_table.html',
+                {'accounts': queryset},
+                request=request
+            )
+            
+            return JsonResponse({'html': html})
+            
+        except Exception as e:
+            print("Error in filter view:", str(e))  # Debug log
+            return JsonResponse({'error': str(e)}, status=500)
+
+
+
+def bank_account_autocomplete(request):
+    search_term = request.GET.get('search', '')
+    accounts = BankAccount.objects.filter(account_number__icontains=search_term)[:10]
+    results = [
+        {
+            "label": f"{account.bank} [{account.account_number}]",
+            "value": account.id,
+            "bank": account.bank
+        }
+        for account in accounts
+    ]
+    return JsonResponse(results, safe=False)
+```
 
 # views_client.py
 
@@ -2005,6 +1954,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount
 import json
+import traceback
 
 class PresentationListView(ListView):
     """
@@ -2150,6 +2100,13 @@ class PresentationDetailView(View):
                 'traceback': traceback.format_exc()
             }, status=400)
 
+def handle_receipt_status(receipt, new_status):
+        if new_status == 'paid':
+            receipt.status = 'PAID'
+        elif new_status == 'unpaid':
+            receipt.status = 'UNPAID'
+        receipt.save()
+
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationUpdateView(View):
     def post(self, request, pk):
@@ -2159,59 +2116,69 @@ class PresentationUpdateView(View):
             data = json.loads(request.body)
             print(f"Parsed data: {data}")
             
-            presentation = get_object_or_404(Presentation, pk=pk)
-            print(f"Found presentation: {presentation}")
-
             with transaction.atomic():
-                if 'bank_reference' in data:
-                    print(f"Updating bank reference to: {data['bank_reference']}")
-                    presentation.bank_reference = data['bank_reference']
-                
-                if 'status' in data:
-                    print(f"Updating status to: {data['status']}")
-                    presentation.status = data['status']
+                presentation = get_object_or_404(Presentation, pk=pk)
+                print(f"Found presentation: {presentation}")
+
+                if presentation.status == 'pending':
+                    # Handle initial status change
+                    if not data.get('bank_reference'):
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': 'Bank reference is required'
+                        }, status=400)
                     
+                    print(f"Updating presentation status from pending to {data['status']}")
+                    presentation.bank_reference = data['bank_reference']
+                    presentation.status = data['status']
+                    presentation.save()
+
+                elif (presentation.status == 'presented' or presentation.status == 'discounted') and 'receipt_statuses' in data:
                     # Handle receipt status updates
-                    for pr in presentation.presentation_receipts.all():
-                        receipt = pr.checkreceipt or pr.lcn
-                        if receipt:
-                            print(f"Updating receipt status: {receipt}")
-                            if data['status'] == 'paid':
-                                receipt.status = 'PAID'
-                            elif data['status'] == 'rejected':
-                                receipt.status = 'REJECTED'
-                            elif data['status'] == 'presented':
-                                receipt.status = (
-                                    'PRESENTED_COLLECTION' 
-                                    if presentation.presentation_type == 'COLLECTION'
-                                    else 'PRESENTED_DISCOUNT'
-                                )
-                            receipt.save()
-                            print(f"Updated receipt status to: {receipt.status}")
+                    receipt_statuses = data['receipt_statuses']
+                    print(f"Updating {len(receipt_statuses)} receipt statuses")
+                    
+                    for receipt_id, new_status in receipt_statuses.items():
+                        print(f"Processing receipt {receipt_id} -> {new_status}")
+                        try:
+                            presentation_receipt = PresentationReceipt.objects.get(
+                                id=receipt_id,
+                                presentation=presentation
+                            )
+                            receipt = presentation_receipt.checkreceipt or presentation_receipt.lcn
+                            
+                            if receipt and receipt.status not in ['PAID', 'UNPAID']:
+                                print(f"Updating receipt {receipt_id} status to {new_status}")
+                                receipt.status = 'PAID' if new_status == 'paid' else 'UNPAID'
+                                receipt.save()
+                                print(f"Receipt status updated successfully")
+                            else:
+                                print(f"Receipt {receipt_id} already has final status: {receipt.status}")
+                        
+                        except PresentationReceipt.DoesNotExist:
+                            print(f"Receipt {receipt_id} not found in presentation {pk}")
+                            continue
+                
+                print("Presentation update completed successfully")
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Presentation updated successfully'
+                })
 
-                presentation.save()
-                print("Presentation saved successfully")
-
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Presentation updated successfully'
-            })
-
-        except json.JSONDecodeError as e:
-            print(f"JSON Decode error: {str(e)}")
+        except json.JSONDecodeError:
+            print("Invalid JSON in request body")
             return JsonResponse({
                 'status': 'error',
-                'message': f'Invalid JSON: {str(e)}'
+                'message': 'Invalid request format'
             }, status=400)
         except Exception as e:
-            import traceback
             print("=== Error in presentation edit ===")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
-                'message': f'Edit failed: {str(e)}'
+                'message': str(e)
             }, status=400)
-
+        
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
     """
@@ -2308,11 +2275,33 @@ class ReceiptListView(ListView):
     context_object_name = 'receipts'
 
     def get_queryset(self):
+        print("\n=== Getting Receipt Queryset ===")
+        checks = CheckReceipt.objects.select_related(
+            'client', 'entity'
+        ).prefetch_related(
+            'check_presentations__presentation__bank_account'
+        ).all()
+        print(f"Fetched {checks.count()} checks")
+        
+        lcns = LCN.objects.select_related(
+            'client', 'entity'
+        ).prefetch_related(
+            'lcn_presentations__presentation__bank_account'
+        ).all()
+        print(f"Fetched {lcns.count()} LCNs")
+
+        # Debug presentation info
+        for check in checks:
+            pres = check.check_presentations.first()
+            if pres:
+                print(f"Check {check.id} presentation: {pres.presentation.id}")
+                print(f"Bank: {pres.presentation.bank_account}")
+
         return {
-            'checks': CheckReceipt.objects.select_related('client', 'entity', 'bank_account').all(),
-            'lcns': LCN.objects.select_related('client', 'entity', 'bank_account').all(),
-            'cash': CashReceipt.objects.select_related('client', 'entity', 'bank_account', 'credited_account').all(),
-            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'bank_account', 'credited_account').all()
+            'checks': checks,
+            'lcns': lcns,
+            'cash': CashReceipt.objects.select_related('client', 'entity', 'credited_account').all(),
+            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'credited_account').all()
         }
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -2432,6 +2421,7 @@ class ReceiptUpdateView(View):
         try:
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
             
+            
             # Get current date info for form
             today = timezone.now()
             year_choices = range(today.year - 2, today.year + 1)
@@ -2461,80 +2451,90 @@ class ReceiptUpdateView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
     def post(self, request, receipt_type, pk):
-            try:
-                data = request.POST.dict()
-                model_map = {
-                    'check': CheckReceipt,
-                    'lcn': LCN,
-                    'cash': CashReceipt,
-                    'transfer': TransferReceipt
-                }
-                
-                receipt = get_object_or_404(model_map[receipt_type], pk=pk)
-                
-                # Update common fields
-                receipt.client_id = data['client']
-                receipt.entity_id = data['entity']
-                receipt.operation_date = data['operation_date']
-                receipt.amount = data['amount']
-                receipt.client_year = data['client_year']
-                receipt.client_month = data['client_month']
-                receipt.bank_account_id = data['bank_account']
-                receipt.notes = data.get('notes', '')
+        import traceback
+        try:
+            data = request.POST.dict()
+            print(f"Received data for {receipt_type} update:", data)
+            
+            model_map = {
+                'check': CheckReceipt,
+                'lcn': LCN,
+                'cash': CashReceipt,
+                'transfer': TransferReceipt
+            }
+            
+            receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
+            # Update common fields
+            receipt.client_id = data['client']
+            receipt.entity_id = data['entity']
+            receipt.operation_date = data['operation_date']
+            receipt.amount = data['amount']
+            receipt.client_year = data['client_year']
+            receipt.client_month = data['client_month']
+            receipt.notes = data.get('notes', '')
 
-                # Update type-specific fields
+            # Update type-specific fields
+            if receipt_type in ['check', 'lcn']:
+                receipt.issuing_bank = data['issuing_bank']  # Set issuing bank
+                receipt.due_date = data['due_date']
                 if receipt_type == 'check':
-                    receipt.due_date = data['due_date']
                     receipt.check_number = data['check_number']
-                    receipt.bank_name = data['bank_name']
                     receipt.branch = data.get('branch', '')
-                
-                elif receipt_type == 'lcn':
-                    receipt.due_date = data['due_date']
+                else:
                     receipt.lcn_number = data['lcn_number']
-                    receipt.issuing_bank = data['issuing_bank']
-                
-                elif receipt_type == 'cash':
-                    receipt.credited_account_id = data['credited_account']
-                    receipt.reference_number = data.get('reference_number', '')
-                
-                elif receipt_type == 'transfer':
-                    receipt.credited_account_id = data['credited_account']
-                    receipt.transfer_reference = data['transfer_reference']
+            else:  # cash or transfer
+                receipt.bank_account_id = data['bank_account']
+                if receipt_type == 'transfer':
+                    receipt.transfer_reference = data['transfer_reference'] 
                     receipt.transfer_date = data['transfer_date']
 
-                receipt.save()
+            receipt.save()
+            print(f"{receipt_type} updated successfully:", receipt)
 
-                return JsonResponse({
-                    'status': 'success',
-                    'message': f'{receipt_type.title()} updated successfully',
-                    'id': str(receipt.id)
-                })
+            return JsonResponse({
+                'status': 'success',
+                'message': f'{receipt_type.title()} updated successfully',
+                'id': str(receipt.id)
+            })
 
-            except Exception as e:
-                return JsonResponse({
-                    'status': 'error',
-                    'message': str(e)
-                }, status=400)
+        except Exception as e:
+            print("Error in receipt update:")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+    
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptDeleteView(View):
     def post(self, request, receipt_type, pk):
-        model_map = {
-            'check': CheckReceipt,
-            'lcn': LCN,
-            'cash': CashReceipt,
-            'transfer': TransferReceipt
-        }
-        
         try:
+            model_map = {
+                'check': CheckReceipt,
+                'lcn': LCN,
+                'cash': CashReceipt,
+                'transfer': TransferReceipt
+            }
+            
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
+            # Check if receipt can be deleted
+            if not receipt.can_delete():
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Cannot delete receipt that is part of a presentation'
+                }, status=400)
+
             receipt.delete()
             return JsonResponse({
                 'status': 'success',
                 'message': f'{receipt_type.title()} deleted successfully'
             })
         except Exception as e:
+            print("Error in receipt deletion:")
+            print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
@@ -2658,8 +2658,6 @@ def entity_autocomplete(request):
     } for entity in entities]
     print(f"results({len(results)}): {results}")
     return JsonResponse({'results': results})
-```
-
 ```
 
 # views.py

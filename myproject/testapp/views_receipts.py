@@ -8,7 +8,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 import calendar
-from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity,MOROCCAN_BANKS
+from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, MOROCCAN_BANKS
 from django.db.models import Q
 
 class ReceiptListView(ListView):
@@ -183,7 +183,8 @@ class ReceiptUpdateView(View):
                 'entity': {
                     'id': str(receipt.entity.id),
                     'text': f"{receipt.entity.name} ({receipt.entity.ice_code})"
-                }
+                },
+                'bank_choices': MOROCCAN_BANKS,
             }
 
             return render(request, 'receipt/receipt_form_modal.html', context)

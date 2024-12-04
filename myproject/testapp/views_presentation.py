@@ -187,7 +187,7 @@ class PresentationUpdateView(View):
                     presentation.status = data['status']
                     presentation.save()
 
-                elif presentation.status == 'presented' and 'receipt_statuses' in data:
+                elif (presentation.status == 'presented' or presentation.status == 'discounted') and 'receipt_statuses' in data:
                     # Handle receipt status updates
                     receipt_statuses = data['receipt_statuses']
                     print(f"Updating {len(receipt_statuses)} receipt statuses")

@@ -12,233 +12,205 @@ Available filters:
     Filtered status: {{ test_status|status_badge }}
 {% endwith %}
 
-<div class="modal-header">
-    <h5 class="modal-title">
-        {{ presentation.get_presentation_type_display }} Presentation Details
-    </h5>
-    <button type="button" class="close" data-dismiss="modal">&times;</button>
-</div>
-<div class="modal-body">
-    <!-- Presentation Info -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-6">
-                    <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p>
-                    <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p>
-                    <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p>
-                </div>
-                <div class="col-md-6 d-flex flex-column">
-                    {% if presentation.status == 'pending' %}
-                        <div class="form-group">
-                            <label>Bank Reference</label>
-                            <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Status</label>
-                            <select class="form-control" id="presentationStatus">
-                                <option value="presented">Presented</option>
-                                <option value="discounted">Discounted</option>
-                                <option value="rejected">Rejected</option>
-                            </select>
-                        </div>
-                    {% else %}
-                        <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p>
-                        <p><strong>Status:</strong> 
-                            <span class="badge badge-{{ presentation.status|status_badge }}">
-                                {{ presentation.get_status_display }}
-                            </span>
-                        </p>
-                    {% endif %}
-                    <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p>
+<div id="presentation-container" data-presentation-id="{{ presentation.id }}">
+    <div class="modal-header">
+        <h5 class="modal-title">
+            {{ presentation.get_presentation_type_display }} Presentation Details
+        </h5>
+        <button type="button" class="close" data-dismiss="modal">&times;</button>
+    </div>
+    <div class="modal-body">
+        <!-- Presentation Info -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p>
+                        <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p>
+                        <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p>
+                    </div>
+                    <div class="col-md-6 d-flex flex-column">
+                        {% if presentation.status == 'pending' %}
+                            <div class="form-group">
+                                <label>Bank Reference</label>
+                                <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Status</label>
+                                <select class="form-control" id="presentationStatus">
+                                    <option value="presented">Presented</option>
+                                    <option value="discounted">Discounted</option>
+                                    <option value="rejected">Rejected</option>
+                                </select>
+                            </div>
+                        {% else %}
+                            <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p>
+                            <p><strong>Status:</strong> 
+                                <span class="badge badge-{{ presentation.status|status_badge }}">
+                                    {{ presentation.get_status_display }}
+                                </span>
+                            </p>
+                        {% endif %}
+                        <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Receipts Table -->
-    <h6>Presented Receipts</h6>
-    <div class="table-responsive">
-        <table class="table table-sm">
-            <thead>
-                <tr>
-                    <th>Type</th>
-                    <th>Reference</th>
-                    <th>Entity</th>
-                    <th>Client</th>
-                    <th>Due Date</th>
-                    <th class="text-right">Amount</th>
-                    <th>Status</th>
-                    {% if presentation.status == 'presented' %}
-                        <th>New Status</th>
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for receipt in presentation.presentation_receipts.all %}
-                <tr>
-                    <td>
-                        {% if receipt.checkreceipt %}
-                            <i class="fas fa-money-check"></i> Check
-                        {% else %}
-                            <i class="fas fa-file-invoice-dollar"></i> LCN
+        <!-- Receipts Table -->
+        <h6>Presented Receipts</h6>
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th>Entity</th>
+                        <th>Client</th>
+                        <th>Due Date</th>
+                        <th class="text-right">Amount</th>
+                        <th>Status</th>
+                        {% if presentation.status == 'presented' %}
+                            <th>New Status</th>
                         {% endif %}
-                    </td>
-                    <td>
-                        {% if receipt.checkreceipt %}
-                            {{ receipt.checkreceipt.check_number }}
-                            <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small>
-                        {% else %}
-                            {{ receipt.lcn.lcn_number }}
-                            <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <strong>
-                            {% if receipt.checkreceipt %}
-                                {{ receipt.checkreceipt.entity.name }}
-                            {% else %}
-                                {{ receipt.lcn.entity.name }}
-                            {% endif %}
-                        </strong>
-                        <br>
-                        <small class="text-muted">
-                            {% if receipt.checkreceipt %}
-                                {{ receipt.checkreceipt.entity.ice_code }}
-                            {% else %}
-                                {{ receipt.lcn.entity.ice_code }}
-                            {% endif %}
-                        </small>
-                    </td>
-                    <td>
-                        <small>
-                            {% if receipt.checkreceipt %}
-                                {{ receipt.checkreceipt.client.name }}
-                            {% else %}
-                                {{ receipt.lcn.client.name }}
-                            {% endif %}
-                        </small>
-                    </td>
-                    <td>
-                        {% if receipt.checkreceipt %}
-                            {{ receipt.checkreceipt.due_date|date:"Y-m-d" }}
-                        {% else %}
-                            {{ receipt.lcn.due_date|date:"Y-m-d" }}
-                        {% endif %}
-                    </td>
-                    <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
-                    <td>
-                        {% if receipt.checkreceipt %}
-                            <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}">
-                                {{ receipt.checkreceipt.get_status_display }}
-                            </span>
-                        {% else %}
-                            <span class="badge badge-{{ receipt.lcn.status|status_badge }}">
-                                {{ receipt.lcn.get_status_display }}
-                            </span>
-                        {% endif %}
-                    </td>
-                    {% if presentation.status == 'presented' %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for receipt in presentation.presentation_receipts.all %}
+                    <tr>
                         <td>
-                            <select class="form-control form-control-sm receipt-status" 
-                                    data-receipt-id="{{ receipt.id }}"
-                                    {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}>
-                                <option value="">Pending</option>
-                                <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option>
-                                <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
-                            </select>
+                            {% if receipt.checkreceipt %}
+                                <i class="fas fa-money-check"></i> Check
+                            {% else %}
+                                <i class="fas fa-file-invoice-dollar"></i> LCN
+                            {% endif %}
                         </td>
-                    {% endif %}
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr class="font-weight-bold">
-                    <td colspan="5" class="text-right">Total:</td>
-                    <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td>
-                    <td colspan="2"></td>
-                </tr>
-            </tfoot>
-        </table>
+                        <td>
+                            {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.check_number }}
+                                <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small>
+                            {% else %}
+                                {{ receipt.lcn.lcn_number }}
+                                <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>
+                                {% if receipt.checkreceipt %}
+                                    {{ receipt.checkreceipt.entity.name }}
+                                {% else %}
+                                    {{ receipt.lcn.entity.name }}
+                                {% endif %}
+                            </strong>
+                            <br>
+                            <small class="text-muted">
+                                {% if receipt.checkreceipt %}
+                                    {{ receipt.checkreceipt.entity.ice_code }}
+                                {% else %}
+                                    {{ receipt.lcn.entity.ice_code }}
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            <small>
+                                {% if receipt.checkreceipt %}
+                                    {{ receipt.checkreceipt.client.name }}
+                                {% else %}
+                                    {{ receipt.lcn.client.name }}
+                                {% endif %}
+                            </small>
+                        </td>
+                        <td>
+                            {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.due_date|date:"Y-m-d" }}
+                            {% else %}
+                                {{ receipt.lcn.due_date|date:"Y-m-d" }}
+                            {% endif %}
+                        </td>
+                        <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
+                        <td>
+                            {% if receipt.checkreceipt %}
+                                <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}">
+                                    {{ receipt.checkreceipt.get_status_display }}
+                                </span>
+                            {% else %}
+                                <span class="badge badge-{{ receipt.lcn.status|status_badge }}">
+                                    {{ receipt.lcn.get_status_display }}
+                                </span>
+                            {% endif %}
+                        </td>
+                        {% if presentation.status == 'presented' or presentation.status == 'discounted' %}
+                            <td>
+                                <select class="form-control form-control-sm receipt-status" 
+                                        data-receipt-id="{{ receipt.id }}"
+                                        {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}>
+                                    <option value="">Pending</option>
+                                    <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option>
+                                    <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
+                                </select>
+                            </td>
+                        {% endif %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="font-weight-bold">
+                        <td colspan="5" class="text-right">Total:</td>
+                        <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
     </div>
-</div>
-<div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-    {% if presentation.status == 'pending' %}
-        <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')">
-            Update Status
-        </button>
-    {% endif %}
-    {% if presentation.status == 'presented' %}
-        <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')">
-            Update Statuses
-        </button>
-    {% endif %}
+    <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+        {% if presentation.status == 'pending' %}
+            <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')">
+                Update Status
+            </button>
+        {% endif %}
+        {% if presentation.status == 'presented' or presentation.status == 'discounted' %}
+            <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')">
+                Update Statuses
+            </button>
+        {% endif %}
+    </div>
 </div>
 
 <script>
+    const presentationId = '{{ presentation.id }}';
+    console.log("Presentation ID:", presentationId);
     function updatePresentation(id) {
-    const bankRef = $('#bankReference').val();
-    if (!bankRef) {
-        showError('Bank reference is required');
-        return;
-    }
-
-    const data = {
-        bank_reference: bankRef,
-        status: $('#presentationStatus').val()
-    };
-
-    $.ajax({
-        url: `/testapp/presentations/${id}/edit/`,
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        success: function(response) {
-            location.reload();
-        },
-        error: function(xhr) {
-            showError(xhr.responseJSON?.message || 'Update failed');
+        const bankRef = $('#bankReference').val();
+        if (!bankRef) {
+            showError('Bank reference is required');
+            return;
         }
-    });
-}
+
+        const data = {
+            bank_reference: bankRef,
+            status: $('#presentationStatus').val()
+        };
+
+        $.ajax({
+            url: `/testapp/presentations/${id}/edit/`,
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                location.reload();
+            },
+            error: function(xhr) {
+                showError(xhr.responseJSON?.message || 'Update failed');
+            }
+        });
+    }
 
 // Handle receipt status changes
-$(document).on('change', '.receipt-status', function() {
-    const receiptId = $(this).data('receipt-id');
-    const status = $(this).val();
-    const $select = $(this);
-
-    if (!confirm('This action cannot be undone. Continue?')) {
-        $select.val($select.find('option').not(':selected').val());
-        return;
-    }
-
-    $.ajax({
-        url: `/testapp/presentations/${presentationId}/edit/`,
-        method: 'POST',
-        headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-        },
-        contentType: 'application/json',
-        data: JSON.stringify({
-            receipt_statuses: {
-                [receiptId]: status
-            }
-        }),
-        success: function() {
-            $select.prop('disabled', true);
-            location.reload();
-        },
-        error: function(xhr) {
-            showError(xhr.responseJSON?.message || 'Status update failed');
-            $select.val($select.find('option').not(':selected').val());
-        }
-    });
-});
 
 function updateReceiptStatuses(presentationId) {
     console.log('Updating receipt statuses for presentation:', presentationId);
@@ -252,11 +224,8 @@ function updateReceiptStatuses(presentationId) {
         const receiptId = $select.data('receipt-id');
         const status = $select.val();
         
-        // Only include non-pending and enabled selects
-        if (status && !$select.prop('disabled')) {
-            receiptStatuses[receiptId] = status;
-            hasChanges = true;
-        }
+        receiptStatuses[receiptId] = status;
+        hasChanges = true; // Consider all selections as potential updates
     });
     
     if (!hasChanges) {
@@ -279,9 +248,11 @@ function updateReceiptStatuses(presentationId) {
         success: function(response) {
             console.log('Status update response:', response);
             
-            // Disable updated selects
+            // Disable dropdowns and show success feedback after update
             Object.keys(receiptStatuses).forEach(receiptId => {
-                $(`.receipt-status[data-receipt-id="${receiptId}"]`).prop('disabled', true);
+                const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`);
+                $select.prop('disabled', true); // Disable updated dropdown
+                $select.closest('tr').addClass('updated-row'); // Optional: Highlight updated rows
             });
             
             showToast('Receipt statuses updated successfully', 'success');

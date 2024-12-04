@@ -187,24 +187,27 @@ Available filters:
                             <td>{{ lcn.get_issuing_bank_display }}</td>
                             <td>{{ lcn.due_date|date:"Y-m-d" }}</td>
                             <td class="text-right">{{ lcn.amount|floatformat:2 }}</td>
+                            <!-- Bank Issued To column -->
                             <td>
-                                {% if lcn.presentation %}
-                                    {{ lcn.presentation.bank_account.bank }} -
-                                    {{ lcn.presentation.bank_account.account_number }}
-                                {% else %}
-                                    -
-                                {% endif %}
+                                {% with pres=lcn.lcn_presentations.first %}
+                                    {% if pres %}
+                                        {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }}
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% endwith %}
                             </td>
                             <td>
-                                {% if lcn.presentation %}
-                                    <span class="d-block">Date: {{ lcn.presentation.date|date:"Y-m-d" }}</span>
-                                    <span class="d-block">Ref: #{{ lcn.presentation.id }}</span>
-                                    <span class="d-block small text-muted">
-                                        {{ lcn.presentation.get_presentation_type_display }}
-                                    </span>
-                                {% else %}
-                                    -
-                                {% endif %}
+                                {% with pres=lcn.lcn_presentations.first %}
+                                    {% if pres %}
+                                        {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br>
+                                        <span class="badge badge-{{ pres.presentation.status|status_badge }}">
+                                            {{ pres.presentation.get_status_display }}
+                                        </span>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% endwith %}
                             </td>
                             <td>
                                 <span class="badge badge-{{ lcn.status|status_badge }}">
@@ -213,26 +216,20 @@ Available filters:
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" 
-                                            onclick="viewReceipt('lcn', '{{ lcn.id }}')"
-                                            {% if lcn.presentation %}title="View Details"{% endif %}>
+                                    <button class="btn btn-sm btn-info" onclick="viewReceipt('lcn', '{{ lcn.id }}')">
                                         <i class="fas fa-eye"></i>
                                     </button>
-                                    {% if not lcn.presentation %}
-                                        <button class="btn btn-sm btn-primary" 
-                                                data-toggle="modal" 
-                                                data-target="#receiptModal" 
-                                                data-type="lcn" 
-                                                data-action="edit" 
-                                                data-id="{{ lcn.id }}">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-danger delete-receipt" 
-                                                data-type="lcn" 
-                                                data-id="{{ lcn.id }}">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    {% endif %}
+                                    {% with pres=lcn.lcn_presentations.first %}
+                                        {% if not pres %}
+                                            <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
+                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}">
+                                                <i class="fas fa-edit"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        {% endif %}
+                                    {% endwith %}
                                 </div>
                             </td>
                         </tr>
@@ -552,7 +549,54 @@ $(document).ready(function() {
             'z-index': '9999'
         });
     }
+    function initializeBankAutocomplete() {
+    const banksList = [
+        {% for code, name in bank_choices %}
+        { label: '{{ name }}', value: '{{ code }}' },
+        {% endfor %}
+    ];
+
+    $("#issuingBank").autocomplete({
+        source: banksList,
+        minLength: 0,
+        select: function(event, ui) {
+        $("#issuingBank").val(ui.item.label);
+        $("#issuingBankCode").val(ui.item.value);
+        return false;
+        }
+    }).focus(function() {
+        $(this).autocomplete("search", "");
+    });
+
+    // Add dropdown indicator
+    if (!$("#issuingBank").next('.bank-dropdown-toggle').length) {
+        $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>');
+        $(".bank-dropdown-toggle").click(function() {
+        $("#issuingBank").focus();
+        });
+    }
+    }
+
+    // Modify the modal show event handler
+    $('#receiptModal').on('show.bs.modal', function(e) {
+    const button = $(e.relatedTarget);
+    const type = button.data('type');
+    const action = button.data('action');
+    const id = button.data('id');
     
+    let url = '';
+    if (action === 'edit') {
+        url = `edit/${type}/${id}/`;
+    } else {
+        url = `create/${type}/`;
+    }
+
+    $.get(url, function(data) {
+        $('#receiptModal .modal-content').html(data);
+        initializeForm();
+        initializeBankAutocomplete(); // Add this line
+    });
+    });
 
     // Handle delete
     $('.delete-receipt').click(function() {
@@ -590,10 +634,10 @@ $(document).keydown(function(e) {
                 case 'l': // Alt + L for LCN
                     receiptType = 'lcn';
                     break;
-                case 'm': // Alt + M for Cash (Money)
+                case 'e': // Alt + M for Cash (Money)
                     receiptType = 'cash';
                     break;
-                case 't': // Alt + T for Transfer
+                case 'v': // Alt + T for Transfer
                     receiptType = 'transfer';
                     break;
             }
