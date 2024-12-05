@@ -401,6 +401,10 @@
 .badge-paid { background-color: #28a745; color: white; }
 .badge-rejected { background-color: #ffc107; color: black; }
 .badge-cancelled { background-color: #dc3545; color: white; }
+.badge-unpaid { 
+    background-color: #dc3545 !important; 
+    color: white !important; 
+}
 
 
 .exclamation {

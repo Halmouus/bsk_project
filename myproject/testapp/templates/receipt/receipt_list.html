@@ -123,6 +123,12 @@ Available filters:
                                 <span class="badge badge-{{ check.status|status_badge }}">
                                     {{ check.get_status_display }}
                                 </span>
+                                {% if check.status == 'UNPAID' and check.rejection_cause %}
+                                    <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small>
+                                {% endif %}
+                                {% if check.compensation_info %}
+                                    <br><small class="text-muted">{{ check.compensation_info }}</small>
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="btn-group">
@@ -213,6 +219,12 @@ Available filters:
                                 <span class="badge badge-{{ lcn.status|status_badge }}">
                                     {{ lcn.get_status_display }}
                                 </span>
+                                {% if lcn.status == 'UNPAID' and lcn.rejection_cause %}
+                                    <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
+                                {% endif %}
+                                {% if lcn.compensation_info %}
+                                    <br><small class="text-muted">{{ lcn.compensation_info }}</small>
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="btn-group">

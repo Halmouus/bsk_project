@@ -114,7 +114,12 @@
                            value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                 </div>
             </div>
-        </div>          
+        </div>
+        <div class="form-group">
+            <label>Compensate Unpaid Receipt</label>
+            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
+            <input type="hidden" id="compensate-receipt-id" name="compensates">
+        </div>
         <div class="row">
             <div class="col-md-6">
                 <div class="form-group">
@@ -143,15 +148,25 @@
                            value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required>
                 </div>
             </div>
-                <div class="col-md-6">
-                    <div class="form-group">
-                        <label for="issuingBank">Issuing Bank</label>
-                        <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
-                               value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
-                        <input type="hidden" id="issuingBankCode" name="issuing_bank" 
-                               value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
-                    </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="issuingBank">Issuing Bank</label>
+                    <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
+                           value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                    <input type="hidden" id="issuingBankCode" name="issuing_bank" 
+                           value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                 </div>
+            </div>
+            <div class="form-group">
+                <label for="compensatesInput">
+                    <i class="fas fa-link me-2"></i>Compensate Unpaid Receipt
+                </label>
+                <input type="text" class="form-control" id="compensatesInput" 
+                       placeholder="Search for an unpaid receipt...">
+                <input type="hidden" id="compensates" name="compensates">
+                <small class="text-muted">
+                    Optional: Select an unpaid receipt this {{ receipt_type }} will compensate when paid
+                </small>
             </div>
         </div>
         {% endif %}
@@ -212,7 +227,7 @@
 $(document).ready(function() {
 // Initialize client autocomplete
 $("#client").autocomplete({
-                minLength: 2,
+                minLength: 0,
             source: function(request, response) {
                 console.log('Client search term:', request.term);
                 $.ajax({
@@ -245,7 +260,7 @@ $("#client").autocomplete({
 
         // Initialize entity autocomplete
         $("#entity").autocomplete({
-            minLength: 2,
+            minLength: 0,
             source: function(request, response) {
                 console.log('Entity search term:', request.term);
                 $.ajax({
@@ -301,6 +316,48 @@ $("#client").autocomplete({
         $(".bank-dropdown-toggle").click(function() {
             $("#issuingBank").focus();
         });
+
+        $("#compensate-receipt-autocomplete").autocomplete({
+    source: function(request, response) {
+        console.log('Unpaid Receipt search term:', request.term);
+        $.ajax({
+            url: "{% url 'unpaid-receipt-autocomplete' %}",
+            dataType: "json",
+            data: { term: request.term },
+            success: function(data) {
+                console.log('Unpaid Receipt data received:', data);
+                response($.map(data.results, function(item) {
+                    return {
+                        label: item.description,
+                        value: item.description,  // Display full description
+                        id: item.id
+                    };
+                }));
+            },
+            error: function(xhr, status, error) {
+                console.error('Unpaid Receipt autocomplete error:', error);
+                console.log('XHR response:', xhr.responseText);
+            }
+        });
+    },
+    minLength: 0,
+    select: function(event, ui) {
+        console.log('Unpaid Receipt selected:', ui.item);
+        $("#compensate-receipt-id").val(ui.item.id);
+        $("#compensate-receipt-autocomplete").val(ui.item.label);
+        $("#compensation-details").html(`
+            Selected Receipt: ${ui.item.label}
+        `);
+    },
+    change: function(event, ui) {
+        console.log('Unpaid Receipt change event triggered');
+        if (!ui.item) {
+            $("#compensate-receipt-id").val('');
+            $("#compensate-receipt-autocomplete").val('');
+            $("#compensation-details").empty();
+        }
+    }
+});
 
 });
 </script>

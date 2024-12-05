@@ -11,6 +11,8 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Q
 import logging
+from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.models import ContentType
 
 logger = logging.getLogger(__name__)
 
@@ -1214,6 +1216,7 @@ class Receipt(BaseModel):
 
 class NegotiableReceipt(Receipt):
     """Base class for checks and LCNs."""
+
     STATUS_PORTFOLIO = 'PORTFOLIO'
     STATUS_PRESENTED_COLLECTION = 'PRESENTED_COLLECTION'
     STATUS_PRESENTED_DISCOUNT = 'PRESENTED_DISCOUNT'
@@ -1221,6 +1224,7 @@ class NegotiableReceipt(Receipt):
     STATUS_PAID = 'PAID'
     STATUS_REJECTED = 'REJECTED'
     STATUS_COMPENSATED = 'COMPENSATED'
+    STATUS_UNPAID = 'UNPAID'
 
     RECEIPT_STATUS = [
         (STATUS_PORTFOLIO, 'In Portfolio'),
@@ -1229,24 +1233,42 @@ class NegotiableReceipt(Receipt):
         (STATUS_DISCOUNTED, 'Discounted'),
         (STATUS_PAID, 'Paid'),
         (STATUS_REJECTED, 'Rejected'),
-        (STATUS_COMPENSATED, 'Compensated')
+        (STATUS_COMPENSATED, 'Compensated'),
+        (STATUS_UNPAID, 'Unpaid') 
     ]
+    
+    REJECTION_CAUSES = [
+        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
+        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
+        ('SIGNATURE_MISMATCH', 'Signature Mismatch'),
+        ('INVALID_DATE', 'Date Invalid/Post-dated'),
+        ('AMOUNT_DISCREPANCY', 'Amount Discrepancy'),
+        ('TECHNICAL_ERROR', 'Technical Error (MICR)'),
+        ('STOP_PAYMENT', 'Stop Payment Order'),
+        ('ACCOUNT_ERROR', 'Account Number Error'),
+        ('FORMAL_DEFECT', 'Formal Defect'),
+        ('BANK_ERROR', 'Bank Processing Error')
+    ]
+
     bank_account = models.ForeignKey(
         'BankAccount', 
         on_delete=models.PROTECT,
         null=True,
         blank=True
     )
+
     issuing_bank = models.CharField(
         max_length=4,
         choices=MOROCCAN_BANKS
     )
+
     due_date = models.DateField()
     status = models.CharField(
         max_length=20, 
         choices=RECEIPT_STATUS,
         default=STATUS_PORTFOLIO
     )
+
     compensates = models.ForeignKey(
         'self',
         null=True,
@@ -1254,6 +1276,32 @@ class NegotiableReceipt(Receipt):
         on_delete=models.SET_NULL,
         related_name='compensated_by'
     )
+
+    rejection_cause = models.CharField(
+        max_length=50,
+        choices=REJECTION_CAUSES,
+        null=True,
+        blank=True
+    )    
+
+    compensating_content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='%(app_label)s_%(class)s_compensating'
+    )
+
+    compensating_object_id = models.UUIDField(null=True, blank=True)
+    compensating_receipt = GenericForeignKey(
+        'compensating_content_type', 
+        'compensating_object_id'
+    )
+    
+    compensation_date = models.DateTimeField(
+        null=True,
+        blank=True
+    )    
 
     class Meta:
         abstract = True
@@ -1323,6 +1371,78 @@ class NegotiableReceipt(Receipt):
             return status_display, details
         return status_display, None
     
+    @property
+    def compensation_info(self):
+        """Returns formatted compensation information"""
+        if not self.compensating_receipt:
+            return None
+            
+        if isinstance(self.compensating_receipt, (CheckReceipt, LCN)):
+            return (f"Compensated by {self.compensating_receipt.__class__.__name__} "
+                   f"#{self.compensating_receipt.get_receipt_number()} "
+                   f"({self.compensating_receipt.entity.name})")
+        else:
+            return (f"Compensated by {self.compensating_receipt.__class__.__name__} "
+                   f"on {self.compensation_date.strftime('%d/%m/%y')}")
+
+    def mark_as_unpaid(self, cause):
+        """Mark receipt as unpaid with a cause"""
+        if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT']:
+            raise ValidationError("Only rejected or presented receipts can be marked as unpaid")
+        
+        self.status = self.STATUS_UNPAID
+        self.rejection_cause = cause
+        self.save()
+
+    def compensate_with(self, compensating_receipt):
+        """Set up compensation relationship"""
+        if self.status != self.STATUS_UNPAID:
+            raise ValidationError("Only unpaid receipts can be compensated")
+            
+        if compensating_receipt.amount < self.amount:
+            raise ValidationError("Compensating receipt amount must be greater than or equal to unpaid amount")
+
+        self.compensating_receipt = compensating_receipt
+        
+        # If cash/transfer, mark as compensated immediately
+        if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
+            self.status = self.STATUS_COMPENSATED
+            self.compensation_date = timezone.now()
+            
+        self.save()
+
+    def handle_compensation_payment(self):
+        """Called when a compensating negotiable receipt is paid"""
+        if self.compensating_receipt and self.status == self.STATUS_UNPAID:
+            self.status = self.STATUS_COMPENSATED
+            self.compensation_date = timezone.now()
+            self.save()
+
+    def update_compensated_receipts(self):
+            """
+            When this receipt is paid, update any receipts it compensates
+            """
+            # Find all receipts that this receipt compensates
+            compensated_checks = CheckReceipt.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id,
+                status=self.STATUS_UNPAID
+            )
+            
+            compensated_lcns = LCN.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id,
+                status=self.STATUS_UNPAID
+            )
+
+            # Update the status of all compensated receipts
+            current_time = timezone.now()
+            
+            for receipt in list(compensated_checks) + list(compensated_lcns):
+                receipt.status = self.STATUS_COMPENSATED
+                receipt.compensation_date = current_time
+                receipt.save()
+
     def save(self, *args, **kwargs):
         if hasattr(self, 'presentation') and self.presentation:
             # Update bank_account from presentation when presented

@@ -124,6 +124,7 @@ class PresentationDetailView(View):
             context = {
                 'presentation': presentation,
                 'receipts': receipts,
+                'rejection_causes': CheckReceipt.REJECTION_CAUSES,
                 'total_amount': sum(receipt.amount for receipt in receipts)
             }
             print("\nContext prepared:", context)
@@ -166,17 +167,18 @@ class PresentationUpdateView(View):
     def post(self, request, pk):
         print("\n=== Starting presentation edit ===")
         try:
-            print(f"Raw request body: {request.body}")
             data = json.loads(request.body)
             print(f"Parsed data: {data}")
+            print(f"Request headers: {dict(request.headers)}")
             
             with transaction.atomic():
                 presentation = get_object_or_404(Presentation, pk=pk)
-                print(f"Found presentation: {presentation}")
+                print(f"Found presentation: {presentation.__dict__}")
 
                 if presentation.status == 'pending':
                     # Handle initial status change
                     if not data.get('bank_reference'):
+                        print("Error: Missing bank reference")
                         return JsonResponse({
                             'status': 'error',
                             'message': 'Bank reference is required'
@@ -186,32 +188,61 @@ class PresentationUpdateView(View):
                     presentation.bank_reference = data['bank_reference']
                     presentation.status = data['status']
                     presentation.save()
+                    print("Presentation updated successfully")
 
-                elif (presentation.status == 'presented' or presentation.status == 'discounted') and 'receipt_statuses' in data:
-                    # Handle receipt status updates
-                    receipt_statuses = data['receipt_statuses']
-                    print(f"Updating {len(receipt_statuses)} receipt statuses")
-                    
-                    for receipt_id, new_status in receipt_statuses.items():
-                        print(f"Processing receipt {receipt_id} -> {new_status}")
-                        try:
-                            presentation_receipt = PresentationReceipt.objects.get(
-                                id=receipt_id,
-                                presentation=presentation
-                            )
-                            receipt = presentation_receipt.checkreceipt or presentation_receipt.lcn
-                            
-                            if receipt and receipt.status not in ['PAID', 'UNPAID']:
-                                print(f"Updating receipt {receipt_id} status to {new_status}")
-                                receipt.status = 'PAID' if new_status == 'paid' else 'UNPAID'
-                                receipt.save()
-                                print(f"Receipt status updated successfully")
-                            else:
-                                print(f"Receipt {receipt_id} already has final status: {receipt.status}")
+                elif (presentation.status == 'presented' or presentation.status == 'discounted'):
+                    if 'receipt_statuses' in data:
+                        receipt_statuses = data['receipt_statuses']
+                        print(f"Processing {len(receipt_statuses)} receipt status updates: {receipt_statuses}")
                         
-                        except PresentationReceipt.DoesNotExist:
-                            print(f"Receipt {receipt_id} not found in presentation {pk}")
-                            continue
+                        for receipt_id, new_status in receipt_statuses.items():
+                            print(f"\nProcessing receipt {receipt_id}:")
+                            print(f"New status data: {new_status}")
+                            
+                            if not new_status:
+                                print("Skipping empty status update")
+                                continue
+                                
+                            try:
+                                presentation_receipt = PresentationReceipt.objects.get(
+                                    id=receipt_id,
+                                    presentation=presentation
+                                )
+                                print(f"Found presentation receipt: {presentation_receipt.__dict__}")
+                                
+                                receipt = presentation_receipt.checkreceipt or presentation_receipt.lcn
+                                print(f"Associated receipt: {receipt.__dict__ if receipt else None}")
+                                
+                                if receipt and receipt.status not in ['PAID', 'UNPAID', 'COMPENSATED']:
+                                    status_value = new_status['status'] if isinstance(new_status, dict) else new_status
+                                    print(f"Processing status update to {status_value}")
+                                    
+                                    if status_value == 'unpaid':
+                                        cause = new_status.get('cause') if isinstance(new_status, dict) else None
+                                        print(f"Processing unpaid status with cause: {cause}")
+                                        if not cause:
+                                            raise ValidationError("Rejection cause required for unpaid status")
+                                        receipt.mark_as_unpaid(cause)
+                                    else:
+                                        print(f"Updating status to: {status_value.upper()}")
+                                        receipt.status = status_value.upper()
+                                        receipt.save()
+                                        
+                                        if status_value.upper() == 'PAID':
+                                            print("Receipt marked as paid, updating compensated receipts")
+                                            receipt.update_compensated_receipts()
+                                    
+                                    print("Status update completed successfully")
+                                else:
+                                    print(f"Skipping receipt with status: {receipt.status if receipt else 'None'}")
+
+                            except PresentationReceipt.DoesNotExist:
+                                print(f"Error: Receipt {receipt_id} not found in presentation {pk}")
+                                continue
+                            except Exception as e:
+                                print(f"Error processing receipt {receipt_id}: {str(e)}")
+                                print(traceback.format_exc())
+                                raise
                 
                 print("Presentation update completed successfully")
                 return JsonResponse({
@@ -219,20 +250,14 @@ class PresentationUpdateView(View):
                     'message': 'Presentation updated successfully'
                 })
 
-        except json.JSONDecodeError:
-            print("Invalid JSON in request body")
-            return JsonResponse({
-                'status': 'error',
-                'message': 'Invalid request format'
-            }, status=400)
         except Exception as e:
             print("=== Error in presentation edit ===")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
-            }, status=400)
-        
+            }, status=400)    
+   
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
     """

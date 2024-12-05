@@ -10,6 +10,9 @@ from django.utils import timezone
 import calendar
 from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, MOROCCAN_BANKS
 from django.db.models import Q
+from django.urls import reverse
+from decimal import Decimal
+
 
 class ReceiptListView(ListView):
     template_name = 'receipt/receipt_list.html'
@@ -86,6 +89,11 @@ class ReceiptCreateView(View):
         print("POST data:", request.POST)
         try:
             data = request.POST.dict()
+
+            compensates_id = data.pop('compensates', None)
+
+            # Convert amount to Decimal
+            data['amount'] = Decimal(data['amount'].replace(',', ''))
             
             # Common fields for all receipt types
             common_fields = {
@@ -129,11 +137,33 @@ class ReceiptCreateView(View):
                     transfer_reference=data['transfer_reference'],
                     transfer_date=data['transfer_date']
                 )
+
             else:
                 return JsonResponse({
                     'status': 'error',
                     'message': 'Invalid receipt type'
                 }, status=400)
+            
+            # Handle compensation if selected
+            if compensates_id:
+                # Find the unpaid receipt
+                unpaid_receipt = None
+                try:
+                    unpaid_receipt = CheckReceipt.objects.get(
+                        id=compensates_id, 
+                        status=CheckReceipt.STATUS_UNPAID
+                    )
+                except CheckReceipt.DoesNotExist:
+                    try:
+                        unpaid_receipt = LCN.objects.get(
+                            id=compensates_id, 
+                            status=LCN.STATUS_UNPAID
+                        )
+                    except LCN.DoesNotExist:
+                        pass
+                
+                if unpaid_receipt:
+                    unpaid_receipt.compensate_with(receipt)
 
             return JsonResponse({
                 'status': 'success',
@@ -371,6 +401,96 @@ class ReceiptDetailView(View):
                 'message': str(e)
             }, status=500)
 
+@method_decorator(csrf_exempt, name='dispatch')
+class ReceiptStatusUpdateView(View):
+    """Handle receipt status updates including unpaid marking"""
+    def post(self, request, receipt_type, pk):
+        try:
+            data = json.loads(request.body)
+            model = CheckReceipt if receipt_type == 'check' else LCN
+            receipt = get_object_or_404(model, pk=pk)
+            
+            status = data.get('status')
+            cause = data.get('cause')
+            
+            if status == 'unpaid':
+                if not cause:
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Rejection cause is required'
+                    }, status=400)
+                receipt.mark_as_unpaid(cause)
+            else:
+                receipt.status = status
+                receipt.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': f'Receipt status updated to {status}'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UnpaidReceiptsView(View):
+    """API endpoint to list unpaid receipts for compensation selection"""
+    def get(self, request):
+        search = request.GET.get('search', '')
+        
+        # Query both check and LCN models for unpaid receipts
+        unpaid_checks = CheckReceipt.objects.filter(
+            status=CheckReceipt.STATUS_UNPAID,
+            compensating_receipt__isnull=True
+        ).select_related('entity')
+        
+        unpaid_lcns = LCN.objects.filter(
+            status=LCN.STATUS_UNPAID,
+            compensating_receipt__isnull=True
+        ).select_related('entity')
+        
+        if search:
+            unpaid_checks = unpaid_checks.filter(
+                Q(check_number__icontains=search) |
+                Q(entity__name__icontains=search)
+            )
+            unpaid_lcns = unpaid_lcns.filter(
+                Q(lcn_number__icontains=search) |
+                Q(entity__name__icontains=search)
+            )
+        
+        # Format results
+        results = []
+        for check in unpaid_checks:
+            results.append({
+                'id': str(check.id),
+                'type': 'Check',
+                'number': check.check_number,
+                'entity': check.entity.name,
+                'amount': float(check.amount),
+                'date': check.operation_date.strftime('%Y-%m-%d'),
+                'url': reverse('receipt-detail', kwargs={'receipt_type': 'check', 'pk': check.id})
+            })
+            
+        for lcn in unpaid_lcns:
+            results.append({
+                'id': str(lcn.id),
+                'type': 'LCN',
+                'number': lcn.lcn_number,
+                'entity': lcn.entity.name,
+                'amount': float(lcn.amount),
+                'date': lcn.operation_date.strftime('%Y-%m-%d'),
+                'url': reverse('receipt-detail', kwargs={'receipt_type': 'lcn', 'pk': lcn.id})
+            })
+            
+        return JsonResponse({
+            'items': results,
+            'has_more': False  # Implement pagination if needed
+        })
+
 def client_autocomplete(request):
     search = request.GET.get('term', '') or request.GET.get('q', '')
     clients = Client.objects.filter(
@@ -399,4 +519,40 @@ def entity_autocomplete(request):
         'text': f"{entity.name} ({entity.ice_code})"
     } for entity in entities]
     print(f"results({len(results)}): {results}")
+    return JsonResponse({'results': results})
+
+def unpaid_receipt_autocomplete(request):
+    search = request.GET.get('term', '') or request.GET.get('q', '')
+    
+    # Search across CheckReceipt and LCN
+    unpaid_checks = CheckReceipt.objects.filter(
+        status=CheckReceipt.STATUS_UNPAID
+    ).filter(
+        check_number__icontains=search
+    )[:10]
+    
+    unpaid_lcns = LCN.objects.filter(
+        status=LCN.STATUS_UNPAID
+    ).filter(
+        lcn_number__icontains=search
+    )[:10]
+    
+    # Combine results
+    results = []
+    
+    for check in unpaid_checks:
+        results.append({
+            'id': str(check.id),
+            'text': f"Check #{check.check_number} ({check.entity.name}) - {check.amount} [{check.get_rejection_cause_display() or 'No cause'}]",
+            'description': f"Check #{check.check_number} ({check.entity.name}) - {check.amount} [{check.get_rejection_cause_display() or 'No cause'}]"
+        })
+    
+    for lcn in unpaid_lcns:
+        results.append({
+            'id': str(lcn.id),
+            'text': f"LCN #{lcn.lcn_number} ({lcn.entity.name}) - {lcn.amount} [{lcn.get_rejection_cause_display() or 'No cause'}]",
+            'description': f"LCN #{lcn.lcn_number} ({lcn.entity.name}) - {lcn.amount} [{lcn.get_rejection_cause_display() or 'No cause'}]"
+        })
+    
+    print(f"Unpaid Receipt results({len(results)}): {results}")
     return JsonResponse({'results': results})

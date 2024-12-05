@@ -5,26 +5,33 @@ logger = logging.getLogger(__name__)
 
 register = template.Library()
 
-logger.info("Loading presentation_filters.py")
-
 @register.filter
 def status_badge(status):
     """Returns appropriate badge class for presentation status"""
-    logger.debug(f"status_badge filter called with status: {status}")
+    # Convert status to lowercase for consistent mapping
+    original_status = str(status)
+    status = original_status.lower()
+    
+    logger.debug(f"status_badge filter called with original status: {original_status}")
+    
     result = {
         'pending': 'secondary',
         'presented': 'info',
         'paid': 'success',
         'rejected': 'danger',
-        'PORTFOLIO': 'primary',
-        'PRESENTED_COLLECTION': 'info',
-        'PRESENTED_DISCOUNT': 'info',
+        'unpaid': 'danger',
+        'portfolio': 'primary',
+        'presented_collection': 'info',
+        'presented_discount': 'info',
+        'discounted': 'success',
+        
+        # Explicitly map uppercase statuses
+        'UNPAID': 'danger',
         'PAID': 'success',
         'REJECTED': 'danger',
-        'DISCOUNTED': 'success'
-    }.get(status, 'secondary')
+        'PRESENTED_COLLECTION': 'info',
+        'PRESENTED_DISCOUNT': 'info',
+    }.get(original_status, status)  # Try original status first, then fallback to lowercase
+    
     logger.debug(f"Returning badge class: {result}")
     return result
-
-# Print confirmation when module is loaded
-print("presentation_filters.py loaded successfully")

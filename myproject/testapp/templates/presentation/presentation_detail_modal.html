@@ -133,10 +133,22 @@ Available filters:
                                 <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}">
                                     {{ receipt.checkreceipt.get_status_display }}
                                 </span>
+                                {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %}
+                                    <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small>
+                                {% endif %}
+                                {% if receipt.checkreceipt.compensation_info %}
+                                    <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small>
+                                {% endif %}
                             {% else %}
                                 <span class="badge badge-{{ receipt.lcn.status|status_badge }}">
                                     {{ receipt.lcn.get_status_display }}
                                 </span>
+                                {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %}
+                                    <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small>
+                                {% endif %}
+                                {% if receipt.lcn.compensation_info %}
+                                    <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small>
+                                {% endif %}
                             {% endif %}
                         </td>
                         {% if presentation.status == 'presented' or presentation.status == 'discounted' %}
@@ -176,6 +188,32 @@ Available filters:
             </button>
         {% endif %}
     </div>
+    <!-- Unpaid Cause Modal -->
+    <div class="modal fade" id="unpaidCauseModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rejection Cause</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label for="rejectionCause">Select Cause</label>
+                        <select class="form-control" id="rejectionCause" required>
+                            <option value="">Select a cause...</option>
+                            {% for cause, label in rejection_causes %}
+                                <option value="{{ cause }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmCause">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -212,57 +250,160 @@ Available filters:
 
 // Handle receipt status changes
 
+// Handle receipt status updates
 function updateReceiptStatuses(presentationId) {
     console.log('Updating receipt statuses for presentation:', presentationId);
-    
-    // Collect all receipt statuses that are not pending
     const receiptStatuses = {};
     let hasChanges = false;
-    
+    let pendingUnpaidStatus = null;
+
+    // Debug info for all receipt status selects
+    $('.receipt-status').each(function() {
+        const $select = $(this);
+        console.log('Found receipt status select:', {
+            receiptId: $select.data('receipt-id'),
+            currentValue: $select.val(),
+            disabled: $select.prop('disabled'),
+            options: Array.from($select.find('option')).map(opt => ({
+                value: opt.value,
+                text: opt.text,
+                selected: opt.selected
+            }))
+        });
+    });
+
     $('.receipt-status').each(function() {
         const $select = $(this);
         const receiptId = $select.data('receipt-id');
         const status = $select.val();
-        
-        receiptStatuses[receiptId] = status;
-        hasChanges = true; // Consider all selections as potential updates
+
+        console.log('Processing receipt:', {
+            receiptId: receiptId,
+            newStatus: status,
+            previousStatus: $select.data('previous-status')
+        });
+
+        if (status === 'unpaid') {
+            pendingUnpaidStatus = { receiptId: receiptId, $select: $select };
+            console.log('Found pending unpaid status:', pendingUnpaidStatus);
+            return false; // Break the loop
+        }
+
+        if (status) {
+            receiptStatuses[receiptId] = status;
+            hasChanges = true;
+            console.log(`Adding status update for receipt ${receiptId}:`, status);
+        }
     });
-    
+
+    if (pendingUnpaidStatus) {
+        console.log('Showing unpaid cause modal for:', pendingUnpaidStatus);
+        $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus);
+        return;
+    }
+
     if (!hasChanges) {
+        console.log('No status changes detected');
         showToast('No status changes to update', 'info');
         return;
     }
 
-    console.log('Updating statuses:', receiptStatuses);
+    console.log('Submitting status updates:', receiptStatuses);
+    submitStatusUpdates(presentationId, receiptStatuses);
+}
+
+function submitStatusUpdates(presentationId, receiptStatuses) {
+    console.log('Submitting status updates:', {
+        presentationId: presentationId,
+        statuses: receiptStatuses,
+        url: `/testapp/presentations/${presentationId}/edit/`
+    });
 
     $.ajax({
         url: `/testapp/presentations/${presentationId}/edit/`,
         method: 'POST',
         headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+            'Content-Type': 'application/json'
         },
-        contentType: 'application/json',
-        data: JSON.stringify({
-            receipt_statuses: receiptStatuses
-        }),
+        data: JSON.stringify({ receipt_statuses: receiptStatuses }),
         success: function(response) {
             console.log('Status update response:', response);
             
-            // Disable dropdowns and show success feedback after update
-            Object.keys(receiptStatuses).forEach(receiptId => {
+            // Update UI to reflect changes
+            Object.entries(receiptStatuses).forEach(([receiptId, status]) => {
                 const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`);
-                $select.prop('disabled', true); // Disable updated dropdown
-                $select.closest('tr').addClass('updated-row'); // Optional: Highlight updated rows
+                console.log(`Updating UI for receipt ${receiptId}:`, {
+                    status: status,
+                    select: $select.length ? 'found' : 'not found'
+                });
+                
+                if ($select.length) {
+                    $select.prop('disabled', true)
+                          .val(status);
+                    
+                    // Update the badge in the status column
+                    const $statusCell = $select.closest('tr').find('td:nth-last-child(2)');
+                    const statusClass = status === 'paid' ? 'badge-success' : 'badge-danger';
+                    $statusCell.html(`<span class="badge ${statusClass}">${status.toUpperCase()}</span>`);
+                }
             });
-            
+
             showToast('Receipt statuses updated successfully', 'success');
+            
+            // Reload after a short delay to ensure UI is updated
+            setTimeout(() => {
+                location.reload();
+            }, 1000);
         },
         error: function(xhr) {
-            console.error('Status update failed:', xhr.responseText);
-            showToast('Failed to update statuses', 'error');
+            console.error('Status update failed:', {
+                status: xhr.status,
+                response: xhr.responseText
+            });
+            try {
+                const error = JSON.parse(xhr.responseText);
+                showToast(error.message || 'Failed to update statuses', 'error');
+            } catch (e) {
+                showToast('Failed to update statuses', 'error');
+            }
         }
     });
 }
+
+// Handle unpaid cause confirmation
+$('#confirmCause').click(function() {
+    console.log('Confirming unpaid cause');
+    const cause = $('#rejectionCause').val();
+    
+    console.log('Selected cause:', cause);
+    
+    if (!cause) {
+        console.log('No cause selected');
+        showError('Please select a rejection cause');
+        return;
+    }
+
+    const pendingStatus = $('#unpaidCauseModal').data('pendingStatus');
+    console.log('Pending status data:', pendingStatus);
+
+    if (!pendingStatus || !pendingStatus.receiptId) {
+        console.error('Missing pending status data');
+        showError('Missing receipt information');
+        return;
+    }
+
+    const receiptStatuses = {
+        [pendingStatus.receiptId]: {
+            status: 'unpaid',
+            cause: cause
+        }
+    };
+
+    console.log('Submitting unpaid status update:', receiptStatuses);
+    submitStatusUpdates(presentationId, receiptStatuses);
+    $('#unpaidCauseModal').modal('hide');
+});
 
 function showToast(message, type = 'success') {
     const toast = `

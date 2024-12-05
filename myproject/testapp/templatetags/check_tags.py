@@ -8,5 +8,6 @@ def status_badge(status):
         'pending': 'secondary',
         'delivered': 'warning',
         'paid': 'success',
-        'cancelled': 'danger'
+        'cancelled': 'danger',
+        'unpaid': 'danger'
     }.get(status, 'secondary')
