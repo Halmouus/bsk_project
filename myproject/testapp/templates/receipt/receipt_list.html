@@ -13,7 +13,7 @@ Available filters:
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">
-            <i class="fas fa-receipt text-primary me-2"></i>Receipts Management
+            <i class="fas fa-receipt text-primary me-2"></i> Receipts Management
         </h2>
         <div class="btn-group">
             <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
@@ -125,6 +125,11 @@ Available filters:
                                 </span>
                                 {% if check.status == 'UNPAID' and check.rejection_cause %}
                                     <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small>
+                                    {% with last_pres=check.check_presentations.last %}
+                                        {% if last_pres %}
+                                            <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                                        {% endif %}
+                                    {% endwith %}
                                 {% endif %}
                                 {% if check.compensation_info %}
                                     <br><small class="text-muted">{{ check.compensation_info }}</small>
@@ -516,7 +521,7 @@ $(document).ready(function() {
 
     // Initialize client autocomplete
     $("#client").autocomplete({
-                minLength: 2,
+                minLength: 0,
             source: function(request, response) {
                 console.log('Client search term:', request.term);
                 $.ajax({
@@ -549,7 +554,7 @@ $(document).ready(function() {
 
         // Initialize entity autocomplete
         $("#entity").autocomplete({
-            minLength: 2,
+            minLength: 0,
             source: function(request, response) {
                 console.log('Entity search term:', request.term);
                 $.ajax({

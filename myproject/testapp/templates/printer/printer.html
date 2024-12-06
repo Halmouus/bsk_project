@@ -1,0 +1,144 @@
+import React, { useState } from 'react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Printer } from 'lucide-react';
+
+const CheckPrinter = () => {
+  const [selectedBank, setSelectedBank] = useState('default');
+  const [fields, setFields] = useState({
+    date: { value: '', position: { x: 350, y: 20 } },
+    payTo: { value: '', position: { x: 30, y: 60 } },
+    amount: { value: '', position: { x: 350, y: 60 } },
+    amountInWords: { value: '', position: { x: 30, y: 100 } },
+    memo: { value: '', position: { x: 30, y: 140 } }
+  });
+
+  // Bank templates with predefined positions
+  const bankTemplates = {
+    default: {
+      date: { x: 350, y: 20 },
+      payTo: { x: 30, y: 60 },
+      amount: { x: 350, y: 60 },
+      amountInWords: { x: 30, y: 100 },
+      memo: { x: 30, y: 140 }
+    },
+    chase: {
+      date: { x: 370, y: 25 },
+      payTo: { x: 40, y: 65 },
+      amount: { x: 370, y: 65 },
+      amountInWords: { x: 40, y: 105 },
+      memo: { x: 40, y: 145 }
+    }
+  };
+
+  const handleBankChange = (value) => {
+    setSelectedBank(value);
+    const template = bankTemplates[value];
+    setFields(prev => {
+      const newFields = { ...prev };
+      for (const field in template) {
+        newFields[field] = {
+          ...prev[field],
+          position: template[field]
+        };
+      }
+      return newFields;
+    });
+  };
+
+  const handleFieldChange = (fieldName, value) => {
+    setFields(prev => ({
+      ...prev,
+      [fieldName]: { ...prev[fieldName], value }
+    }));
+  };
+
+  const handlePositionChange = (fieldName, axis, value) => {
+    setFields(prev => ({
+      ...prev,
+      [fieldName]: {
+        ...prev[fieldName],
+        position: {
+          ...prev[fieldName].position,
+          [axis]: parseInt(value) || 0
+        }
+      }
+    }));
+  };
+
+  return (
+    <div className="w-full max-w-4xl mx-auto p-4">
+      <Card className="mb-4">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-2xl font-bold">Check Printer</h2>
+            <Select value={selectedBank} onValueChange={handleBankChange}>
+              <SelectTrigger className="w-48">
+                <SelectValue placeholder="Select Bank" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="default">Default Template</SelectItem>
+                <SelectItem value="chase">Chase Bank</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="relative border-2 border-gray-300 h-96 mb-6">
+            {Object.entries(fields).map(([fieldName, field]) => (
+              <div
+                key={fieldName}
+                className="absolute"
+                style={{
+                  left: `${field.position.x}px`,
+                  top: `${field.position.y}px`
+                }}
+              >
+                <Input
+                  value={field.value}
+                  onChange={(e) => handleFieldChange(fieldName, e.target.value)}
+                  placeholder={fieldName.replace(/([A-Z])/g, ' $1').toLowerCase()}
+                  className="border-dashed border-gray-400"
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Object.entries(fields).map(([fieldName, field]) => (
+              <div key={fieldName} className="space-y-2">
+                <h3 className="font-medium capitalize">
+                  {fieldName.replace(/([A-Z])/g, ' $1')}
+                </h3>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    value={field.position.x}
+                    onChange={(e) => handlePositionChange(fieldName, 'x', e.target.value)}
+                    placeholder="X position"
+                    className="w-24"
+                  />
+                  <Input
+                    type="number"
+                    value={field.position.y}
+                    onChange={(e) => handlePositionChange(fieldName, 'y', e.target.value)}
+                    placeholder="Y position"
+                    className="w-24"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <Button className="mt-6 w-full" onClick={() => console.log('Print check')}>
+            <Printer className="w-4 h-4 mr-2" />
+            Print Check
+          </Button>
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default CheckPrinter;
