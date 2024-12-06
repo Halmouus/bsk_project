@@ -23,7 +23,7 @@ from .views_bank import (
 
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
-    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView)
+    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,)
 
 from .views_client import (
     client_management,
@@ -140,9 +140,11 @@ urlpatterns = [
     path('receipts/delete/<str:receipt_type>/<uuid:pk>/', ReceiptDeleteView.as_view(), name='receipt-delete'),
     path('receipts/details/<str:receipt_type>/<uuid:pk>/', ReceiptDetailView.as_view(), name='receipt-detail'),
     path('receipts/unpaid/', UnpaidReceiptsView.as_view(), name='unpaid-receipts'),
-    path('receipts/<str:receipt_type>/<uuid:pk>/status/',
-        ReceiptStatusUpdateView.as_view(), 
+    path('receipts/<str:receipt_type>/<uuid:pk>/status/', ReceiptStatusUpdateView.as_view(), 
         name='receipt-status-update'),
+    path('receipts/<str:receipt_type>/<uuid:pk>/timeline/', 
+        ReceiptTimelineView.as_view(), 
+         name='receipt-timeline'),
 
     # Autocomplete endpoints for form fields
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),

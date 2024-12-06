@@ -6,9 +6,10 @@ from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import calendar
-from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, MOROCCAN_BANKS
+from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS
 from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
@@ -490,6 +491,37 @@ class UnpaidReceiptsView(View):
             'items': results,
             'has_more': False  # Implement pagination if needed
         })
+    
+# In views_receipts.py - add the following class
+
+class ReceiptTimelineView(View):
+    def get(self, request, receipt_type, pk):
+        try:
+            # Get the receipt
+            if receipt_type == 'check':
+                receipt = get_object_or_404(CheckReceipt, pk=pk)
+            else:
+                receipt = get_object_or_404(LCN, pk=pk)
+
+            # Get the receipt's history
+            content_type = ContentType.objects.get_for_model(receipt)
+            history = ReceiptHistory.objects.filter(
+                content_type=content_type,
+                object_id=receipt.id
+            ).select_related('user')
+
+            context = {
+                'receipt': receipt,
+                'history': history,
+            }
+
+            return render(request, 'receipt/receipt_timeline_modal.html', context)
+
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
 
 def client_autocomplete(request):
     search = request.GET.get('term', '') or request.GET.get('q', '')

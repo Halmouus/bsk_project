@@ -935,7 +935,7 @@ class Client(BaseModel):
             sales_query = sales_query.filter(date__year=year)
             if month:
                 sales_query = sales_query.filter(date__month=month)
-                
+                    
         for sale in sales_query:
             transactions.append({
                 'date': sale.date,
@@ -943,7 +943,7 @@ class Client(BaseModel):
                 'description': f'Sales of {sale.date.strftime("%m-%Y")}',
                 'debit': sale.amount,
                 'credit': None,
-                'actual_date': sale.date  # Store actual date for sorting
+                'actual_date': sale.date
             })
 
         # Calculate previous balance using client_year and client_month for receipts
@@ -956,45 +956,33 @@ class Client(BaseModel):
             for sale in prev_sales:
                 previous_balance += sale.amount
 
-            # Previous Checks (by client year/month)
-            prev_checks = CheckReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for check in prev_checks:
-                previous_balance -= check.amount
+            # Previous Checks and LCNs
+            for receipt_class in [CheckReceipt, LCN]:
+                prev_receipts = receipt_class.objects.filter(
+                    client=self
+                ).filter(
+                    Q(client_year__lt=year) | 
+                    Q(client_year=year, client_month__lt=month)
+                ).select_related('client', 'entity')  # Remove compensating_receipt from select_related
 
-            # Previous LCNs (by client year/month)
-            prev_lcns = LCN.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for lcn in prev_lcns:
-                previous_balance -= lcn.amount
+                for receipt in prev_receipts:
+                    # Initially subtract the receipt amount
+                    previous_balance -= receipt.amount
+                    
+                    # Add back if unpaid or compensated (creating a net zero effect)
+                    if receipt.status in ['UNPAID', 'COMPENSATED']:
+                        previous_balance += receipt.amount
 
-            # Previous Transfers (by client year/month)
-            prev_transfers = TransferReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for transfer in prev_transfers:
-                previous_balance -= transfer.amount
-
-            # Previous Cash (by client year/month)
-            prev_cash = CashReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for cash in prev_cash:
-                previous_balance -= cash.amount
+            # Previous Cash/Transfers (these can't be unpaid/compensated)
+            for receipt_class in [CashReceipt, TransferReceipt]:
+                prev_receipts = receipt_class.objects.filter(
+                    client=self
+                ).filter(
+                    Q(client_year__lt=year) | 
+                    Q(client_year=year, client_month__lt=month)
+                )
+                for receipt in prev_receipts:
+                    previous_balance -= receipt.amount
 
             if previous_balance != 0:
                 transactions.append({
@@ -1007,81 +995,94 @@ class Client(BaseModel):
                     'actual_date': current_date
                 })
 
-        # Get receipts for the specified period (using client_year/month)
-        if year and month:
-            # Checks for this period
-            checks_query = CheckReceipt.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for check in checks_query:
-                transactions.append({
-                    'date': check.operation_date,
-                    'type': 'CHECK',
-                    'description': (f'CHQ {check.check_number} {check.entity.name} '
-                                f'(received on {check.operation_date.strftime("%Y-%m-%d")})'),
-                    'debit': None,
-                    'credit': check.amount,
-                    'actual_date': check.operation_date
-                })
+            # Get current period receipts
+            # Handle Checks and LCNs
+            for receipt_class, type_name in [(CheckReceipt, 'CHECK'), (LCN, 'LCN')]:
+                receipts = receipt_class.objects.filter(
+                    client=self,
+                    client_year=year,
+                    client_month=month
+                ).select_related('entity')  # Remove compensating_receipt from select_related
 
-            # LCNs for this period
-            lcns_query = LCN.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for lcn in lcns_query:
-                transactions.append({
-                    'date': lcn.operation_date,
-                    'type': 'LCN',
-                    'description': (f'LCN {lcn.lcn_number} {lcn.entity.name} '
-                                f'(received on {lcn.operation_date.strftime("%Y-%m-%d")}, '
-                                f'due on {lcn.due_date.strftime("%Y-%m-%d")})'),
-                    'debit': None,
-                    'credit': lcn.amount,
-                    'actual_date': lcn.operation_date
-                })
+                for receipt in receipts:
+                    # Initial receipt entry
+                    number = receipt.check_number if type_name == 'CHECK' else receipt.lcn_number
+                    transactions.append({
+                        'date': receipt.operation_date,
+                        'type': type_name,
+                        'description': (f'{type_name} {number} {receipt.entity.name} '
+                                    f'(received on {receipt.operation_date.strftime("%Y-%m-%d")}'
+                                    f'{", due on " + receipt.due_date.strftime("%Y-%m-%d") if hasattr(receipt, "due_date") else ""})'
+                        ),
+                        'debit': None,
+                        'credit': receipt.amount,
+                        'actual_date': receipt.operation_date
+                    })
+                    
+                    # Add reversal entry for unpaid/compensated
+                    if receipt.status in ['UNPAID', 'COMPENSATED']:
+                        reversal_date = receipt.compensation_date or receipt.updated_at
+                        description = f'Reversal of {type_name} {number}'
+                        
+                        if receipt.status == 'UNPAID':
+                            description += (f' - {receipt.get_rejection_cause_display()}' 
+                                        if receipt.rejection_cause else ' - Unpaid')
+                        elif receipt.status == 'COMPENSATED' and receipt.compensating_receipt:
+                            # Access compensating receipt through the GenericForeignKey
+                            comp = receipt.compensating_receipt
+                            comp_type = comp.__class__.__name__.replace('Receipt', '')
+                            comp_number = comp.check_number if isinstance(comp, CheckReceipt) else comp.lcn_number
+                            description += f' (Compensated by {comp_type} #{comp_number})'
+                        
+                        transactions.append({
+                            'date': reversal_date,
+                            'type': f'{type_name}_REVERSAL',
+                            'description': description,
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'actual_date': reversal_date
+                        })
 
-            # Similar updates for Transfer and Cash receipts...
-            transfers_query = TransferReceipt.objects.filter(
+            # Handle Cash Receipts
+            cash_receipts = CashReceipt.objects.filter(
                 client=self,
                 client_year=year,
                 client_month=month
-            )
-            for transfer in transfers_query:
-                transactions.append({
-                    'date': transfer.operation_date,
-                    'type': 'TRANSFER',
-                    'description': (f'Transfer from {transfer.entity.name} '
-                                f'(received on {transfer.operation_date.strftime("%Y-%m-%d")})'),
-                    'debit': None,
-                    'credit': transfer.amount,
-                    'actual_date': transfer.operation_date
-                })
+            ).select_related('credited_account')
 
-            cash_query = CashReceipt.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for cash in cash_query:
+            for receipt in cash_receipts:
                 transactions.append({
-                    'date': cash.operation_date,
+                    'date': receipt.operation_date,
                     'type': 'CASH',
-                    'description': f'Cash (received on {cash.operation_date.strftime("%Y-%m-%d")})',
+                    'description': (f'Cash Receipt {receipt.reference_number or ""} '
+                                f'(credited to {receipt.credited_account.bank})'),
                     'debit': None,
-                    'credit': cash.amount,
-                    'actual_date': cash.operation_date
+                    'credit': receipt.amount,
+                    'actual_date': receipt.operation_date
                 })
 
-        # Sort transactions:
-        # 1. Balance entries first
-        # 2. Then by actual date
+            # Handle Transfer Receipts
+            transfer_receipts = TransferReceipt.objects.filter(
+                client=self,
+                client_year=year,
+                client_month=month
+            ).select_related('credited_account')
+
+            for receipt in transfer_receipts:
+                transactions.append({
+                    'date': receipt.operation_date,
+                    'type': 'TRANSFER',
+                    'description': (f'Transfer {receipt.transfer_reference} '
+                                f'(credited to {receipt.credited_account.bank})'),
+                    'debit': None,
+                    'credit': receipt.amount,
+                    'actual_date': receipt.operation_date
+                })
+
+        # Sort transactions
         transactions.sort(key=lambda x: (
             x['type'] != 'BALANCE',  # Balance entries first
-            x['actual_date']  # Then by actual date
+            x['actual_date'].date() if isinstance(x['actual_date'], datetime.datetime) else x['actual_date']  # Convert datetime to date if needed
         ))
 
         # Calculate running balance
@@ -1408,14 +1409,38 @@ class NegotiableReceipt(Receipt):
         if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
             self.status = self.STATUS_COMPENSATED
             self.compensation_date = timezone.now()
+            self.record_history(
+                action='status_changed',
+                old_value={'status': self.STATUS_UNPAID},
+                new_value={'status': self.STATUS_COMPENSATED},
+                notes=f'Compensated by {compensating_receipt.__class__.__name__} {compensating_receipt.id}'
+            )
+        else:
+            # For checks/LCNs, just record that a compensating receipt was assigned
+            self.record_history(
+                action='compensation_assigned',
+                new_value={
+                    'compensating_type': compensating_receipt.__class__.__name__,
+                    'compensating_id': str(compensating_receipt.id)
+                },
+                notes=f'Assigned {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()} as compensating receipt'
+            )
             
         self.save()
 
     def handle_compensation_payment(self):
         """Called when a compensating negotiable receipt is paid"""
-        if self.compensating_receipt and self.status == self.STATUS_UNPAID:
+        if self.status == self.STATUS_UNPAID and self.compensating_receipt:
+            old_status = self.status
             self.status = self.STATUS_COMPENSATED
             self.compensation_date = timezone.now()
+            
+            self.record_history(
+                action='status_changed',
+                old_value={'status': old_status},
+                new_value={'status': self.STATUS_COMPENSATED},
+                notes=f'Status changed to compensated as compensating receipt was paid'
+            )
             self.save()
 
     def update_compensated_receipts(self):
@@ -1443,11 +1468,67 @@ class NegotiableReceipt(Receipt):
                 receipt.compensation_date = current_time
                 receipt.save()
 
+    def record_history(self, action, old_value=None, new_value=None, notes=None, user=None):
+        """
+        Record a history event for the negotiable receipt
+        """
+        content_type = ContentType.objects.get_for_model(self)
+        
+        ReceiptHistory.objects.create(
+            content_type=content_type,
+            object_id=self.id,
+            action=action,
+            old_value=old_value,
+            new_value=new_value,
+            notes=notes,
+            user=user
+        )
+
+    def delete(self, *args, **kwargs):
+        # If this receipt is compensating any unpaid receipts and is still in PORTFOLIO
+        if self.status == self.STATUS_PORTFOLIO:
+            # Find any receipts this one was supposed to compensate
+            compensated_checks = CheckReceipt.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id
+            )
+            compensated_lcns = LCN.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id
+            )
+            
+            # Clean up the compensated receipts
+            for receipt in list(compensated_checks) + list(compensated_lcns):
+                receipt.record_history(
+                    action='compensation_cancelled',
+                    notes=f'Compensating receipt {self.__class__.__name__} #{self.get_receipt_number()} was deleted'
+                )
+                receipt.compensating_receipt = None
+                receipt.save()
+
+        super().delete(*args, **kwargs)
+
     def save(self, *args, **kwargs):
-        if hasattr(self, 'presentation') and self.presentation:
-            # Update bank_account from presentation when presented
-            self.bank_account = self.presentation.bank_account
-        super().save(*args, **kwargs)
+        if not self.pk:
+            super().save(*args, **kwargs)
+            self.record_history(
+                action='created',
+                new_value={'status': self.get_status_display()},  # Use display value
+                notes=f'Receipt created with status {self.get_status_display()}'
+            )
+        else:
+            try:
+                old_instance = type(self).objects.get(pk=self.pk)
+                if old_instance.status != self.status:
+                    self.record_history(
+                        action='status_changed',
+                        old_value={'status': old_instance.get_status_display()},  # Use display value
+                        new_value={'status': self.get_status_display()},  # Use display value
+                        notes=f'Status changed from {old_instance.get_status_display()} to {self.get_status_display()}'
+                    )
+            except type(self).DoesNotExist:
+                pass
+            super().save(*args, **kwargs)
 
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
@@ -1641,6 +1722,44 @@ class PresentationReceipt(BaseModel):
             ('presentation', 'checkreceipt'),
             ('presentation', 'lcn')
         ]
+
+class ReceiptHistory(BaseModel):
+    # Generic Foreign Key to support both Check and LCN receipts
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    receipt = GenericForeignKey('content_type', 'object_id')
+    
+    ACTION_CHOICES = [
+        ('created', 'Created'),
+        ('status_changed', 'Status Changed'),
+        ('presented_collection', 'Presented for Collection'),
+        ('presented_discount', 'Presented for Discount'),
+        ('compensating_assigned', 'Compensating Receipt Assigned'),
+        ('compensated', 'Compensated'),
+        ('unpaid', 'Marked as Unpaid'),
+        ('paid', 'Paid'),
+        ('rejected', 'Rejected by Bank')
+    ]
+    
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    old_value = models.JSONField(null=True, blank=True)
+    new_value = models.JSONField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    user = models.ForeignKey(
+        'auth.User', 
+        on_delete=models.SET_NULL, 
+        null=True,
+        related_name='receipt_history'
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Receipt History"
+        verbose_name_plural = "Receipt Histories"
+
+    def __str__(self):
+        return f"{self.receipt} - {self.action} at {self.timestamp}"
 
 class ClientSale(BaseModel):
     client = models.ForeignKey(Client, on_delete=models.PROTECT)

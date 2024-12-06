@@ -10,6 +10,7 @@
    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet">
    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
    <link href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" rel="stylesheet">
+   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
         
     <!-- Custom Styles -->
     <style>
@@ -197,6 +198,49 @@
         /* Keep autocomplete dropdown above other elements */
         .ui-autocomplete {
             z-index: 2000;
+
+        .timeline-item {
+            opacity: 0;
+        }
+
+        .timeline-item.animate__animated {
+            opacity: 1;
+        }
+
+        /* Custom animation for loading spinner */
+        @keyframes modalFadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .modal.show .modal-dialog {
+            animation: modalFadeIn 0.3s ease-out;
+        }
+
+        /* Enhance timeline visuals */
+        .timeline-content:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transform: translateY(-2px);
+            transition: all 0.3s ease;
+        }
+
+        .timeline-marker::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+        }
         }
     </style>
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>

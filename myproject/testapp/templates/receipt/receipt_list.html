@@ -83,7 +83,7 @@ Available filters:
                     </thead>
                     <tbody>
                         {% for check in receipts.checks %}
-                        <tr>
+                        <tr class="status-{{ check.status|lower }}">
                             <td>{{ check.operation_date|date:"Y-m-d" }}</td>
                             <td>
                                 <strong>{{ check.entity.name }}</strong><br>
@@ -132,8 +132,8 @@ Available filters:
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" onclick="viewReceipt('check', '{{ check.id }}')">
-                                        <i class="fas fa-eye"></i>
+                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')">
+                                        <i class="fas fa-history"></i>
                                     </button>
                                     {% with pres=check.check_presentations.first %}
                                         {% if not pres %}
@@ -180,7 +180,7 @@ Available filters:
                     </thead>
                     <tbody>
                         {% for lcn in receipts.lcns %}
-                        <tr>
+                        <tr class="status-{{ lcn.status|lower }}">
                             <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
                             <td>
                                 <strong>{{ lcn.entity.name }}</strong><br>
@@ -228,8 +228,8 @@ Available filters:
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" onclick="viewReceipt('lcn', '{{ lcn.id }}')">
-                                        <i class="fas fa-eye"></i>
+                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')">
+                                        <i class="fas fa-history"></i>
                                     </button>
                                     {% with pres=lcn.lcn_presentations.first %}
                                         {% if not pres %}
@@ -357,6 +357,33 @@ Available filters:
     </div>
 </div>
 
+<!-- Timeline Modal -->
+<div class="modal fade" id="timelineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <!-- Content will be loaded dynamically -->
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Status Badge Colors */
+    .badge-portfolio { background-color: #6c757d; }
+    .badge-presented_collection, .badge-presented_discount { background-color: #17a2b8; }
+    .badge-paid { background-color: #28a745; }
+    .badge-unpaid { background-color: #dc3545; }
+    .badge-compensated { background-color: #fd7e14; }  /* Orange color for compensated */
+    
+    /* Row Status Highlighting */
+    tr.status-paid { background-color: rgba(40, 167, 69, 0.1); }     /* Light green */
+    tr.status-unpaid { background-color: rgba(220, 53, 69, 0.1); }   /* Light red */
+    tr.status-compensated { background-color: rgba(253, 126, 20, 0.1); } /* Light orange */
+    
+    /* Maintain hover effect with status background */
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 0, 0, 0.075) !important;
+    }
+</style>
 
 <script>
     console.log("Extra JS loaded");
@@ -720,6 +747,87 @@ $(document).on('change', '.receipt-status', function() {
             $select.val($select.find('option').not(':selected').val());
         }
     });
+});
+
+function viewReceiptTimeline(receiptType, receiptId) {
+    console.log(`Loading timeline for ${receiptType} ${receiptId}`);
+    
+    // Show loading state in modal
+    $('#timelineModal').modal('show');
+    $('#timelineModal .modal-content').html(`
+        <div class="modal-body text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+            <p class="mt-2">Loading timeline...</p>
+        </div>
+    `);
+
+    // Load timeline content
+    $.ajax({
+        url: `/testapp/receipts/${receiptType}/${receiptId}/timeline/`,
+        method: 'GET',
+        success: function(response) {
+            $('#timelineModal .modal-content').html(response);
+            
+            // Initialize any tooltips or popovers
+            $('#timelineModal [data-toggle="tooltip"]').tooltip();
+            $('#timelineModal [data-toggle="popover"]').popover();
+            
+            // Add animation classes to timeline items
+            $('.timeline-item').each(function(index) {
+                $(this)
+                    .addClass('animate__animated animate__fadeInLeft')
+                    .css('animation-delay', `${index * 0.1}s`);
+            });
+        },
+        error: function(xhr) {
+            let errorMessage = 'Failed to load timeline';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                errorMessage = response.message || errorMessage;
+            } catch(e) {}
+            
+            $('#timelineModal .modal-content').html(`
+                <div class="modal-header">
+                    <h5 class="modal-title">Error</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        ${errorMessage}
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            `);
+        }
+    });
+}
+
+// Optional: Add helper function for formatting dates in timeline
+function formatTimelineDate(dateString) {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('fr-MA', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).format(date);
+}
+
+// Add modal cleanup on hide
+$('#timelineModal').on('hidden.bs.modal', function() {
+    $(this).find('.modal-content').html('');
+});
+
+// Optional: Add keyboard shortcut to close modal
+$(document).keydown(function(e) {
+    if (e.key === 'Escape' && $('#timelineModal').hasClass('show')) {
+        $('#timelineModal').modal('hide');
+    }
 });
 
 function showError(message) {

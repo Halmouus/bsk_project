@@ -157,15 +157,33 @@
                            value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                 </div>
             </div>
+            <!-- In receipt_form_modal.html -->
             <div class="form-group">
                 <label for="compensatesInput">
                     <i class="fas fa-link me-2"></i>Compensate Unpaid Receipt
                 </label>
-                <input type="text" class="form-control" id="compensatesInput" 
-                       placeholder="Search for an unpaid receipt...">
-                <input type="hidden" id="compensates" name="compensates">
+                <input type="text" 
+                    class="form-control" 
+                    id="compensatesInput" 
+                    placeholder="Search for an unpaid receipt..."
+                    {% if receipt %}disabled{% endif %}
+                    {% if receipt.compensates %}
+                    value="{{ receipt.compensates.get_receipt_number }} ({{ receipt.compensates.entity.name }}) - {{ receipt.compensates.amount }}"
+                    {% endif %}>
+                <input type="hidden" 
+                    id="compensates" 
+                    name="compensates"
+                    {% if receipt.compensates %}value="{{ receipt.compensates.id }}"{% endif %}>
                 <small class="text-muted">
-                    Optional: Select an unpaid receipt this {{ receipt_type }} will compensate when paid
+                    {% if receipt %}
+                        {% if receipt.compensates %}
+                            Compensating unpaid receipt: {{ receipt.compensates.get_receipt_number }}
+                        {% else %}
+                            Compensation cannot be modified after creation
+                        {% endif %}
+                    {% else %}
+                        Optional: Select an unpaid receipt this {{ receipt_type }} will compensate when paid
+                    {% endif %}
                 </small>
             </div>
         </div>
@@ -358,6 +376,71 @@ $("#client").autocomplete({
         }
     }
 });
+
+// Initialize tooltips
+$('[data-toggle="tooltip"]').tooltip();
+    
+    // Enhanced status badges with tooltips
+    function updateStatusBadge($element, status, details) {
+        const badge = $('<span>')
+            .addClass(`badge badge-${status.toLowerCase()}`)
+            .text(status);
+            
+        if (details) {
+            badge.attr('data-toggle', 'tooltip')
+                 .attr('data-html', 'true')
+                 .attr('title', details);
+        }
+        
+        $element.html(badge);
+        badge.tooltip();
+    }
+    
+    // Add bulk action support
+    let selectedReceipts = new Set();
+    
+    // Add checkboxes for bulk actions
+    $('.receipt-table').find('tbody tr').each(function() {
+        const $tr = $(this);
+        const receiptId = $tr.data('receipt-id');
+        const $checkbox = $('<input>', {
+            type: 'checkbox',
+            class: 'receipt-checkbox',
+            'data-receipt-id': receiptId
+        });
+        
+        $tr.prepend($('<td>').append($checkbox));
+    });
+    
+    // Bulk action handlers
+    $('.receipt-checkbox').on('change', function() {
+        const receiptId = $(this).data('receipt-id');
+        if (this.checked) {
+            selectedReceipts.add(receiptId);
+        } else {
+            selectedReceipts.delete(receiptId);
+        }
+        updateBulkActionButtons();
+    });
+    
+    function updateBulkActionButtons() {
+        const hasSelected = selectedReceipts.size > 0;
+        $('.bulk-action-btn').prop('disabled', !hasSelected);
+    }
+    
+    // Add number formatting
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('fr-MA', {
+            style: 'currency',
+            currency: 'MAD'
+        }).format(amount);
+    }
+    
+    // Update all amount displays
+    $('.amount-display').each(function() {
+        const amount = $(this).data('amount');
+        $(this).text(formatCurrency(amount));
+    });
 
 });
 </script>

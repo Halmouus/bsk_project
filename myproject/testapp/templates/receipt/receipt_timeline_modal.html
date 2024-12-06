@@ -1,0 +1,136 @@
+<!-- templates/receipt/receipt_timeline_modal.html -->
+<div class="modal-header">
+    <h5 class="modal-title">
+        {% if receipt.check_number %}
+            <i class="fas fa-money-check me-2"></i>Check #{{ receipt.check_number }}
+        {% else %}
+            <i class="fas fa-file-invoice-dollar me-2"></i>LCN #{{ receipt.lcn_number }}
+        {% endif %}
+        History
+    </h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button>
+</div>
+
+<div class="modal-body">
+    <!-- Receipt Summary -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Entity:</strong> {{ receipt.entity.name }}</p>
+                    <p><strong>Client:</strong> {{ receipt.client.name }}</p>
+                    <p><strong>Amount:</strong> {{ receipt.amount|floatformat:2 }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Status:</strong> 
+                        <span class="badge badge-{{ receipt.status|lower }}">
+                            {{ receipt.get_status_display }}
+                        </span>
+                    </p>
+                    <p><strong>Created:</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p>
+                    <p><strong>Due Date:</strong> {{ receipt.due_date|date:"d/m/Y" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="timeline">
+        {% for event in history %}
+        <div class="timeline-item">
+            <div class="timeline-marker {% if event.action == 'status_changed' %}bg-primary
+                                      {% elif event.action == 'presented' %}bg-info
+                                      {% elif event.action == 'compensated' %}bg-warning
+                                      {% elif event.action == 'compensation_paid' %}bg-success
+                                      {% else %}bg-secondary{% endif %}">
+            </div>
+            <div class="timeline-content">
+                <div class="d-flex justify-content-between">
+                    <h6 class="mb-0">{{ event.get_action_display }}</h6>
+                    <small class="text-muted">{{ event.timestamp|date:"d/m/Y H:i" }}</small>
+                </div>
+                <p class="mb-0">{{ event.notes }}</p>
+                {% if event.action == 'status_changed' %}
+                    <small class="text-muted">
+                        Changed from 
+                        <span class="badge badge-{{ event.old_value.status|lower }}">
+                            {{ event.old_value.status }}
+                        </span>
+                        to
+                        <span class="badge badge-{{ event.new_value.status|lower }}">
+                            {{ event.new_value.status }}
+                        </span>
+                    </small>
+                {% endif %}
+                {% if event.user %}
+                    <small class="text-muted d-block">by {{ event.user.get_full_name|default:event.user.username }}</small>
+                {% endif %}
+            </div>
+        </div>
+        {% empty %}
+        <p class="text-center text-muted">No history available</p>
+        {% endfor %}
+    </div>
+</div>
+
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+</div>
+
+<style>
+.timeline {
+    position: relative;
+    padding-left: 3rem;
+    margin-bottom: 3rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    height: 100%;
+    width: 2px;
+    background-color: #e9ecef;
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -3rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px #e9ecef;
+}
+
+.timeline-content {
+    background: #f8f9fa;
+    border-radius: 0.3rem;
+    padding: 1rem;
+    position: relative;
+}
+
+.timeline-content::before {
+    content: '';
+    position: absolute;
+    left: -0.5rem;
+    top: 0.75rem;
+    width: 0.5rem;
+    height: 0.5rem;
+    background: inherit;
+    transform: rotate(45deg);
+}
+
+/* Status Badge Colors */
+.badge-portfolio { background-color: #6c757d; color: white; }
+.badge-presented { background-color: #17a2b8; color: white; }
+.badge-paid { background-color: #28a745; color: white; }
+.badge-unpaid { background-color: #dc3545; color: white; }
+.badge-compensated { background-color: #fd7e14; color: white; }
+</style>
