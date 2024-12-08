@@ -11,8 +11,9 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Q
 import logging
-from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,6 @@ class Supplier(BaseModel):
     
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['name', 'rc_code'], name='unique_supplier_name_rc_code')
         ]
 
     def __str__(self):
@@ -95,7 +95,6 @@ class Product(BaseModel):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['name', 'expense_code'], name='unique_product_name_expense_code')
         ]
     def __str__(self):
         return self.name
@@ -152,7 +151,6 @@ class Invoice(BaseModel):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=['supplier', 'ref'], name='unique_supplier_invoice_ref'),
             models.CheckConstraint(
                 check=Q(
                     Q(type='invoice', original_invoice__isnull=True) |
@@ -537,8 +535,109 @@ class BankAccount(BaseModel):
     account_type = models.CharField(max_length=15, choices=ACCOUNT_TYPE)
     is_active = models.BooleanField(default=True)
 
+    is_current = models.BooleanField(
+        default=False,
+        help_text="Determines if accounting operations are recorded on this account"
+    )
+    bank_overdraft = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum allowed overdraft amount"
+    )
+    overdraft_fee = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Fee applied for overdraft usage"
+    )
+    has_check_discount_line = models.BooleanField(
+        default=False,
+        help_text="Indicates if this account can discount checks"
+    )
+    check_discount_line_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum amount available for check discounting"
+    )
+    has_lcn_discount_line = models.BooleanField(
+        default=False,
+        help_text="Indicates if this account can discount LCNs"
+    )
+    lcn_discount_line_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum amount available for LCN discounting"
+    )
+    stamp_fee_per_receipt = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Stamp fee charged per presented receipt"
+    )
+
+    def get_available_check_discount_line(self):
+        """Calculate remaining check discount line amount"""
+        if not self.has_check_discount_line or not self.check_discount_line_amount:
+            return Decimal('0.00')
+            
+        # Get all discounted checks for this account
+        total_discounted = PresentationReceipt.objects.filter(
+            presentation__bank_account=self,
+            presentation__presentation_type='DISCOUNT',
+            checkreceipt__isnull=False  # Ensure it's a check
+        ).exclude(
+            recorded_status__in=['UNPAID', 'PAID'] # Only count currently discounted
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return self.check_discount_line_amount - total_discounted
+
+    def get_available_lcn_discount_line(self):
+        """Calculate remaining LCN discount line amount"""
+        if not self.has_lcn_discount_line or not self.lcn_discount_line_amount:
+            return Decimal('0.00')
+            
+        discounted_amount = PresentationReceipt.objects.filter(
+            presentation__bank_account=self,
+            presentation__presentation_type='DISCOUNT',
+            lcn__isnull=False,  # Ensure it's an LCN
+            lcn__status='DISCOUNTED'  # Only count currently discounted
+        ).exclude(
+            lcn__status__in=['UNPAID', 'PAID', 'COMPENSATED']
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return self.lcn_discount_line_amount - discounted_amount
+
+    def clean(self):
+        super().clean()
+        if self.has_check_discount_line and not self.check_discount_line_amount:
+            raise ValidationError({
+                'check_discount_line_amount': 'Amount required when check discount line is enabled'
+            })
+        if self.has_lcn_discount_line and not self.lcn_discount_line_amount:
+            raise ValidationError({
+                'lcn_discount_line_amount': 'Amount required when LCN discount line is enabled'
+            })
+
     class Meta:
         ordering = ['bank', 'account_number']
+
 
     def __str__(self):
         type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
@@ -827,7 +926,6 @@ class Check(BaseModel):
         
         Args:
             checker (Checker): The checker to use for the new check
-            **kwargs: Additional fields to override (amount, due date, etc.)
         """
         if not self.can_be_replaced:
             raise ValidationError(
@@ -844,7 +942,6 @@ class Check(BaseModel):
             cause=self.cause,
             amount_due=self.amount_due,
             replaces=self,
-            **kwargs  # Allow overriding specific fields like amount, due date
         )
         return replacement
 
@@ -923,7 +1020,6 @@ class Client(BaseModel):
         """
         Get all transactions for the client with optional year/month filter.
         For sales: Uses the actual date
-        For receipts: Uses the client_year and client_month fields
         """
         print("\n=== Starting get_transactions ===")
         transactions = []
@@ -1164,7 +1260,6 @@ class Entity(BaseModel):
         help_text='Enter 5-7 digits starting with 3'
     )
     
-    # Optional fields
     city = models.CharField(max_length=100, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)

@@ -117,7 +117,7 @@
 
 <!-- Create/Edit Presentation Modal -->
 <div class="modal fade" id="presentationModal" tabindex="-1">
-    <div class="modal-dialog modal-xl"> <!-- Made larger for better receipt selection view -->
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
@@ -164,6 +164,7 @@
                                 </div>
                             </div>
                         </div>
+
                         <div class="row">
                             <div class="col-md-6">
                                 <div class="form-group">
@@ -178,6 +179,56 @@
                                     <textarea class="form-control" id="presentationNotes" rows="1"></textarea>
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    <!-- Discount Line Information (Only shown if type is DISCOUNT) -->
+                    <div class="discount-info d-none mb-3">
+                        <h6 class="card-subtitle mb-3">Discount Line Information</h6>
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="card text-white bg-info mb-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Total Discount Line</h5>
+                                        <p class="card-text">
+                                            <span id="totalDiscountLine">0.00</span> MAD
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-white bg-success mb-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Used Amount</h5>
+                                        <p class="card-text">
+                                            <span id="usedDiscountAmount">0.00</span> MAD
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-white bg-warning mb-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Available Amount</h5>
+                                        <p class="card-text">
+                                            <span id="availableDiscountAmount">0.00</span> MAD
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card text-white bg-primary mb-3">
+                                    <div class="card-body">
+                                        <h5 class="card-title">Selected Amount</h5>
+                                        <p class="card-text">
+                                            <span id="selectedDiscountAmount">0.00</span> MAD
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-danger d-none" id="discountLineExceededAlert">
+                            The selected amount exceeds the available discount line.
                         </div>
                     </div>
 
@@ -213,6 +264,7 @@
 </div>
 
 
+
 <!-- View Presentation Modal -->
 <div class="modal fade" id="viewPresentationModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -245,6 +297,57 @@ const PresentationManager = {
         this.setupValidation();
     },
 
+    discountInfo: {
+    available: 0,
+    total: 0,
+    used: 0,
+    selected: 0
+    },
+
+    async loadDiscountInfo(bankAccountId) {
+    if (!bankAccountId) return;
+    
+    try {
+        const response = await fetch(`/testapp/presentations/discount-info/${bankAccountId}/?type=${this.receiptType}`);
+        const data = await response.json();
+        
+        this.discountInfo = {
+        available: parseFloat(data.available_amount),
+        total: parseFloat(data.total_amount),
+        used: parseFloat(data.used_amount),
+        selected: 0
+        };
+        
+        this.updateDiscountDisplay();
+    } catch (error) {
+        console.error('Failed to load discount information:', error);
+    }
+    },
+
+    updateDiscountDisplay() {
+        const discountCard = $('.discount-info');
+        const presentationType = $('#presentationType').val();
+        
+        if (presentationType === 'DISCOUNT') {
+            discountCard.removeClass('d-none');
+            $('#totalDiscountLine').text(this.discountInfo.total.toFixed(2));
+            $('#usedDiscountAmount').text(this.discountInfo.used.toFixed(2));
+            $('#availableDiscountAmount').text(this.discountInfo.available.toFixed(2));
+            $('#selectedDiscountAmount').text(this.discountInfo.selected.toFixed(2));
+            
+            const exceededAlert = $('#discountLineExceededAlert');
+            if (this.discountInfo.selected > this.discountInfo.available) {
+            exceededAlert.removeClass('d-none');
+            $('#nextStep, #savePresentation').prop('disabled', true);
+            } else {
+            exceededAlert.addClass('d-none');
+            this.validateCurrentStep();
+            }
+        } else {
+            discountCard.addClass('d-none');
+        }
+        },
+
     bindEvents() {
         $('#nextStep').on('click', () => this.nextStep());
         $('#prevStep').on('click', () => this.previousStep());
@@ -252,9 +355,16 @@ const PresentationManager = {
     },
 
     setupValidation() {
-        // Add validation for required fields
         $('#presentationForm input[required], #presentationForm select[required]')
             .on('input change', () => this.validateCurrentStep());
+        
+        $('#presentationType, #bankAccount').on('change', () => {
+            if ($('#presentationType').val() === 'DISCOUNT') {
+            this.loadDiscountInfo($('#bankAccount').val());
+            } else {
+            $('.discount-info').addClass('d-none');
+            }
+        });
     },
 
     startPresentation(type) {
@@ -289,12 +399,25 @@ const PresentationManager = {
     },
 
     initializeReceiptSelection() {
-        // Initialize receipt selection handlers
-        $('.receipt-checkbox').on('change', () => this.updateSelectionSummary());
-        $('#selectAll').on('change', (e) => {
-            $('.receipt-checkbox').prop('checked', e.target.checked);
-            this.updateSelectionSummary();
-        });
+    $('.receipt-checkbox').on('change', () => {
+        this.updateSelectionSummary();
+        if ($('#presentationType').val() === 'DISCOUNT') {
+        this.discountInfo.selected = Array.from($('.receipt-checkbox:checked'))
+            .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0);
+        this.updateDiscountDisplay();
+        }
+    });
+    
+    $('#selectAll').on('change', (e) => {
+        $('.receipt-checkbox').prop('checked', e.target.checked);
+        this.updateSelectionSummary();
+        if ($('#presentationType').val() === 'DISCOUNT') {
+        this.discountInfo.selected = e.target.checked ? 
+            Array.from($('.receipt-checkbox'))
+            .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0) : 0;
+        this.updateDiscountDisplay();
+        }
+    });
     },
 
     updateSelectionSummary() {
@@ -440,7 +563,6 @@ const PresentationManager = {
     }
 };
 
-// Add these functions after PresentationManager
 
 async function viewPresentation(id) {
     try {

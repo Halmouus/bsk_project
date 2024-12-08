@@ -17,7 +17,7 @@ from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
 
 from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
-    BankAccountDeactivateView, BankAccountFilterView,
+    BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView,
     bank_account_autocomplete
 )
 
@@ -41,7 +41,7 @@ from .views_entity import (
 )
 from .views_presentation import (
     PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
-    PresentationDetailView, AvailableReceiptsView
+    PresentationDetailView, AvailableReceiptsView, DiscountInfoView
 )
 
 
@@ -106,6 +106,8 @@ urlpatterns = [
 
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
     path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
+    path('bank-accounts/<uuid:pk>/edit/', BankAccountUpdateView.as_view(), name='bank-account-edit'),
+    path('bank-accounts/<uuid:pk>/delete/', BankAccountDeleteView.as_view(), name='bank-account-delete'),
     path('bank-accounts/<uuid:pk>/deactivate/', 
          BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
     path('bank-accounts/filter/', 
@@ -158,6 +160,8 @@ urlpatterns = [
     path('presentations/<uuid:pk>/edit/', PresentationUpdateView.as_view(), name='presentation-edit'),
     path('presentations/<uuid:pk>/delete/', PresentationDeleteView.as_view(), name='presentation-delete'),
     path('presentations/available-receipts/', AvailableReceiptsView.as_view(), name='available-receipts'),
+    path('presentations/discount-info/<uuid:bank_account_id>/', 
+        DiscountInfoView.as_view(), name='presentation-discount-info'),
     
 
 ]

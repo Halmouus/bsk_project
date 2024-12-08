@@ -1,10 +1,12 @@
 from django.views.generic import ListView, View
+from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from .models import BankAccount
 from django.contrib import messages
 import json
 from django.core.exceptions import ValidationError
+from decimal import Decimal
 
 class BankAccountListView(ListView):
     model = BankAccount
@@ -43,48 +45,129 @@ class BankAccountCreateView(View):
         try:
             data = json.loads(request.body)
             
-            # Basic validation
-            required_fields = ['bank', 'account_number', 'accounting_number', 
-                             'journal_number', 'city', 'account_type']
+            # Convert decimal fields
+            decimal_fields = [
+                'bank_overdraft', 'overdraft_fee', 
+                'check_discount_line_amount', 'lcn_discount_line_amount',
+                'stamp_fee_per_receipt'
+            ]
             
-            for field in required_fields:
-                if not data.get(field):
-                    return JsonResponse(
-                        {'error': f'{field.replace("_", " ").title()} is required'}, 
-                        status=400
-                    )
+            for field in decimal_fields:
+                if data.get(field):
+                    data[field] = Decimal(str(data[field]))
+                else:
+                    data[field] = None
             
-            # Specific validations
-            if not data['account_number'].isdigit() or len(data['account_number']) < 10:
-                return JsonResponse(
-                    {'error': 'Account number must be at least 10 digits'}, 
-                    status=400
-                )
-                
-            if not data['accounting_number'].isdigit() or len(data['accounting_number']) < 5:
-                return JsonResponse(
-                    {'error': 'Accounting number must be at least 5 digits'}, 
-                    status=400
-                )
-                
-            if not data['journal_number'].isdigit() or len(data['journal_number']) != 2:
-                return JsonResponse(
-                    {'error': 'Journal number must be exactly 2 digits'}, 
-                    status=400
-                )
-
-            # Create account
-            account = BankAccount.objects.create(**data)
+            # Create bank account
+            account = BankAccount.objects.create(
+                bank=data['bank'],
+                account_number=data['account_number'],
+                accounting_number=data['accounting_number'],
+                journal_number=data['journal_number'],
+                city=data['city'],
+                account_type=data['account_type'],
+                is_active=data.get('is_active', True),
+                is_current=data.get('is_current', False),
+                bank_overdraft=data['bank_overdraft'],
+                overdraft_fee=data['overdraft_fee'],
+                has_check_discount_line=data.get('has_check_discount_line', False),
+                check_discount_line_amount=data['check_discount_line_amount'],
+                has_lcn_discount_line=data.get('has_lcn_discount_line', False),
+                lcn_discount_line_amount=data['lcn_discount_line_amount'],
+                stamp_fee_per_receipt=data['stamp_fee_per_receipt']
+            )
             
             return JsonResponse({
+                'status': 'success',
                 'message': 'Bank account created successfully',
                 'id': str(account.id)
             })
             
-        except ValidationError as e:
-            return JsonResponse({'error': str(e)}, status=400)
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=500)
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankAccountUpdateView(View):
+    def get(self, request, pk):
+        account = get_object_or_404(BankAccount, pk=pk)
+        return JsonResponse({
+            'id': str(account.id),
+            'bank': account.bank,
+            'account_number': account.account_number,
+            'accounting_number': account.accounting_number,
+            'journal_number': account.journal_number,
+            'city': account.city,
+            'account_type': account.account_type,
+            'is_active': account.is_active,
+            'is_current': account.is_current,
+            'bank_overdraft': str(account.bank_overdraft) if account.bank_overdraft else None,
+            'overdraft_fee': str(account.overdraft_fee) if account.overdraft_fee else None,
+            'has_check_discount_line': account.has_check_discount_line,
+            'check_discount_line_amount': str(account.check_discount_line_amount) if account.check_discount_line_amount else None,
+            'has_lcn_discount_line': account.has_lcn_discount_line,
+            'lcn_discount_line_amount': str(account.lcn_discount_line_amount) if account.lcn_discount_line_amount else None,
+            'stamp_fee_per_receipt': str(account.stamp_fee_per_receipt) if account.stamp_fee_per_receipt else None
+        })
+
+    def post(self, request, pk):
+        try:
+            account = get_object_or_404(BankAccount, pk=pk)
+            data = json.loads(request.body)
+            
+            # Convert decimal fields
+            decimal_fields = [
+                'bank_overdraft', 'overdraft_fee', 
+                'check_discount_line_amount', 'lcn_discount_line_amount',
+                'stamp_fee_per_receipt'
+            ]
+            
+            for field in decimal_fields:
+                if data.get(field):
+                    setattr(account, field, Decimal(str(data[field])))
+                else:
+                    setattr(account, field, None)
+            
+            # Update other fields
+            account.bank = data['bank']
+            account.account_number = data['account_number']
+            account.accounting_number = data['accounting_number']
+            account.journal_number = data['journal_number']
+            account.city = data['city']
+            account.account_type = data['account_type']
+            account.is_active = data.get('is_active', True)
+            account.is_current = data.get('is_current', False)
+            account.has_check_discount_line = data.get('has_check_discount_line', False)
+            account.has_lcn_discount_line = data.get('has_lcn_discount_line', False)
+            
+            account.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Bank account updated successfully'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankAccountDeleteView(View):
+    def post(self, request, pk):
+        try:
+            account = get_object_or_404(BankAccount, pk=pk)
+            account.delete()
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Bank account deleted successfully'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
 
 class BankAccountDeactivateView(View):
     def post(self, request, pk):

@@ -10,6 +10,7 @@ from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAc
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
+from decimal import Decimal
 
 class PresentationListView(ListView):
     """
@@ -376,3 +377,29 @@ class AvailableReceiptsView(View):
         }, request=request)
         
         return JsonResponse({'html': html})
+
+class DiscountInfoView(View):
+    def get(self, request, bank_account_id):
+        try:
+            bank_account = get_object_or_404(BankAccount, id=bank_account_id)
+            receipt_type = request.GET.get('type', 'check')
+            
+            if receipt_type == 'check':
+                available = bank_account.get_available_check_discount_line()
+                total = bank_account.check_discount_line_amount or Decimal('0.00')
+            else:
+                available = bank_account.get_available_lcn_discount_line()
+                total = bank_account.lcn_discount_line_amount or Decimal('0.00')
+            
+            used = total - available
+            
+            return JsonResponse({
+                'total_amount': str(total),
+                'used_amount': str(used),
+                'available_amount': str(available)
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'error': str(e)
+            }, status=400)
