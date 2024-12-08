@@ -13,6 +13,7 @@ from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount
 from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
+import traceback
 
 
 class ReceiptListView(ListView):
@@ -45,13 +46,14 @@ class ReceiptListView(ListView):
         return {
             'checks': checks,
             'lcns': lcns,
-            'cash': CashReceipt.objects.select_related('client', 'entity', 'credited_account').all(),
-            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'credited_account').all()
+            'cash': CashReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all(),
+            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all()
         }
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptCreateView(View):
     def get(self, request, receipt_type):
+        print(f"Loading form for receipt type: {receipt_type}")
         if receipt_type not in ['check', 'lcn', 'cash', 'transfer']:
             return JsonResponse({'error': 'Invalid receipt type'}, status=400)
 
@@ -81,13 +83,20 @@ class ReceiptCreateView(View):
             'bank_accounts': bank_accounts,
             'bank_choices': MOROCCAN_BANKS, 
         }
-
-        return render(request, 'receipt/receipt_form_modal.html', context)
+        print(f"Context receipt_type: {context['receipt_type']}") 
+        rendered = render(request, 'receipt/receipt_form_modal.html', context)
+        print(f"Form HTML contains transfer fields: {'transfer_date' in rendered.content.decode()}")  # Debug
+        return rendered
     
     def post(self, request, receipt_type):
         print("POST request received:")
         print("Receipt type:", receipt_type)
+        print("Raw POST data:", request.body)
+        data = request.POST.dict()
         print("POST data:", request.POST)
+        print("transfer_date value:", request.POST.get('transfer_date'))
+        print("transfer_reference value:", request.POST.get('transfer_reference'))
+        
         try:
             data = request.POST.dict()
 
@@ -128,6 +137,7 @@ class ReceiptCreateView(View):
                 receipt = CashReceipt.objects.create(
                     **common_fields,
                     credited_account_id=data['credited_account'],
+                    bank_account_id=data['credited_account'],
                     reference_number=data.get('reference_number', '')
                 )
             
@@ -135,8 +145,9 @@ class ReceiptCreateView(View):
                 receipt = TransferReceipt.objects.create(
                     **common_fields,
                     credited_account_id=data['credited_account'],
-                    transfer_reference=data['transfer_reference'],
-                    transfer_date=data['transfer_date']
+                    bank_account_id=data['credited_account'],
+                    transfer_reference=data.get('transfer_reference', ''),
+                    transfer_date=data.get('transfer_date')
                 )
 
             else:
@@ -257,8 +268,9 @@ class ReceiptUpdateView(View):
                 else:
                     receipt.lcn_number = data['lcn_number']
             else:  # cash or transfer
-                receipt.bank_account_id = data['bank_account']
-                if receipt_type == 'transfer':
+                receipt.credited_account_id = data['credited_account']
+                receipt.bank_account_id = data['credited_account'] 
+                if receipt_type == 'transfer':  
                     receipt.transfer_reference = data['transfer_reference'] 
                     receipt.transfer_date = data['transfer_date']
 
@@ -294,11 +306,13 @@ class ReceiptDeleteView(View):
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
             
             # Check if receipt can be deleted
-            if not receipt.can_delete():
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'Cannot delete receipt that is part of a presentation'
-                }, status=400)
+            if receipt_type in ['check', 'lcn']:
+                presentations = receipt.check_presentations.all() if receipt_type == 'check' else receipt.lcn_presentations.all()
+                if presentations.exists():
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Cannot delete receipt that is part of a presentation'
+                    }, status=400)
 
             receipt.delete()
             return JsonResponse({

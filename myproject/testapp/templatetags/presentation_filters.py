@@ -31,6 +31,7 @@ def status_badge(status):
         'REJECTED': 'danger',
         'PRESENTED_COLLECTION': 'info',
         'PRESENTED_DISCOUNT': 'info',
+        'DISCOUNTED': 'success',
     }.get(original_status, status)  # Try original status first, then fallback to lowercase
     
     logger.debug(f"Returning badge class: {result}")

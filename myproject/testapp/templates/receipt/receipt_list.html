@@ -13,7 +13,7 @@ Available filters:
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">
-            <i class="fas fa-receipt text-primary me-2"></i>Receipts Management
+            <i class="fas fa-receipt text-primary me-2"></i> Receipts Management
         </h2>
         <div class="btn-group">
             <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
@@ -125,6 +125,11 @@ Available filters:
                                 </span>
                                 {% if check.status == 'UNPAID' and check.rejection_cause %}
                                     <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small>
+                                    {% with last_pres=check.check_presentations.last %}
+                                        {% if last_pres %}
+                                            <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                                        {% endif %}
+                                    {% endwith %}
                                 {% endif %}
                                 {% if check.compensation_info %}
                                     <br><small class="text-muted">{{ check.compensation_info }}</small>
@@ -279,13 +284,18 @@ Available filters:
                             <td class="text-right">{{ cash.amount|floatformat:2 }}</td>
                             <td>
                                 <div class="btn-group">
+                                    {% if cash.can_edit %}
                                     <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
                                             data-type="cash" data-action="edit" data-id="{{ cash.id }}">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    {% endif %}
+                                    {% if cash.can_delete %}
                                     <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}">
                                         <i class="fas fa-trash"></i>
                                     </button>
+                                    {% endif %}
+                                </div>
                                 </div>
                             </td>
                         </tr>
@@ -325,13 +335,17 @@ Available filters:
                             <td class="text-right">{{ transfer.amount|floatformat:2 }}</td>
                             <td>
                                 <div class="btn-group">
+                                    {% if transfer.can_edit %}
                                     <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
                                             data-type="transfer" data-action="edit" data-id="{{ transfer.id }}">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    {% endif %}
+                                    {% if transfer.can_delete %}
                                     <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}">
                                         <i class="fas fa-trash"></i>
                                     </button>
+                                    {% endif %}
                                 </div>
                             </td>
                         </tr>
@@ -428,36 +442,31 @@ $(document).ready(function() {
         $(document).on('submit', '#receiptForm', function(e) {
             e.preventDefault();
             const form = $(this);
-            const url = form.attr('action');
-            const isEdit = url.includes('/edit/');
             
-            console.log("Form being submitted:", {
-                url: url,
-                isEdit: isEdit,
-                formData: form.serialize(),
-                formElements: form.serializeArray()
-            });
+            // Create FormData object and append transfer fields manually
+            let formData = new FormData(form[0]);
+            if ($('#transfer_reference').length) {
+                formData.append('transfer_reference', $('#transfer_reference').val());
+                formData.append('transfer_date', $('#transfer_date').val());
+            }
+
+            // Convert FormData to URLSearchParams for jQuery
+            const data = new URLSearchParams(formData).toString();
 
             $.ajax({
-                url: url,
+                url: form.attr('action'),
                 type: 'POST',
-                data: form.serialize(),
+                data: data,
                 success: function(response) {
-                    console.log("Success response:", response);
                     if (response.status === 'success') {
                         $('#receiptModal').modal('hide');
                         showToast(response.message, 'success');
                         location.reload();
                     } else {
-                        console.log("Form errors:", response.errors);
                         showFormErrors(form, response.errors);
                     }
                 },
                 error: function(xhr) {
-                    console.error("Error response:", {
-                        status: xhr.status,
-                        responseText: xhr.responseText
-                    });
                     try {
                         const errors = JSON.parse(xhr.responseText);
                         showFormErrors(form, errors);
@@ -516,7 +525,7 @@ $(document).ready(function() {
 
     // Initialize client autocomplete
     $("#client").autocomplete({
-                minLength: 2,
+                minLength: 0,
             source: function(request, response) {
                 console.log('Client search term:', request.term);
                 $.ajax({
@@ -549,7 +558,7 @@ $(document).ready(function() {
 
         // Initialize entity autocomplete
         $("#entity").autocomplete({
-            minLength: 2,
+            minLength: 0,
             source: function(request, response) {
                 console.log('Entity search term:', request.term);
                 $.ajax({

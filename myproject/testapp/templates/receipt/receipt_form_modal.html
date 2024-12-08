@@ -1,3 +1,8 @@
+ <!-- Debug Info -->
+ <div style="display:none">
+    Receipt type from context: {{ receipt_type }}
+    Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %}
+</div>
 <!-- Modal Header -->
 <div class="modal-header">
     <h5 class="modal-title">
@@ -83,7 +88,6 @@
                            step="0.01" min="0.01" required>
                 </div>
             </div>
-
         </div>
 
         {% if receipt_type == 'check' %}
@@ -105,14 +109,12 @@
             </div>
         </div>
         <div class="col-md-6">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="issuingBank">Issuing Bank</label>
-                    <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
-                           value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
-                    <input type="hidden" id="issuingBankCode" name="issuing_bank" 
-                           value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
-                </div>
+            <div class="form-group">
+                <label for="issuingBank">Issuing Bank</label>
+                <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
+                       value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                <input type="hidden" id="issuingBankCode" name="issuing_bank" 
+                       value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
             </div>
         </div>
         <div class="form-group">
@@ -157,34 +159,10 @@
                            value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                 </div>
             </div>
-            <!-- In receipt_form_modal.html -->
-            <div class="form-group">
-                <label for="compensatesInput">
-                    <i class="fas fa-link me-2"></i>Compensate Unpaid Receipt
-                </label>
-                <input type="text" 
-                    class="form-control" 
-                    id="compensatesInput" 
-                    placeholder="Search for an unpaid receipt..."
-                    {% if receipt %}disabled{% endif %}
-                    {% if receipt.compensates %}
-                    value="{{ receipt.compensates.get_receipt_number }} ({{ receipt.compensates.entity.name }}) - {{ receipt.compensates.amount }}"
-                    {% endif %}>
-                <input type="hidden" 
-                    id="compensates" 
-                    name="compensates"
-                    {% if receipt.compensates %}value="{{ receipt.compensates.id }}"{% endif %}>
-                <small class="text-muted">
-                    {% if receipt %}
-                        {% if receipt.compensates %}
-                            Compensating unpaid receipt: {{ receipt.compensates.get_receipt_number }}
-                        {% else %}
-                            Compensation cannot be modified after creation
-                        {% endif %}
-                    {% else %}
-                        Optional: Select an unpaid receipt this {{ receipt_type }} will compensate when paid
-                    {% endif %}
-                </small>
+            <div class="form-group col-md-6">
+                <label>Compensate Unpaid Receipt</label>
+                <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
+                <input type="hidden" id="compensate-receipt-id" name="compensates">
             </div>
         </div>
         {% endif %}
@@ -204,6 +182,12 @@
                     </select>
                 </div>
             </div>
+        </div>
+        <div class="form-group">
+            <label>Compensate Unpaid Receipt</label>
+            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
+            <input type="hidden" id="compensate-receipt-id" name="compensates">
+        </div>
         </div>
         {% endif %}
 
@@ -225,6 +209,12 @@
                 </div>
             </div>
         </div>
+        <div class="form-group">
+            <label>Compensate Unpaid Receipt</label>
+            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
+            <input type="hidden" id="compensate-receipt-id" name="compensates">
+        </div>
+        </div>
         {% endif %}
 
         <div class="form-group">
@@ -242,6 +232,8 @@
 
 <!-- Initialize autocomplete -->
 <script>
+console.log('Form loaded for receipt type:', '{{ receipt_type }}');
+
 $(document).ready(function() {
 // Initialize client autocomplete
 $("#client").autocomplete({

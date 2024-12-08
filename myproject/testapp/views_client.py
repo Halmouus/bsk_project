@@ -175,7 +175,8 @@ def create_sale(request):
             amount=data['amount'],
             year=int(data.get('year') or data['date'][:4]),
             month=int(data.get('month') or data['date'][5:7]),
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            sale_type=data['sale_type']
         )
         return JsonResponse({
             'status': 'success',

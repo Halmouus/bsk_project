@@ -28,13 +28,13 @@
             </thead>
             <tbody>
                 {% for receipt in receipts %}
+                <!-- In available_receipts.html -->
                 <tr>
                     <td>
                         <div class="custom-control custom-checkbox">
                             <input type="checkbox" class="custom-control-input receipt-checkbox" 
-                                   id="receipt{{ receipt.id }}"
-                                   value="{{ receipt.id }}"
-                                   data-amount="{{ receipt.amount }}">
+                                id="receipt{{ receipt.id }}" value="{{ receipt.id }}" 
+                                data-amount="{{ receipt.amount }}">
                             <label class="custom-control-label" for="receipt{{ receipt.id }}"></label>
                         </div>
                     </td>
@@ -43,12 +43,16 @@
                     <td>{{ receipt.operation_date|date:"Y-m-d" }}</td>
                     <td>{{ receipt.due_date|date:"Y-m-d" }}</td>
                     <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
-                    <td>{{ receipt.due_date|timeuntil }}</td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="7" class="text-center">
-                        No available receipts found in portfolio status
+                    <td>
+                        <span class="badge badge-{{ receipt.status|lower }}">
+                            {{ receipt.get_status_display }}
+                        </span>
+                        {% if receipt.status == 'UNPAID' and receipt.last_presentation_date %}
+                            <br>
+                            <small class="text-muted">
+                                Previously presented on {{ receipt.last_presentation_date|date:"Y-m-d" }}
+                            </small>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}

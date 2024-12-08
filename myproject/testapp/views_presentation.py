@@ -6,7 +6,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount
+from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory
+from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 
@@ -55,7 +56,7 @@ class PresentationCreateView(View):
                         print(f"Processing receipt: {receipt}, Status: {receipt.status}")
 
                         # Verify receipt is in portfolio status
-                        if receipt.status != 'PORTFOLIO':
+                        if receipt.status != 'PORTFOLIO' and receipt.status != 'UNPAID':
                             raise ValidationError(f"Receipt {receipt} is not in portfolio status")
 
                         # Create presentation receipt with proper field name
@@ -68,6 +69,8 @@ class PresentationCreateView(View):
                         
                         print(f"Creating presentation receipt with kwargs:", kwargs)
                         presentation_receipt = PresentationReceipt.objects.create(**kwargs)
+                        receipt.bank_account = BankAccount.objects.get(id=data['bank_account'])
+                        receipt.save()
                         print(f"Created presentation receipt: {presentation_receipt}")
 
                     except Exception as e:
@@ -187,6 +190,15 @@ class PresentationUpdateView(View):
                     print(f"Updating presentation status from pending to {data['status']}")
                     presentation.bank_reference = data['bank_reference']
                     presentation.status = data['status']
+
+                    # If status is being set to 'discounted', update all receipts
+                    if data['status'] == 'discounted':
+                        for pr in presentation.presentation_receipts.all():
+                            receipt = pr.checkreceipt or pr.lcn
+                            if receipt:
+                                receipt.status = 'DISCOUNTED'
+                                receipt.save()
+
                     presentation.save()
                     print("Presentation updated successfully")
 
@@ -222,9 +234,15 @@ class PresentationUpdateView(View):
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
+                                        # Add this line after successful unpaid update
+                                        presentation_receipt.recorded_status = 'UNPAID'
+                                        presentation_receipt.save()
                                         receipt.mark_as_unpaid(cause)
                                     else:
                                         print(f"Updating status to: {status_value.upper()}")
+                                        # Add this line after successful paid update
+                                        presentation_receipt.recorded_status = status_value.upper()
+                                        presentation_receipt.save()
                                         receipt.status = status_value.upper()
                                         receipt.save()
                                         
@@ -275,16 +293,26 @@ class PresentationDeleteView(View):
                             'status': 'error',
                             'message': 'Only pending presentations can be deleted'
                         }, status=400)
-
-                    # Reset status of all receipts back to portfolio
+                    
+                    # Get all related receipts before deletion
+                    related_receipts = []
                     for pr in presentation.presentation_receipts.all():
-                        print(f"Processing receipt in presentation: {pr}")
                         receipt = pr.checkreceipt or pr.lcn
                         if receipt:
-                            print(f"Resetting status for receipt: {receipt}")
-                            receipt.status = 'PORTFOLIO'
-                            receipt.save()
-                            print(f"Receipt status reset to PORTFOLIO")
+                            related_receipts.append(receipt)
+
+                    # Delete presentation-related history entries for all receipts
+                    content_types = ContentType.objects.get_for_model(CheckReceipt), ContentType.objects.get_for_model(LCN)
+                    for receipt in related_receipts:
+                        ReceiptHistory.objects.filter(
+                            content_type__in=content_types,
+                            object_id=receipt.id,
+                            new_value__contains=str(presentation.id)  # Look for presentation ID in the new_value JSON
+                        ).delete()
+                        
+                        # Reset receipt status back to PORTFOLIO
+                        receipt.status = 'PORTFOLIO'
+                        receipt.save()
                     
                     # Delete the presentation
                     presentation.delete()
@@ -319,13 +347,30 @@ class AvailableReceiptsView(View):
         
         if receipt_type == 'check':
             receipts = CheckReceipt.objects.filter(
-                status=CheckReceipt.STATUS_PORTFOLIO
-            ).select_related('client')
+                status__in=[
+                    CheckReceipt.STATUS_PORTFOLIO,
+                    CheckReceipt.STATUS_UNPAID
+                ]
+            ).select_related('client', 'entity')
         else:  # lcn
             receipts = LCN.objects.filter(
-                status=LCN.STATUS_PORTFOLIO
-            ).select_related('client')
+                status__in=[
+                    LCN.STATUS_PORTFOLIO,
+                    LCN.STATUS_UNPAID
+                ]
+            ).select_related('client', 'entity')
         
+        # Get presentation info for unpaid receipts
+        for receipt in receipts:
+            if receipt.status == 'UNPAID':
+                if receipt_type == 'check':
+                    presentation = receipt.check_presentations.order_by('-presentation__date').first()
+                else:
+                    presentation = receipt.lcn_presentations.order_by('-presentation__date').first()
+                
+                if presentation:
+                    receipt.last_presentation_date = presentation.presentation.date
+
         html = render_to_string('presentation/available_receipts.html', {
             'receipts': receipts
         }, request=request)

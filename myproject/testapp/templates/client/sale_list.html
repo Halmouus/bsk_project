@@ -16,6 +16,7 @@
                 <tr>
                     <th>Date</th>
                     <th>Client</th>
+                    <th>Type</th>
                     <th>Amount</th>
                     <th>Notes</th>
                 </tr>
@@ -25,6 +26,7 @@
                 <tr>
                     <td>{{ sale.date|date:"Y-m-d" }}</td>
                     <td>{{ sale.client.name }}</td>
+                    <td>{{ sale.get_sale_type_display }}</td>
                     <td class="text-right">{{ sale.amount|floatformat:2 }}</td>
                     <td>{{ sale.notes }}</td>
                 </tr>
@@ -58,6 +60,13 @@
                         <label for="date">Date</label>
                         <input type="date" class="form-control" id="date" name="date" 
                                value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="sale_type">Sale Type</label>
+                        <select class="form-control" id="sale_type" name="sale_type" required>
+                            <option value="BRICKS">Bricks</option>
+                            <option value="TRANSPORT">Transport</option>
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="amount">Amount</label>

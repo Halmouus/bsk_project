@@ -155,10 +155,10 @@ Available filters:
                             <td>
                                 <select class="form-control form-control-sm receipt-status" 
                                         data-receipt-id="{{ receipt.id }}"
-                                        {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}>
+                                        {% if receipt.recorded_status %}disabled{% endif %}>
                                     <option value="">Pending</option>
-                                    <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option>
-                                    <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
+                                    <option value="paid" {% if receipt.recorded_status == 'PAID' or receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option>
+                                    <option value="unpaid" {% if receipt.recorded_status == 'UNPAID' or receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
                                 </select>
                             </td>
                         {% endif %}

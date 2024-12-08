@@ -1,4 +1,3 @@
-
 # base.py
 
 ```py
@@ -26,76 +25,6 @@ from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashRe
     Presentation, PresentationReceipt, MOROCCAN_BANKS)
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
-
-# Define the inline formset for linking Invoice and InvoiceProduct
-InvoiceProductFormset = inlineformset_factory(
-    Invoice,
-    InvoiceProduct,
-    fields=['product', 'quantity', 'unit_price', 'reduction_rate', 'vat_rate'],
-    extra=1,  # Number of empty forms to display initially
-    can_delete=True,
-    widgets={
-        'product': forms.Select(attrs={'class': 'form-control'}),
-        'quantity': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
-        'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.01'}),
-        'reduction_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100'}),
-        'vat_rate': forms.Select(attrs={'class': 'form-control'}),
-    }
-)
-
-class InvoiceCreateForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        print("INITIALIZING CREATE FORM")  # Debug print
-        super().__init__(*args, **kwargs)
-        print(f"CREATE FORM fields: {self.fields}")  # Debug print
-
-    class Meta:
-        model = Invoice
-        fields = ['ref', 'date', 'supplier']
-        widgets = { 
-            'ref': forms.TextInput(attrs={'class': 'form-control'}),
-            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'supplier': forms.Select(attrs={'class': 'form-control'}),
-        }
-
-class InvoiceUpdateForm(forms.ModelForm):
-    def __init__(self, *args, **kwargs):
-        print("INITIALIZING UPDATE FORM")  # Debug print
-        super().__init__(*args, **kwargs)
-        print(f"UPDATE FORM Before disable: {self.fields}")  # Debug print
-        self.fields['supplier'].disabled = True
-        print(f"UPDATE FORM After disable: {self.fields}")  # Debug print
-
-    class Meta:
-        model = Invoice
-        fields = ['ref', 'date', 'supplier']
-        widgets = { 
-            'ref': forms.TextInput(attrs={'class': 'form-control'}),
-            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'supplier': forms.Select(attrs={'class': 'form-control'}),
-        }
-
-    def clean(self):
-        cleaned_data = super().clean()
-        cleaned_data['supplier'] = self.instance.supplier
-        return cleaned_data
-        
-
-class ProductForm(forms.ModelForm):
-    class Meta:
-        model = Product
-        fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
-        widgets = {
-            'vat_rate': forms.Select(choices=[
-                ('0.00', '0%'), 
-                ('7.00', '7%'), 
-                ('10.00', '10%'), 
-                ('11.00', '11%'), 
-                ('14.00', '14%'), 
-                ('16.00', '16%'), 
-                ('20.00', '20%')
-            ])
-        }
 
 class CheckReceiptForm(forms.ModelForm):
     class Meta:
@@ -173,7 +102,6 @@ class TransferReceiptForm(forms.ModelForm):
         }
 ```
 
-
 # models.py
 
 ```py
@@ -209,7 +137,6 @@ MOROCCAN_BANKS = [
     ('ABM', 'Arab Bank Maroc'),
     ('CTB', 'Citibank Maghreb')
 ]
-
 
 class BankAccount(BaseModel):
     BANK_CHOICES = [
@@ -263,6 +190,143 @@ class BankAccount(BaseModel):
     def __str__(self):
         type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
         return f"{self.bank} [{self.account_number}] - {type_indicator}"
+    
+class Checker(BaseModel):
+    TYPE_CHOICES = [
+        ('CHQ', 'Cheque'),
+        ('LCN', 'LCN')
+    ]
+    
+    PAGE_CHOICES = [
+        (25, '25'),
+        (50, '50'),
+        (100, '100')
+    ]
+
+    STATUS_CHOICES = [
+        ('new', 'New'),
+        ('in_use', 'In Use'), 
+        ('completed', 'Completed')
+    ]
+
+    code = models.CharField(max_length=10, unique=True, blank=True)
+    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
+    bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
+    num_pages = models.IntegerField(choices=PAGE_CHOICES)
+    index = models.CharField(
+        max_length=3,
+        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
+    )
+    starting_page = models.IntegerField(validators=[MinValueValidator(1)])
+    final_page = models.IntegerField(blank=True)
+    current_position = models.IntegerField(blank=True)
+    is_active = models.BooleanField(default=True)
+    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
+
+    def update_status(self):
+        if self.current_position > self.starting_page:
+            self.status = 'in_use'
+        if self.current_position >= self.final_page:
+            self.status = 'completed'
+        self.save()
+
+    def get_status(self):
+        STATUS_STYLES = {
+            'new': {'label': 'New', 'color': 'primary'},
+            'in_use': {'label': 'In Use', 'color': 'warning'},
+            'completed': {'label': 'Completed', 'color': 'success'},
+        }
+        return STATUS_STYLES.get(self.status, {'label': 'Unknown', 'color': 'secondary'})
+
+    @property
+    def remaining_pages(self):
+        print(f"Calculating remaining pages for {self.bank_account.bank}")
+        
+        # Get all used positions (excluding cancelled checks)
+        used_positions = set(
+            self.checks.values_list('position', flat=True)
+        )
+        used_positions_count = self.checks.count()
+        # Count available positions
+        available_count = self.final_page - self.starting_page + 1 - used_positions_count
+        print(f"Used positions: {used_positions}")
+        print(f"Available positions count: {available_count}")
+        
+        return available_count
+    def clean(self):
+        if self.bank_account:
+            if not self.bank_account.is_active:
+                raise ValidationError("Cannot create checker for inactive bank account")
+            if self.bank_account.account_type != 'national':
+                raise ValidationError("Can only create checkers for national accounts")
+        super().clean()
+
+    def save(self, *args, **kwargs):
+        if not self.code:
+            self.code = self.generate_code()
+        if not self.final_page:
+            self.final_page = self.starting_page + self.num_pages - 1
+        if not self.current_position:
+            self.current_position = self.starting_page
+        super().save(*args, **kwargs)
+
+    def generate_code(self):
+        # Generate random alphanumeric code
+        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    
+    #signature part#
+    position_signatures = models.JSONField(default=dict)
+
+    def get_position_signature_status(self, position):
+        print(f"Getting signature status for position {position}")
+        print(f"Current signatures: {self.position_signatures}")
+        return self.position_signatures.get(str(position), {
+            'signatures': [],
+            'timestamps': []
+        })
+
+    def add_signature(self, position, signature):
+        print(f"Adding signature {signature} to position {position}")
+        position = str(position)
+        if position not in self.position_signatures:
+            print(f"Position {position} not found, initializing")
+            self.position_signatures[position] = {
+                'signatures': [],
+                'timestamps': []
+            }
+        
+        if signature not in self.position_signatures[position]['signatures']:
+            print(f"Adding new signature {signature}")
+            self.position_signatures[position]['signatures'].append(signature)
+            self.position_signatures[position]['timestamps'].append(
+                timezone.now().isoformat()
+            )
+            print(f"Updated signatures: {self.position_signatures}")
+            self.save()
+        else:
+            print(f"Signature {signature} already exists for position {position}")
+        
+    
+    def get_last_issued_check(self):
+        """Get the last issued check."""
+        return self.checks.exclude(status="available").order_by('-position').first()
+
+    def get_next_available_position(self):
+        """Calculate the next available position."""
+        last_check = self.get_last_issued_check()
+        if last_check:
+            last_position = int(last_check.position[len(self.index):])
+            next_position = last_position + 1
+            if next_position <= self.final_page:
+                return next_position
+        return self.starting_page
+
+    def __str__(self):
+        return f'Checker {self.index}'
+
+    class Meta:
+        ordering = ['-created_at']
 
 class Client(BaseModel):
     """
@@ -310,14 +374,13 @@ class Client(BaseModel):
                 logger.error(f"Validation error for client_code: {e}")
                 raise
     
-    # Add to Client model
-
     def get_transactions(self, year=None, month=None):
         """
         Get all transactions for the client with optional year/month filter.
         For sales: Uses the actual date
         For receipts: Uses the client_year and client_month fields
         """
+        print("\n=== Starting get_transactions ===")
         transactions = []
         
         # Get sales for the specified period (using actual date)
@@ -326,7 +389,7 @@ class Client(BaseModel):
             sales_query = sales_query.filter(date__year=year)
             if month:
                 sales_query = sales_query.filter(date__month=month)
-                
+                    
         for sale in sales_query:
             transactions.append({
                 'date': sale.date,
@@ -334,145 +397,161 @@ class Client(BaseModel):
                 'description': f'Sales of {sale.date.strftime("%m-%Y")}',
                 'debit': sale.amount,
                 'credit': None,
-                'actual_date': sale.date  # Store actual date for sorting
+                'actual_date': sale.date
             })
 
-        # Calculate previous balance using client_year and client_month for receipts
+        # Calculate previous balance
         if year and month:
             current_date = datetime.date(int(year), int(month), 1)
             previous_balance = 0
             
             # Previous Sales (by actual date)
             prev_sales = self.clientsale_set.filter(date__lt=current_date)
-            for sale in prev_sales:
-                previous_balance += sale.amount
+            previous_balance = sum(sale.amount for sale in prev_sales)
 
-            # Previous Checks (by client year/month)
-            prev_checks = CheckReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for check in prev_checks:
-                previous_balance -= check.amount
+            # Previous Checks and LCNs - based on presentations
+            for receipt_class in [CheckReceipt, LCN]:
+                prev_receipts = receipt_class.objects.filter(
+                    client=self
+                ).filter(
+                    Q(client_year__lt=year) | 
+                    Q(client_year=year, client_month__lt=month)
+                ).select_related('client', 'entity')
 
-            # Previous LCNs (by client year/month)
-            prev_lcns = LCN.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for lcn in prev_lcns:
-                previous_balance -= lcn.amount
+                for receipt in prev_receipts:
+                    # Get all presentations for this receipt
+                    if isinstance(receipt, CheckReceipt):
+                        presentations = receipt.check_presentations.select_related('presentation').all()
+                    else:
+                        presentations = receipt.lcn_presentations.select_related('presentation').all()
+                    
+                    # Process each presentation's effect on balance
+                    for pres in presentations:
+                        if pres.presentation.date < current_date:
+                            # Credit for presentation
+                            previous_balance -= receipt.amount
+                            
+                            # Debit if unpaid after this presentation
+                            if receipt.status == 'UNPAID' and receipt.updated_at < current_date:
+                                previous_balance += receipt.amount
 
-            # Previous Transfers (by client year/month)
-            prev_transfers = TransferReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for transfer in prev_transfers:
-                previous_balance -= transfer.amount
+            # Previous Cash/Transfers (these can't be unpaid)
+            for receipt_class in [CashReceipt, TransferReceipt]:
+                prev_receipts = receipt_class.objects.filter(
+                    client=self
+                ).filter(
+                    Q(client_year__lt=year) | 
+                    Q(client_year=year, client_month__lt=month)
+                ).select_related('entity')
+                previous_balance -= sum(receipt.amount for receipt in prev_receipts)
 
-            # Previous Cash (by client year/month)
-            prev_cash = CashReceipt.objects.filter(
-                client=self
-            ).filter(
-                Q(client_year__lt=year) | 
-                Q(client_year=year, client_month__lt=month)
-            )
-            for cash in prev_cash:
-                previous_balance -= cash.amount
+            # Add balance entry even if no transactions in current month
+            transactions.insert(0, {
+                'date': current_date,
+                'type': 'BALANCE',
+                'description': 'Previous Balance',
+                'debit': max(previous_balance, 0),
+                'credit': abs(min(previous_balance, 0)),
+                'actual_date': current_date,
+                'balance': previous_balance
+            })
 
-            if previous_balance != 0:
-                transactions.append({
-                    'date': current_date,
-                    'type': 'BALANCE',
-                    'description': 'Previous Balance',
-                    'debit': previous_balance if previous_balance > 0 else None,
-                    'credit': abs(previous_balance) if previous_balance < 0 else None,
-                    'balance': previous_balance,
-                    'actual_date': current_date
-                })
+            # Get current period receipts
+            # Handle Checks and LCNs with presentations
+            for receipt_class, type_name in [(CheckReceipt, 'CHECK'), (LCN, 'LCN')]:
+                receipts = receipt_class.objects.filter(
+                    client=self,
+                    client_year=year,
+                    client_month=month
+                ).select_related('entity')
 
-        # Get receipts for the specified period (using client_year/month)
-        if year and month:
-            # Checks for this period
-            checks_query = CheckReceipt.objects.filter(
+                print(f"\nProcessing {type_name} receipts:")
+                for receipt in receipts:
+                    print(f"\nReceipt: {type_name} #{receipt.get_receipt_number()}")
+                    print(f"Current Status: {receipt.status}")
+                    
+
+                    # Get all presentations for this receipt
+                    if isinstance(receipt, CheckReceipt):
+                        presentations = receipt.check_presentations.select_related('presentation').all()
+                    else:
+                        presentations = receipt.lcn_presentations.select_related('presentation').all()
+
+                    print(f"Found {presentations.count()} presentations")
+
+                    # Process presentations
+                    for pres in presentations:
+                        print(f"\nPresentation date: {pres.presentation.date}")
+                        number = receipt.check_number if type_name == 'CHECK' else receipt.lcn_number
+
+                        # Determine if this is a representation
+                        is_representation = False
+                        earlier_presentations = presentations.filter(
+                            presentation__date__lt=pres.presentation.date
+                        ).exists()
+                        if earlier_presentations:
+                            is_representation = True
+
+                        # Add presentation transaction
+                        presentation_entry = {
+                            'date': pres.presentation.date,
+                            'type': type_name,
+                            'description': f'{type_name} {number} {receipt.entity.name} '
+                                        f'({("re" if is_representation else "")}presented for '
+                                        f'{"collection" if pres.presentation.presentation_type == "COLLECTION" else "discount"} '
+                                        f'on {pres.presentation.date.strftime("%Y-%m-%d")})',
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'actual_date': pres.presentation.date
+                        }
+                        transactions.append(presentation_entry)
+                        print("Added presentation entry:", presentation_entry)
+
+                    # Handle ALL unpaid statuses (history)
+                    unpaid_history = ReceiptHistory.objects.filter(
+                        content_type=ContentType.objects.get_for_model(receipt_class),
+                        object_id=receipt.id,
+                        action='status_changed',
+                        new_value__status='UNPAID'
+                    ).order_by('timestamp')
+
+                    for history in unpaid_history:
+                        unpaid_entry = {
+                            'date': history.timestamp.date(),
+                            'type': f'{type_name}_REVERSAL',
+                            'description': f'Reversal of {type_name} {receipt.get_receipt_number()} - '
+                                        f'{history.notes if history.notes else "Unpaid"}',
+                            'debit': history.new_value.get("amount", receipt.amount),  # Include the unpaid amount
+                            'credit': None,
+                            'actual_date': history.timestamp.date()
+                        }
+                        transactions.append(unpaid_entry)
+                        print("Added historical unpaid entry:", unpaid_entry)
+                # Process current period cash and transfer receipts
+        for receipt_class, type_name in [(CashReceipt, 'CASH'), (TransferReceipt, 'TRANSFER')]:
+            receipts = receipt_class.objects.filter(
                 client=self,
                 client_year=year,
                 client_month=month
-            )
-            for check in checks_query:
+            ).select_related('entity')
+
+            for receipt in receipts:
                 transactions.append({
-                    'date': check.operation_date,
-                    'type': 'CHECK',
-                    'description': (f'CHQ {check.check_number} {check.entity.name} '
-                                f'(received on {check.operation_date.strftime("%Y-%m-%d")})'),
+                    'date': receipt.operation_date,
+                    'type': type_name,
+                    'description': f'{type_name} {receipt.reference_number if hasattr(receipt, "reference_number") else receipt.transfer_reference} {receipt.entity.name}',
                     'debit': None,
-                    'credit': check.amount,
-                    'actual_date': check.operation_date
+                    'credit': receipt.amount,
+                    'actual_date': receipt.operation_date
                 })
 
-            # LCNs for this period
-            lcns_query = LCN.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for lcn in lcns_query:
-                transactions.append({
-                    'date': lcn.operation_date,
-                    'type': 'LCN',
-                    'description': (f'LCN {lcn.lcn_number} {lcn.entity.name} '
-                                f'(received on {lcn.operation_date.strftime("%Y-%m-%d")}, '
-                                f'due on {lcn.due_date.strftime("%Y-%m-%d")})'),
-                    'debit': None,
-                    'credit': lcn.amount,
-                    'actual_date': lcn.operation_date
-                })
-
-            # Similar updates for Transfer and Cash receipts...
-            transfers_query = TransferReceipt.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for transfer in transfers_query:
-                transactions.append({
-                    'date': transfer.operation_date,
-                    'type': 'TRANSFER',
-                    'description': (f'Transfer from {transfer.entity.name} '
-                                f'(received on {transfer.operation_date.strftime("%Y-%m-%d")})'),
-                    'debit': None,
-                    'credit': transfer.amount,
-                    'actual_date': transfer.operation_date
-                })
-
-            cash_query = CashReceipt.objects.filter(
-                client=self,
-                client_year=year,
-                client_month=month
-            )
-            for cash in cash_query:
-                transactions.append({
-                    'date': cash.operation_date,
-                    'type': 'CASH',
-                    'description': f'Cash (received on {cash.operation_date.strftime("%Y-%m-%d")})',
-                    'debit': None,
-                    'credit': cash.amount,
-                    'actual_date': cash.operation_date
-                })
-
-        # Sort transactions:
-        # 1. Balance entries first
-        # 2. Then by actual date
+        
+        print("\n=== Finished processing transactions ===\n")
+        # Sort transactions
         transactions.sort(key=lambda x: (
             x['type'] != 'BALANCE',  # Balance entries first
-            x['actual_date']  # Then by actual date
+            x['actual_date'].date() if isinstance(x['actual_date'], datetime.datetime) else x['actual_date']  # Convert datetime to date if needed
+
         ))
 
         # Calculate running balance
@@ -581,8 +660,6 @@ class Entity(BaseModel):
         ordering = ['name']
         verbose_name = 'Entity'
         verbose_name_plural = 'Entities'
-
-
 
 class Receipt(BaseModel):
     """Base class for all receipt types."""
@@ -768,17 +845,18 @@ class NegotiableReceipt(Receipt):
         if not self.compensating_receipt:
             return None
             
-        if isinstance(self.compensating_receipt, (CheckReceipt, LCN)):
-            return (f"Compensated by {self.compensating_receipt.__class__.__name__} "
-                   f"#{self.compensating_receipt.get_receipt_number()} "
-                   f"({self.compensating_receipt.entity.name})")
+        if isinstance(self.compensating_receipt, CashReceipt):
+            return f"Compensated by cash payment (Ref: {self.compensating_receipt.reference_number or 'N/A'})"
+        elif isinstance(self.compensating_receipt, TransferReceipt):
+            return f"Compensated by bank transfer (Ref: {self.compensating_receipt.transfer_reference})"
         else:
-            return (f"Compensated by {self.compensating_receipt.__class__.__name__} "
-                   f"on {self.compensation_date.strftime('%d/%m/%y')}")
+            return (f"Compensated by {self.compensating_receipt.__class__.__name__.replace('Receipt', '')} "
+                f"#{self.compensating_receipt.get_receipt_number()} "
+                f"({self.compensating_receipt.entity.name})")
 
     def mark_as_unpaid(self, cause):
         """Mark receipt as unpaid with a cause"""
-        if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT']:
+        if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT', 'DISCOUNTED']:
             raise ValidationError("Only rejected or presented receipts can be marked as unpaid")
         
         self.status = self.STATUS_UNPAID
@@ -799,21 +877,148 @@ class NegotiableReceipt(Receipt):
         if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
             self.status = self.STATUS_COMPENSATED
             self.compensation_date = timezone.now()
+            self.record_history(
+                action='status_changed',
+                old_value={'status': self.STATUS_UNPAID},
+                new_value={'status': self.STATUS_COMPENSATED},
+                notes=f'Compensated by {compensating_receipt.__class__.__name__} {compensating_receipt.id}'
+            )
+        else:
+            # For checks/LCNs, just record that a compensating receipt was assigned
+            self.record_history(
+                action='compensation_assigned',
+                new_value={
+                    'compensating_type': compensating_receipt.__class__.__name__,
+                    'compensating_id': str(compensating_receipt.id)
+                },
+                notes=f'Assigned {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()} as compensating receipt'
+            )
             
         self.save()
 
     def handle_compensation_payment(self):
         """Called when a compensating negotiable receipt is paid"""
-        if self.compensating_receipt and self.status == self.STATUS_UNPAID:
+        if self.status == self.STATUS_UNPAID and self.compensating_receipt:
+            old_status = self.status
             self.status = self.STATUS_COMPENSATED
             self.compensation_date = timezone.now()
+            
+            self.record_history(
+                action='status_changed',
+                old_value={'status': old_status},
+                new_value={'status': self.STATUS_COMPENSATED},
+                notes=f'Status changed to compensated as compensating receipt was paid'
+            )
             self.save()
 
+    def update_compensated_receipts(self):
+            """
+            When this receipt is paid, update any receipts it compensates
+            """
+            # Find all receipts that this receipt compensates
+            compensated_checks = CheckReceipt.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id,
+                status=self.STATUS_UNPAID
+            )
+            
+            compensated_lcns = LCN.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id,
+                status=self.STATUS_UNPAID
+            )
+
+            # Update the status of all compensated receipts
+            current_time = timezone.now()
+            
+            for receipt in list(compensated_checks) + list(compensated_lcns):
+                receipt.status = self.STATUS_COMPENSATED
+                receipt.compensation_date = current_time
+                receipt.save()
+
+    def record_history(self, action, old_value=None, new_value=None, notes=None, user=None):
+        """
+        Record a history event for the negotiable receipt
+        """
+        content_type = ContentType.objects.get_for_model(self)
+
+        
+        
+        ReceiptHistory.objects.create(
+            content_type=content_type,
+            object_id=self.id,
+            action=action,
+            old_value=old_value,
+            new_value=new_value,
+            notes=notes,
+            user=user
+        )
+
+    def delete(self, *args, **kwargs):
+        # If this receipt is compensating any unpaid receipts and is still in PORTFOLIO
+        if self.status == self.STATUS_PORTFOLIO:
+            # Find any receipts this one was supposed to compensate
+            compensated_checks = CheckReceipt.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id
+            )
+            compensated_lcns = LCN.objects.filter(
+                compensating_content_type=ContentType.objects.get_for_model(self),
+                compensating_object_id=self.id
+            )
+            
+            # Clean up the compensated receipts
+            for receipt in list(compensated_checks) + list(compensated_lcns):
+                receipt.record_history(
+                    action='compensation_cancelled',
+                    notes=f'Compensating receipt {self.__class__.__name__} #{self.get_receipt_number()} was deleted'
+                )
+                receipt.compensating_receipt = None
+                receipt.save()
+
+        super().delete(*args, **kwargs)
+
     def save(self, *args, **kwargs):
-        if hasattr(self, 'presentation') and self.presentation:
-            # Update bank_account from presentation when presented
-            self.bank_account = self.presentation.bank_account
-        super().save(*args, **kwargs)
+        if not self.pk:
+            super().save(*args, **kwargs)
+            self.record_history(
+                action='created',
+                notes=f'Receipt created with status {self.get_status_display()}'
+            )
+        else:
+            try:
+                old_instance = type(self).objects.get(pk=self.pk)
+                if old_instance.status != self.status:
+                    # Check if this is a discount update
+                    if self.status == 'DISCOUNTED':
+                        # Get the presentation info
+                        if hasattr(self, 'check_presentations'):
+                            presentation = self.check_presentations.last().presentation
+                        else:
+                            presentation = self.lcn_presentations.last().presentation
+                            
+                        self.record_history(
+                            action='status_changed',
+                            old_value={'status': old_instance.status},
+                            new_value={
+                                'status': self.status,
+                                'presentation_id': str(presentation.id),
+                                'bank_account': presentation.bank_account.get_bank_display(),
+                                'date': presentation.date.strftime('%Y-%m-%d')
+                            },
+                            notes=f'Discounted at {presentation.bank_account.get_bank_display()}'
+                        )
+                    else:
+                        self.record_history(
+                            action='status_changed',
+                            old_value={'status': old_instance.status},
+                            new_value={'status': self.status},
+                            notes=f'Status changed from {old_instance.status} to {self.status}'
+                        )
+            except type(self).DoesNotExist:
+                pass
+                
+            super().save(*args, **kwargs)
 
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
@@ -853,8 +1058,57 @@ class CashReceipt(Receipt):
         related_name='cash_receipts'
     )
 
+    compensating_content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='%(app_label)s_%(class)s_compensating'
+    )
+    compensating_object_id = models.UUIDField(null=True, blank=True)
+    compensating_receipt = GenericForeignKey(
+        'compensating_content_type', 
+        'compensating_object_id'
+    )
+
+    def get_compensated_receipt(self):
+        """Returns the receipt that this cash/transfer is compensating"""
+        # Check for checks first
+        compensated_check = CheckReceipt.objects.filter(
+            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
+            compensating_object_id=self.id
+        ).first()
+        
+        if compensated_check:
+            return compensated_check
+            
+        # Check for LCNs
+        compensated_lcn = LCN.objects.filter(
+            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
+            compensating_object_id=self.id
+        ).first()
+        
+        return compensated_lcn
+    
+    def get_compensation_description(self):
+        """Returns description if this receipt compensates another"""
+        compensated = self.get_compensated_receipt()
+        if compensated:
+            return f"Compensating unpaid {compensated.__class__.__name__.replace('Receipt', '')} #{compensated.get_receipt_number()}"
+        return None
+
+    def can_edit(self):
+        """Check if receipt can be edited"""
+        compensated_receipt = self.get_compensated_receipt()
+        return compensated_receipt is None
+
+    def can_delete(self):
+        """Check if receipt can be deleted"""
+        compensated_receipt = self.get_compensated_receipt()
+        return compensated_receipt is None
+
     def __str__(self):
-        return f"Cash Receipt {self.id} - {self.amount}"
+        return f"Cash Receipt {self.reference_number or 'N/A'}"
 
     class Meta:
         verbose_name = "Cash Receipt"
@@ -869,9 +1123,57 @@ class TransferReceipt(Receipt):
         related_name='transfer_receipts'
     )
     transfer_date = models.DateField(default=timezone.now)
+    compensating_content_type = models.ForeignKey(
+        'contenttypes.ContentType',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='%(app_label)s_%(class)s_compensating'
+    )
+    compensating_object_id = models.UUIDField(null=True, blank=True)
+    compensating_receipt = GenericForeignKey(
+        'compensating_content_type', 
+        'compensating_object_id'
+    )
+
+    def get_compensated_receipt(self):
+        """Returns the receipt that this cash/transfer is compensating"""
+        # Check for checks first
+        compensated_check = CheckReceipt.objects.filter(
+            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
+            compensating_object_id=self.id
+        ).first()
+        
+        if compensated_check:
+            return compensated_check
+            
+        # Check for LCNs
+        compensated_lcn = LCN.objects.filter(
+            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
+            compensating_object_id=self.id
+        ).first()
+        
+        return compensated_lcn
+    
+    def get_compensation_description(self):
+        """Returns description if this receipt compensates another"""
+        compensated = self.get_compensated_receipt()
+        if compensated:
+            return f"Compensating unpaid {compensated.__class__.__name__.replace('Receipt', '')} #{compensated.get_receipt_number()}"
+        return None
+
+    def can_edit(self):
+        """Check if receipt can be edited"""
+        compensated_receipt = self.get_compensated_receipt()
+        return compensated_receipt is None
+
+    def can_delete(self):
+        """Check if receipt can be deleted"""
+        compensated_receipt = self.get_compensated_receipt()
+        return compensated_receipt is None
 
     def __str__(self):
-        return f"Transfer {self.transfer_reference} - {self.amount}"
+        return f"Transfer {self.transfer_reference}"
 
     class Meta:
         verbose_name = "Transfer"
@@ -937,6 +1239,7 @@ class Presentation(BaseModel):
 
 class PresentationReceipt(BaseModel):
     """Links receipts to presentations."""
+
     presentation = models.ForeignKey(
         Presentation, 
         on_delete=models.CASCADE,
@@ -957,6 +1260,7 @@ class PresentationReceipt(BaseModel):
         related_name='lcn_presentations'
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
+    immutable = models.BooleanField(default=False)
 
     class Meta:
         unique_together = [
@@ -980,11 +1284,10 @@ class PresentationReceipt(BaseModel):
         # Get the actual receipt object
         receipt = self.checkreceipt or self.lcn
         
-        # Check the status on the actual object
-        if getattr(receipt, 'status', None) != 'PORTFOLIO':
-            raise ValidationError(
-                'Only receipts in portfolio status can be presented'
-            )
+        # Only validate receipt status during initial creation
+        if not self.pk:  # If this is a new record
+            if getattr(receipt, 'status', None) != 'PORTFOLIO' and getattr(receipt, 'status', None) != 'UNPAID':
+                raise ValidationError('Only receipts in portfolio status can be presented')
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -1008,13 +1311,57 @@ class PresentationReceipt(BaseModel):
             ('presentation', 'lcn')
         ]
 
-class ClientSale(BaseModel):
-    client = models.ForeignKey(Client, on_delete=models.PROTECT)
-    date = models.DateField()
-    amount = models.DecimalField(max_digits=15, decimal_places=2)
-    year = models.IntegerField()  # For easy filtering
-    month = models.IntegerField()  # For easy filtering
+class ReceiptHistory(BaseModel):
+    # Generic Foreign Key to support both Check and LCN receipts
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.UUIDField()
+    receipt = GenericForeignKey('content_type', 'object_id')
+    
+    ACTION_CHOICES = [
+        ('created', 'Created'),
+        ('status_changed', 'Status Changed'),
+        ('presented_collection', 'Presented for Collection'),
+        ('presented_discount', 'Presented for Discount'),
+        ('compensating_assigned', 'Compensating Receipt Assigned'),
+        ('compensated', 'Compensated'),
+        ('unpaid', 'Marked as Unpaid'),
+        ('paid', 'Paid'),
+        ('rejected', 'Rejected by Bank')
+    ]
+    
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    timestamp = models.DateTimeField(auto_now_add=True)
+    old_value = models.JSONField(null=True, blank=True)
+    new_value = models.JSONField(null=True, blank=True)
     notes = models.TextField(blank=True)
+    user = models.ForeignKey(
+        'auth.User', 
+        on_delete=models.SET_NULL, 
+        null=True,
+        related_name='receipt_history'
+    )
+    
+    class Meta:
+        ordering = ['-timestamp']
+        verbose_name = "Receipt History"
+        verbose_name_plural = "Receipt Histories"
+
+    def __str__(self):
+        return f"{self.receipt} - {self.action} at {self.timestamp}"
+
+class ClientSale(BaseModel):
+    SALE_TYPES = [
+        ('BRICKS', 'Bricks'),
+        ('TRANSPORT', 'Transport'),
+    ]
+
+    client = models.ForeignKey('Client', on_delete=models.CASCADE)
+    date = models.DateField()
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    year = models.IntegerField()
+    month = models.IntegerField()
+    notes = models.TextField(blank=True)
+    sale_type = models.CharField(max_length=10, choices=SALE_TYPES, default='BRICKS')
 
     class Meta:
         ordering = ['-date', '-created_at']
@@ -1063,7 +1410,7 @@ def update_checker_status(sender, instance, **kwargs):
 # templates/base.html
 
 ```html
-<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>{% block title %}BSK Management{% endblock %}</title> <!-- CSS --> <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet"> <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet"> <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"> <link href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" rel="stylesheet"> <!-- Custom Styles --> <style> :root { --primary-color: #2563eb; --sidebar-width: 250px; --topbar-height: 60px; --transition-speed: 0.3s; } body { min-height: 100vh; background-color: #f8fafc; padding-top: var(--topbar-height) } /* Sidebar Styling */ #sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: #1e293b; transition: transform var(--transition-speed); z-index: 1000; } #sidebar.collapsed { transform: translateX(-100%); } #sidebar .nav-link { color: #e2e8f0; padding: 0.8rem 1rem; transition: all var(--transition-speed); } #sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.1); transform: translateX(5px); } #sidebar .nav-link.active { background: var(--primary-color); color: white; } /* Dropdown menu styling */ .nav-dropdown { background: rgba(255, 255, 255, 0.05); } .nav-dropdown .nav-link { padding-left: 2.5rem !important; font-size: 0.9rem; opacity: 0.9; } .nav-item-parent > .nav-link { display: flex; justify-content: space-between; align-items: center; } .nav-item-parent > .nav-link::after { content: '\f107'; font-family: 'Font Awesome 5 Free'; font-weight: 900; transition: transform 0.3s; } .nav-item-parent > .nav-link[aria-expanded="true"]::after { transform: rotate(180deg); } .collapse { transition: all 0.3s ease; } /* Main Content */ #main-content { margin-left: var(--sidebar-width); padding-top: var(--topbar-height); transition: margin var(--transition-speed); padding: 20px; margin-top: 0; } #main-content.expanded { margin-left: 0; } /* Topbar */ #topbar { height: var(--topbar-height); background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: fixed; top: 0; right: 0; left: var(--sidebar-width); z-index: 999; transition: left var(--transition-speed); } #topbar.expanded { left: 0; } /* Modal Animations */ .modal.fade .modal-dialog { transform: scale(0.8); transition: transform var(--transition-speed); } .modal.show .modal-dialog { transform: scale(1); } .modal { z-index: 1050; } /* Toast Animations */ .toast { position: fixed; top: 20px; right: 20px; z-index: 1050; animation: slideIn 0.3s ease-out; } @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } } /* Card Hover Effects */ .card { transition: transform 0.2s, box-shadow 0.2s; } .card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); } /* Button Hover Effects */ .btn { transition: all 0.2s; } .btn:hover { transform: translateY(-1px); } /* Table Row Hover */ .table-hover tbody tr { transition: background-color 0.2s; } /* Select2 Styling */ .select2-container--default .select2-selection--single { height: 38px; border: 1px solid #ced4da; border-radius: 0.375rem; } .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 38px; } /* Ensure dropdowns appear above other elements */ .dropdown-menu { z-index: 1000; } /* Keep autocomplete dropdown above other elements */ .ui-autocomplete { z-index: 2000; } </style> <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script> <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script> </head> <body> <!-- Sidebar --> <nav id="sidebar"> <div class="d-flex flex-column h-100"> <div class="p-3 text-center"> <h5 class="text-white mb-0">BSK Management</h5> </div> <ul class="nav flex-column mt-2"> <li class="nav-item"> <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'home' %}"> <i class="fas fa-home me-2"></i> Dashboard </a> </li> <!-- Business Operations Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'business' in request.path %}active{% endif %}" data-toggle="collapse" href="#businessSubmenu" role="button" aria-expanded="false" aria-controls="businessSubmenu"> <span><i class="fas fa-briefcase me-2"></i> Business Operations</span> </a> <div class="collapse nav-dropdown" id="businessSubmenu"> <a class="nav-link {% if 'supplier' in request.path %}active{% endif %}" href="{% url 'supplier-list' %}"> <i class="fas fa-truck me-2"></i> Suppliers </a> <a class="nav-link {% if 'product' in request.path %}active{% endif %}" href="{% url 'product-list' %}"> <i class="fas fa-box-open me-2"></i> Products </a> <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" href="{% url 'invoice-list' %}"> <i class="fas fa-file-invoice-dollar me-2"></i> Invoices </a> </div> </li> <!-- Clients Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'client' in request.path %}active{% endif %}" data-toggle="collapse" href="#clientSubmenu" role="button" aria-expanded="false" aria-controls="clientSubmenu"> <span><i class="fas fa-users me-2"></i> Clients</span> </a> <div class="collapse nav-dropdown" id="clientSubmenu"> <a class="nav-link {% if 'receipt' in request.path %}active{% endif %}" href="{% url 'receipt-list' %}"> <i class="fas fa-receipt me-2"></i> Receipts </a> <a class="nav-link {% if 'client_management' in request.path %}active{% endif %}" href="{% url 'client_management' %}"> <i class="fas fa-address-card me-2"></i> Clients </a> <a class="nav-link {% if 'sale-list' in request.path %}active{% endif %}" href="{% url 'sale-list' %}"> <i class="fas fa-shopping-cart me-2"></i> Sales </a> <a class="nav-link {% if 'presentation' in request.path %}active{% endif %}" href="{% url 'presentation-list' %}"> <i class="fas fa-file-powerpoint me-2"></i> Presentations </a> </div> </li> <!-- Financial Management Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'financial' in request.path %}active{% endif %}" data-toggle="collapse" href="#financialSubmenu" role="button" aria-expanded="false" aria-controls="financialSubmenu"> <span><i class="fas fa-money-bill-wave me-2"></i> Financial Management</span> </a> <div class="collapse nav-dropdown" id="financialSubmenu"> <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" href="{% url 'bank-account-list' %}"> <i class="fas fa-university me-2"></i> Bank Accounts </a> <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" href="{% url 'check-list' %}"> <i class="fas fa-money-check me-2"></i> Checks </a> <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" href="{% url 'checker-list' %}"> <i class="fas fa-user-shield me-2"></i> Checkers </a> </div> </li> <!-- Bottom Section --> <div class="mt-auto p-3"> <div class="dropdown"> <button class="btn btn-dark dropdown-toggle w-100" type="button" data-bs-toggle="dropdown"> <i class="fas fa-user-circle me-2"></i> {{ request.user.username }} </button> <ul class="dropdown-menu dropdown-menu-dark w-100"> <li> <a class="dropdown-item" href="{% url 'profile' %}"> <i class="fas fa-id-card me-2"></i> Profile </a> </li> <li><hr class="dropdown-divider"></li> <li> <a class="dropdown-item text-danger" href="{% url 'logout' %}"> <i class="fas fa-sign-out-alt me-2"></i> Logout </a> </li> </ul> </div> </div> </div> </nav> <!-- Topbar --> <nav id="topbar" class="px-4 d-flex align-items-center"> <button id="sidebar-toggle" class="btn btn-link"> <i class="fas fa-bars"></i> </button> <div class="ms-auto d-flex align-items-center"> <div class="dropdown"> <button class="btn btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown"> <i class="fas fa-bell"></i> <span class="badge bg-danger">3</span> </button> <ul class="dropdown-menu dropdown-menu-end"> <li><h6 class="dropdown-header">Notifications</h6></li> <li><a class="dropdown-item" href="#">New invoice added</a></li> <li><a class="dropdown-item" href="#">Payment received</a></li> <li><a class="dropdown-item" href="#">Check due today</a></li> </ul> </div> </div> </nav> <!-- Main Content --> <main id="main-content" class="p-4"> {% block content %}{% endblock %} </main> <!-- Scripts --> <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script> <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script> <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script> <script> $(document).ready(function() { // Sidebar Toggle $('#sidebar-toggle').click(function() { $('#sidebar').toggleClass('collapsed'); $('#main-content').toggleClass('expanded'); $('#topbar').toggleClass('expanded'); }); // Initialize Select2 $('.select2').select2({ theme: 'bootstrap' }); // Initialize tooltips $('[data-toggle="tooltip"]').tooltip(); // Keep submenu open if a child is active if ($('#clientSubmenu .nav-link.active').length) { $('#clientSubmenu').addClass('show'); $('#clientSubmenu').prev('.nav-link').attr('aria-expanded', 'true'); } }); // Toast function function showToast(message, type = 'success') { const toast = ` <div class="toast align-items-center text-white bg-${type}" role="alert"> <div class="d-flex"> <div class="toast-body">${message}</div> <button type="button" class="close ml-2 mb-1" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> </div> `; const toastContainer = $('<div>', { class: 'position-fixed', style: 'top: 20px; right: 20px; z-index: 1060;' }).html(toast); $('body').append(toastContainer); toastContainer.find('.toast').toast({ delay: 3000 }).toast('show'); toastContainer.find('.toast').on('hidden.bs.toast', function() { toastContainer.remove(); }); } </script> {% block extra_js %}{% endblock %} </body> </html>
+<!DOCTYPE html> <html lang="en"> <head> <meta charset="UTF-8"> <meta name="viewport" content="width=device-width, initial-scale=1.0"> <title>{% block title %}BSK Management{% endblock %}</title> <!-- CSS --> <link href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css" rel="stylesheet"> <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet"> <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet"> <link href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" rel="stylesheet"> <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"> <!-- Custom Styles --> <style> :root { --primary-color: #2563eb; --sidebar-width: 250px; --topbar-height: 60px; --transition-speed: 0.3s; } body { min-height: 100vh; background-color: #f8fafc; padding-top: var(--topbar-height) } /* Sidebar Styling */ #sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; left: 0; top: 0; background: #1e293b; transition: transform var(--transition-speed); z-index: 1000; } #sidebar.collapsed { transform: translateX(-100%); } #sidebar .nav-link { color: #e2e8f0; padding: 0.8rem 1rem; transition: all var(--transition-speed); } #sidebar .nav-link:hover { background: rgba(255, 255, 255, 0.1); transform: translateX(5px); } #sidebar .nav-link.active { background: var(--primary-color); color: white; } /* Dropdown menu styling */ .nav-dropdown { background: rgba(255, 255, 255, 0.05); } .nav-dropdown .nav-link { padding-left: 2.5rem !important; font-size: 0.9rem; opacity: 0.9; } .nav-item-parent > .nav-link { display: flex; justify-content: space-between; align-items: center; } .nav-item-parent > .nav-link::after { content: '\f107'; font-family: 'Font Awesome 5 Free'; font-weight: 900; transition: transform 0.3s; } .nav-item-parent > .nav-link[aria-expanded="true"]::after { transform: rotate(180deg); } .collapse { transition: all 0.3s ease; } /* Main Content */ #main-content { margin-left: var(--sidebar-width); padding-top: var(--topbar-height); transition: margin var(--transition-speed); padding: 20px; margin-top: 0; } #main-content.expanded { margin-left: 0; } /* Topbar */ #topbar { height: var(--topbar-height); background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.1); position: fixed; top: 0; right: 0; left: var(--sidebar-width); z-index: 999; transition: left var(--transition-speed); } #topbar.expanded { left: 0; } /* Modal Animations */ .modal.fade .modal-dialog { transform: scale(0.8); transition: transform var(--transition-speed); } .modal.show .modal-dialog { transform: scale(1); } .modal { z-index: 1050; } /* Toast Animations */ .toast { position: fixed; top: 20px; right: 20px; z-index: 1050; animation: slideIn 0.3s ease-out; } @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } } /* Card Hover Effects */ .card { transition: transform 0.2s, box-shadow 0.2s; } .card:hover { transform: translateY(-5px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); } /* Button Hover Effects */ .btn { transition: all 0.2s; } .btn:hover { transform: translateY(-1px); } /* Table Row Hover */ .table-hover tbody tr { transition: background-color 0.2s; } /* Select2 Styling */ .select2-container--default .select2-selection--single { height: 38px; border: 1px solid #ced4da; border-radius: 0.375rem; } .select2-container--default .select2-selection--single .select2-selection__rendered { line-height: 38px; } /* Ensure dropdowns appear above other elements */ .dropdown-menu { z-index: 1000; } /* Keep autocomplete dropdown above other elements */ .ui-autocomplete { z-index: 2000; .timeline-item { opacity: 0; } .timeline-item.animate__animated { opacity: 1; } /* Custom animation for loading spinner */ @keyframes modalFadeIn { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } } .modal.show .modal-dialog { animation: modalFadeIn 0.3s ease-out; } /* Enhance timeline visuals */ .timeline-content:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.1); transform: translateY(-2px); transition: all 0.3s ease; } .timeline-marker::after { content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 8px; height: 8px; background: white; border-radius: 50%; } } </style> <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script> <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.min.js"></script> </head> <body> <!-- Sidebar --> <nav id="sidebar"> <div class="d-flex flex-column h-100"> <div class="p-3 text-center"> <h5 class="text-white mb-0">BSK Management</h5> </div> <ul class="nav flex-column mt-2"> <li class="nav-item"> <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" href="{% url 'home' %}"> <i class="fas fa-home me-2"></i> Dashboard </a> </li> <!-- Business Operations Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'business' in request.path %}active{% endif %}" data-toggle="collapse" href="#businessSubmenu" role="button" aria-expanded="false" aria-controls="businessSubmenu"> <span><i class="fas fa-briefcase me-2"></i> Business Operations</span> </a> <div class="collapse nav-dropdown" id="businessSubmenu"> <a class="nav-link {% if 'supplier' in request.path %}active{% endif %}" href="{% url 'supplier-list' %}"> <i class="fas fa-truck me-2"></i> Suppliers </a> <a class="nav-link {% if 'product' in request.path %}active{% endif %}" href="{% url 'product-list' %}"> <i class="fas fa-box-open me-2"></i> Products </a> <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" href="{% url 'invoice-list' %}"> <i class="fas fa-file-invoice-dollar me-2"></i> Invoices </a> </div> </li> <!-- Clients Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'client' in request.path %}active{% endif %}" data-toggle="collapse" href="#clientSubmenu" role="button" aria-expanded="false" aria-controls="clientSubmenu"> <span><i class="fas fa-users me-2"></i> Clients</span> </a> <div class="collapse nav-dropdown" id="clientSubmenu"> <a class="nav-link {% if 'receipt' in request.path %}active{% endif %}" href="{% url 'receipt-list' %}"> <i class="fas fa-receipt me-2"></i> Receipts </a> <a class="nav-link {% if 'client_management' in request.path %}active{% endif %}" href="{% url 'client_management' %}"> <i class="fas fa-address-card me-2"></i> Clients </a> <a class="nav-link {% if 'sale-list' in request.path %}active{% endif %}" href="{% url 'sale-list' %}"> <i class="fas fa-shopping-cart me-2"></i> Sales </a> <a class="nav-link {% if 'presentation' in request.path %}active{% endif %}" href="{% url 'presentation-list' %}"> <i class="fas fa-file-powerpoint me-2"></i> Presentations </a> </div> </li> <!-- Financial Management Section --> <li class="nav-item nav-item-parent"> <a class="nav-link {% if 'financial' in request.path %}active{% endif %}" data-toggle="collapse" href="#financialSubmenu" role="button" aria-expanded="false" aria-controls="financialSubmenu"> <span><i class="fas fa-money-bill-wave me-2"></i> Financial Management</span> </a> <div class="collapse nav-dropdown" id="financialSubmenu"> <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" href="{% url 'bank-account-list' %}"> <i class="fas fa-university me-2"></i> Bank Accounts </a> <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" href="{% url 'check-list' %}"> <i class="fas fa-money-check me-2"></i> Checks </a> <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" href="{% url 'checker-list' %}"> <i class="fas fa-user-shield me-2"></i> Checkers </a> </div> </li> <!-- Bottom Section --> <div class="mt-auto p-3"> <div class="dropdown"> <button class="btn btn-dark dropdown-toggle w-100" type="button" data-bs-toggle="dropdown"> <i class="fas fa-user-circle me-2"></i> {{ request.user.username }} </button> <ul class="dropdown-menu dropdown-menu-dark w-100"> <li> <a class="dropdown-item" href="{% url 'profile' %}"> <i class="fas fa-id-card me-2"></i> Profile </a> </li> <li><hr class="dropdown-divider"></li> <li> <a class="dropdown-item text-danger" href="{% url 'logout' %}"> <i class="fas fa-sign-out-alt me-2"></i> Logout </a> </li> </ul> </div> </div> </div> </nav> <!-- Topbar --> <nav id="topbar" class="px-4 d-flex align-items-center"> <button id="sidebar-toggle" class="btn btn-link"> <i class="fas fa-bars"></i> </button> <div class="ms-auto d-flex align-items-center"> <div class="dropdown"> <button class="btn btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown"> <i class="fas fa-bell"></i> <span class="badge bg-danger">3</span> </button> <ul class="dropdown-menu dropdown-menu-end"> <li><h6 class="dropdown-header">Notifications</h6></li> <li><a class="dropdown-item" href="#">New invoice added</a></li> <li><a class="dropdown-item" href="#">Payment received</a></li> <li><a class="dropdown-item" href="#">Check due today</a></li> </ul> </div> </div> </nav> <!-- Main Content --> <main id="main-content" class="p-4"> {% block content %}{% endblock %} </main> <!-- Scripts --> <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script> <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.min.js"></script> <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script> <script> $(document).ready(function() { // Sidebar Toggle $('#sidebar-toggle').click(function() { $('#sidebar').toggleClass('collapsed'); $('#main-content').toggleClass('expanded'); $('#topbar').toggleClass('expanded'); }); // Initialize Select2 $('.select2').select2({ theme: 'bootstrap' }); // Initialize tooltips $('[data-toggle="tooltip"]').tooltip(); // Keep submenu open if a child is active if ($('#clientSubmenu .nav-link.active').length) { $('#clientSubmenu').addClass('show'); $('#clientSubmenu').prev('.nav-link').attr('aria-expanded', 'true'); } }); // Toast function function showToast(message, type = 'success') { const toast = ` <div class="toast align-items-center text-white bg-${type}" role="alert"> <div class="d-flex"> <div class="toast-body">${message}</div> <button type="button" class="close ml-2 mb-1" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> </div> `; const toastContainer = $('<div>', { class: 'position-fixed', style: 'top: 20px; right: 20px; z-index: 1060;' }).html(toast); $('body').append(toastContainer); toastContainer.find('.toast').toast({ delay: 3000 }).toast('show'); toastContainer.find('.toast').on('hidden.bs.toast', function() { toastContainer.remove(); }); } </script> {% block extra_js %}{% endblock %} </body> </html>
 ```
 
 # templates/client/client_card.html
@@ -1075,25 +1422,25 @@ def update_checker_status(sender, instance, **kwargs):
 # templates/client/client_management.html
 
 ```html
-{% extends 'base.html' %} {% load static %} {% block extra_css %} <link rel="stylesheet" href="{% static 'css/client.css' %}"> {% endblock %} {% block content %} <div class="container-fluid px-4"> <div class="row mt-4"> <div class="col"> <!-- Tabs Navigation --> <ul class="nav nav-tabs nav-fill border-0" id="clientTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active custom-tab" id="clients-tab" data-toggle="tab" href="#clients" role="tab"> <i class="fas fa-users me-2"></i>Clients </a> </li> <li class="nav-item"> <a class="nav-link custom-tab" id="entities-tab" data-toggle="tab" href="#entities" role="tab"> <i class="fas fa-building me-2"></i>Entities </a> </li> </ul> <!-- Tabs Content --> <div class="tab-content mt-4" id="clientTabsContent"> <!-- Clients Tab --> <div class="tab-pane fade show active" id="clients" role="tabpanel"> <!-- Header --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-users text-primary me-2"></i>Clients Management </h2> <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" data-toggle="modal" data-target="#clientModal"> <i class="fas fa-plus-circle me-2"></i>Add New Client </button> </div> <!-- Clients Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover" id="clientsTable"> <thead class="bg-light"> <tr> <th>Client Code</th> <th>Name</th> <th>Created At</th> <th>Actions</th> </tr> </thead> <tbody id="clientsTableBody"> <!-- Populated by JavaScript --> </tbody> </table> </div> </div> </div> </div> <!-- Entities Tab --> <div class="tab-pane fade" id="entities" role="tabpanel"> <!-- Header --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-building text-primary me-2"></i>Entities Management </h2> <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" data-toggle="modal" data-target="#entityModal"> <i class="fas fa-plus-circle me-2"></i>Add New Entity </button> </div> <!-- Entities Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover" id="entitiesTable"> <thead class="bg-light"> <tr> <th>Name</th> <th>ICE Code</th> <th>Accounting Code</th> <th>City</th> <th>Phone</th> <th>Actions</th> </tr> </thead> <tbody id="entitiesTableBody"> <!-- Populated by JavaScript --> </tbody> </table> </div> </div> </div> </div> </div> </div> </div> </div> {% include 'client/components/client_modal.html' %} {% include 'client/components/entity_modal.html' %} <script> console.log('Initializing client management module...'); // Validation configurations const ValidationConfig = { clientCode: { minLength: 5, maxLength: 10, pattern: /^\d+$/, messages: { pattern: 'Only digits are allowed', minLength: 'Must be at least 5 digits', maxLength: 'Cannot exceed 10 digits' } }, iceCode: { length: 15, pattern: /^\d+$/, inputPattern: /[0-9]/, // Add this - for single digit validation messages: { pattern: 'Only digits are allowed', length: 'Must be exactly 15 digits' } }, accountingCode: { minLength: 5, maxLength: 7, pattern: /^\d+$/, // Just check for digits initially messages: { pattern: 'Only digits are allowed', minLength: 'Must be at least 5 digits', maxLength: 'Cannot exceed 7 digits' } }, name: { pattern: /^[a-zA-Z\s]+$/, messages: { pattern: 'Only letters and spaces allowed' } } }; class FormValidator { constructor(formId, config) { this.form = document.getElementById(formId); this.config = config; console.log(`Initializing validator for form: ${formId}`); this.setupValidation(); } setupValidation() { const inputs = this.form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { console.log(`Setting up validation for: ${input.id}`); this.setupInputValidation(input); }); } setupInputValidation(input) { const validationType = input.dataset.validate; const rules = this.config[validationType]; // Real-time validation input.addEventListener('input', (e) => { console.log(`Input event on ${input.id}`); this.validateInput(input, rules); }); // Blur validation input.addEventListener('blur', (e) => { console.log(`Blur event on ${input.id}`); this.validateInput(input, rules, true); }); // Prevent invalid characters input.addEventListener('keypress', (e) => { if (rules.pattern && !String.fromCharCode(e.charCode).match(rules.pattern)) { e.preventDefault(); } }); // Prevent invalid characters and enforce length input.addEventListener('keypress', (e) => { // Check max length for ICE code if (validationType === 'iceCode' && input.value.length >= 15) { e.preventDefault(); return; } // Special handling for first character of accounting code if (validationType === 'accountingCode') { if (input.value.length === 0 && e.key !== '3') { e.preventDefault(); return; } if (input.value.length >= 7) { e.preventDefault(); return; } } // Use inputPattern for digit validation if (!e.key.match(rules.inputPattern)) { e.preventDefault(); } }); } validateInput(input, rules, isBlur = false) { const value = input.value.trim(); let isValid = true; let message = ''; // Add validating class during check input.classList.add('is-validating'); // Required field validation if (input.required && !value) { isValid = false; message = 'This field is required'; this.updateValidationUI(input, false, message); return false; } // Special validation for accounting code if (input.dataset.validate === 'accountingCode') { if (!value.startsWith('3')) { isValid = false; message = 'Must start with 3'; } } // Uniqueness check for client_code and accounting_code on blur if (isBlur && (input.id === 'clientCode' || input.id === 'accountingCode' || input.id === 'iceCode')) { fetch(`/testapp/api/validate/${input.id}/${value}/`) .then(response => response.json()) .then(data => { if (!data.available) { isValid = false; message = `This ${input.id.replace('Code', ' code')} already exists`; this.updateValidationUI(input, false, message, true); } }) .catch(error => { console.error(`Error checking ${input.id} uniqueness:`, error); }); } // Pattern validation if (rules.pattern && !value.match(rules.pattern)) { isValid = false; message = rules.messages.pattern; } // Length validation if (rules.length && value.length !== rules.length) { isValid = false; message = rules.messages.length; } if (rules.minLength && value.length < rules.minLength) { isValid = false; message = rules.messages.minLength; } if (rules.maxLength && value.length > rules.maxLength) { isValid = false; message = rules.messages.maxLength; } // Update UI with validation result setTimeout(() => { input.classList.remove('is-validating'); this.updateValidationUI(input, isValid, message, isBlur); this.checkFormValidity(); }, 300); return isValid; } checkFormValidity() { let isValid = true; const formId = this.formId; const form = document.querySelector(`#${formId}:not(.d-none), #${formId}:not(.hide)`); if (!form) { console.debug(`Form ${formId} not found or not visible`); return true; } const inputs = form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { // Check for empty required fields if (input.required && !input.value.trim()) { isValid = false; return; } // Check for validation state if (input.classList.contains('is-invalid') || (input.required && !input.classList.contains('is-valid'))) { isValid = false; return; } }); // Update save button state const saveButton = form.querySelector('button[type="submit"]'); if (saveButton) { saveButton.disabled = !isValid; console.debug(`Form ${formId} validity: ${isValid}`); } return isValid; } updateValidationUI(input, isValid, message, isBlur) { const feedback = input.nextElementSibling; if (isValid) { input.classList.remove('is-invalid'); input.classList.add('is-valid'); if (feedback && feedback.classList.contains('invalid-feedback')) { feedback.classList.remove('show'); } } else if (isBlur || input.value.length > 0) { input.classList.remove('is-valid'); input.classList.add('is-invalid'); if (feedback) { feedback.textContent = message; feedback.classList.add('show'); } } } validateForm() { let isValid = true; const inputs = this.form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { const validationType = input.dataset.validate; const rules = this.config[validationType]; if (!this.validateInput(input, rules, true)) { isValid = false; } }); return isValid; } } // Client Management class class ClientManagement { constructor() { console.log('Initializing ClientManagement'); this.initializeValidators(); this.bindEvents(); this.loadClients(); this.loadEntities(); } initializeValidators() { this.clientValidator = new FormValidator('clientForm', ValidationConfig); this.entityValidator = new FormValidator('entityForm', ValidationConfig); } // Event Binding bindEvents() { $('#saveClientBtn').on('click', () => this.saveClient()); $('#saveEntityBtn').on('click', () => this.saveEntity()); // Reset forms on modal close $('#clientModal').on('hidden.bs.modal', () => this.resetForm('clientForm')); $('#entityModal').on('hidden.bs.modal', () => this.resetForm('entityForm')); // Tab change handlers $('#clientTabs a[data-toggle="tab"]').on('shown.bs.tab', (e) => { if (e.target.id === 'clients-tab') { this.loadClients(); } else { this.loadEntities(); } }); } // Client Operations async loadClients() { console.log('Loading clients...'); try { const response = await fetch('/testapp/api/clients/'); const data = await response.json(); const tbody = $('#clientsTableBody'); tbody.empty(); data.clients.forEach(client => { const formattedDate = this.formatDate(client.created_at); tbody.append(` <tr class="fade-in"> <td>${client.client_code}</td> <td>${client.name}</td> <td>${formattedDate}</td> <td> <button class="btn btn-sm btn-outline-primary me-2" onclick="window.clientManagement.editClient('${client.id}', '${client.name}', '${client.client_code}')"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-outline-danger me-2" onclick="window.clientManagement.deleteClient('${client.id}')"> <i class="fas fa-trash"></i> </button> <a href="/testapp/clients/${client.id}/card/" class="btn btn-sm btn-outline-info"> <i class="fas fa-chart-line me-1"></i> Sales Card </a> </td> </tr> `); console.log('Client loaded:', client, formattedDate); }); } catch (error) { console.error('Error loading clients:', error); this.showToast('Error', 'Failed to load clients'); } } async saveClient() { console.log('Saving client...'); if (!this.clientValidator.validateForm()) { console.log('Client form validation failed'); return; } const formData = { name: $('#clientName').val().trim(), client_code: $('#clientCode').val().trim() }; const id = $('#clientId').val(); const method = id ? 'PUT' : 'POST'; const url = id ? `/testapp/api/clients/${id}/update/` : '/testapp/api/clients/create/'; try { const response = await this.sendRequest(url, method, formData); if (response.ok) { const result = await response.json(); console.log('Client saved successfully:', result); $('#clientModal').modal('hide'); await this.loadClients(); this.showToast('Success', 'Client saved successfully'); } } catch (error) { console.error('Error saving client:', error); this.showToast('Error', error.message); } } editClient(id, name, client_code) { console.log('Editing client:', id); $('#clientId').val(id); $('#clientName').val(name); $('#clientCode').val(client_code); $('#clientModalTitle .title-text').text('Edit Client'); $('#clientModal').modal('show'); } async deleteClient(id) { if (!confirm('Are you sure you want to delete this client?')) { return; } try { const response = await this.sendRequest( `/testapp/api/clients/${id}/delete/`, 'DELETE' ); if (response.ok) { await this.loadClients(); this.showToast('Success', 'Client deleted successfully'); } } catch (error) { console.error('Error deleting client:', error); this.showToast('Error', error.message); } } // Entity Operations async loadEntities() { console.log('Loading entities...'); try { const response = await fetch('/testapp/api/entities/'); const data = await response.json(); const tbody = $('#entitiesTableBody'); tbody.empty(); data.entities.forEach(entity => { tbody.append(` <tr class="fade-in"> <td>${entity.name}</td> <td>${entity.ice_code}</td> <td>${entity.accounting_code}</td> <td>${entity.city || '-'}</td> <td>${entity.phone_number || '-'}</td> <td> <button class="btn btn-sm btn-outline-primary me-2" onclick="window.clientManagement.editEntity('${entity.id}', ${JSON.stringify(entity)})"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-outline-danger" onclick="window.clientManagement.deleteEntity('${entity.id}')"> <i class="fas fa-trash"></i> </button> </td> </tr> `); }); } catch (error) { console.error('Error loading entities:', error); this.showToast('Error', 'Failed to load entities'); } } async saveEntity() { console.log('Saving entity...'); if (!this.entityValidator.validateForm()) { console.log('Entity form validation failed'); return; } const formData = { name: $('#entityName').val().trim(), ice_code: $('#iceCode').val().trim(), accounting_code: $('#accountingCode').val().trim(), city: $('#city').val().trim(), phone_number: $('#phoneNumber').val().trim() }; const id = $('#entityId').val(); const method = id ? 'PUT' : 'POST'; const url = id ? `/testapp/api/entities/${id}/update/` : '/testapp/api/entities/create/'; try { const response = await this.sendRequest(url, method, formData); if (response.ok) { const result = await response.json(); console.log('Entity saved successfully:', result); $('#entityModal').modal('hide'); await this.loadEntities(); this.showToast('Success', 'Entity saved successfully'); } } catch (error) { console.error('Error saving entity:', error); this.showToast('Error', error.message); } } editEntity(id, entityData) { console.log('Editing entity:', id); $('#entityId').val(id); $('#entityName').val(entityData.name); $('#iceCode').val(entityData.ice_code); $('#accountingCode').val(entityData.accounting_code); $('#city').val(entityData.city || ''); $('#phoneNumber').val(entityData.phone_number || ''); $('#entityModalTitle .title-text').text('Edit Entity'); $('#entityModal').modal('show'); } async deleteEntity(id) { if (!confirm('Are you sure you want to delete this entity?')) { return; } try { const response = await this.sendRequest( `/testapp/api/entities/${id}/delete/`, 'DELETE' ); if (response.ok) { await this.loadEntities(); this.showToast('Success', 'Entity deleted successfully'); } } catch (error) { console.error('Error deleting entity:', error); this.showToast('Error', error.message); } } // Utility Methods formatDate(dateString) { if (!dateString) return '-'; try { const date = new Date(dateString); return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { console.error('Error formatting date:', e); return dateString; } } async sendRequest(url, method, data = null) { const options = { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }; if (data && method !== 'GET') { options.body = JSON.stringify(data); } const response = await fetch(url, options); if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Request failed'); } return response; } resetForm(formId) { console.log(`Resetting form: ${formId}`); const form = document.getElementById(formId); form.reset(); const inputs = form.querySelectorAll('.form-control'); inputs.forEach(input => { input.classList.remove('is-valid', 'is-invalid', 'is-validating'); const feedback = input.nextElementSibling; if (feedback) { feedback.classList.remove('show'); } }); // Reset titles if (formId === 'clientForm') { $('#clientModalTitle .title-text').text('Add New Client'); $('#clientId').val(''); } else { $('#entityModalTitle .title-text').text('Add New Entity'); $('#entityId').val(''); } } showToast(title, message) { // You can replace this with your preferred notification library alert(`${title}: ${message}`); } } // Initialize when document is ready document.addEventListener('DOMContentLoaded', () => { console.log('Initializing client management module'); window.clientManagement = new ClientManagement(); }); </script> {% endblock %}
+{% extends 'base.html' %} {% load static %} {% block extra_css %} <link rel="stylesheet" href="{% static 'css/client.css' %}"> {% endblock %} {% block content %} <div class="container-fluid px-4"> <div class="row mt-4"> <div class="col"> <!-- Tabs Navigation --> <ul class="nav nav-tabs nav-fill border-0" id="clientTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active custom-tab" id="clients-tab" data-toggle="tab" href="#clients" role="tab"> <i class="fas fa-users me-2"></i> Clients </a> </li> <li class="nav-item"> <a class="nav-link custom-tab" id="entities-tab" data-toggle="tab" href="#entities" role="tab"> <i class="fas fa-building me-2"></i> Entities </a> </li> </ul> <!-- Tabs Content --> <div class="tab-content mt-4" id="clientTabsContent"> <!-- Clients Tab --> <div class="tab-pane fade show active" id="clients" role="tabpanel"> <!-- Header --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-users text-primary me-2"></i> Clients Management </h2> <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" data-toggle="modal" data-target="#clientModal"> <i class="fas fa-plus-circle me-2"></i> Add New Client </button> </div> <!-- Clients Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover" id="clientsTable"> <thead class="bg-light"> <tr> <th>Client Code</th> <th>Name</th> <th>Created At</th> <th>Actions</th> </tr> </thead> <tbody id="clientsTableBody"> <!-- Populated by JavaScript --> </tbody> </table> </div> </div> </div> </div> <!-- Entities Tab --> <div class="tab-pane fade" id="entities" role="tabpanel"> <!-- Header --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-building text-primary me-2"></i> Entities Management </h2> <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" data-toggle="modal" data-target="#entityModal"> <i class="fas fa-plus-circle me-2"></i> Add New Entity </button> </div> <!-- Entities Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover" id="entitiesTable"> <thead class="bg-light"> <tr> <th>Name</th> <th>ICE Code</th> <th>Accounting Code</th> <th>City</th> <th>Phone</th> <th>Actions</th> </tr> </thead> <tbody id="entitiesTableBody"> <!-- Populated by JavaScript --> </tbody> </table> </div> </div> </div> </div> </div> </div> </div> </div> {% include 'client/components/client_modal.html' %} {% include 'client/components/entity_modal.html' %} <script> console.log('Initializing client management module...'); // Validation configurations const ValidationConfig = { clientCode: { minLength: 5, maxLength: 10, pattern: /^\d+$/, messages: { pattern: 'Only digits are allowed', minLength: 'Must be at least 5 digits', maxLength: 'Cannot exceed 10 digits' } }, iceCode: { length: 15, pattern: /^\d+$/, inputPattern: /[0-9]/, // Add this - for single digit validation messages: { pattern: 'Only digits are allowed', length: 'Must be exactly 15 digits' } }, accountingCode: { minLength: 5, maxLength: 7, pattern: /^\d+$/, // Just check for digits initially messages: { pattern: 'Only digits are allowed', minLength: 'Must be at least 5 digits', maxLength: 'Cannot exceed 7 digits' } }, name: { pattern: /^[a-zA-Z\s]+$/, messages: { pattern: 'Only letters and spaces allowed' } } }; class FormValidator { constructor(formId, config) { this.form = document.getElementById(formId); this.config = config; console.log(`Initializing validator for form: ${formId}`); this.setupValidation(); } setupValidation() { const inputs = this.form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { console.log(`Setting up validation for: ${input.id}`); this.setupInputValidation(input); }); } setupInputValidation(input) { const validationType = input.dataset.validate; const rules = this.config[validationType]; // Real-time validation input.addEventListener('input', (e) => { console.log(`Input event on ${input.id}`); this.validateInput(input, rules); }); // Blur validation input.addEventListener('blur', (e) => { console.log(`Blur event on ${input.id}`); this.validateInput(input, rules, true); }); // Prevent invalid characters input.addEventListener('keypress', (e) => { if (rules.pattern && !String.fromCharCode(e.charCode).match(rules.pattern)) { e.preventDefault(); } }); // Prevent invalid characters and enforce length input.addEventListener('keypress', (e) => { // Check max length for ICE code if (validationType === 'iceCode' && input.value.length >= 15) { e.preventDefault(); return; } // Special handling for first character of accounting code if (validationType === 'accountingCode') { if (input.value.length === 0 && e.key !== '3') { e.preventDefault(); return; } if (input.value.length >= 7) { e.preventDefault(); return; } } // Use inputPattern for digit validation if (!e.key.match(rules.inputPattern)) { e.preventDefault(); } }); } validateInput(input, rules, isBlur = false) { const value = input.value.trim(); let isValid = true; let message = ''; // Add validating class during check input.classList.add('is-validating'); // Required field validation if (input.required && !value) { isValid = false; message = 'This field is required'; this.updateValidationUI(input, false, message); return false; } // Special validation for accounting code if (input.dataset.validate === 'accountingCode') { if (!value.startsWith('3')) { isValid = false; message = 'Must start with 3'; } } // Uniqueness check for client_code and accounting_code on blur if (isBlur && (input.id === 'clientCode' || input.id === 'accountingCode' || input.id === 'iceCode')) { fetch(`/testapp/api/validate/${input.id}/${value}/`) .then(response => response.json()) .then(data => { if (!data.available) { isValid = false; message = `This ${input.id.replace('Code', ' code')} already exists`; this.updateValidationUI(input, false, message, true); } }) .catch(error => { console.error(`Error checking ${input.id} uniqueness:`, error); }); } // Pattern validation if (rules.pattern && !value.match(rules.pattern)) { isValid = false; message = rules.messages.pattern; } // Length validation if (rules.length && value.length !== rules.length) { isValid = false; message = rules.messages.length; } if (rules.minLength && value.length < rules.minLength) { isValid = false; message = rules.messages.minLength; } if (rules.maxLength && value.length > rules.maxLength) { isValid = false; message = rules.messages.maxLength; } // Update UI with validation result setTimeout(() => { input.classList.remove('is-validating'); this.updateValidationUI(input, isValid, message, isBlur); this.checkFormValidity(); }, 300); return isValid; } checkFormValidity() { let isValid = true; const formId = this.formId; const form = document.querySelector(`#${formId}:not(.d-none), #${formId}:not(.hide)`); if (!form) { console.debug(`Form ${formId} not found or not visible`); return true; } const inputs = form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { // Check for empty required fields if (input.required && !input.value.trim()) { isValid = false; return; } // Check for validation state if (input.classList.contains('is-invalid') || (input.required && !input.classList.contains('is-valid'))) { isValid = false; return; } }); // Update save button state const saveButton = form.querySelector('button[type="submit"]'); if (saveButton) { saveButton.disabled = !isValid; console.debug(`Form ${formId} validity: ${isValid}`); } return isValid; } updateValidationUI(input, isValid, message, isBlur) { const feedback = input.nextElementSibling; if (isValid) { input.classList.remove('is-invalid'); input.classList.add('is-valid'); if (feedback && feedback.classList.contains('invalid-feedback')) { feedback.classList.remove('show'); } } else if (isBlur || input.value.length > 0) { input.classList.remove('is-valid'); input.classList.add('is-invalid'); if (feedback) { feedback.textContent = message; feedback.classList.add('show'); } } } validateForm() { let isValid = true; const inputs = this.form.querySelectorAll('input[data-validate]'); inputs.forEach(input => { const validationType = input.dataset.validate; const rules = this.config[validationType]; if (!this.validateInput(input, rules, true)) { isValid = false; } }); return isValid; } } // Client Management class class ClientManagement { constructor() { console.log('Initializing ClientManagement'); this.initializeValidators(); this.bindEvents(); this.loadClients(); this.loadEntities(); } initializeValidators() { this.clientValidator = new FormValidator('clientForm', ValidationConfig); this.entityValidator = new FormValidator('entityForm', ValidationConfig); } // Event Binding bindEvents() { $('#saveClientBtn').on('click', () => this.saveClient()); $('#saveEntityBtn').on('click', () => this.saveEntity()); // Reset forms on modal close $('#clientModal').on('hidden.bs.modal', () => this.resetForm('clientForm')); $('#entityModal').on('hidden.bs.modal', () => this.resetForm('entityForm')); // Tab change handlers $('#clientTabs a[data-toggle="tab"]').on('shown.bs.tab', (e) => { if (e.target.id === 'clients-tab') { this.loadClients(); } else { this.loadEntities(); } }); } // Client Operations async loadClients() { console.log('Loading clients...'); try { const response = await fetch('/testapp/api/clients/'); const data = await response.json(); const tbody = $('#clientsTableBody'); tbody.empty(); data.clients.forEach(client => { const formattedDate = this.formatDate(client.created_at); tbody.append(` <tr class="fade-in"> <td>${client.client_code}</td> <td>${client.name}</td> <td>${formattedDate}</td> <td> <button class="btn btn-sm btn-outline-primary me-2" onclick="window.clientManagement.editClient('${client.id}', '${client.name}', '${client.client_code}')"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-outline-danger me-2" onclick="window.clientManagement.deleteClient('${client.id}')"> <i class="fas fa-trash"></i> </button> <a href="/testapp/clients/${client.id}/card/" class="btn btn-sm btn-outline-info"> <i class="fas fa-chart-line me-1"></i> Sales Card </a> </td> </tr> `); console.log('Client loaded:', client, formattedDate); }); } catch (error) { console.error('Error loading clients:', error); this.showToast('Error', 'Failed to load clients'); } } async saveClient() { console.log('Saving client...'); if (!this.clientValidator.validateForm()) { console.log('Client form validation failed'); return; } const formData = { name: $('#clientName').val().trim(), client_code: $('#clientCode').val().trim() }; const id = $('#clientId').val(); const method = id ? 'PUT' : 'POST'; const url = id ? `/testapp/api/clients/${id}/update/` : '/testapp/api/clients/create/'; try { const response = await this.sendRequest(url, method, formData); if (response.ok) { const result = await response.json(); console.log('Client saved successfully:', result); $('#clientModal').modal('hide'); await this.loadClients(); this.showToast('Success', 'Client saved successfully'); } } catch (error) { console.error('Error saving client:', error); this.showToast('Error', error.message); } } editClient(id, name, client_code) { console.log('Editing client:', id); $('#clientId').val(id); $('#clientName').val(name); $('#clientCode').val(client_code); $('#clientModalTitle .title-text').text('Edit Client'); $('#clientModal').modal('show'); } async deleteClient(id) { if (!confirm('Are you sure you want to delete this client?')) { return; } try { const response = await this.sendRequest( `/testapp/api/clients/${id}/delete/`, 'DELETE' ); if (response.ok) { await this.loadClients(); this.showToast('Success', 'Client deleted successfully'); } } catch (error) { console.error('Error deleting client:', error); this.showToast('Error', error.message); } } // Entity Operations async loadEntities() { console.log('Loading entities...'); try { const response = await fetch('/testapp/api/entities/'); const data = await response.json(); const tbody = $('#entitiesTableBody'); tbody.empty(); data.entities.forEach(entity => { tbody.append(` <tr class="fade-in"> <td>${entity.name}</td> <td>${entity.ice_code}</td> <td>${entity.accounting_code}</td> <td>${entity.city || '-'}</td> <td>${entity.phone_number || '-'}</td> <td> <button class="btn btn-sm btn-outline-primary me-2" onclick="window.clientManagement.editEntity('${entity.id}', ${JSON.stringify(entity)})"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-outline-danger" onclick="window.clientManagement.deleteEntity('${entity.id}')"> <i class="fas fa-trash"></i> </button> </td> </tr> `); }); } catch (error) { console.error('Error loading entities:', error); this.showToast('Error', 'Failed to load entities'); } } async saveEntity() { console.log('Saving entity...'); if (!this.entityValidator.validateForm()) { console.log('Entity form validation failed'); return; } const formData = { name: $('#entityName').val().trim(), ice_code: $('#iceCode').val().trim(), accounting_code: $('#accountingCode').val().trim(), city: $('#city').val().trim(), phone_number: $('#phoneNumber').val().trim() }; const id = $('#entityId').val(); const method = id ? 'PUT' : 'POST'; const url = id ? `/testapp/api/entities/${id}/update/` : '/testapp/api/entities/create/'; try { const response = await this.sendRequest(url, method, formData); if (response.ok) { const result = await response.json(); console.log('Entity saved successfully:', result); $('#entityModal').modal('hide'); await this.loadEntities(); this.showToast('Success', 'Entity saved successfully'); } } catch (error) { console.error('Error saving entity:', error); this.showToast('Error', error.message); } } editEntity(id, entityData) { console.log('Editing entity:', id); $('#entityId').val(id); $('#entityName').val(entityData.name); $('#iceCode').val(entityData.ice_code); $('#accountingCode').val(entityData.accounting_code); $('#city').val(entityData.city || ''); $('#phoneNumber').val(entityData.phone_number || ''); $('#entityModalTitle .title-text').text('Edit Entity'); $('#entityModal').modal('show'); } async deleteEntity(id) { if (!confirm('Are you sure you want to delete this entity?')) { return; } try { const response = await this.sendRequest( `/testapp/api/entities/${id}/delete/`, 'DELETE' ); if (response.ok) { await this.loadEntities(); this.showToast('Success', 'Entity deleted successfully'); } } catch (error) { console.error('Error deleting entity:', error); this.showToast('Error', error.message); } } // Utility Methods formatDate(dateString) { if (!dateString) return '-'; try { const date = new Date(dateString); return date.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { console.error('Error formatting date:', e); return dateString; } } async sendRequest(url, method, data = null) { const options = { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }; if (data && method !== 'GET') { options.body = JSON.stringify(data); } const response = await fetch(url, options); if (!response.ok) { const error = await response.json(); throw new Error(error.error || 'Request failed'); } return response; } resetForm(formId) { console.log(`Resetting form: ${formId}`); const form = document.getElementById(formId); form.reset(); const inputs = form.querySelectorAll('.form-control'); inputs.forEach(input => { input.classList.remove('is-valid', 'is-invalid', 'is-validating'); const feedback = input.nextElementSibling; if (feedback) { feedback.classList.remove('show'); } }); // Reset titles if (formId === 'clientForm') { $('#clientModalTitle .title-text').text('Add New Client'); $('#clientId').val(''); } else { $('#entityModalTitle .title-text').text('Add New Entity'); $('#entityId').val(''); } } showToast(title, message) { // You can replace this with your preferred notification library alert(`${title}: ${message}`); } } // Initialize when document is ready document.addEventListener('DOMContentLoaded', () => { console.log('Initializing client management module'); window.clientManagement = new ClientManagement(); }); </script> {% endblock %}
 ```
 
 # templates/client/components/client_modal.html
 
 ```html
-<!-- Client Modal --> <div class="modal fade" id="clientModal" tabindex="-1" role="dialog"> <div class="modal-dialog modal-dialog-centered" role="document"> <div class="modal-content"> <div class="modal-header bg-primary text-white"> <h5 class="modal-title" id="clientModalTitle"> <i class="fas fa-user-plus me-2"></i> <span class="title-text">Add New Client</span> </h5> <button type="button" class="close text-white" data-dismiss="modal"> <span>&times;</span> </button> </div> <div class="modal-body"> <form id="clientForm" class="needs-validation" novalidate> {% csrf_token %} <input type="hidden" id="clientId"> <!-- Name Field --> <div class="form-group mb-4"> <label for="clientName" class="form-label"> <i class="fas fa-signature me-2"></i>Client Name </label> <input type="text" class="form-control" id="clientName" data-validate="name" required> <div class="invalid-feedback"></div> </div> <!-- Client Code Field --> <div class="form-group mb-4"> <label for="clientCode" class="form-label"> <i class="fas fa-hashtag me-2"></i>Client Code </label> <input type="text" class="form-control" id="clientCode" data-validate="clientCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Enter a unique code (5-10 digits) </small> </div> </form> </div> <div class="modal-footer bg-light"> <button type="button" class="btn btn-secondary" data-dismiss="modal"> <i class="fas fa-times me-2"></i>Cancel </button> <button type="button" class="btn btn-primary" id="saveClientBtn"> <i class="fas fa-save me-2"></i>Save Client </button> </div> </div> </div> </div>
+<!-- Client Modal --> <div class="modal fade" id="clientModal" tabindex="-1" role="dialog"> <div class="modal-dialog modal-dialog-centered" role="document"> <div class="modal-content"> <div class="modal-header bg-primary text-white"> <h5 class="modal-title" id="clientModalTitle"> <i class="fas fa-user-plus me-2"></i> <span class="title-text"> Add New Client</span> </h5> <button type="button" class="close text-white" data-dismiss="modal"> <span>&times;</span> </button> </div> <div class="modal-body"> <form id="clientForm" class="needs-validation" novalidate> {% csrf_token %} <input type="hidden" id="clientId"> <!-- Name Field --> <div class="form-group mb-4"> <label for="clientName" class="form-label"> <i class="fas fa-signature me-2"></i> Client Name </label> <input type="text" class="form-control" id="clientName" data-validate="name" required> <div class="invalid-feedback"></div> </div> <!-- Client Code Field --> <div class="form-group mb-4"> <label for="clientCode" class="form-label"> <i class="fas fa-hashtag me-2"></i> Client Code </label> <input type="text" class="form-control" id="clientCode" data-validate="clientCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Enter a unique code (5-10 digits) </small> </div> </form> </div> <div class="modal-footer bg-light"> <button type="button" class="btn btn-secondary" data-dismiss="modal"> <i class="fas fa-times me-2"></i> Cancel </button> <button type="button" class="btn btn-primary" id="saveClientBtn"> <i class="fas fa-save me-2"></i> Save Client </button> </div> </div> </div> </div>
 ```
 
 # templates/client/components/entity_modal.html
 
 ```html
-<!-- Entity Modal --> <div class="modal fade" id="entityModal" tabindex="-1" role="dialog"> <div class="modal-dialog modal-dialog-centered" role="document"> <div class="modal-content"> <div class="modal-header bg-primary text-white"> <h5 class="modal-title" id="entityModalTitle"> <i class="fas fa-building me-2"></i> <span class="title-text">Add New Entity</span> </h5> <button type="button" class="close text-white" data-dismiss="modal"> <span>&times;</span> </button> </div> <div class="modal-body"> <form id="entityForm" class="needs-validation" novalidate> {% csrf_token %} <input type="hidden" id="entityId"> <!-- Name Field --> <div class="form-group mb-4"> <label for="entityName" class="form-label"> <i class="fas fa-signature me-2"></i>Entity Name </label> <input type="text" class="form-control" id="entityName" data-validate="name" required> <div class="invalid-feedback"></div> </div> <!-- ICE Code Field --> <div class="form-group mb-4"> <label for="iceCode" class="form-label"> <i class="fas fa-fingerprint me-2"></i>ICE Code </label> <input type="text" class="form-control" id="iceCode" data-validate="iceCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Must be exactly 15 digits </small> </div> <!-- Accounting Code Field --> <div class="form-group mb-4"> <label for="accountingCode" class="form-label"> <i class="fas fa-calculator me-2"></i>Accounting Code </label> <input type="text" class="form-control" id="accountingCode" data-validate="accountingCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Must start with 3 and be 5-7 digits long </small> </div> <!-- Optional Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group mb-4"> <label for="city" class="form-label"> <i class="fas fa-city me-2"></i>City </label> <input type="text" class="form-control" id="city"> </div> </div> <div class="col-md-6"> <div class="form-group mb-4"> <label for="phoneNumber" class="form-label"> <i class="fas fa-phone me-2"></i>Phone Number </label> <input type="tel" class="form-control" id="phoneNumber"> </div> </div> </div> </form> </div> <div class="modal-footer bg-light"> <button type="button" class="btn btn-secondary" data-dismiss="modal"> <i class="fas fa-times me-2"></i>Cancel </button> <button type="button" class="btn btn-primary" id="saveEntityBtn"> <i class="fas fa-save me-2"></i>Save Entity </button> </div> </div> </div> </div>
+<!-- Entity Modal --> <div class="modal fade" id="entityModal" tabindex="-1" role="dialog"> <div class="modal-dialog modal-dialog-centered" role="document"> <div class="modal-content"> <div class="modal-header bg-primary text-white"> <h5 class="modal-title" id="entityModalTitle"> <i class="fas fa-building me-2"></i> <span class="title-text"> Add New Entity</span> </h5> <button type="button" class="close text-white" data-dismiss="modal"> <span>&times;</span> </button> </div> <div class="modal-body"> <form id="entityForm" class="needs-validation" novalidate> {% csrf_token %} <input type="hidden" id="entityId"> <!-- Name Field --> <div class="form-group mb-4"> <label for="entityName" class="form-label"> <i class="fas fa-signature me-2"></i> Entity Name </label> <input type="text" class="form-control" id="entityName" data-validate="name" required> <div class="invalid-feedback"></div> </div> <!-- ICE Code Field --> <div class="form-group mb-4"> <label for="iceCode" class="form-label"> <i class="fas fa-fingerprint me-2"></i> ICE Code </label> <input type="text" class="form-control" id="iceCode" data-validate="iceCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Must be exactly 15 digits </small> </div> <!-- Accounting Code Field --> <div class="form-group mb-4"> <label for="accountingCode" class="form-label"> <i class="fas fa-calculator me-2"></i> Accounting Code </label> <input type="text" class="form-control" id="accountingCode" data-validate="accountingCode" required> <div class="invalid-feedback"></div> <small class="text-muted"> Must start with 3 and be 5-7 digits long </small> </div> <!-- Optional Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group mb-4"> <label for="city" class="form-label"> <i class="fas fa-city me-2"></i> City </label> <input type="text" class="form-control" id="city"> </div> </div> <div class="col-md-6"> <div class="form-group mb-4"> <label for="phoneNumber" class="form-label"> <i class="fas fa-phone me-2"></i> Phone Number </label> <input type="tel" class="form-control" id="phoneNumber"> </div> </div> </div> </form> </div> <div class="modal-footer bg-light"> <button type="button" class="btn btn-secondary" data-dismiss="modal"> <i class="fas fa-times me-2"></i> Cancel </button> <button type="button" class="btn btn-primary" id="saveEntityBtn"> <i class="fas fa-save me-2"></i> Save Entity </button> </div> </div> </div> </div>
 ```
 
 # templates/client/sale_list.html
 
 ```html
-{% extends 'base.html' %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Client Sales</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#saleModal"> <i class="fas fa-plus"></i> New Sale </button> </div> <!-- Sales Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Amount</th> <th>Notes</th> </tr> </thead> <tbody> {% for sale in sales %} <tr> <td>{{ sale.date|date:"Y-m-d" }}</td> <td>{{ sale.client.name }}</td> <td class="text-right">{{ sale.amount|floatformat:2 }}</td> <td>{{ sale.notes }}</td> </tr> {% empty %} <tr> <td colspan="4" class="text-center">No sales recorded yet</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Sale Modal --> <div class="modal fade" id="saleModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Record New Sale</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="saleForm"> {% csrf_token %} <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" placeholder="Search client..." required> <input type="hidden" id="client_id" name="client" required> </div> <div class="form-group"> <label for="date">Date</label> <input type="date" class="form-control" id="date" name="date" value="{% now 'Y-m-d' %}" required> </div> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01" required> </div> <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2"></textarea> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveSale">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Handle form submission $('#saveSale').click(function() { const form = $('#saleForm'); $.ajax({ url: "{% url 'create-sale' %}", method: 'POST', data: form.serialize(), success: function(response) { $('#saleModal').modal('hide'); showToast('Sale recorded successfully'); location.reload(); }, error: function(xhr) { showToast(xhr.responseJSON.message, 'error'); } }); }); }); </script> {% endblock %}
+{% extends 'base.html' %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Client Sales</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#saleModal"> <i class="fas fa-plus"></i> New Sale </button> </div> <!-- Sales Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Type</th> <th>Amount</th> <th>Notes</th> </tr> </thead> <tbody> {% for sale in sales %} <tr> <td>{{ sale.date|date:"Y-m-d" }}</td> <td>{{ sale.client.name }}</td> <td>{{ sale.get_sale_type_display }}</td> <td class="text-right">{{ sale.amount|floatformat:2 }}</td> <td>{{ sale.notes }}</td> </tr> {% empty %} <tr> <td colspan="4" class="text-center">No sales recorded yet</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Sale Modal --> <div class="modal fade" id="saleModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Record New Sale</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="saleForm"> {% csrf_token %} <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" placeholder="Search client..." required> <input type="hidden" id="client_id" name="client" required> </div> <div class="form-group"> <label for="date">Date</label> <input type="date" class="form-control" id="date" name="date" value="{% now 'Y-m-d' %}" required> </div> <div class="form-group"> <label for="sale_type">Sale Type</label> <select class="form-control" id="sale_type" name="sale_type" required> <option value="BRICKS">Bricks</option> <option value="TRANSPORT">Transport</option> </select> </div> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" step="0.01" min="0.01" required> </div> <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2"></textarea> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveSale">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Handle form submission $('#saveSale').click(function() { const form = $('#saleForm'); $.ajax({ url: "{% url 'create-sale' %}", method: 'POST', data: form.serialize(), success: function(response) { $('#saleModal').modal('hide'); showToast('Sale recorded successfully'); location.reload(); }, error: function(xhr) { showToast(xhr.responseJSON.message, 'error'); } }); }); }); </script> {% endblock %}
 ```
 
 # templates/home.html
@@ -1111,13 +1458,13 @@ def update_checker_status(sender, instance, **kwargs):
 # templates/presentation/available_receipts.html
 
 ```html
-<div class="receipt-container"> <!-- Summary info --> <div class="alert alert-info"> <strong>Selected:</strong> <span id="selectedCount">0</span> receipts <strong class="ml-3">Total Amount:</strong> <span id="selectedAmount">0.00</span> MAD </div> <!-- Receipts table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input" id="selectAll"> <label class="custom-control-label" for="selectAll"></label> </div> </th> <th>Reference</th> <th>Entity</th> <th>Issue Date</th> <th>Due Date</th> <th>Amount</th> <th>Days to Due</th> </tr> </thead> <tbody> {% for receipt in receipts %} <tr> <td> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input receipt-checkbox" id="receipt{{ receipt.id }}" value="{{ receipt.id }}" data-amount="{{ receipt.amount }}"> <label class="custom-control-label" for="receipt{{ receipt.id }}"></label> </div> </td> <td>{{ receipt.get_receipt_number }}</td> <td>{{ receipt.entity.name }}</td> <td>{{ receipt.operation_date|date:"Y-m-d" }}</td> <td>{{ receipt.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td>{{ receipt.due_date|timeuntil }}</td> </tr> {% empty %} <tr> <td colspan="7" class="text-center"> No available receipts found in portfolio status </td> </tr> {% endfor %} </tbody> </table> </div> </div> <script> $(document).ready(function() { // Handle select all checkbox $('#selectAll').change(function() { $('.receipt-checkbox').prop('checked', $(this).prop('checked')); updateSelection(); }); // Handle individual checkboxes $('.receipt-checkbox').change(function() { updateSelection(); // Update select all checkbox state $('#selectAll').prop('checked', $('.receipt-checkbox').length === $('.receipt-checkbox:checked').length); }); function updateSelection() { const selected = $('.receipt-checkbox:checked'); $('#selectedCount').text(selected.length); const totalAmount = selected.toArray() .reduce((sum, checkbox) => sum + parseFloat($(checkbox).data('amount')), 0); $('#selectedAmount').text(totalAmount.toFixed(2)); // Enable/disable save button based on selection $('#savePresentation').prop('disabled', selected.length === 0); } }); </script>
+<div class="receipt-container"> <!-- Summary info --> <div class="alert alert-info"> <strong>Selected:</strong> <span id="selectedCount">0</span> receipts <strong class="ml-3">Total Amount:</strong> <span id="selectedAmount">0.00</span> MAD </div> <!-- Receipts table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input" id="selectAll"> <label class="custom-control-label" for="selectAll"></label> </div> </th> <th>Reference</th> <th>Entity</th> <th>Issue Date</th> <th>Due Date</th> <th>Amount</th> <th>Days to Due</th> </tr> </thead> <tbody> {% for receipt in receipts %} <!-- In available_receipts.html --> <tr> <td> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input receipt-checkbox" id="receipt{{ receipt.id }}" value="{{ receipt.id }}" data-amount="{{ receipt.amount }}"> <label class="custom-control-label" for="receipt{{ receipt.id }}"></label> </div> </td> <td>{{ receipt.get_receipt_number }}</td> <td>{{ receipt.entity.name }}</td> <td>{{ receipt.operation_date|date:"Y-m-d" }}</td> <td>{{ receipt.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> <span class="badge badge-{{ receipt.status|lower }}"> {{ receipt.get_status_display }} </span> {% if receipt.status == 'UNPAID' and receipt.last_presentation_date %} <br> <small class="text-muted"> Previously presented on {{ receipt.last_presentation_date|date:"Y-m-d" }} </small> {% endif %} </td> </tr> {% endfor %} </tbody> </table> </div> </div> <script> $(document).ready(function() { // Handle select all checkbox $('#selectAll').change(function() { $('.receipt-checkbox').prop('checked', $(this).prop('checked')); updateSelection(); }); // Handle individual checkboxes $('.receipt-checkbox').change(function() { updateSelection(); // Update select all checkbox state $('#selectAll').prop('checked', $('.receipt-checkbox').length === $('.receipt-checkbox:checked').length); }); function updateSelection() { const selected = $('.receipt-checkbox:checked'); $('#selectedCount').text(selected.length); const totalAmount = selected.toArray() .reduce((sum, checkbox) => sum + parseFloat($(checkbox).data('amount')), 0); $('#selectedAmount').text(totalAmount.toFixed(2)); // Enable/disable save button based on selection $('#savePresentation').prop('disabled', selected.length === 0); } }); </script>
 ```
 
 # templates/presentation/presentation_detail_modal.html
 
 ```html
-{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div id="presentation-container" data-presentation-id="{{ presentation.id }}"> <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6 d-flex flex-column"> {% if presentation.status == 'pending' %} <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required> </div> <div class="form-group"> <label>Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Presented</option> <option value="discounted">Discounted</option> <option value="rejected">Rejected</option> </select> </div> {% else %} <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> {% endif %} <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> {% if presentation.status == 'presented' %} <th>New Status</th> {% endif %} </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small> {% else %} {{ receipt.lcn.lcn_number }} <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %} <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small> {% endif %} {% if receipt.checkreceipt.compensation_info %} <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small> {% endif %} {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %} <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small> {% endif %} {% if receipt.lcn.compensation_info %} <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small> {% endif %} {% endif %} </td> {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <td> <select class="form-control form-control-sm receipt-status" data-receipt-id="{{ receipt.id }}" {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}> <option value="">Pending</option> <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option> <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option> </select> </td> {% endif %} </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="5" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td colspan="2"></td> </tr> </tfoot> </table> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')"> Update Status </button> {% endif %} {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')"> Update Statuses </button> {% endif %} </div> <!-- Unpaid Cause Modal --> <div class="modal fade" id="unpaidCauseModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Rejection Cause</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <div class="form-group"> <label for="rejectionCause">Select Cause</label> <select class="form-control" id="rejectionCause" required> <option value="">Select a cause...</option> {% for cause, label in rejection_causes %} <option value="{{ cause }}">{{ label }}</option> {% endfor %} </select> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="confirmCause">Confirm</button> </div> </div> </div> </div> </div> <script> const presentationId = '{{ presentation.id }}'; console.log("Presentation ID:", presentationId); function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } const data = { bank_reference: bankRef, status: $('#presentationStatus').val() }; $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify(data), success: function(response) { location.reload(); }, error: function(xhr) { showError(xhr.responseJSON?.message || 'Update failed'); } }); } // Handle receipt status changes function updateReceiptStatuses(presentationId) { console.log('Updating receipt statuses for presentation:', presentationId); const receiptStatuses = {}; let hasChanges = false; let pendingUnpaidStatus = null; $('.receipt-status').each(function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const status = $select.val(); if (status === 'unpaid') { pendingUnpaidStatus = { receiptId: receiptId, $select: $select }; return false; // Break the loop } if (status) { receiptStatuses[receiptId] = status; hasChanges = true; } }); if (pendingUnpaidStatus) { $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus); return; } if (!hasChanges) { showToast('No status changes to update', 'info'); return; } submitStatusUpdates(presentationId, receiptStatuses); } function submitStatusUpdates(presentationId, receiptStatuses) { $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_statuses: receiptStatuses }), success: function(response) { console.log('Status update response:', response); Object.keys(receiptStatuses).forEach(receiptId => { const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`); $select.prop('disabled', true); $select.closest('tr').addClass('updated-row'); }); showToast('Receipt statuses updated successfully', 'success'); location.reload(); }, error: function(xhr) { console.error('Status update failed:', xhr.responseText); showToast('Failed to update statuses', 'error'); } }); } // Handler for unpaid cause confirmation $('#confirmCause').click(function() { console.log('Confirming unpaid cause'); const cause = $('#rejectionCause').val(); if (!cause) { showError('Please select a rejection cause'); return; } const pendingStatus = $('#unpaidCauseModal').data('pendingStatus'); const receiptStatuses = { [pendingStatus.receiptId]: { status: 'unpaid', cause: cause } }; submitStatusUpdates(presentationId, receiptStatuses); $('#unpaidCauseModal').modal('hide'); }); function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .html(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', function() { container.remove(); }); } </script>
+{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div id="presentation-container" data-presentation-id="{{ presentation.id }}"> <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6 d-flex flex-column"> {% if presentation.status == 'pending' %} <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required> </div> <div class="form-group"> <label>Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Presented</option> <option value="discounted">Discounted</option> <option value="rejected">Rejected</option> </select> </div> {% else %} <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> {% endif %} <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> {% if presentation.status == 'presented' %} <th>New Status</th> {% endif %} </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small> {% else %} {{ receipt.lcn.lcn_number }} <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %} <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small> {% endif %} {% if receipt.checkreceipt.compensation_info %} <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small> {% endif %} {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %} <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small> {% endif %} {% if receipt.lcn.compensation_info %} <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small> {% endif %} {% endif %} </td> {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <td> <select class="form-control form-control-sm receipt-status" data-receipt-id="{{ receipt.id }}" {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}> <option value="">Pending</option> <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option> <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option> </select> </td> {% endif %} </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="5" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td colspan="2"></td> </tr> </tfoot> </table> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')"> Update Status </button> {% endif %} {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')"> Update Statuses </button> {% endif %} </div> <!-- Unpaid Cause Modal --> <div class="modal fade" id="unpaidCauseModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Rejection Cause</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <div class="form-group"> <label for="rejectionCause">Select Cause</label> <select class="form-control" id="rejectionCause" required> <option value="">Select a cause...</option> {% for cause, label in rejection_causes %} <option value="{{ cause }}">{{ label }}</option> {% endfor %} </select> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="confirmCause">Confirm</button> </div> </div> </div> </div> </div> <script> const presentationId = '{{ presentation.id }}'; console.log("Presentation ID:", presentationId); function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } const data = { bank_reference: bankRef, status: $('#presentationStatus').val() }; $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify(data), success: function(response) { location.reload(); }, error: function(xhr) { showError(xhr.responseJSON?.message || 'Update failed'); } }); } // Handle receipt status changes // Handle receipt status updates function updateReceiptStatuses(presentationId) { console.log('Updating receipt statuses for presentation:', presentationId); const receiptStatuses = {}; let hasChanges = false; let pendingUnpaidStatus = null; // Debug info for all receipt status selects $('.receipt-status').each(function() { const $select = $(this); console.log('Found receipt status select:', { receiptId: $select.data('receipt-id'), currentValue: $select.val(), disabled: $select.prop('disabled'), options: Array.from($select.find('option')).map(opt => ({ value: opt.value, text: opt.text, selected: opt.selected })) }); }); $('.receipt-status').each(function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const status = $select.val(); console.log('Processing receipt:', { receiptId: receiptId, newStatus: status, previousStatus: $select.data('previous-status') }); if (status === 'unpaid') { pendingUnpaidStatus = { receiptId: receiptId, $select: $select }; console.log('Found pending unpaid status:', pendingUnpaidStatus); return false; // Break the loop } if (status) { receiptStatuses[receiptId] = status; hasChanges = true; console.log(`Adding status update for receipt ${receiptId}:`, status); } }); if (pendingUnpaidStatus) { console.log('Showing unpaid cause modal for:', pendingUnpaidStatus); $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus); return; } if (!hasChanges) { console.log('No status changes detected'); showToast('No status changes to update', 'info'); return; } console.log('Submitting status updates:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); } function submitStatusUpdates(presentationId, receiptStatuses) { console.log('Submitting status updates:', { presentationId: presentationId, statuses: receiptStatuses, url: `/testapp/presentations/${presentationId}/edit/` }); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value, 'Content-Type': 'application/json' }, data: JSON.stringify({ receipt_statuses: receiptStatuses }), success: function(response) { console.log('Status update response:', response); // Update UI to reflect changes Object.entries(receiptStatuses).forEach(([receiptId, status]) => { const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`); console.log(`Updating UI for receipt ${receiptId}:`, { status: status, select: $select.length ? 'found' : 'not found' }); if ($select.length) { $select.prop('disabled', true) .val(status); // Update the badge in the status column const $statusCell = $select.closest('tr').find('td:nth-last-child(2)'); const statusClass = status === 'paid' ? 'badge-success' : 'badge-danger'; $statusCell.html(`<span class="badge ${statusClass}">${status.toUpperCase()}</span>`); } }); showToast('Receipt statuses updated successfully', 'success'); // Reload after a short delay to ensure UI is updated setTimeout(() => { location.reload(); }, 1000); }, error: function(xhr) { console.error('Status update failed:', { status: xhr.status, response: xhr.responseText }); try { const error = JSON.parse(xhr.responseText); showToast(error.message || 'Failed to update statuses', 'error'); } catch (e) { showToast('Failed to update statuses', 'error'); } } }); } // Handle unpaid cause confirmation $('#confirmCause').click(function() { console.log('Confirming unpaid cause'); const cause = $('#rejectionCause').val(); console.log('Selected cause:', cause); if (!cause) { console.log('No cause selected'); showError('Please select a rejection cause'); return; } const pendingStatus = $('#unpaidCauseModal').data('pendingStatus'); console.log('Pending status data:', pendingStatus); if (!pendingStatus || !pendingStatus.receiptId) { console.error('Missing pending status data'); showError('Missing receipt information'); return; } const receiptStatuses = { [pendingStatus.receiptId]: { status: 'unpaid', cause: cause } }; console.log('Submitting unpaid status update:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); $('#unpaidCauseModal').modal('hide'); }); function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .html(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', function() { container.remove(); }); } </script>
 ```
 
 # templates/presentation/presentation_list.html
@@ -1129,115 +1476,19 @@ def update_checker_status(sender, instance, **kwargs):
 # templates/receipt/receipt_form_modal.html
 
 ```html
-<!-- Modal Header --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt_type == 'check' %} <i class="fas fa-money-check"></i> {% elif receipt_type == 'lcn' %} <i class="fas fa-file-invoice-dollar"></i> {% elif receipt_type == 'cash' %} <i class="fas fa-money-bill"></i> {% else %} <i class="fas fa-exchange-alt"></i> {% endif %} {{ title }} </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <!-- Modal Body --> <div class="modal-body"> <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}"> {% csrf_token %} <!-- Common Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" name="client_display" placeholder="Search for a client..." required value="{% if receipt %}{{ receipt.client.name }}{% endif %}"> <input type="hidden" id="client_id" name="client" value="{% if receipt %}{{ receipt.client.id }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="entity">Entity</label> <input type="text" class="form-control" id="entity" name="entity_display" placeholder="Search for an entity..." required value="{% if receipt %}{{ receipt.entity.name }}{% endif %}"> <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label for="operation_date">Operation Date</label> <input type="date" class="form-control" id="operation_date" name="operation_date" value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_year">Year</label> <select class="form-control" id="client_year" name="client_year" required> {% for year in year_choices %} <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>{{ year }}</option> {% endfor %} </select> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_month">Month</label> <select class="form-control" id="client_month" name="client_month" required> {% for month in month_choices %} <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>{{ month.1 }}</option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" value="{% if receipt %}{{ receipt.amount }}{% endif %}" step="0.01" min="0.01" required> </div> </div> </div> {% if receipt_type == 'check' %} <!-- Check-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="check_number">Check Number</label> <input type="text" class="form-control" id="check_number" name="check_number" value="{% if receipt %}{{ receipt.check_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> </div> <div class="col-md-6"> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> </div> <div class="form-group"> <label>Compensate Unpaid Receipt</label> <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates"> <input type="hidden" id="compensate-receipt-id" name="compensates"> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="branch">Branch</label> <input type="text" class="form-control" id="branch" name="branch" value="{% if receipt %}{{ receipt.branch }}{% endif %}"> </div> </div> </div> {% endif %} {% if receipt_type == 'lcn' %} <!-- LCN-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="lcn_number">LCN Number</label> <input type="text" class="form-control" id="lcn_number" name="lcn_number" value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> <div class="form-group"> <label for="compensatesInput"> <i class="fas fa-link me-2"></i>Compensate Unpaid Receipt </label> <input type="text" class="form-control" id="compensatesInput" placeholder="Search for an unpaid receipt..."> <input type="hidden" id="compensates" name="compensates"> <small class="text-muted"> Optional: Select an unpaid receipt this {{ receipt_type }} will compensate when paid </small> </div> </div> {% endif %} {% if receipt_type == 'cash' or receipt_type == 'transfer' %} <!-- Cash/Transfer-specific fields --> <div class="row"> <div class="col-md-12"> <div class="form-group"> <label for="credited_account">Credited Account</label> <select class="form-control" id="credited_account" name="credited_account" required> {% for account in bank_accounts %} <option value="{{ account.id }}" {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> {% endif %} {% if receipt_type == 'transfer' %} <!-- Transfer-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="transfer_reference">Transfer Reference</label> <input type="text" class="form-control" id="transfer_reference" name="transfer_reference" value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="transfer_date">Transfer Date</label> <input type="date" class="form-control" id="transfer_date" name="transfer_date" value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> </div> {% endif %} <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea> </div> </form> </div> <!-- Modal Footer --> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="submit" class="btn btn-primary" form="receiptForm">Save Receipt</button> </div> <!-- Initialize autocomplete --> <script> $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 0, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 0, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Bank selection using jQuery UI autocomplete const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, // Show all options even without typing select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { // Show all options when field is focused $(this).autocomplete("search", ""); }); // Add dropdown indicator and click handler $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); $("#compensate-receipt-autocomplete").autocomplete({ source: function(request, response) { console.log('Unpaid Receipt search term:', request.term); $.ajax({ url: "{% url 'unpaid-receipt-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Unpaid Receipt data received:', data); response($.map(data.results, function(item) { return { label: item.description, value: item.description, // Display full description id: item.id }; })); }, error: function(xhr, status, error) { console.error('Unpaid Receipt autocomplete error:', error); console.log('XHR response:', xhr.responseText); } }); }, minLength: 0, select: function(event, ui) { console.log('Unpaid Receipt selected:', ui.item); $("#compensate-receipt-id").val(ui.item.id); $("#compensate-receipt-autocomplete").val(ui.item.label); $("#compensation-details").html(` Selected Receipt: ${ui.item.label} `); }, change: function(event, ui) { console.log('Unpaid Receipt change event triggered'); if (!ui.item) { $("#compensate-receipt-id").val(''); $("#compensate-receipt-autocomplete").val(''); $("#compensation-details").empty(); } } }); }); </script> <style> .bank-dropdown-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; } .ui-autocomplete { max-height: 200px; overflow-y: auto; overflow-x: hidden; z-index: 9999; /* Scrollbar styles */ scrollbar-width: thin; scrollbar-color: #0b4d71 #f1f1f1; -webkit-overflow-scrolling: touch; -ms-overflow-style: -ms-autohiding-scrollbar; } .ui-autocomplete::-webkit-scrollbar { width: 6px; } .ui-autocomplete::-webkit-scrollbar-track { background: #f1f1f1; } .ui-autocomplete::-webkit-scrollbar-thumb { background: #888; } .ui-autocomplete::-webkit-scrollbar-thumb:hover { background: #555; } </style>
+<!-- Debug Info --> <div style="display:none"> Receipt type from context: {{ receipt_type }} Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %} </div> <!-- Modal Header --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt_type == 'check' %} <i class="fas fa-money-check"></i> {% elif receipt_type == 'lcn' %} <i class="fas fa-file-invoice-dollar"></i> {% elif receipt_type == 'cash' %} <i class="fas fa-money-bill"></i> {% else %} <i class="fas fa-exchange-alt"></i> {% endif %} {{ title }} </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <!-- Modal Body --> <div class="modal-body"> <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}"> {% csrf_token %} <!-- Common Fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="client">Client</label> <input type="text" class="form-control" id="client" name="client_display" placeholder="Search for a client..." required value="{% if receipt %}{{ receipt.client.name }}{% endif %}"> <input type="hidden" id="client_id" name="client" value="{% if receipt %}{{ receipt.client.id }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="entity">Entity</label> <input type="text" class="form-control" id="entity" name="entity_display" placeholder="Search for an entity..." required value="{% if receipt %}{{ receipt.entity.name }}{% endif %}"> <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label for="operation_date">Operation Date</label> <input type="date" class="form-control" id="operation_date" name="operation_date" value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_year">Year</label> <select class="form-control" id="client_year" name="client_year" required> {% for year in year_choices %} <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>{{ year }}</option> {% endfor %} </select> </div> </div> <div class="col-md-4"> <div class="form-group"> <label for="client_month">Month</label> <select class="form-control" id="client_month" name="client_month" required> {% for month in month_choices %} <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>{{ month.1 }}</option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="amount">Amount</label> <input type="number" class="form-control" id="amount" name="amount" value="{% if receipt %}{{ receipt.amount }}{% endif %}" step="0.01" min="0.01" required> </div> </div> </div> {% if receipt_type == 'check' %} <!-- Check-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="check_number">Check Number</label> <input type="text" class="form-control" id="check_number" name="check_number" value="{% if receipt %}{{ receipt.check_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> <div class="form-group"> <label>Compensate Unpaid Receipt</label> <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates"> <input type="hidden" id="compensate-receipt-id" name="compensates"> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="branch">Branch</label> <input type="text" class="form-control" id="branch" name="branch" value="{% if receipt %}{{ receipt.branch }}{% endif %}"> </div> </div> </div> {% endif %} {% if receipt_type == 'lcn' %} <!-- LCN-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="lcn_number">LCN Number</label> <input type="text" class="form-control" id="lcn_number" name="lcn_number" value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="due_date">Due Date</label> <input type="date" class="form-control" id="due_date" name="due_date" value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="issuingBank">Issuing Bank</label> <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}"> <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}"> </div> </div> <div class="form-group col-md-6"> <label>Compensate Unpaid Receipt</label> <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates"> <input type="hidden" id="compensate-receipt-id" name="compensates"> </div> </div> {% endif %} {% if receipt_type == 'cash' or receipt_type == 'transfer' %} <!-- Cash/Transfer-specific fields --> <div class="row"> <div class="col-md-12"> <div class="form-group"> <label for="credited_account">Credited Account</label> <select class="form-control" id="credited_account" name="credited_account" required> {% for account in bank_accounts %} <option value="{{ account.id }}" {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="form-group"> <label>Compensate Unpaid Receipt</label> <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates"> <input type="hidden" id="compensate-receipt-id" name="compensates"> </div> </div> {% endif %} {% if receipt_type == 'transfer' %} <!-- Transfer-specific fields --> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label for="transfer_reference">Transfer Reference</label> <input type="text" class="form-control" id="transfer_reference" name="transfer_reference" value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label for="transfer_date">Transfer Date</label> <input type="date" class="form-control" id="transfer_date" name="transfer_date" value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required> </div> </div> </div> <div class="form-group"> <label>Compensate Unpaid Receipt</label> <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates"> <input type="hidden" id="compensate-receipt-id" name="compensates"> </div> </div> {% endif %} <div class="form-group"> <label for="notes">Notes</label> <textarea class="form-control" id="notes" name="notes" rows="2">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea> </div> </form> </div> <!-- Modal Footer --> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="submit" class="btn btn-primary" form="receiptForm">Save Receipt</button> </div> <!-- Initialize autocomplete --> <script> console.log('Form loaded for receipt type:', '{{ receipt_type }}'); $(document).ready(function() { // Initialize client autocomplete $("#client").autocomplete({ minLength: 0, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 0, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Bank selection using jQuery UI autocomplete const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, // Show all options even without typing select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { // Show all options when field is focused $(this).autocomplete("search", ""); }); // Add dropdown indicator and click handler $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); $("#compensate-receipt-autocomplete").autocomplete({ source: function(request, response) { console.log('Unpaid Receipt search term:', request.term); $.ajax({ url: "{% url 'unpaid-receipt-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Unpaid Receipt data received:', data); response($.map(data.results, function(item) { return { label: item.description, value: item.description, // Display full description id: item.id }; })); }, error: function(xhr, status, error) { console.error('Unpaid Receipt autocomplete error:', error); console.log('XHR response:', xhr.responseText); } }); }, minLength: 0, select: function(event, ui) { console.log('Unpaid Receipt selected:', ui.item); $("#compensate-receipt-id").val(ui.item.id); $("#compensate-receipt-autocomplete").val(ui.item.label); $("#compensation-details").html(` Selected Receipt: ${ui.item.label} `); }, change: function(event, ui) { console.log('Unpaid Receipt change event triggered'); if (!ui.item) { $("#compensate-receipt-id").val(''); $("#compensate-receipt-autocomplete").val(''); $("#compensation-details").empty(); } } }); // Initialize tooltips $('[data-toggle="tooltip"]').tooltip(); // Enhanced status badges with tooltips function updateStatusBadge($element, status, details) { const badge = $('<span>') .addClass(`badge badge-${status.toLowerCase()}`) .text(status); if (details) { badge.attr('data-toggle', 'tooltip') .attr('data-html', 'true') .attr('title', details); } $element.html(badge); badge.tooltip(); } // Add bulk action support let selectedReceipts = new Set(); // Add checkboxes for bulk actions $('.receipt-table').find('tbody tr').each(function() { const $tr = $(this); const receiptId = $tr.data('receipt-id'); const $checkbox = $('<input>', { type: 'checkbox', class: 'receipt-checkbox', 'data-receipt-id': receiptId }); $tr.prepend($('<td>').append($checkbox)); }); // Bulk action handlers $('.receipt-checkbox').on('change', function() { const receiptId = $(this).data('receipt-id'); if (this.checked) { selectedReceipts.add(receiptId); } else { selectedReceipts.delete(receiptId); } updateBulkActionButtons(); }); function updateBulkActionButtons() { const hasSelected = selectedReceipts.size > 0; $('.bulk-action-btn').prop('disabled', !hasSelected); } // Add number formatting function formatCurrency(amount) { return new Intl.NumberFormat('fr-MA', { style: 'currency', currency: 'MAD' }).format(amount); } // Update all amount displays $('.amount-display').each(function() { const amount = $(this).data('amount'); $(this).text(formatCurrency(amount)); }); }); </script> <style> .bank-dropdown-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); cursor: pointer; } .ui-autocomplete { max-height: 200px; overflow-y: auto; overflow-x: hidden; z-index: 9999; /* Scrollbar styles */ scrollbar-width: thin; scrollbar-color: #0b4d71 #f1f1f1; -webkit-overflow-scrolling: touch; -ms-overflow-style: -ms-autohiding-scrollbar; } .ui-autocomplete::-webkit-scrollbar { width: 6px; } .ui-autocomplete::-webkit-scrollbar-track { background: #f1f1f1; } .ui-autocomplete::-webkit-scrollbar-thumb { background: #888; } .ui-autocomplete::-webkit-scrollbar-thumb:hover { background: #555; } </style>
 ```
 
 # templates/receipt/receipt_list.html
 
 ```html
-{% extends 'base.html' %} {% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-receipt text-primary me-2"></i>Receipts Management </h2> <div class="btn-group"> <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus-circle"></i> New Receipt </button> <div class="dropdown-menu"> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check"> <i class="fas fa-money-check"></i> Check </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn"> <i class="fas fa-file-invoice-dollar"></i> LCN </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash"> <i class="fas fa-money-bill"></i> Cash </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer"> <i class="fas fa-exchange-alt"></i> Transfer </a> </div> </div> </div> <!-- Tabs Navigation --> <ul class="nav nav-tabs" id="receiptTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab"> <i class="fas fa-money-check"></i> Checks </a> </li> <li class="nav-item"> <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab"> <i class="fas fa-file-invoice-dollar"></i> LCNs </a> </li> <li class="nav-item"> <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab"> <i class="fas fa-money-bill"></i> Cash </a> </li> <li class="nav-item"> <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab"> <i class="fas fa-exchange-alt"></i> Transfers </a> </li> </ul> <!-- Tab Content --> <div class="tab-content mt-4" id="receiptTabsContent"> <!-- Checks Tab Content --> <div class="tab-pane fade show active" id="checks" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>Check Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for check in receipts.checks %} <tr> <td>{{ check.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ check.entity.name }}</strong><br> <small class="text-muted">{{ check.entity.ice_code }}</small> </td> <td> <small>{{ check.client.name }}</small> </td> <td>{{ check.check_number }}</td> <td>{{ check.get_issuing_bank_display }}</td> <td>{{ check.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ check.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ check.status|status_badge }}"> {{ check.get_status_display }} </span> {% if check.status == 'UNPAID' and check.rejection_cause %} <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small> {% endif %} {% if check.compensation_info %} <br><small class="text-muted">{{ check.compensation_info }}</small> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceipt('check', '{{ check.id }}')"> <i class="fas fa-eye"></i> </button> {% with pres=check.check_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="check" data-action="edit" data-id="{{ check.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No checks found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- LCNs Tab Content --> <div class="tab-pane fade" id="lcns" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>LCN Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for lcn in receipts.lcns %} <tr> <td>{{ lcn.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ lcn.entity.name }}</strong><br> <small class="text-muted">{{ lcn.entity.ice_code }}</small> </td> <td> <small>{{ lcn.client.name }}</small> </td> <td>{{ lcn.lcn_number }}</td> <td>{{ lcn.get_issuing_bank_display }}</td> <td>{{ lcn.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ lcn.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ lcn.status|status_badge }}"> {{ lcn.get_status_display }} </span> {% if lcn.status == 'UNPAID' and lcn.rejection_cause %} <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small> {% endif %} {% if lcn.compensation_info %} <br><small class="text-muted">{{ lcn.compensation_info }}</small> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceipt('lcn', '{{ lcn.id }}')"> <i class="fas fa-eye"></i> </button> {% with pres=lcn.lcn_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="lcn" data-action="edit" data-id="{{ lcn.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No LCNs found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Cash Tab --> <div class="tab-pane fade" id="cash" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Reference</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for cash in receipts.cash %} <tr> <td>{{ cash.operation_date|date:"Y-m-d" }}</td> <td>{{ cash.client.name }}</td> <td>{{ cash.reference_number }}</td> <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td> <td class="text-right">{{ cash.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="cash" data-action="edit" data-id="{{ cash.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="6" class="text-center">No cash receipts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Transfers Tab --> <div class="tab-pane fade" id="transfers" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Transfer Reference</th> <th>Transfer Date</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for transfer in receipts.transfers %} <tr> <td>{{ transfer.operation_date|date:"Y-m-d" }}</td> <td>{{ transfer.client.name }}</td> <td>{{ transfer.transfer_reference }}</td> <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td> <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td> <td class="text-right">{{ transfer.amount|floatformat:2 }}</td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="transfer" data-action="edit" data-id="{{ transfer.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}"> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="7" class="text-center">No transfers found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> </div> <!-- Receipt Modal --> <div class="modal fade" id="receiptModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Modal content will be loaded dynamically --> </div> </div> </div> <script> console.log("Extra JS loaded"); $(document).ready(function() { $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url += `edit/${type}/${id}/`; } else { url += `create/${type}/`; } // Load modal content $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); if (action === 'edit') { // Set form action URL for edit $('#receiptForm').attr('action', url); // Initialize Select2 with pre-selected values if (data.client) { const clientOption = new Option(data.client.text, data.client.id, true, true); $('#client').append(clientOption).trigger('change'); } if (data.entity) { const entityOption = new Option(data.entity.text, data.entity.id, true, true); $('#entity').append(entityOption).trigger('change'); } } }); }); // Handle form submission for both create and edit $(document).on('submit', '#receiptForm', function(e) { e.preventDefault(); const form = $(this); const url = form.attr('action'); const isEdit = url.includes('/edit/'); console.log("Form being submitted:", { url: url, isEdit: isEdit, formData: form.serialize(), formElements: form.serializeArray() }); $.ajax({ url: url, type: 'POST', data: form.serialize(), success: function(response) { console.log("Success response:", response); if (response.status === 'success') { $('#receiptModal').modal('hide'); showToast(response.message, 'success'); location.reload(); } else { console.log("Form errors:", response.errors); showFormErrors(form, response.errors); } }, error: function(xhr) { console.error("Error response:", { status: xhr.status, responseText: xhr.responseText }); try { const errors = JSON.parse(xhr.responseText); showFormErrors(form, errors); } catch (e) { showToast('An error occurred while saving the receipt.', 'error'); } } }); }); function showFormErrors(form, errors) { // Clear previous errors form.find('.is-invalid').removeClass('is-invalid'); form.find('.invalid-feedback').remove(); // Show new errors Object.keys(errors).forEach(field => { const input = form.find(`[name="${field}"]`); const error = errors[field].join(' '); input.addClass('is-invalid'); input.after(`<div class="invalid-feedback">${error}</div>`); }); } function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">Notification</strong> <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>'); toastContainer.html(toast); $('body').append(toastContainer); $('.toast').toast('show'); // Remove toast after it's hidden $('.toast').on('hidden.bs.toast', function() { $(this).closest('.toast-container').remove(); }); } }); // Initialize form elements after modal load function initializeForm() { console.log('Initializing form with autocomplete...'); console.log('Client input exists:', $('#client').length); console.log('Entity input exists:', $('#entity').length); // Initialize client autocomplete $("#client").autocomplete({ minLength: 2, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 2, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Add some basic styling to autocomplete dropdown $(".ui-autocomplete").addClass("dropdown-menu").css({ 'max-height': '200px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'z-index': '9999' }); } function initializeBankAutocomplete() { const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { $(this).autocomplete("search", ""); }); // Add dropdown indicator if (!$("#issuingBank").next('.bank-dropdown-toggle').length) { $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); } } // Modify the modal show event handler $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url = `edit/${type}/${id}/`; } else { url = `create/${type}/`; } $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); initializeBankAutocomplete(); // Add this line }); }); // Handle delete $('.delete-receipt').click(function() { if (confirm('Are you sure you want to delete this receipt?')) { const type = $(this).data('type'); const id = $(this).data('id'); $.ajax({ url: `/testapp/receipts/delete/${type}/${id}/`, type: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, success: function() { location.reload(); }, error: function() { alert('Error deleting receipt'); } }); } }); // Keyboard shortcuts $(document).keydown(function(e) { // Only trigger if no modal is open and no input is focused if ($('.modal:visible').length === 0 && !$(document.activeElement).is('input, textarea, select')) { let receiptType = null; if (e.altKey) { switch(e.key.toLowerCase()) { case 'c': // Alt + C for Check receiptType = 'check'; break; case 'l': // Alt + L for LCN receiptType = 'lcn'; break; case 'e': // Alt + M for Cash (Money) receiptType = 'cash'; break; case 'v': // Alt + T for Transfer receiptType = 'transfer'; break; } if (receiptType) { e.preventDefault(); const url = "{% url 'receipt-create' 'TYPE' %}".replace('TYPE', receiptType); const modal = $('#receiptModal'); modal.modal('show'); modal.find('.modal-content').load(url, function() { setTimeout(function() { initializeForm(); }, 100); }); } } } }); // Handle presentation status update function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ bank_reference: bankRef, status: $('#presentationStatus').val() }), success: () => location.reload(), error: xhr => showError(xhr.responseJSON?.message || 'Update failed') }); } // Handle receipt status update $(document).on('change', '.receipt-status', function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const newStatus = $select.val(); if (!confirm('This status change is irreversible. Continue?')) { $select.val($select.find('option').not(':selected').val()); return; } $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ receipt_id: receiptId, receipt_status: newStatus }), success: () => { $select.prop('disabled', true); location.reload(); }, error: xhr => { showError(xhr.responseJSON?.message || 'Status update failed'); $select.val($select.find('option').not(':selected').val()); } }); }); function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } // Add tooltip hints for shortcuts $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() { const type = $(this).data('type'); let shortcut = ''; switch(type) { case 'check': shortcut = 'Alt+C'; break; case 'lcn': shortcut = 'Alt+L'; break; case 'cash': shortcut = 'Alt+M'; break; case 'transfer': shortcut = 'Alt+T'; break; } if (shortcut) { $(this).attr('title', `${$(this).text().trim()} (${shortcut})`); } }); </script> {% endblock %}
+{% extends 'base.html' %} {% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2 class="mb-0"> <i class="fas fa-receipt text-primary me-2"></i> Receipts Management </h2> <div class="btn-group"> <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus-circle"></i> New Receipt </button> <div class="dropdown-menu"> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check"> <i class="fas fa-money-check"></i> Check </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn"> <i class="fas fa-file-invoice-dollar"></i> LCN </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash"> <i class="fas fa-money-bill"></i> Cash </a> <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer"> <i class="fas fa-exchange-alt"></i> Transfer </a> </div> </div> </div> <!-- Tabs Navigation --> <ul class="nav nav-tabs" id="receiptTabs" role="tablist"> <li class="nav-item"> <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab"> <i class="fas fa-money-check"></i> Checks </a> </li> <li class="nav-item"> <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab"> <i class="fas fa-file-invoice-dollar"></i> LCNs </a> </li> <li class="nav-item"> <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab"> <i class="fas fa-money-bill"></i> Cash </a> </li> <li class="nav-item"> <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab"> <i class="fas fa-exchange-alt"></i> Transfers </a> </li> </ul> <!-- Tab Content --> <div class="tab-content mt-4" id="receiptTabsContent"> <!-- Checks Tab Content --> <div class="tab-pane fade show active" id="checks" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>Check Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for check in receipts.checks %} <tr class="status-{{ check.status|lower }}"> <td>{{ check.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ check.entity.name }}</strong><br> <small class="text-muted">{{ check.entity.ice_code }}</small> </td> <td> <small>{{ check.client.name }}</small> </td> <td>{{ check.check_number }}</td> <td>{{ check.get_issuing_bank_display }}</td> <td>{{ check.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ check.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=check.check_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ check.status|status_badge }}"> {{ check.get_status_display }} </span> {% if check.status == 'UNPAID' and check.rejection_cause %} <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small> {% with last_pres=check.check_presentations.last %} {% if last_pres %} <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small> {% endif %} {% endwith %} {% endif %} {% if check.compensation_info %} <br><small class="text-muted">{{ check.compensation_info }}</small> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')"> <i class="fas fa-history"></i> </button> {% with pres=check.check_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="check" data-action="edit" data-id="{{ check.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No checks found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- LCNs Tab Content --> <div class="tab-pane fade" id="lcns" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Entity</th> <th>Client</th> <th>LCN Number</th> <th>Issuing Bank</th> <th>Due Date</th> <th>Amount</th> <th>Bank Issued To</th> <th>Presentation</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for lcn in receipts.lcns %} <tr class="status-{{ lcn.status|lower }}"> <td>{{ lcn.operation_date|date:"Y-m-d" }}</td> <td> <strong>{{ lcn.entity.name }}</strong><br> <small class="text-muted">{{ lcn.entity.ice_code }}</small> </td> <td> <small>{{ lcn.client.name }}</small> </td> <td>{{ lcn.lcn_number }}</td> <td>{{ lcn.get_issuing_bank_display }}</td> <td>{{ lcn.due_date|date:"Y-m-d" }}</td> <td class="text-right">{{ lcn.amount|floatformat:2 }}</td> <!-- Bank Issued To column --> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }} {% else %} - {% endif %} {% endwith %} </td> <td> {% with pres=lcn.lcn_presentations.first %} {% if pres %} {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br> <span class="badge badge-{{ pres.presentation.status|status_badge }}"> {{ pres.presentation.get_status_display }} </span> {% else %} - {% endif %} {% endwith %} </td> <td> <span class="badge badge-{{ lcn.status|status_badge }}"> {{ lcn.get_status_display }} </span> {% if lcn.status == 'UNPAID' and lcn.rejection_cause %} <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small> {% endif %} {% if lcn.compensation_info %} <br><small class="text-muted">{{ lcn.compensation_info }}</small> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')"> <i class="fas fa-history"></i> </button> {% with pres=lcn.lcn_presentations.first %} {% if not pres %} <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" data-type="lcn" data-action="edit" data-id="{{ lcn.id }}"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} {% endwith %} </div> </td> </tr> {% empty %} <tr> <td colspan="11" class="text-center">No LCNs found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Cash Tab --> <div class="tab-pane fade" id="cash" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Reference</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for cash in receipts.cash %} <tr> <td>{{ cash.operation_date|date:"Y-m-d" }}</td> <td>{{ cash.client.name }}</td> <td>{{ cash.reference_number }}</td> <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td> <td class="text-right">{{ cash.amount|floatformat:2 }}</td> <td> <div class="btn-group"> {% if cash.can_edit %} <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="cash" data-action="edit" data-id="{{ cash.id }}"> <i class="fas fa-edit"></i> </button> {% endif %} {% if cash.can_delete %} <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} </div> </div> </td> </tr> {% empty %} <tr> <td colspan="6" class="text-center">No cash receipts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Transfers Tab --> <div class="tab-pane fade" id="transfers" role="tabpanel"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Client</th> <th>Transfer Reference</th> <th>Transfer Date</th> <th>Credited Account</th> <th>Amount</th> <th>Actions</th> </tr> </thead> <tbody> {% for transfer in receipts.transfers %} <tr> <td>{{ transfer.operation_date|date:"Y-m-d" }}</td> <td>{{ transfer.client.name }}</td> <td>{{ transfer.transfer_reference }}</td> <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td> <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td> <td class="text-right">{{ transfer.amount|floatformat:2 }}</td> <td> <div class="btn-group"> {% if transfer.can_edit %} <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" data-type="transfer" data-action="edit" data-id="{{ transfer.id }}"> <i class="fas fa-edit"></i> </button> {% endif %} {% if transfer.can_delete %} <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}"> <i class="fas fa-trash"></i> </button> {% endif %} </div> </td> </tr> {% empty %} <tr> <td colspan="7" class="text-center">No transfers found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> </div> <!-- Receipt Modal --> <div class="modal fade" id="receiptModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Modal content will be loaded dynamically --> </div> </div> </div> <!-- Timeline Modal --> <div class="modal fade" id="timelineModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> <style> /* Status Badge Colors */ .badge-portfolio { background-color: #6c757d; } .badge-presented_collection, .badge-presented_discount { background-color: #17a2b8; } .badge-paid { background-color: #28a745; } .badge-unpaid { background-color: #dc3545; } .badge-compensated { background-color: #fd7e14; } /* Orange color for compensated */ /* Row Status Highlighting */ tr.status-paid { background-color: rgba(40, 167, 69, 0.1); } /* Light green */ tr.status-unpaid { background-color: rgba(220, 53, 69, 0.1); } /* Light red */ tr.status-compensated { background-color: rgba(253, 126, 20, 0.1); } /* Light orange */ /* Maintain hover effect with status background */ .table-hover tbody tr:hover { background-color: rgba(0, 0, 0, 0.075) !important; } </style> <script> console.log("Extra JS loaded"); $(document).ready(function() { $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url += `edit/${type}/${id}/`; } else { url += `create/${type}/`; } // Load modal content $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); if (action === 'edit') { // Set form action URL for edit $('#receiptForm').attr('action', url); // Initialize Select2 with pre-selected values if (data.client) { const clientOption = new Option(data.client.text, data.client.id, true, true); $('#client').append(clientOption).trigger('change'); } if (data.entity) { const entityOption = new Option(data.entity.text, data.entity.id, true, true); $('#entity').append(entityOption).trigger('change'); } } }); }); // Handle form submission for both create and edit $(document).on('submit', '#receiptForm', function(e) { e.preventDefault(); const form = $(this); // Create FormData object and append transfer fields manually let formData = new FormData(form[0]); if ($('#transfer_reference').length) { formData.append('transfer_reference', $('#transfer_reference').val()); formData.append('transfer_date', $('#transfer_date').val()); } // Convert FormData to URLSearchParams for jQuery const data = new URLSearchParams(formData).toString(); $.ajax({ url: form.attr('action'), type: 'POST', data: data, success: function(response) { if (response.status === 'success') { $('#receiptModal').modal('hide'); showToast(response.message, 'success'); location.reload(); } else { showFormErrors(form, response.errors); } }, error: function(xhr) { try { const errors = JSON.parse(xhr.responseText); showFormErrors(form, errors); } catch (e) { showToast('An error occurred while saving the receipt.', 'error'); } } }); }); function showFormErrors(form, errors) { // Clear previous errors form.find('.is-invalid').removeClass('is-invalid'); form.find('.invalid-feedback').remove(); // Show new errors Object.keys(errors).forEach(field => { const input = form.find(`[name="${field}"]`); const error = errors[field].join(' '); input.addClass('is-invalid'); input.after(`<div class="invalid-feedback">${error}</div>`); }); } function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">Notification</strong> <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>'); toastContainer.html(toast); $('body').append(toastContainer); $('.toast').toast('show'); // Remove toast after it's hidden $('.toast').on('hidden.bs.toast', function() { $(this).closest('.toast-container').remove(); }); } }); // Initialize form elements after modal load function initializeForm() { console.log('Initializing form with autocomplete...'); console.log('Client input exists:', $('#client').length); console.log('Entity input exists:', $('#entity').length); // Initialize client autocomplete $("#client").autocomplete({ minLength: 0, source: function(request, response) { console.log('Client search term:', request.term); $.ajax({ url: "{% url 'client-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Client data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Client autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Client selected:', ui.item); $("#client").val(ui.item.label); $("#client_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Client input focused'); }); // Initialize entity autocomplete $("#entity").autocomplete({ minLength: 0, source: function(request, response) { console.log('Entity search term:', request.term); $.ajax({ url: "{% url 'entity-autocomplete' %}", dataType: "json", data: { term: request.term }, success: function(data) { console.log('Entity data received:', data); response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); }, error: function(xhr, status, error) { console.error('Entity autocomplete error:', error); } }); }, select: function(event, ui) { console.log('Entity selected:', ui.item); $("#entity").val(ui.item.label); $("#entity_id").val(ui.item.value); return false; } }).on('focus', function() { console.log('Entity input focused'); }); // Add some basic styling to autocomplete dropdown $(".ui-autocomplete").addClass("dropdown-menu").css({ 'max-height': '200px', 'overflow-y': 'auto', 'overflow-x': 'hidden', 'z-index': '9999' }); } function initializeBankAutocomplete() { const banksList = [ {% for code, name in bank_choices %} { label: '{{ name }}', value: '{{ code }}' }, {% endfor %} ]; $("#issuingBank").autocomplete({ source: banksList, minLength: 0, select: function(event, ui) { $("#issuingBank").val(ui.item.label); $("#issuingBankCode").val(ui.item.value); return false; } }).focus(function() { $(this).autocomplete("search", ""); }); // Add dropdown indicator if (!$("#issuingBank").next('.bank-dropdown-toggle').length) { $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>'); $(".bank-dropdown-toggle").click(function() { $("#issuingBank").focus(); }); } } // Modify the modal show event handler $('#receiptModal').on('show.bs.modal', function(e) { const button = $(e.relatedTarget); const type = button.data('type'); const action = button.data('action'); const id = button.data('id'); let url = ''; if (action === 'edit') { url = `edit/${type}/${id}/`; } else { url = `create/${type}/`; } $.get(url, function(data) { $('#receiptModal .modal-content').html(data); initializeForm(); initializeBankAutocomplete(); // Add this line }); }); // Handle delete $('.delete-receipt').click(function() { if (confirm('Are you sure you want to delete this receipt?')) { const type = $(this).data('type'); const id = $(this).data('id'); $.ajax({ url: `/testapp/receipts/delete/${type}/${id}/`, type: 'POST', headers: { 'X-CSRFToken': '{{ csrf_token }}' }, success: function() { location.reload(); }, error: function() { alert('Error deleting receipt'); } }); } }); // Keyboard shortcuts $(document).keydown(function(e) { // Only trigger if no modal is open and no input is focused if ($('.modal:visible').length === 0 && !$(document.activeElement).is('input, textarea, select')) { let receiptType = null; if (e.altKey) { switch(e.key.toLowerCase()) { case 'c': // Alt + C for Check receiptType = 'check'; break; case 'l': // Alt + L for LCN receiptType = 'lcn'; break; case 'e': // Alt + M for Cash (Money) receiptType = 'cash'; break; case 'v': // Alt + T for Transfer receiptType = 'transfer'; break; } if (receiptType) { e.preventDefault(); const url = "{% url 'receipt-create' 'TYPE' %}".replace('TYPE', receiptType); const modal = $('#receiptModal'); modal.modal('show'); modal.find('.modal-content').load(url, function() { setTimeout(function() { initializeForm(); }, 100); }); } } } }); // Handle presentation status update function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ bank_reference: bankRef, status: $('#presentationStatus').val() }), success: () => location.reload(), error: xhr => showError(xhr.responseJSON?.message || 'Update failed') }); } // Handle receipt status update $(document).on('change', '.receipt-status', function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const newStatus = $select.val(); if (!confirm('This status change is irreversible. Continue?')) { $select.val($select.find('option').not(':selected').val()); return; } $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', contentType: 'application/json', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, data: JSON.stringify({ receipt_id: receiptId, receipt_status: newStatus }), success: () => { $select.prop('disabled', true); location.reload(); }, error: xhr => { showError(xhr.responseJSON?.message || 'Status update failed'); $select.val($select.find('option').not(':selected').val()); } }); }); function viewReceiptTimeline(receiptType, receiptId) { console.log(`Loading timeline for ${receiptType} ${receiptId}`); // Show loading state in modal $('#timelineModal').modal('show'); $('#timelineModal .modal-content').html(` <div class="modal-body text-center"> <div class="spinner-border text-primary" role="status"> <span class="sr-only">Loading...</span> </div> <p class="mt-2">Loading timeline...</p> </div> `); // Load timeline content $.ajax({ url: `/testapp/receipts/${receiptType}/${receiptId}/timeline/`, method: 'GET', success: function(response) { $('#timelineModal .modal-content').html(response); // Initialize any tooltips or popovers $('#timelineModal [data-toggle="tooltip"]').tooltip(); $('#timelineModal [data-toggle="popover"]').popover(); // Add animation classes to timeline items $('.timeline-item').each(function(index) { $(this) .addClass('animate__animated animate__fadeInLeft') .css('animation-delay', `${index * 0.1}s`); }); }, error: function(xhr) { let errorMessage = 'Failed to load timeline'; try { const response = JSON.parse(xhr.responseText); errorMessage = response.message || errorMessage; } catch(e) {} $('#timelineModal .modal-content').html(` <div class="modal-header"> <h5 class="modal-title">Error</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <div class="alert alert-danger"> ${errorMessage} </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> </div> `); } }); } // Optional: Add helper function for formatting dates in timeline function formatTimelineDate(dateString) { const date = new Date(dateString); return new Intl.DateTimeFormat('fr-MA', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }).format(date); } // Add modal cleanup on hide $('#timelineModal').on('hidden.bs.modal', function() { $(this).find('.modal-content').html(''); }); // Optional: Add keyboard shortcut to close modal $(document).keydown(function(e) { if (e.key === 'Escape' && $('#timelineModal').hasClass('show')) { $('#timelineModal').modal('hide'); } }); function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } // Add tooltip hints for shortcuts $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() { const type = $(this).data('type'); let shortcut = ''; switch(type) { case 'check': shortcut = 'Alt+C'; break; case 'lcn': shortcut = 'Alt+L'; break; case 'cash': shortcut = 'Alt+M'; break; case 'transfer': shortcut = 'Alt+T'; break; } if (shortcut) { $(this).attr('title', `${$(this).text().trim()} (${shortcut})`); } }); </script> {% endblock %}
 ```
+
+# templates/receipt/receipt_timeline_modal.html
 
 ```html
-{% extends 'base.html' %} {% block title %}Supplier List{% endblock %} {% block content %} <h1>Supplier List</h1> <a href="{% url 'supplier-create' %}" class="btn btn-primary">Add New Supplier</a> <table class="table mt-4"> <thead> <tr> <th>Name</th> <th>IF Code</th> <th>ICE Code</th> <th>RC Code</th> <th>Actions</th> </tr> </thead> <tbody> {% for supplier in suppliers %} <tr> <td>{{ supplier.name }}</td> <td>{{ supplier.if_code }}</td> <td>{{ supplier.ice_code }}</td> <td>{{ supplier.rc_code }}</td> <td> <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning">Edit</a> <a href="{% url 'supplier-delete' supplier.pk %}" class="btn btn-danger">Delete</a> </td> </tr> {% empty %} <tr> <td colspan="5">No suppliers found.</td> </tr> {% endfor %} </tbody> </table> {% endblock %}
-```
-
-# templatetags/__init__.py
-
-```py
-
-```
-
-# templatetags/accounting_filters.py
-
-```py
-from django import template
-from django.template.defaultfilters import floatformat
-
-register = template.Library()
-
-@register.filter
-def sum_debit(entries):
-    return sum(entry['debit'] or 0 for entry in entries)
-
-@register.filter
-def sum_credit(entries):
-    return sum(entry['credit'] or 0 for entry in entries)
-
-@register.filter
-def space_thousands(value):
-    """
-    Formats a number with spaces as thousand separators and 2 decimal places
-    Example: 1234567.89 becomes 1 234 567.89
-    """
-    if value is None:
-        return ''
-    
-    # Format to 2 decimal places first
-    formatted = floatformat(value, 2)
-    
-    # Split the number into integer and decimal parts
-    if '.' in formatted:
-        integer_part, decimal_part = formatted.split('.')
-    else:
-        integer_part, decimal_part = formatted, '00'
-
-    # Add space thousand separators to integer part
-    int_with_spaces = ''
-    for i, digit in enumerate(reversed(integer_part)):
-        if i and i % 3 == 0:
-            int_with_spaces = ' ' + int_with_spaces
-        int_with_spaces = digit + int_with_spaces
-
-    return f'{int_with_spaces}.{decimal_part}'
-```
-
-# templatetags/check_tags.py
-
-```py
-from django import template
-
-register = template.Library()
-
-@register.filter
-def status_badge(status):
-    return {
-        'pending': 'secondary',
-        'delivered': 'warning',
-        'paid': 'success',
-        'cancelled': 'danger',
-        'unpaid': 'danger'
-    }.get(status, 'secondary')
-```
-
-# templatetags/custom_filters.py
-
-```py
-from django import template
-
-register = template.Library()
-
-@register.filter
-def divide(value, arg):
-    try:
-        return int(value) / int(arg)
-    except (ValueError, ZeroDivisionError):
-        return None
-
-@register.filter
-def status_badge(status):
-    """
-    Convert status to a bootstrap badge class
-    """
-    status_map = {
-        'pending': 'badge-secondary',
-        'approved': 'badge-success',
-        'rejected': 'badge-danger',
-        'in_progress': 'badge-warning',
-        'completed': 'badge-primary'
-    }
-    return status_map.get(status, 'badge-light')
-
+<!-- templates/receipt/receipt_timeline_modal.html --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt.check_number %} <i class="fas fa-money-check me-2"></i>Check #{{ receipt.check_number }} {% else %} <i class="fas fa-file-invoice-dollar me-2"></i>LCN #{{ receipt.lcn_number }} {% endif %} History </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Receipt Summary --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Entity:</strong> {{ receipt.entity.name }}</p> <p><strong>Client:</strong> {{ receipt.client.name }}</p> <p><strong>Amount:</strong> {{ receipt.amount|floatformat:2 }}</p> </div> <div class="col-md-6"> <p><strong>Status:</strong> <span class="badge badge-{{ receipt.status|lower }}"> {{ receipt.get_status_display }} </span> </p> <p><strong>Created:</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p> <p><strong>Due Date:</strong> {{ receipt.due_date|date:"d/m/Y" }}</p> </div> </div> </div> </div> <!-- Timeline --> <div class="timeline"> {% for event in history %} <div class="timeline-item"> <div class="timeline-marker {% if event.action == 'status_changed' %}bg-primary {% elif event.action == 'presented' %}bg-info {% elif event.action == 'compensated' %}bg-warning {% elif event.action == 'compensation_paid' %}bg-success {% else %}bg-secondary{% endif %}"> </div> <div class="timeline-content"> <div class="d-flex justify-content-between"> <h6 class="mb-0">{{ event.get_action_display }}</h6> <small class="text-muted">{{ event.timestamp|date:"d/m/Y H:i" }}</small> </div> <p class="mb-0">{{ event.notes }}</p> {% if event.action == 'status_changed' %} <small class="text-muted"> Changed from <span class="badge badge-{{ event.old_value.status|lower }}"> {{ event.old_value.status }} </span> to <span class="badge badge-{{ event.new_value.status|lower }}"> {{ event.new_value.status }} </span> </small> {% endif %} {% if event.user %} <small class="text-muted d-block">by {{ event.user.get_full_name|default:event.user.username }}</small> {% endif %} </div> </div> {% empty %} <p class="text-center text-muted">No history available</p> {% endfor %} </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> </div> <style> .timeline { position: relative; padding-left: 3rem; margin-bottom: 3rem; } .timeline::before { content: ''; position: absolute; left: 11px; top: 0; height: 100%; width: 2px; background-color: #e9ecef; } .timeline-item { position: relative; margin-bottom: 2rem; } .timeline-marker { position: absolute; left: -3rem; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px #e9ecef; } .timeline-content { background: #f8f9fa; border-radius: 0.3rem; padding: 1rem; position: relative; } .timeline-content::before { content: ''; position: absolute; left: -0.5rem; top: 0.75rem; width: 0.5rem; height: 0.5rem; background: inherit; transform: rotate(45deg); } /* Status Badge Colors */ .badge-portfolio { background-color: #6c757d; color: white; } .badge-presented { background-color: #17a2b8; color: white; } .badge-presented_discount { background-color: #e437d3; color: white; } .badge-paid { background-color: #28a745; color: white; } .badge-discounted { background-color: #1032dc; color: white; } .badge-unpaid { background-color: #dc3545; color: white; } .badge-compensated { background-color: #fd7e14; color: white; } </style>
 ```
 
 # templatetags/presentation_filters.py
@@ -1276,6 +1527,7 @@ def status_badge(status):
         'REJECTED': 'danger',
         'PRESENTED_COLLECTION': 'info',
         'PRESENTED_DISCOUNT': 'info',
+        'DISCOUNTED': 'success',
     }.get(original_status, status)  # Try original status first, then fallback to lowercase
     
     logger.debug(f"Returning badge class: {result}")
@@ -1286,31 +1538,9 @@ def status_badge(status):
 
 ```py
 from django.urls import path, include
-from . import views
-from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
-from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
-from .views_invoice import (
-    InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
-    product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
-    InvoicePaymentDetailsView, InvoiceAccountingSummaryView
-)
-from .views_checkers import (
-    CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
-    invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
-    CheckerFilterView, CheckFilterView, CheckDetailView, AvailableCheckersView, CheckerSignatureView, CheckerPositionStatusView
-)
-
-from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
-
-from .views_bank import (
-    BankAccountListView, BankAccountCreateView, 
-    BankAccountDeactivateView, BankAccountFilterView,
-    bank_account_autocomplete
-)
-
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
-    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView)
+    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,)
 
 from .views_client import (
     client_management,
@@ -1335,69 +1565,6 @@ from .views_presentation import (
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
-
-    path('suppliers/', SupplierListView.as_view(), name='supplier-list'),  # List all suppliers
-    path('suppliers/create/', SupplierCreateView.as_view(), name='supplier-create'),  # Create a new supplier
-    path('suppliers/<uuid:pk>/update/', SupplierUpdateView.as_view(), name='supplier-update'),  # Update a supplier
-    path('suppliers/<uuid:pk>/delete/', SupplierDeleteView.as_view(), name='supplier-delete'),  # Delete a supplier
-    path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
-
-    path('products/', ProductListView.as_view(), name='product-list'),  # List all products
-    path('products/create/', ProductCreateView.as_view(), name='product-create'),  # Create a new product
-    path('products/<uuid:pk>/update/', ProductUpdateView.as_view(), name='product-update'),  # Update a product
-    path('products/<uuid:pk>/delete/', ProductDeleteView.as_view(), name='product-delete'),  # Delete a product
-    path('products/<uuid:pk>/details/', ProductDetailsView.as_view(), name='product-details'),  # Details for a specific product
-    path('products/ajax-create/', ProductAjaxCreateView.as_view(), name='product-ajax-create'),  # AJAX view for creating a new Product
-
-    path('invoices/', InvoiceListView.as_view(), name='invoice-list'),  # List all invoices
-    path('invoices/create/', InvoiceCreateView.as_view(), name='invoice-create'),  # Create a new invoice
-    path('invoices/<uuid:pk>/update/', InvoiceUpdateView.as_view(), name='invoice-update'),  # Update an invoice
-    path('invoices/<uuid:pk>/delete/', InvoiceDeleteView.as_view(), name='invoice-delete'),  # Delete an invoice
-    path('products/autocomplete/', product_autocomplete, name='product-autocomplete'),  # Autocomplete for products
-    path('invoices/details/', InvoiceDetailsView.as_view(), name='invoice-details'),  # Details for a specific invoice
-    path('invoices/add-product/', AddProductToInvoiceView.as_view(), name='add-product-to-invoice'),  # Add a product to an invoice
-    path('invoices/edit-product/<uuid:pk>/', EditProductInInvoiceView.as_view(), name='invoice-edit-product'),  # Edit a product in an invoice
-    path('invoices/export/', ExportInvoicesView.as_view(), name='export-invoices'),
-    path('invoices/<uuid:invoice_id>/unexport/', UnexportInvoiceView.as_view(), name='unexport-invoice'),
-    path('invoices/<str:pk>/payment-details/', InvoicePaymentDetailsView.as_view(), name='invoice-payment-details'),
-    path('invoices/<str:invoice_id>/accounting-summary/', InvoiceAccountingSummaryView.as_view(), name='invoice-accounting-summary'),
-    path('invoices/autocomplete/', invoice_autocomplete, name='invoice-autocomplete'),
-    path('invoices/<str:invoice_id>/credit-note-details/', CreditNoteDetailsView.as_view(), name='credit-note-details'),
-    path('invoices/create-credit-note/', 
-         CreateCreditNoteView.as_view(), 
-         name='create-credit-note'),
-
-    path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
-    path('checkers/filter/', CheckerFilterView.as_view(), name='checker-filter'),
-    path('checkers/create/', CheckerCreateView.as_view(), name='checker-create'),
-    path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
-    path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
-    path('checkers/available/', AvailableCheckersView.as_view(), name='available-checkers'),
-
-    path('checks/create/', CheckCreateView.as_view(), name='check-create'),
-    path('checks/', CheckListView.as_view(), name='check-list'),
-    path('checks/<uuid:pk>/mark-delivered/', 
-        CheckStatusView.as_view(), {'action': 'delivered'}, name='check-mark-delivered'),
-    path('checks/<uuid:pk>/mark-paid/', 
-        CheckStatusView.as_view(), {'action': 'paid'}, name='check-mark-paid'),
-    path('checks/<uuid:pk>/action/', CheckActionView.as_view(), name='check-action'),
-    path('checks/<uuid:check_id>/details/', CheckDetailView.as_view(), name='check-details'),
-    path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
-    path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
-    path('checks/filter/', CheckFilterView.as_view(), name='check-filter'),
-    path('checkers/<uuid:pk>/signatures/', CheckerSignatureView.as_view(), name='checker-signatures'),
-    path('checkers/<uuid:pk>/sign/', CheckerSignatureView.as_view(), name='checker-sign'),
-    path('checkers/<uuid:checker_id>/position-status/<int:position>/',
-    CheckerPositionStatusView.as_view(),
-    name='checker-position-status'),
-
-    path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
-    path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
-    path('bank-accounts/<uuid:pk>/deactivate/', 
-         BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
-    path('bank-accounts/filter/', 
-         BankAccountFilterView.as_view(), name='bank-account-filter'),
-    path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -1427,9 +1594,11 @@ urlpatterns = [
     path('receipts/delete/<str:receipt_type>/<uuid:pk>/', ReceiptDeleteView.as_view(), name='receipt-delete'),
     path('receipts/details/<str:receipt_type>/<uuid:pk>/', ReceiptDetailView.as_view(), name='receipt-detail'),
     path('receipts/unpaid/', UnpaidReceiptsView.as_view(), name='unpaid-receipts'),
-    path('receipts/<str:receipt_type>/<uuid:pk>/status/',
-        ReceiptStatusUpdateView.as_view(), 
+    path('receipts/<str:receipt_type>/<uuid:pk>/status/', ReceiptStatusUpdateView.as_view(), 
         name='receipt-status-update'),
+    path('receipts/<str:receipt_type>/<uuid:pk>/timeline/', 
+        ReceiptTimelineView.as_view(), 
+         name='receipt-timeline'),
 
     # Autocomplete endpoints for form fields
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
@@ -1630,7 +1799,8 @@ def create_sale(request):
             amount=data['amount'],
             year=int(data.get('year') or data['date'][:4]),
             month=int(data.get('month') or data['date'][5:7]),
-            notes=data.get('notes', '')
+            notes=data.get('notes', ''),
+            sale_type=data['sale_type']
         )
         return JsonResponse({
             'status': 'success',
@@ -1891,7 +2061,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount
+from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory
+from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 
@@ -1940,7 +2111,7 @@ class PresentationCreateView(View):
                         print(f"Processing receipt: {receipt}, Status: {receipt.status}")
 
                         # Verify receipt is in portfolio status
-                        if receipt.status != 'PORTFOLIO':
+                        if receipt.status != 'PORTFOLIO' and receipt.status != 'UNPAID':
                             raise ValidationError(f"Receipt {receipt} is not in portfolio status")
 
                         # Create presentation receipt with proper field name
@@ -1953,6 +2124,8 @@ class PresentationCreateView(View):
                         
                         print(f"Creating presentation receipt with kwargs:", kwargs)
                         presentation_receipt = PresentationReceipt.objects.create(**kwargs)
+                        receipt.bank_account = BankAccount.objects.get(id=data['bank_account'])
+                        receipt.save()
                         print(f"Created presentation receipt: {presentation_receipt}")
 
                     except Exception as e:
@@ -2054,14 +2227,16 @@ class PresentationUpdateView(View):
         try:
             data = json.loads(request.body)
             print(f"Parsed data: {data}")
+            print(f"Request headers: {dict(request.headers)}")
             
             with transaction.atomic():
                 presentation = get_object_or_404(Presentation, pk=pk)
-                print(f"Found presentation: {presentation}")
+                print(f"Found presentation: {presentation.__dict__}")
 
                 if presentation.status == 'pending':
                     # Handle initial status change
                     if not data.get('bank_reference'):
+                        print("Error: Missing bank reference")
                         return JsonResponse({
                             'status': 'error',
                             'message': 'Bank reference is required'
@@ -2070,16 +2245,29 @@ class PresentationUpdateView(View):
                     print(f"Updating presentation status from pending to {data['status']}")
                     presentation.bank_reference = data['bank_reference']
                     presentation.status = data['status']
+
+                    # If status is being set to 'discounted', update all receipts
+                    if data['status'] == 'discounted':
+                        for pr in presentation.presentation_receipts.all():
+                            receipt = pr.checkreceipt or pr.lcn
+                            if receipt:
+                                receipt.status = 'DISCOUNTED'
+                                receipt.save()
+
                     presentation.save()
+                    print("Presentation updated successfully")
 
                 elif (presentation.status == 'presented' or presentation.status == 'discounted'):
                     if 'receipt_statuses' in data:
-                        # Handle receipt status updates
                         receipt_statuses = data['receipt_statuses']
-                        print(f"Updating {len(receipt_statuses)} receipt statuses")
+                        print(f"Processing {len(receipt_statuses)} receipt status updates: {receipt_statuses}")
                         
                         for receipt_id, new_status in receipt_statuses.items():
-                            if not new_status:  # Skip empty status updates
+                            print(f"\nProcessing receipt {receipt_id}:")
+                            print(f"New status data: {new_status}")
+                            
+                            if not new_status:
+                                print("Skipping empty status update")
                                 continue
                                 
                             try:
@@ -2087,34 +2275,41 @@ class PresentationUpdateView(View):
                                     id=receipt_id,
                                     presentation=presentation
                                 )
+                                print(f"Found presentation receipt: {presentation_receipt.__dict__}")
+                                
                                 receipt = presentation_receipt.checkreceipt or presentation_receipt.lcn
+                                print(f"Associated receipt: {receipt.__dict__ if receipt else None}")
                                 
                                 if receipt and receipt.status not in ['PAID', 'UNPAID', 'COMPENSATED']:
-                                    print(f"Debug - new_status type: {type(new_status)}")
-                                    print(f"Debug - new_status content: {new_status}")
                                     status_value = new_status['status'] if isinstance(new_status, dict) else new_status
-                                    print(f"Updating receipt {receipt_id} status to {status_value}")
+                                    print(f"Processing status update to {status_value}")
                                     
                                     if status_value == 'unpaid':
-                                        print(f"Debug - Checking cause in: {new_status}")
                                         cause = new_status.get('cause') if isinstance(new_status, dict) else None
-                                        print(f"Debug - Found cause: {cause}")
+                                        print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
                                         receipt.mark_as_unpaid(cause)
                                     else:
+                                        print(f"Updating status to: {status_value.upper()}")
                                         receipt.status = status_value.upper()
                                         receipt.save()
-                                    
-                                    # Handle any compensating receipts if this was marked as paid
-                                    if status_value.upper() == 'PAID':
-                                        receipt.handle_compensation_payment()
                                         
-                                    print(f"Receipt status updated successfully")
+                                        if status_value.upper() == 'PAID':
+                                            print("Receipt marked as paid, updating compensated receipts")
+                                            receipt.update_compensated_receipts()
+                                    
+                                    print("Status update completed successfully")
+                                else:
+                                    print(f"Skipping receipt with status: {receipt.status if receipt else 'None'}")
 
                             except PresentationReceipt.DoesNotExist:
-                                print(f"Receipt {receipt_id} not found in presentation {pk}")
+                                print(f"Error: Receipt {receipt_id} not found in presentation {pk}")
                                 continue
+                            except Exception as e:
+                                print(f"Error processing receipt {receipt_id}: {str(e)}")
+                                print(traceback.format_exc())
+                                raise
                 
                 print("Presentation update completed successfully")
                 return JsonResponse({
@@ -2129,7 +2324,7 @@ class PresentationUpdateView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=400)    
-         
+   
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
     """
@@ -2147,16 +2342,26 @@ class PresentationDeleteView(View):
                             'status': 'error',
                             'message': 'Only pending presentations can be deleted'
                         }, status=400)
-
-                    # Reset status of all receipts back to portfolio
+                    
+                    # Get all related receipts before deletion
+                    related_receipts = []
                     for pr in presentation.presentation_receipts.all():
-                        print(f"Processing receipt in presentation: {pr}")
                         receipt = pr.checkreceipt or pr.lcn
                         if receipt:
-                            print(f"Resetting status for receipt: {receipt}")
-                            receipt.status = 'PORTFOLIO'
-                            receipt.save()
-                            print(f"Receipt status reset to PORTFOLIO")
+                            related_receipts.append(receipt)
+
+                    # Delete presentation-related history entries for all receipts
+                    content_types = ContentType.objects.get_for_model(CheckReceipt), ContentType.objects.get_for_model(LCN)
+                    for receipt in related_receipts:
+                        ReceiptHistory.objects.filter(
+                            content_type__in=content_types,
+                            object_id=receipt.id,
+                            new_value__contains=str(presentation.id)  # Look for presentation ID in the new_value JSON
+                        ).delete()
+                        
+                        # Reset receipt status back to PORTFOLIO
+                        receipt.status = 'PORTFOLIO'
+                        receipt.save()
                     
                     # Delete the presentation
                     presentation.delete()
@@ -2191,13 +2396,30 @@ class AvailableReceiptsView(View):
         
         if receipt_type == 'check':
             receipts = CheckReceipt.objects.filter(
-                status=CheckReceipt.STATUS_PORTFOLIO
-            ).select_related('client')
+                status__in=[
+                    CheckReceipt.STATUS_PORTFOLIO,
+                    CheckReceipt.STATUS_UNPAID
+                ]
+            ).select_related('client', 'entity')
         else:  # lcn
             receipts = LCN.objects.filter(
-                status=LCN.STATUS_PORTFOLIO
-            ).select_related('client')
+                status__in=[
+                    LCN.STATUS_PORTFOLIO,
+                    LCN.STATUS_UNPAID
+                ]
+            ).select_related('client', 'entity')
         
+        # Get presentation info for unpaid receipts
+        for receipt in receipts:
+            if receipt.status == 'UNPAID':
+                if receipt_type == 'check':
+                    presentation = receipt.check_presentations.order_by('-presentation__date').first()
+                else:
+                    presentation = receipt.lcn_presentations.order_by('-presentation__date').first()
+                
+                if presentation:
+                    receipt.last_presentation_date = presentation.presentation.date
+
         html = render_to_string('presentation/available_receipts.html', {
             'receipts': receipts
         }, request=request)
@@ -2216,12 +2438,14 @@ from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import calendar
-from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, MOROCCAN_BANKS
+from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS
 from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
+import traceback
 
 
 class ReceiptListView(ListView):
@@ -2254,13 +2478,14 @@ class ReceiptListView(ListView):
         return {
             'checks': checks,
             'lcns': lcns,
-            'cash': CashReceipt.objects.select_related('client', 'entity', 'credited_account').all(),
-            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'credited_account').all()
+            'cash': CashReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all(),
+            'transfers': TransferReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all()
         }
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptCreateView(View):
     def get(self, request, receipt_type):
+        print(f"Loading form for receipt type: {receipt_type}")
         if receipt_type not in ['check', 'lcn', 'cash', 'transfer']:
             return JsonResponse({'error': 'Invalid receipt type'}, status=400)
 
@@ -2290,13 +2515,20 @@ class ReceiptCreateView(View):
             'bank_accounts': bank_accounts,
             'bank_choices': MOROCCAN_BANKS, 
         }
-
-        return render(request, 'receipt/receipt_form_modal.html', context)
+        print(f"Context receipt_type: {context['receipt_type']}") 
+        rendered = render(request, 'receipt/receipt_form_modal.html', context)
+        print(f"Form HTML contains transfer fields: {'transfer_date' in rendered.content.decode()}")  # Debug
+        return rendered
     
     def post(self, request, receipt_type):
         print("POST request received:")
         print("Receipt type:", receipt_type)
+        print("Raw POST data:", request.body)
+        data = request.POST.dict()
         print("POST data:", request.POST)
+        print("transfer_date value:", request.POST.get('transfer_date'))
+        print("transfer_reference value:", request.POST.get('transfer_reference'))
+        
         try:
             data = request.POST.dict()
 
@@ -2337,6 +2569,7 @@ class ReceiptCreateView(View):
                 receipt = CashReceipt.objects.create(
                     **common_fields,
                     credited_account_id=data['credited_account'],
+                    bank_account_id=data['credited_account'],
                     reference_number=data.get('reference_number', '')
                 )
             
@@ -2344,8 +2577,9 @@ class ReceiptCreateView(View):
                 receipt = TransferReceipt.objects.create(
                     **common_fields,
                     credited_account_id=data['credited_account'],
-                    transfer_reference=data['transfer_reference'],
-                    transfer_date=data['transfer_date']
+                    bank_account_id=data['credited_account'],
+                    transfer_reference=data.get('transfer_reference', ''),
+                    transfer_date=data.get('transfer_date')
                 )
 
             else:
@@ -2466,8 +2700,9 @@ class ReceiptUpdateView(View):
                 else:
                     receipt.lcn_number = data['lcn_number']
             else:  # cash or transfer
-                receipt.bank_account_id = data['bank_account']
-                if receipt_type == 'transfer':
+                receipt.credited_account_id = data['credited_account']
+                receipt.bank_account_id = data['credited_account'] 
+                if receipt_type == 'transfer':  
                     receipt.transfer_reference = data['transfer_reference'] 
                     receipt.transfer_date = data['transfer_date']
 
@@ -2503,11 +2738,13 @@ class ReceiptDeleteView(View):
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
             
             # Check if receipt can be deleted
-            if not receipt.can_delete():
-                return JsonResponse({
-                    'status': 'error',
-                    'message': 'Cannot delete receipt that is part of a presentation'
-                }, status=400)
+            if receipt_type in ['check', 'lcn']:
+                presentations = receipt.check_presentations.all() if receipt_type == 'check' else receipt.lcn_presentations.all()
+                if presentations.exists():
+                    return JsonResponse({
+                        'status': 'error',
+                        'message': 'Cannot delete receipt that is part of a presentation'
+                    }, status=400)
 
             receipt.delete()
             return JsonResponse({
@@ -2700,6 +2937,37 @@ class UnpaidReceiptsView(View):
             'items': results,
             'has_more': False  # Implement pagination if needed
         })
+    
+# In views_receipts.py - add the following class
+
+class ReceiptTimelineView(View):
+    def get(self, request, receipt_type, pk):
+        try:
+            # Get the receipt
+            if receipt_type == 'check':
+                receipt = get_object_or_404(CheckReceipt, pk=pk)
+            else:
+                receipt = get_object_or_404(LCN, pk=pk)
+
+            # Get the receipt's history
+            content_type = ContentType.objects.get_for_model(receipt)
+            history = ReceiptHistory.objects.filter(
+                content_type=content_type,
+                object_id=receipt.id
+            ).select_related('user')
+
+            context = {
+                'receipt': receipt,
+                'history': history,
+            }
+
+            return render(request, 'receipt/receipt_timeline_modal.html', context)
+
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
 
 def client_autocomplete(request):
     search = request.GET.get('term', '') or request.GET.get('q', '')
