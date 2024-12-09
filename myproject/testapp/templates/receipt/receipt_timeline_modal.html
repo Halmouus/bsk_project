@@ -1,3 +1,4 @@
+{% load accounting_filters %}
 <!-- templates/receipt/receipt_timeline_modal.html -->
 <div class="modal-header">
     <h5 class="modal-title">
@@ -19,7 +20,7 @@
                 <div class="col-md-6">
                     <p><strong>Entity:</strong> {{ receipt.entity.name }}</p>
                     <p><strong>Client:</strong> {{ receipt.client.name }}</p>
-                    <p><strong>Amount:</strong> {{ receipt.amount|floatformat:2 }}</p>
+                    <p><strong>Amount:</strong> {{ receipt.amount|format_balance }}</p>
                 </div>
                 <div class="col-md-6">
                     <p><strong>Status:</strong> 
@@ -54,11 +55,11 @@
                     <small class="text-muted">
                         Changed from 
                         <span class="badge badge-{{ event.old_value.status|lower }}">
-                            {{ event.old_value.status }}
+                            {{ event.old_value.status|default_if_none:""|get_status_display }}
                         </span>
                         to
                         <span class="badge badge-{{ event.new_value.status|lower }}">
-                            {{ event.new_value.status }}
+                            {{ event.new_value.status|default_if_none:""|get_status_display }}
                         </span>
                     </small>
                 {% endif %}

@@ -37,3 +37,39 @@ def space_thousands(value):
         int_with_spaces = digit + int_with_spaces
 
     return f'{int_with_spaces}.{decimal_part}'
+
+@register.filter
+def format_balance(value):
+    """
+    Formats a balance number without negative sign
+    Returns tuple of (formatted_number, css_class)
+    """
+    if value is None:
+        return ''
+    
+    # Convert to positive number for display
+    formatted = floatformat(abs(value), 2)
+    
+    # Add space thousand separators
+    int_part, dec_part = formatted.split('.')
+    int_with_spaces = ''
+    for i, digit in enumerate(reversed(int_part)):
+        if i and i % 3 == 0:
+            int_with_spaces = ' ' + int_with_spaces
+        int_with_spaces = digit + int_with_spaces
+        
+    return f'{int_with_spaces}.{dec_part}'
+
+@register.filter
+def get_status_display(status_code):
+    STATUS_DISPLAY = {
+        'PORTFOLIO': 'In Portfolio',
+        'PRESENTED_COLLECTION': 'Presented for Collection',
+        'PRESENTED_DISCOUNT': 'Presented for Discount',
+        'DISCOUNTED': 'Discounted',
+        'PAID': 'Paid',
+        'REJECTED': 'Rejected',
+        'COMPENSATED': 'Compensated',
+        'UNPAID': 'Unpaid'
+    }
+    return STATUS_DISPLAY.get(status_code, status_code)

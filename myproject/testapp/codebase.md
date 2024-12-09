@@ -102,6 +102,7 @@ class TransferReceiptForm(forms.ModelForm):
         }
 ```
 
+
 # models.py
 
 ```py
@@ -118,8 +119,9 @@ from django.utils import timezone
 from decimal import Decimal
 from django.db.models import Q
 import logging
-from django.contrib.contenttypes.fields import GenericForeignKey
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.contenttypes.fields import GenericForeignKey
+
 
 logger = logging.getLogger(__name__)
 
@@ -184,149 +186,113 @@ class BankAccount(BaseModel):
     account_type = models.CharField(max_length=15, choices=ACCOUNT_TYPE)
     is_active = models.BooleanField(default=True)
 
+    is_current = models.BooleanField(
+        default=False,
+        help_text="Determines if accounting operations are recorded on this account"
+    )
+    bank_overdraft = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum allowed overdraft amount"
+    )
+    overdraft_fee = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Fee applied for overdraft usage"
+    )
+    has_check_discount_line = models.BooleanField(
+        default=False,
+        help_text="Indicates if this account can discount checks"
+    )
+    check_discount_line_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum amount available for check discounting"
+    )
+    has_lcn_discount_line = models.BooleanField(
+        default=False,
+        help_text="Indicates if this account can discount LCNs"
+    )
+    lcn_discount_line_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Maximum amount available for LCN discounting"
+    )
+    stamp_fee_per_receipt = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(Decimal('0.00'))],
+        help_text="Stamp fee charged per presented receipt"
+    )
+
+    def get_available_check_discount_line(self):
+        """Calculate remaining check discount line amount"""
+        if not self.has_check_discount_line or not self.check_discount_line_amount:
+            return Decimal('0.00')
+            
+        # Get all discounted checks for this account
+        total_discounted = PresentationReceipt.objects.filter(
+            presentation__bank_account=self,
+            presentation__presentation_type='DISCOUNT',
+            checkreceipt__isnull=False  # Ensure it's a check
+        ).exclude(
+            recorded_status__in=['UNPAID', 'PAID'] # Only count currently discounted
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return self.check_discount_line_amount - total_discounted
+
+    def get_available_lcn_discount_line(self):
+        """Calculate remaining LCN discount line amount"""
+        if not self.has_lcn_discount_line or not self.lcn_discount_line_amount:
+            return Decimal('0.00')
+            
+        discounted_amount = PresentationReceipt.objects.filter(
+            presentation__bank_account=self,
+            presentation__presentation_type='DISCOUNT',
+            lcn__isnull=False,  # Ensure it's an LCN
+            lcn__status='DISCOUNTED'  # Only count currently discounted
+        ).exclude(
+            lcn__status__in=['UNPAID', 'PAID', 'COMPENSATED']
+        ).aggregate(
+            total=models.Sum('amount')
+        )['total'] or Decimal('0.00')
+        
+        return self.lcn_discount_line_amount - discounted_amount
+
+    def clean(self):
+        super().clean()
+        if self.has_check_discount_line and not self.check_discount_line_amount:
+            raise ValidationError({
+                'check_discount_line_amount': 'Amount required when check discount line is enabled'
+            })
+        if self.has_lcn_discount_line and not self.lcn_discount_line_amount:
+            raise ValidationError({
+                'lcn_discount_line_amount': 'Amount required when LCN discount line is enabled'
+            })
+
     class Meta:
         ordering = ['bank', 'account_number']
+
 
     def __str__(self):
         type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
         return f"{self.bank} [{self.account_number}] - {type_indicator}"
-    
-class Checker(BaseModel):
-    TYPE_CHOICES = [
-        ('CHQ', 'Cheque'),
-        ('LCN', 'LCN')
-    ]
-    
-    PAGE_CHOICES = [
-        (25, '25'),
-        (50, '50'),
-        (100, '100')
-    ]
-
-    STATUS_CHOICES = [
-        ('new', 'New'),
-        ('in_use', 'In Use'), 
-        ('completed', 'Completed')
-    ]
-
-    code = models.CharField(max_length=10, unique=True, blank=True)
-    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
-    bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
-    num_pages = models.IntegerField(choices=PAGE_CHOICES)
-    index = models.CharField(
-        max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
-    )
-    starting_page = models.IntegerField(validators=[MinValueValidator(1)])
-    final_page = models.IntegerField(blank=True)
-    current_position = models.IntegerField(blank=True)
-    is_active = models.BooleanField(default=True)
-    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
-
-    def update_status(self):
-        if self.current_position > self.starting_page:
-            self.status = 'in_use'
-        if self.current_position >= self.final_page:
-            self.status = 'completed'
-        self.save()
-
-    def get_status(self):
-        STATUS_STYLES = {
-            'new': {'label': 'New', 'color': 'primary'},
-            'in_use': {'label': 'In Use', 'color': 'warning'},
-            'completed': {'label': 'Completed', 'color': 'success'},
-        }
-        return STATUS_STYLES.get(self.status, {'label': 'Unknown', 'color': 'secondary'})
-
-    @property
-    def remaining_pages(self):
-        print(f"Calculating remaining pages for {self.bank_account.bank}")
-        
-        # Get all used positions (excluding cancelled checks)
-        used_positions = set(
-            self.checks.values_list('position', flat=True)
-        )
-        used_positions_count = self.checks.count()
-        # Count available positions
-        available_count = self.final_page - self.starting_page + 1 - used_positions_count
-        print(f"Used positions: {used_positions}")
-        print(f"Available positions count: {available_count}")
-        
-        return available_count
-    def clean(self):
-        if self.bank_account:
-            if not self.bank_account.is_active:
-                raise ValidationError("Cannot create checker for inactive bank account")
-            if self.bank_account.account_type != 'national':
-                raise ValidationError("Can only create checkers for national accounts")
-        super().clean()
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = self.generate_code()
-        if not self.final_page:
-            self.final_page = self.starting_page + self.num_pages - 1
-        if not self.current_position:
-            self.current_position = self.starting_page
-        super().save(*args, **kwargs)
-
-    def generate_code(self):
-        # Generate random alphanumeric code
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    
-    #signature part#
-    position_signatures = models.JSONField(default=dict)
-
-    def get_position_signature_status(self, position):
-        print(f"Getting signature status for position {position}")
-        print(f"Current signatures: {self.position_signatures}")
-        return self.position_signatures.get(str(position), {
-            'signatures': [],
-            'timestamps': []
-        })
-
-    def add_signature(self, position, signature):
-        print(f"Adding signature {signature} to position {position}")
-        position = str(position)
-        if position not in self.position_signatures:
-            print(f"Position {position} not found, initializing")
-            self.position_signatures[position] = {
-                'signatures': [],
-                'timestamps': []
-            }
-        
-        if signature not in self.position_signatures[position]['signatures']:
-            print(f"Adding new signature {signature}")
-            self.position_signatures[position]['signatures'].append(signature)
-            self.position_signatures[position]['timestamps'].append(
-                timezone.now().isoformat()
-            )
-            print(f"Updated signatures: {self.position_signatures}")
-            self.save()
-        else:
-            print(f"Signature {signature} already exists for position {position}")
-        
-    
-    def get_last_issued_check(self):
-        """Get the last issued check."""
-        return self.checks.exclude(status="available").order_by('-position').first()
-
-    def get_next_available_position(self):
-        """Calculate the next available position."""
-        last_check = self.get_last_issued_check()
-        if last_check:
-            last_position = int(last_check.position[len(self.index):])
-            next_position = last_position + 1
-            if next_position <= self.final_page:
-                return next_position
-        return self.starting_page
-
-    def __str__(self):
-        return f'Checker {self.index}'
-
-    class Meta:
-        ordering = ['-created_at']
 
 class Client(BaseModel):
     """
@@ -378,7 +344,6 @@ class Client(BaseModel):
         """
         Get all transactions for the client with optional year/month filter.
         For sales: Uses the actual date
-        For receipts: Uses the client_year and client_month fields
         """
         print("\n=== Starting get_transactions ===")
         transactions = []
@@ -619,7 +584,6 @@ class Entity(BaseModel):
         help_text='Enter 5-7 digits starting with 3'
     )
     
-    # Optional fields
     city = models.CharField(max_length=100, blank=True, null=True)
     phone_number = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
@@ -660,6 +624,8 @@ class Entity(BaseModel):
         ordering = ['name']
         verbose_name = 'Entity'
         verbose_name_plural = 'Entities'
+
+
 
 class Receipt(BaseModel):
     """Base class for all receipt types."""
@@ -1259,6 +1225,14 @@ class PresentationReceipt(BaseModel):
         blank=True,
         related_name='lcn_presentations'
     )
+    
+    recorded_status = models.CharField(
+        max_length=20,
+        choices=NegotiableReceipt.RECEIPT_STATUS,
+        null=True,
+        blank=True,
+        help_text="Stores the final status decision made in this presentation"
+    )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     immutable = models.BooleanField(default=False)
 
@@ -1407,6 +1381,18 @@ def update_checker_status(sender, instance, **kwargs):
 
 ```
 
+# templates/bank/bank_list.html
+
+```html
+{% extends 'base.html' %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Bank Accounts</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#bankAccountModal"> <i class="fas fa-plus"></i> New Bank Account </button> </div> <!-- Accounts Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Bank</th> <th>Account Number</th> <th>Type</th> <th>City</th> <th>Status</th> <th>Current Account</th> <th>Check Discount</th> <th>LCN Discount</th> <th>Actions</th> </tr> </thead> <tbody> <tbody> {% for account in accounts %} <tr> <td>{{ account.get_bank_display }}</td> <td>{{ account.account_number }}</td> <td>{{ account.get_account_type_display }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td> <span class="badge {% if account.is_current %}badge-primary{% else %}badge-secondary{% endif %}"> {{ account.is_current|yesno:"Yes,No" }} </span> </td> <td> {% if account.has_check_discount_line %} <span class="badge badge-info"> {{ account.check_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> {% if account.has_lcn_discount_line %} <span class="badge badge-info"> {{ account.lcn_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-primary" onclick="editBankAccount('{{ account.id }}')"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deleteBankAccount('{{ account.id }}')"> <i class="fas fa-trash"></i> </button> </div> </td> <td style="display:none"> Check line: {{ account.get_available_check_discount_line }} LCN line: {{ account.get_available_lcn_discount_line }} Raw check amount: {{ account.check_discount_line_amount }} Raw lcn amount: {{ account.lcn_discount_line_amount }} </td> </tr> {% empty %} <tr> <td colspan="9" class="text-center">No bank accounts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> <!-- Bank Account Modal --> <div class="modal fade" id="bankAccountModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title" id="modalTitle">New Bank Account</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="bankAccountForm"> {% csrf_token %} <input type="hidden" id="accountId"> <!-- Basic Information --> <div class="card mb-3"> <div class="card-header"> Basic Information </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank</label> <select class="form-control" id="bank" required> {% for code, name in bank_choices %} <option value="{{ code }}">{{ name }}</option> {% endfor %} </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Account Number</label> <input type="text" class="form-control" id="accountNumber" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label>Accounting Number</label> <input type="text" class="form-control" id="accountingNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>Journal Number</label> <input type="text" class="form-control" id="journalNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>City</label> <input type="text" class="form-control" id="city" required> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Account Type</label> <select class="form-control" id="accountType" required> <option value="national">National</option> <option value="international">International</option> </select> </div> </div> <div class="col-md-6"> <div class="form-check mt-4"> <input type="checkbox" class="form-check-input" id="isActive" checked> <label class="form-check-label">Active Account</label> </div> <div class="form-check"> <input type="checkbox" class="form-check-input" id="isCurrent"> <label class="form-check-label">Current Account</label> </div> </div> </div> </div> </div> <!-- Financial Parameters --> <div class="card mb-3"> <div class="card-header"> Financial Parameters </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank Overdraft</label> <input type="number" class="form-control" id="bankOverdraft" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Overdraft Fee (%)</label> <input type="number" class="form-control" id="overdraftFee" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasCheckDiscountLine"> <label class="form-check-label">Has Check Discount Line</label> </div> <div class="form-group check-discount-amount d-none"> <label>Check Discount Line Amount</label> <input type="number" class="form-control" id="checkDiscountLineAmount" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasLcnDiscountLine"> <label class="form-check-label">Has LCN Discount Line</label> </div> <div class="form-group lcn-discount-amount d-none"> <label>LCN Discount Line Amount</label> <input type="number" class="form-control" id="lcnDiscountLineAmount" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Stamp Fee per Receipt</label> <input type="number" class="form-control" id="stampFeePerReceipt" step="0.01" min="0"> </div> </div> </div> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveBankAccount">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> const BankAccountManager = { init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#saveBankAccount').on('click', () => this.saveBankAccount()); // Toggle discount line amount inputs $('#hasCheckDiscountLine').change(function() { $('.check-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#checkDiscountLineAmount').prop('required', true); } else { $('#checkDiscountLineAmount').prop('required', false).val(''); } }); $('#hasLcnDiscountLine').change(function() { $('.lcn-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#lcnDiscountLineAmount').prop('required', true); } else { $('#lcnDiscountLineAmount').prop('required', false).val(''); } }); // Reset form on modal close $('#bankAccountModal').on('hidden.bs.modal', () => { this.resetForm(); }); }, setupValidation() { const form = document.getElementById('bankAccountForm'); // Add validation for numeric fields ['bankOverdraft', 'overdraftFee', 'checkDiscountLineAmount', 'lcnDiscountLineAmount', 'stampFeePerReceipt'].forEach(id => { const input = document.getElementById(id); input.addEventListener('input', () => { const value = parseFloat(input.value); if (value < 0) { input.setCustomValidity('Value must be positive'); } else { input.setCustomValidity(''); } }); }); }, async saveBankAccount() { const form = document.getElementById('bankAccountForm'); if (!form.checkValidity()) { form.reportValidity(); return; } const data = { bank: $('#bank').val(), account_number: $('#accountNumber').val(), accounting_number: $('#accountingNumber').val(), journal_number: $('#journalNumber').val(), city: $('#city').val(), account_type: $('#accountType').val(), is_active: $('#isActive').prop('checked'), is_current: $('#isCurrent').prop('checked'), bank_overdraft: $('#bankOverdraft').val() || null, overdraft_fee: $('#overdraftFee').val() || null, has_check_discount_line: $('#hasCheckDiscountLine').prop('checked'), check_discount_line_amount: $('#hasCheckDiscountLine').prop('checked') ? $('#checkDiscountLineAmount').val() : null, has_lcn_discount_line: $('#hasLcnDiscountLine').prop('checked'), lcn_discount_line_amount: $('#hasLcnDiscountLine').prop('checked') ? $('#lcnDiscountLineAmount').val() : null, stamp_fee_per_receipt: $('#stampFeePerReceipt').val() || null }; const id = $('#accountId').val(); const url = id ? `/testapp/bank-accounts/${id}/edit/` : '/testapp/bank-accounts/create/'; const method = id ? 'POST' : 'POST'; try { const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const result = await response.json(); if (response.ok) { $('#bankAccountModal').modal('hide'); showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } } catch (error) { showToast('Error', 'Failed to save bank account'); console.error('Error:', error); } }, resetForm() { const form = document.getElementById('bankAccountForm'); form.reset(); $('#accountId').val(''); $('#modalTitle').text('New Bank Account'); $('.check-discount-amount, .lcn-discount-amount').addClass('d-none'); $('#checkDiscountLineAmount, #lcnDiscountLineAmount').prop('required', false); } }; // Initialize when document is ready $(document).ready(function() { BankAccountManager.init(); }); // Global functions for edit and delete function editBankAccount(id) { fetch(`/testapp/bank-accounts/${id}/edit/`) .then(response => response.json()) .then(data => { $('#accountId').val(id); $('#modalTitle').text('Edit Bank Account'); // Fill in the form $('#bank').val(data.bank); $('#accountNumber').val(data.account_number); $('#accountingNumber').val(data.accounting_number); $('#journalNumber').val(data.journal_number); $('#city').val(data.city); $('#accountType').val(data.account_type); $('#isActive').prop('checked', data.is_active); $('#isCurrent').prop('checked', data.is_current); $('#bankOverdraft').val(data.bank_overdraft); $('#overdraftFee').val(data.overdraft_fee); $('#hasCheckDiscountLine').prop('checked', data.has_check_discount_line).trigger('change'); $('#checkDiscountLineAmount').val(data.check_discount_line_amount); $('#hasLcnDiscountLine').prop('checked', data.has_lcn_discount_line).trigger('change'); $('#lcnDiscountLineAmount').val(data.lcn_discount_line_amount); $('#stampFeePerReceipt').val(data.stamp_fee_per_receipt); $('#bankAccountModal').modal('show'); }) .catch(error => { showToast('Error', 'Failed to load bank account details'); console.error('Error:', error); }); } function deleteBankAccount(id) { if (!confirm('Are you sure you want to delete this bank account?')) { return; } fetch(`/testapp/bank-accounts/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }) .then(response => response.json()) .then(result => { if (result.status === 'success') { showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } }) .catch(error => { showToast('Error', 'Failed to delete bank account'); console.error('Error:', error); }); } function showToast(title, message) { // Implementation remains the same as before } </script> {% endblock %}
+```
+
+# templates/bank/partials/accounts_table.html
+
+```html
+{% for account in accounts %} <tr> <td> <div class="d-flex align-items-center"> <span class="bank-logo {{ account.bank|lower }}"></span> <span class="ml-2">{{ account.get_bank_display }}</span> </div> </td> <td>{{ account.account_number }}</td> <td>{{ account.journal_number }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.account_type == 'national' %}badge-primary{% else %}badge-info{% endif %}"> {{ account.get_account_type_display }} </span> </td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td>{{ account.created_at|date:"d/m/Y" }}</td> <td> {% if account.is_active %} <button class="btn btn-sm btn-danger deactivate-account" data-account-id="{{ account.id }}" {% if account.has_active_checkers %}disabled{% endif %} title="{% if account.has_active_checkers %}Cannot deactivate: Has active checkers{% endif %}"> <i class="fas fa-times"></i> </button> {% endif %} </td> </tr> {% endfor %}
+```
+
 # templates/base.html
 
 ```html
@@ -1464,13 +1450,17 @@ def update_checker_status(sender, instance, **kwargs):
 # templates/presentation/presentation_detail_modal.html
 
 ```html
-{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div id="presentation-container" data-presentation-id="{{ presentation.id }}"> <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6 d-flex flex-column"> {% if presentation.status == 'pending' %} <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required> </div> <div class="form-group"> <label>Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Presented</option> <option value="discounted">Discounted</option> <option value="rejected">Rejected</option> </select> </div> {% else %} <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> {% endif %} <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> {% if presentation.status == 'presented' %} <th>New Status</th> {% endif %} </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small> {% else %} {{ receipt.lcn.lcn_number }} <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %} <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small> {% endif %} {% if receipt.checkreceipt.compensation_info %} <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small> {% endif %} {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %} <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small> {% endif %} {% if receipt.lcn.compensation_info %} <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small> {% endif %} {% endif %} </td> {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <td> <select class="form-control form-control-sm receipt-status" data-receipt-id="{{ receipt.id }}" {% if receipt.checkreceipt.status in 'PAID,UNPAID' or receipt.lcn.status in 'PAID,UNPAID' %}disabled{% endif %}> <option value="">Pending</option> <option value="paid" {% if receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option> <option value="unpaid" {% if receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option> </select> </td> {% endif %} </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="5" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td colspan="2"></td> </tr> </tfoot> </table> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')"> Update Status </button> {% endif %} {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')"> Update Statuses </button> {% endif %} </div> <!-- Unpaid Cause Modal --> <div class="modal fade" id="unpaidCauseModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Rejection Cause</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <div class="form-group"> <label for="rejectionCause">Select Cause</label> <select class="form-control" id="rejectionCause" required> <option value="">Select a cause...</option> {% for cause, label in rejection_causes %} <option value="{{ cause }}">{{ label }}</option> {% endfor %} </select> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="confirmCause">Confirm</button> </div> </div> </div> </div> </div> <script> const presentationId = '{{ presentation.id }}'; console.log("Presentation ID:", presentationId); function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } const data = { bank_reference: bankRef, status: $('#presentationStatus').val() }; $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify(data), success: function(response) { location.reload(); }, error: function(xhr) { showError(xhr.responseJSON?.message || 'Update failed'); } }); } // Handle receipt status changes // Handle receipt status updates function updateReceiptStatuses(presentationId) { console.log('Updating receipt statuses for presentation:', presentationId); const receiptStatuses = {}; let hasChanges = false; let pendingUnpaidStatus = null; // Debug info for all receipt status selects $('.receipt-status').each(function() { const $select = $(this); console.log('Found receipt status select:', { receiptId: $select.data('receipt-id'), currentValue: $select.val(), disabled: $select.prop('disabled'), options: Array.from($select.find('option')).map(opt => ({ value: opt.value, text: opt.text, selected: opt.selected })) }); }); $('.receipt-status').each(function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const status = $select.val(); console.log('Processing receipt:', { receiptId: receiptId, newStatus: status, previousStatus: $select.data('previous-status') }); if (status === 'unpaid') { pendingUnpaidStatus = { receiptId: receiptId, $select: $select }; console.log('Found pending unpaid status:', pendingUnpaidStatus); return false; // Break the loop } if (status) { receiptStatuses[receiptId] = status; hasChanges = true; console.log(`Adding status update for receipt ${receiptId}:`, status); } }); if (pendingUnpaidStatus) { console.log('Showing unpaid cause modal for:', pendingUnpaidStatus); $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus); return; } if (!hasChanges) { console.log('No status changes detected'); showToast('No status changes to update', 'info'); return; } console.log('Submitting status updates:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); } function submitStatusUpdates(presentationId, receiptStatuses) { console.log('Submitting status updates:', { presentationId: presentationId, statuses: receiptStatuses, url: `/testapp/presentations/${presentationId}/edit/` }); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value, 'Content-Type': 'application/json' }, data: JSON.stringify({ receipt_statuses: receiptStatuses }), success: function(response) { console.log('Status update response:', response); // Update UI to reflect changes Object.entries(receiptStatuses).forEach(([receiptId, status]) => { const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`); console.log(`Updating UI for receipt ${receiptId}:`, { status: status, select: $select.length ? 'found' : 'not found' }); if ($select.length) { $select.prop('disabled', true) .val(status); // Update the badge in the status column const $statusCell = $select.closest('tr').find('td:nth-last-child(2)'); const statusClass = status === 'paid' ? 'badge-success' : 'badge-danger'; $statusCell.html(`<span class="badge ${statusClass}">${status.toUpperCase()}</span>`); } }); showToast('Receipt statuses updated successfully', 'success'); // Reload after a short delay to ensure UI is updated setTimeout(() => { location.reload(); }, 1000); }, error: function(xhr) { console.error('Status update failed:', { status: xhr.status, response: xhr.responseText }); try { const error = JSON.parse(xhr.responseText); showToast(error.message || 'Failed to update statuses', 'error'); } catch (e) { showToast('Failed to update statuses', 'error'); } } }); } // Handle unpaid cause confirmation $('#confirmCause').click(function() { console.log('Confirming unpaid cause'); const cause = $('#rejectionCause').val(); console.log('Selected cause:', cause); if (!cause) { console.log('No cause selected'); showError('Please select a rejection cause'); return; } const pendingStatus = $('#unpaidCauseModal').data('pendingStatus'); console.log('Pending status data:', pendingStatus); if (!pendingStatus || !pendingStatus.receiptId) { console.error('Missing pending status data'); showError('Missing receipt information'); return; } const receiptStatuses = { [pendingStatus.receiptId]: { status: 'unpaid', cause: cause } }; console.log('Submitting unpaid status update:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); $('#unpaidCauseModal').modal('hide'); }); function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .html(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', function() { container.remove(); }); } </script>
+{% load presentation_filters %} <!-- Debug info --> {% comment %} Available filters: {{ presentation_filters }} {% endcomment %} <!-- Test filter directly --> {% with test_status='pending' %} Raw status: {{ test_status }} Filtered status: {{ test_status|status_badge }} {% endwith %} <div id="presentation-container" data-presentation-id="{{ presentation.id }}"> <div class="modal-header"> <h5 class="modal-title"> {{ presentation.get_presentation_type_display }} Presentation Details </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Presentation Info --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p> <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p> <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p> </div> <div class="col-md-6 d-flex flex-column"> {% if presentation.status == 'pending' %} <div class="form-group"> <label>Bank Reference</label> <input type="text" class="form-control" id="bankReference" value="{{ presentation.bank_reference }}" required> </div> <div class="form-group"> <label>Status</label> <select class="form-control" id="presentationStatus"> <option value="presented">Presented</option> <option value="discounted">Discounted</option> <option value="rejected">Rejected</option> </select> </div> {% else %} <p><strong>Bank Reference:</strong> {{ presentation.bank_reference }}</p> <p><strong>Status:</strong> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </p> {% endif %} <p><strong>Notes:</strong> {{ presentation.notes|default:"No notes" }}</p> </div> </div> </div> </div> <!-- Receipts Table --> <h6>Presented Receipts</h6> <div class="table-responsive"> <table class="table table-sm"> <thead> <tr> <th>Type</th> <th>Reference</th> <th>Entity</th> <th>Client</th> <th>Due Date</th> <th class="text-right">Amount</th> <th>Status</th> {% if presentation.status == 'presented' %} <th>New Status</th> {% endif %} </tr> </thead> <tbody> {% for receipt in presentation.presentation_receipts.all %} <tr> <td> {% if receipt.checkreceipt %} <i class="fas fa-money-check"></i> Check {% else %} <i class="fas fa-file-invoice-dollar"></i> LCN {% endif %} </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.check_number }} <br><small class="text-muted">{{ receipt.checkreceipt.get_issuing_bank_display }}</small> {% else %} {{ receipt.lcn.lcn_number }} <br><small class="text-muted">{{ receipt.lcn.get_issuing_bank_display }}</small> {% endif %} </td> <td> <strong> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.name }} {% else %} {{ receipt.lcn.entity.name }} {% endif %} </strong> <br> <small class="text-muted"> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.entity.ice_code }} {% else %} {{ receipt.lcn.entity.ice_code }} {% endif %} </small> </td> <td> <small> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.client.name }} {% else %} {{ receipt.lcn.client.name }} {% endif %} </small> </td> <td> {% if receipt.checkreceipt %} {{ receipt.checkreceipt.due_date|date:"Y-m-d" }} {% else %} {{ receipt.lcn.due_date|date:"Y-m-d" }} {% endif %} </td> <td class="text-right">{{ receipt.amount|floatformat:2 }}</td> <td> {% if receipt.checkreceipt %} <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}"> {{ receipt.checkreceipt.get_status_display }} </span> {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %} <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small> {% endif %} {% if receipt.checkreceipt.compensation_info %} <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small> {% endif %} {% else %} <span class="badge badge-{{ receipt.lcn.status|status_badge }}"> {{ receipt.lcn.get_status_display }} </span> {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %} <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small> {% endif %} {% if receipt.lcn.compensation_info %} <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small> {% endif %} {% endif %} </td> {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <td> <select class="form-control form-control-sm receipt-status" data-receipt-id="{{ receipt.id }}" {% if receipt.recorded_status %}disabled{% endif %}> <option value="">Pending</option> <option value="paid" {% if receipt.recorded_status == 'PAID' or receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option> <option value="unpaid" {% if receipt.recorded_status == 'UNPAID' or receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option> </select> </td> {% endif %} </tr> {% endfor %} </tbody> <tfoot> <tr class="font-weight-bold"> <td colspan="5" class="text-right">Total:</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td colspan="2"></td> </tr> </tfoot> </table> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> {% if presentation.status == 'pending' %} <button type="button" class="btn btn-primary" onclick="updatePresentation('{{ presentation.id }}')"> Update Status </button> {% endif %} {% if presentation.status == 'presented' or presentation.status == 'discounted' %} <button type="button" class="btn btn-primary" onclick="updateReceiptStatuses('{{ presentation.id }}')"> Update Statuses </button> {% endif %} </div> <!-- Unpaid Cause Modal --> <div class="modal fade" id="unpaidCauseModal" tabindex="-1"> <div class="modal-dialog"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title">Rejection Cause</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <div class="form-group"> <label for="rejectionCause">Select Cause</label> <select class="form-control" id="rejectionCause" required> <option value="">Select a cause...</option> {% for cause, label in rejection_causes %} <option value="{{ cause }}">{{ label }}</option> {% endfor %} </select> </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="confirmCause">Confirm</button> </div> </div> </div> </div> </div> <script> const presentationId = '{{ presentation.id }}'; console.log("Presentation ID:", presentationId); function updatePresentation(id) { const bankRef = $('#bankReference').val(); if (!bankRef) { showError('Bank reference is required'); return; } const data = { bank_reference: bankRef, status: $('#presentationStatus').val() }; $.ajax({ url: `/testapp/presentations/${id}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify(data), success: function(response) { location.reload(); }, error: function(xhr) { showError(xhr.responseJSON?.message || 'Update failed'); } }); } // Handle receipt status changes // Handle receipt status updates function updateReceiptStatuses(presentationId) { console.log('Updating receipt statuses for presentation:', presentationId); const receiptStatuses = {}; let hasChanges = false; let pendingUnpaidStatus = null; // Debug info for all receipt status selects $('.receipt-status').each(function() { const $select = $(this); console.log('Found receipt status select:', { receiptId: $select.data('receipt-id'), currentValue: $select.val(), disabled: $select.prop('disabled'), options: Array.from($select.find('option')).map(opt => ({ value: opt.value, text: opt.text, selected: opt.selected })) }); }); $('.receipt-status').each(function() { const $select = $(this); const receiptId = $select.data('receipt-id'); const status = $select.val(); console.log('Processing receipt:', { receiptId: receiptId, newStatus: status, previousStatus: $select.data('previous-status') }); if (status === 'unpaid') { pendingUnpaidStatus = { receiptId: receiptId, $select: $select }; console.log('Found pending unpaid status:', pendingUnpaidStatus); return false; // Break the loop } if (status) { receiptStatuses[receiptId] = status; hasChanges = true; console.log(`Adding status update for receipt ${receiptId}:`, status); } }); if (pendingUnpaidStatus) { console.log('Showing unpaid cause modal for:', pendingUnpaidStatus); $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus); return; } if (!hasChanges) { console.log('No status changes detected'); showToast('No status changes to update', 'info'); return; } console.log('Submitting status updates:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); } function submitStatusUpdates(presentationId, receiptStatuses) { console.log('Submitting status updates:', { presentationId: presentationId, statuses: receiptStatuses, url: `/testapp/presentations/${presentationId}/edit/` }); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value, 'Content-Type': 'application/json' }, data: JSON.stringify({ receipt_statuses: receiptStatuses }), success: function(response) { console.log('Status update response:', response); // Update UI to reflect changes Object.entries(receiptStatuses).forEach(([receiptId, status]) => { const $select = $(`.receipt-status[data-receipt-id="${receiptId}"]`); console.log(`Updating UI for receipt ${receiptId}:`, { status: status, select: $select.length ? 'found' : 'not found' }); if ($select.length) { $select.prop('disabled', true) .val(status); // Update the badge in the status column const $statusCell = $select.closest('tr').find('td:nth-last-child(2)'); const statusClass = status === 'paid' ? 'badge-success' : 'badge-danger'; $statusCell.html(`<span class="badge ${statusClass}">${status.toUpperCase()}</span>`); } }); showToast('Receipt statuses updated successfully', 'success'); // Reload after a short delay to ensure UI is updated setTimeout(() => { location.reload(); }, 1000); }, error: function(xhr) { console.error('Status update failed:', { status: xhr.status, response: xhr.responseText }); try { const error = JSON.parse(xhr.responseText); showToast(error.message || 'Failed to update statuses', 'error'); } catch (e) { showToast('Failed to update statuses', 'error'); } } }); } // Handle unpaid cause confirmation $('#confirmCause').click(function() { console.log('Confirming unpaid cause'); const cause = $('#rejectionCause').val(); console.log('Selected cause:', cause); if (!cause) { console.log('No cause selected'); showError('Please select a rejection cause'); return; } const pendingStatus = $('#unpaidCauseModal').data('pendingStatus'); console.log('Pending status data:', pendingStatus); if (!pendingStatus || !pendingStatus.receiptId) { console.error('Missing pending status data'); showError('Missing receipt information'); return; } const receiptStatuses = { [pendingStatus.receiptId]: { status: 'unpaid', cause: cause } }; console.log('Submitting unpaid status update:', receiptStatuses); submitStatusUpdates(presentationId, receiptStatuses); $('#unpaidCauseModal').modal('hide'); }); function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function showError(message) { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-danger text-white"> <strong class="mr-auto">Error</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast"> <span aria-hidden="true">&times;</span> </button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .html(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', function() { container.remove(); }); } </script>
 ```
 
 # templates/presentation/presentation_list.html
 
 ```html
-{% extends 'base.html' %} {% load presentation_filters %} {% block content %} {% csrf_token %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Presentations</h2> <div class="btn-group"> <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus"></i> New Presentation </button> <div class="dropdown-menu dropdown-menu-right"> <a class="dropdown-item" href="#" onclick="startPresentation('check')"> <i class="fas fa-money-check"></i> Present Checks </a> <a class="dropdown-item" href="#" onclick="startPresentation('lcn')"> <i class="fas fa-file-invoice-dollar"></i> Present LCNs </a> </div> </div> </div> <!-- Filter Section --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-3"> <select class="form-control" id="typeFilter"> <option value="">All Types</option> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="statusFilter"> <option value="">All Status</option> <option value="pending">Pending</option> <option value="presented">Presented</option> <option value="paid">Paid</option> <option value="rejected">Rejected</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="bankFilter"> <option value="">All Banks</option> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> <div class="col-md-3"> <input type="text" class="form-control" id="searchPresentation" placeholder="Search by reference..."> </div> </div> </div> </div> <!-- Presentations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Type</th> <th>Bank Account</th> <th>Bank Reference</th> <th>Total Amount</th> <th>Receipt Count</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for presentation in presentations %} <tr> <td>{{ presentation.date|date:"Y-m-d" }}</td> <td>{{ presentation.get_presentation_type_display }}</td> <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td> <td>{{ presentation.bank_reference|default:"-" }}</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td class="text-center">{{ presentation.receipt_count }}</td> <td> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')"> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')" {% if presentation.status == 'paid' %}disabled{% endif %}> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')" {% if presentation.status != 'pending' %}disabled{% endif %}> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No presentations found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Create/Edit Presentation Modal --> <div class="modal fade" id="presentationModal" tabindex="-1"> <div class="modal-dialog modal-xl"> <!-- Made larger for better receipt selection view --> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <span id="modalTitleText">Create Presentation</span> </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="presentationForm"> <!-- Step indicator --> <div class="mb-4"> <div class="progress"> <div class="progress-bar" role="progressbar" style="width: 0%"></div> </div> <div class="d-flex justify-content-between mt-2"> <span class="step-indicator active">1. Basic Info</span> <span class="step-indicator">2. Select Receipts</span> <span class="step-indicator">3. Review</span> </div> </div> <!-- Step 1: Basic Info --> <div id="step1" class="step-content"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Presentation Type</label> <select class="form-control" id="presentationType" required> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Bank Account</label> <select class="form-control" id="bankAccount" required> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="presentationDate" value="{% now 'Y-m-d' %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Notes</label> <textarea class="form-control" id="presentationNotes" rows="1"></textarea> </div> </div> </div> </div> <!-- Step 2: Receipt Selection --> <div id="step2" class="step-content d-none"> <div class="receipt-selection-container"> <!-- Receipts will be loaded here --> </div> </div> <!-- Step 3: Review --> <div id="step3" class="step-content d-none"> <div class="review-summary"> <!-- Summary will be populated dynamically --> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-info" id="prevStep" style="display: none"> <i class="fas fa-arrow-left"></i> Previous </button> <button type="button" class="btn btn-primary" id="nextStep"> Next <i class="fas fa-arrow-right"></i> </button> <button type="button" class="btn btn-success" id="savePresentation" style="display: none"> <i class="fas fa-save"></i> Create Presentation </button> </div> </div> </div> </div> <!-- View Presentation Modal --> <div class="modal fade" id="viewPresentationModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> {% endblock %} {% block extra_js %} <script> function showError(error) { console.error(error); alert('An error occurred: ' + error); } function showSuccess(message) { console.log(message); alert('Succes!: ' + message); } const PresentationManager = { currentStep: 1, totalSteps: 3, receiptType: null, selectedReceipts: [], init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#nextStep').on('click', () => this.nextStep()); $('#prevStep').on('click', () => this.previousStep()); $('#savePresentation').on('click', () => this.savePresentation()); }, setupValidation() { // Add validation for required fields $('#presentationForm input[required], #presentationForm select[required]') .on('input change', () => this.validateCurrentStep()); }, startPresentation(type) { this.receiptType = type; this.currentStep = 1; this.selectedReceipts = []; // Update modal title $('#modalTitleText').text(`Create ${type.toUpperCase()} Presentation`); // Reset form $('#presentationForm')[0].reset(); // Show first step this.showStep(1); // Show modal $('#presentationModal').modal('show'); }, async loadAvailableReceipts() { try { const response = await $.get('/testapp/presentations/available-receipts/', { type: this.receiptType }); $('.receipt-selection-container').html(response.html); this.initializeReceiptSelection(); } catch (error) { showError('Failed to load available receipts'); } }, initializeReceiptSelection() { // Initialize receipt selection handlers $('.receipt-checkbox').on('change', () => this.updateSelectionSummary()); $('#selectAll').on('change', (e) => { $('.receipt-checkbox').prop('checked', e.target.checked); this.updateSelectionSummary(); }); }, updateSelectionSummary() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); $('#selectedCount').text(count); $('#selectedAmount').text(total.toFixed(2)); // Enable/disable next button based on selection $('#nextStep').prop('disabled', count === 0); }, validateCurrentStep() { let isValid = true; if (this.currentStep === 1) { // Check required fields in step 1 $('#step1 [required]').each(function() { if (!$(this).val()) { isValid = false; return false; // break } }); } else if (this.currentStep === 2) { // Check if at least one receipt is selected isValid = $('.receipt-checkbox:checked').length > 0; } $('#nextStep').prop('disabled', !isValid); return isValid; }, updateProgressBar() { const progress = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100; $('.progress-bar').css('width', `${progress}%`); // Update step indicators $('.step-indicator').removeClass('active'); $(`.step-indicator:nth-child(${this.currentStep})`).addClass('active'); }, showStep(step) { $('.step-content').addClass('d-none'); $(`#step${step}`).removeClass('d-none'); // Update buttons $('#prevStep').toggle(step > 1); $('#nextStep').toggle(step < this.totalSteps); $('#savePresentation').toggle(step === this.totalSteps); // Load receipts if moving to step 2 if (step === 2) { this.loadAvailableReceipts(); } else if (step === 3) { this.showReviewStep(); } this.currentStep = step; this.updateProgressBar(); this.validateCurrentStep(); }, showReviewStep() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); const summary = ` <div class="card"> <div class="card-body"> <h6 class="card-subtitle mb-2 text-muted">Presentation Summary</h6> <dl class="row mb-0"> <dt class="col-sm-4">Type</dt> <dd class="col-sm-8">${$('#presentationType option:selected').text()}</dd> <dt class="col-sm-4">Bank Account</dt> <dd class="col-sm-8">${$('#bankAccount option:selected').text()}</dd> <dt class="col-sm-4">Date</dt> <dd class="col-sm-8">${$('#presentationDate').val()}</dd> <dt class="col-sm-4">Receipts</dt> <dd class="col-sm-8">${count} ${this.receiptType}(s)</dd> <dt class="col-sm-4">Total Amount</dt> <dd class="col-sm-8">${total.toFixed(2)} MAD</dd> </dl> </div> </div> `; $('.review-summary').html(summary); }, nextStep() { if (this.validateCurrentStep()) { this.showStep(this.currentStep + 1); } }, previousStep() { if (this.currentStep > 1) { this.showStep(this.currentStep - 1); } }, async savePresentation() { try { const data = { presentation_type: $('#presentationType').val(), date: $('#presentationDate').val(), bank_account: $('#bankAccount').val(), notes: $('#presentationNotes').val(), receipt_type: this.receiptType, receipt_ids: $('.receipt-checkbox:checked').map(function() { return $(this).val(); }).get() }; console.log('Sending data:', data); const response = await $.ajax({ url: '/testapp/presentations/create/', method: 'POST', contentType: 'application/json', data: JSON.stringify(data) }); if (response.status === 'success') { $('#presentationModal').modal('hide'); showSuccess('Presentation created successfully'); location.reload(); } else { showError(response.message); } } catch (error) { console.error('Creation error:', error); const errorMessage = error.responseJSON?.message || 'Failed to create presentation'; showError(errorMessage); } } }; // Add these functions after PresentationManager async function viewPresentation(id) { try { const response = await $.get(`/testapp/presentations/${id}/`); $('#viewPresentationModal .modal-content').html(response); $('#viewPresentationModal').modal('show'); } catch (error) { showError('Failed to load presentation details'); } } async function editPresentation(id) { try { const data = { bank_reference: $('#bankReference').val(), status: $('#presentationStatus').val(), notes: $('#presentationNotes').val() // If you have this field }; console.log('Sending edit request:', { id: id, data: data, url: `/testapp/presentations/${id}/edit/` }); const response = await fetch(`/testapp/presentations/${id}/edit/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const responseData = await response.json(); console.log('Edit response:', responseData); if (!response.ok) { throw new Error(responseData.message || 'Failed to edit presentation'); } showSuccess('Presentation updated successfully'); $('#viewPresentationModal').modal('hide'); location.reload(); } catch (error) { console.error('Edit error:', error); showError(error.message || 'Failed to edit presentation'); } } async function deletePresentation(id) { console.log('Delete initiated for presentation:', id); try { if (!confirm('Are you sure you want to delete this presentation?')) { console.log('Delete cancelled by user'); return; } const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No'); const response = await fetch(`/testapp/presentations/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' } }); console.log('Delete response status:', response.status); const data = await response.json(); console.log('Delete response data:', data); if (response.ok) { showSuccess('Presentation deleted successfully'); location.reload(); } else { throw new Error(data.message || 'Failed to delete presentation'); } } catch (error) { console.error('Delete error:', error); showError(error.message || 'Failed to delete presentation'); } } // Initialize on document ready $(document).ready(function() { PresentationManager.init(); }); // Global function to start presentation creation function startPresentation(type) { PresentationManager.startPresentation(type); } // Handle receipt status updates $(document).on('click', '.update-receipt-status', function() { const $button = $(this); const receiptId = $button.data('receipt-id'); if (!confirm('This action cannot be undone. Continue?')) { return; } console.log('Updating receipt status:', receiptId); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_id: receiptId, receipt_status: 'paid' }), success: function(response) { console.log('Status updated:', response); $button.prop('disabled', true).text('Paid'); }, error: function(xhr) { console.error('Update failed:', xhr.responseText); showToast('Failed to update status', 'error'); } }); }); </script> {% endblock %}
+{% extends 'base.html' %} {% load presentation_filters %} {% block content %} {% csrf_token %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Presentations</h2> <div class="btn-group"> <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus"></i> New Presentation </button> <div class="dropdown-menu dropdown-menu-right"> <a class="dropdown-item" href="#" onclick="startPresentation('check')"> <i class="fas fa-money-check"></i> Present Checks </a> <a class="dropdown-item" href="#" onclick="startPresentation('lcn')"> <i class="fas fa-file-invoice-dollar"></i> Present LCNs </a> </div> </div> </div> <!-- Filter Section --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-3"> <select class="form-control" id="typeFilter"> <option value="">All Types</option> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="statusFilter"> <option value="">All Status</option> <option value="pending">Pending</option> <option value="presented">Presented</option> <option value="paid">Paid</option> <option value="rejected">Rejected</option> </select> </div> <div class="col-md-3"> <select class="form-control" id="bankFilter"> <option value="">All Banks</option> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> <div class="col-md-3"> <input type="text" class="form-control" id="searchPresentation" placeholder="Search by reference..."> </div> </div> </div> </div> <!-- Presentations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Type</th> <th>Bank Account</th> <th>Bank Reference</th> <th>Total Amount</th> <th>Receipt Count</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for presentation in presentations %} <tr> <td>{{ presentation.date|date:"Y-m-d" }}</td> <td>{{ presentation.get_presentation_type_display }}</td> <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td> <td>{{ presentation.bank_reference|default:"-" }}</td> <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td> <td class="text-center">{{ presentation.receipt_count }}</td> <td> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')"> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')" {% if presentation.status == 'paid' %}disabled{% endif %}> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')" {% if presentation.status != 'pending' %}disabled{% endif %}> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No presentations found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Create/Edit Presentation Modal --> <div class="modal fade" id="presentationModal" tabindex="-1"> <div class="modal-dialog modal-xl"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <span id="modalTitleText">Create Presentation</span> </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="presentationForm"> <!-- Step indicator --> <div class="mb-4"> <div class="progress"> <div class="progress-bar" role="progressbar" style="width: 0%"></div> </div> <div class="d-flex justify-content-between mt-2"> <span class="step-indicator active">1. Basic Info</span> <span class="step-indicator">2. Select Receipts</span> <span class="step-indicator">3. Review</span> </div> </div> <!-- Step 1: Basic Info --> <div id="step1" class="step-content"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Presentation Type</label> <select class="form-control" id="presentationType" required> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Bank Account</label> <select class="form-control" id="bankAccount" required> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="presentationDate" value="{% now 'Y-m-d' %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Notes</label> <textarea class="form-control" id="presentationNotes" rows="1"></textarea> </div> </div> </div> </div> <!-- Discount Line Information (Only shown if type is DISCOUNT) --> <div class="discount-info d-none mb-3"> <h6 class="card-subtitle mb-3">Discount Line Information</h6> <div class="row"> <div class="col-md-3"> <div class="card text-white bg-info mb-3"> <div class="card-body"> <h5 class="card-title">Total Discount Line</h5> <p class="card-text"> <span id="totalDiscountLine">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-success mb-3"> <div class="card-body"> <h5 class="card-title">Used Amount</h5> <p class="card-text"> <span id="usedDiscountAmount">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-warning mb-3"> <div class="card-body"> <h5 class="card-title">Available Amount</h5> <p class="card-text"> <span id="availableDiscountAmount">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-primary mb-3"> <div class="card-body"> <h5 class="card-title">Selected Amount</h5> <p class="card-text"> <span id="selectedDiscountAmount">0.00</span> MAD </p> </div> </div> </div> </div> <div class="alert alert-danger d-none" id="discountLineExceededAlert"> The selected amount exceeds the available discount line. </div> </div> <!-- Step 2: Receipt Selection --> <div id="step2" class="step-content d-none"> <div class="receipt-selection-container"> <!-- Receipts will be loaded here --> </div> </div> <!-- Step 3: Review --> <div id="step3" class="step-content d-none"> <div class="review-summary"> <!-- Summary will be populated dynamically --> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-info" id="prevStep" style="display: none"> <i class="fas fa-arrow-left"></i> Previous </button> <button type="button" class="btn btn-primary" id="nextStep"> Next <i class="fas fa-arrow-right"></i> </button> <button type="button" class="btn btn-success" id="savePresentation" style="display: none"> <i class="fas fa-save"></i> Create Presentation </button> </div> </div> </div> </div> <!-- View Presentation Modal --> <div class="modal fade" id="viewPresentationModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> {% endblock %} {% block extra_js %} <script> function showError(error) { console.error(error); alert('An error occurred: ' + error); } function showSuccess(message) { console.log(message); alert('Succes!: ' + message); } const PresentationManager = { currentStep: 1, totalSteps: 3, receiptType: null, selectedReceipts: [], init() { this.bindEvents(); this.setupValidation(); }, discountInfo: { available: 0, total: 0, used: 0, selected: 0 }, async loadDiscountInfo(bankAccountId) { if (!bankAccountId) return; try { const response = await fetch(`/testapp/presentations/discount-info/${bankAccountId}/?type=${this.receiptType}`); const data = await response.json(); this.discountInfo = { available: parseFloat(data.available_amount), total: parseFloat(data.total_amount), used: parseFloat(data.used_amount), selected: 0 }; this.updateDiscountDisplay(); } catch (error) { console.error('Failed to load discount information:', error); } }, updateDiscountDisplay() { const discountCard = $('.discount-info'); const presentationType = $('#presentationType').val(); if (presentationType === 'DISCOUNT') { discountCard.removeClass('d-none'); $('#totalDiscountLine').text(this.discountInfo.total.toFixed(2)); $('#usedDiscountAmount').text(this.discountInfo.used.toFixed(2)); $('#availableDiscountAmount').text(this.discountInfo.available.toFixed(2)); $('#selectedDiscountAmount').text(this.discountInfo.selected.toFixed(2)); const exceededAlert = $('#discountLineExceededAlert'); if (this.discountInfo.selected > this.discountInfo.available) { exceededAlert.removeClass('d-none'); $('#nextStep, #savePresentation').prop('disabled', true); } else { exceededAlert.addClass('d-none'); this.validateCurrentStep(); } } else { discountCard.addClass('d-none'); } }, bindEvents() { $('#nextStep').on('click', () => this.nextStep()); $('#prevStep').on('click', () => this.previousStep()); $('#savePresentation').on('click', () => this.savePresentation()); }, setupValidation() { $('#presentationForm input[required], #presentationForm select[required]') .on('input change', () => this.validateCurrentStep()); $('#presentationType, #bankAccount').on('change', () => { if ($('#presentationType').val() === 'DISCOUNT') { this.loadDiscountInfo($('#bankAccount').val()); } else { $('.discount-info').addClass('d-none'); } }); }, startPresentation(type) { this.receiptType = type; this.currentStep = 1; this.selectedReceipts = []; // Update modal title $('#modalTitleText').text(`Create ${type.toUpperCase()} Presentation`); // Reset form $('#presentationForm')[0].reset(); // Show first step this.showStep(1); // Show modal $('#presentationModal').modal('show'); }, async loadAvailableReceipts() { try { const response = await $.get('/testapp/presentations/available-receipts/', { type: this.receiptType }); $('.receipt-selection-container').html(response.html); this.initializeReceiptSelection(); } catch (error) { showError('Failed to load available receipts'); } }, initializeReceiptSelection() { $('.receipt-checkbox').on('change', () => { this.updateSelectionSummary(); if ($('#presentationType').val() === 'DISCOUNT') { this.discountInfo.selected = Array.from($('.receipt-checkbox:checked')) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); this.updateDiscountDisplay(); } }); $('#selectAll').on('change', (e) => { $('.receipt-checkbox').prop('checked', e.target.checked); this.updateSelectionSummary(); if ($('#presentationType').val() === 'DISCOUNT') { this.discountInfo.selected = e.target.checked ? Array.from($('.receipt-checkbox')) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0) : 0; this.updateDiscountDisplay(); } }); }, updateSelectionSummary() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); $('#selectedCount').text(count); $('#selectedAmount').text(total.toFixed(2)); // Enable/disable next button based on selection $('#nextStep').prop('disabled', count === 0); }, validateCurrentStep() { let isValid = true; if (this.currentStep === 1) { // Check required fields in step 1 $('#step1 [required]').each(function() { if (!$(this).val()) { isValid = false; return false; // break } }); } else if (this.currentStep === 2) { // Check if at least one receipt is selected isValid = $('.receipt-checkbox:checked').length > 0; } $('#nextStep').prop('disabled', !isValid); return isValid; }, updateProgressBar() { const progress = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100; $('.progress-bar').css('width', `${progress}%`); // Update step indicators $('.step-indicator').removeClass('active'); $(`.step-indicator:nth-child(${this.currentStep})`).addClass('active'); }, showStep(step) { $('.step-content').addClass('d-none'); $(`#step${step}`).removeClass('d-none'); // Update buttons $('#prevStep').toggle(step > 1); $('#nextStep').toggle(step < this.totalSteps); $('#savePresentation').toggle(step === this.totalSteps); // Load receipts if moving to step 2 if (step === 2) { this.loadAvailableReceipts(); } else if (step === 3) { this.showReviewStep(); } this.currentStep = step; this.updateProgressBar(); this.validateCurrentStep(); }, showReviewStep() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); const summary = ` <div class="card"> <div class="card-body"> <h6 class="card-subtitle mb-2 text-muted">Presentation Summary</h6> <dl class="row mb-0"> <dt class="col-sm-4">Type</dt> <dd class="col-sm-8">${$('#presentationType option:selected').text()}</dd> <dt class="col-sm-4">Bank Account</dt> <dd class="col-sm-8">${$('#bankAccount option:selected').text()}</dd> <dt class="col-sm-4">Date</dt> <dd class="col-sm-8">${$('#presentationDate').val()}</dd> <dt class="col-sm-4">Receipts</dt> <dd class="col-sm-8">${count} ${this.receiptType}(s)</dd> <dt class="col-sm-4">Total Amount</dt> <dd class="col-sm-8">${total.toFixed(2)} MAD</dd> </dl> </div> </div> `; $('.review-summary').html(summary); }, nextStep() { if (this.validateCurrentStep()) { this.showStep(this.currentStep + 1); } }, previousStep() { if (this.currentStep > 1) { this.showStep(this.currentStep - 1); } }, async savePresentation() { try { const data = { presentation_type: $('#presentationType').val(), date: $('#presentationDate').val(), bank_account: $('#bankAccount').val(), notes: $('#presentationNotes').val(), receipt_type: this.receiptType, receipt_ids: $('.receipt-checkbox:checked').map(function() { return $(this).val(); }).get() }; console.log('Sending data:', data); const response = await $.ajax({ url: '/testapp/presentations/create/', method: 'POST', contentType: 'application/json', data: JSON.stringify(data) }); if (response.status === 'success') { $('#presentationModal').modal('hide'); showSuccess('Presentation created successfully'); location.reload(); } else { showError(response.message); } } catch (error) { console.error('Creation error:', error); const errorMessage = error.responseJSON?.message || 'Failed to create presentation'; showError(errorMessage); } } }; async function viewPresentation(id) { try { const response = await $.get(`/testapp/presentations/${id}/`); $('#viewPresentationModal .modal-content').html(response); $('#viewPresentationModal').modal('show'); } catch (error) { showError('Failed to load presentation details'); } } async function editPresentation(id) { try { const data = { bank_reference: $('#bankReference').val(), status: $('#presentationStatus').val(), notes: $('#presentationNotes').val() // If you have this field }; console.log('Sending edit request:', { id: id, data: data, url: `/testapp/presentations/${id}/edit/` }); const response = await fetch(`/testapp/presentations/${id}/edit/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const responseData = await response.json(); console.log('Edit response:', responseData); if (!response.ok) { throw new Error(responseData.message || 'Failed to edit presentation'); } showSuccess('Presentation updated successfully'); $('#viewPresentationModal').modal('hide'); location.reload(); } catch (error) { console.error('Edit error:', error); showError(error.message || 'Failed to edit presentation'); } } async function deletePresentation(id) { console.log('Delete initiated for presentation:', id); try { if (!confirm('Are you sure you want to delete this presentation?')) { console.log('Delete cancelled by user'); return; } const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No'); const response = await fetch(`/testapp/presentations/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' } }); console.log('Delete response status:', response.status); const data = await response.json(); console.log('Delete response data:', data); if (response.ok) { showSuccess('Presentation deleted successfully'); location.reload(); } else { throw new Error(data.message || 'Failed to delete presentation'); } } catch (error) { console.error('Delete error:', error); showError(error.message || 'Failed to delete presentation'); } } // Initialize on document ready $(document).ready(function() { PresentationManager.init(); }); // Global function to start presentation creation function startPresentation(type) { PresentationManager.startPresentation(type); } // Handle receipt status updates $(document).on('click', '.update-receipt-status', function() { const $button = $(this); const receiptId = $button.data('receipt-id'); if (!confirm('This action cannot be undone. Continue?')) { return; } console.log('Updating receipt status:', receiptId); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_id: receiptId, receipt_status: 'paid' }), success: function(response) { console.log('Status updated:', response); $button.prop('disabled', true).text('Paid'); }, error: function(xhr) { console.error('Update failed:', xhr.responseText); showToast('Failed to update status', 'error'); } }); }); </script> {% endblock %}
+```
+
+```html
+{% extends 'base.html' %} {% block title %}Profile{% endblock %} {% block content %} <h1>Profile Page</h1> <p>First Name: {{ user.first_name }}</p> <p>Last Name: {{ user.last_name }}</p> <p>Email: {{ user.email }}</p> {% endblock %}
 ```
 
 # templates/receipt/receipt_form_modal.html
@@ -1489,6 +1479,98 @@ def update_checker_status(sender, instance, **kwargs):
 
 ```html
 <!-- templates/receipt/receipt_timeline_modal.html --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt.check_number %} <i class="fas fa-money-check me-2"></i>Check #{{ receipt.check_number }} {% else %} <i class="fas fa-file-invoice-dollar me-2"></i>LCN #{{ receipt.lcn_number }} {% endif %} History </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Receipt Summary --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Entity:</strong> {{ receipt.entity.name }}</p> <p><strong>Client:</strong> {{ receipt.client.name }}</p> <p><strong>Amount:</strong> {{ receipt.amount|floatformat:2 }}</p> </div> <div class="col-md-6"> <p><strong>Status:</strong> <span class="badge badge-{{ receipt.status|lower }}"> {{ receipt.get_status_display }} </span> </p> <p><strong>Created:</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p> <p><strong>Due Date:</strong> {{ receipt.due_date|date:"d/m/Y" }}</p> </div> </div> </div> </div> <!-- Timeline --> <div class="timeline"> {% for event in history %} <div class="timeline-item"> <div class="timeline-marker {% if event.action == 'status_changed' %}bg-primary {% elif event.action == 'presented' %}bg-info {% elif event.action == 'compensated' %}bg-warning {% elif event.action == 'compensation_paid' %}bg-success {% else %}bg-secondary{% endif %}"> </div> <div class="timeline-content"> <div class="d-flex justify-content-between"> <h6 class="mb-0">{{ event.get_action_display }}</h6> <small class="text-muted">{{ event.timestamp|date:"d/m/Y H:i" }}</small> </div> <p class="mb-0">{{ event.notes }}</p> {% if event.action == 'status_changed' %} <small class="text-muted"> Changed from <span class="badge badge-{{ event.old_value.status|lower }}"> {{ event.old_value.status }} </span> to <span class="badge badge-{{ event.new_value.status|lower }}"> {{ event.new_value.status }} </span> </small> {% endif %} {% if event.user %} <small class="text-muted d-block">by {{ event.user.get_full_name|default:event.user.username }}</small> {% endif %} </div> </div> {% empty %} <p class="text-center text-muted">No history available</p> {% endfor %} </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> </div> <style> .timeline { position: relative; padding-left: 3rem; margin-bottom: 3rem; } .timeline::before { content: ''; position: absolute; left: 11px; top: 0; height: 100%; width: 2px; background-color: #e9ecef; } .timeline-item { position: relative; margin-bottom: 2rem; } .timeline-marker { position: absolute; left: -3rem; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px #e9ecef; } .timeline-content { background: #f8f9fa; border-radius: 0.3rem; padding: 1rem; position: relative; } .timeline-content::before { content: ''; position: absolute; left: -0.5rem; top: 0.75rem; width: 0.5rem; height: 0.5rem; background: inherit; transform: rotate(45deg); } /* Status Badge Colors */ .badge-portfolio { background-color: #6c757d; color: white; } .badge-presented { background-color: #17a2b8; color: white; } .badge-presented_discount { background-color: #e437d3; color: white; } .badge-paid { background-color: #28a745; color: white; } .badge-discounted { background-color: #1032dc; color: white; } .badge-unpaid { background-color: #dc3545; color: white; } .badge-compensated { background-color: #fd7e14; color: white; } </style>
+```
+
+# templatetags/accounting_filters.py
+
+```py
+from django import template
+from django.template.defaultfilters import floatformat
+
+register = template.Library()
+
+@register.filter
+def sum_debit(entries):
+    return sum(entry['debit'] or 0 for entry in entries)
+
+@register.filter
+def sum_credit(entries):
+    return sum(entry['credit'] or 0 for entry in entries)
+
+@register.filter
+def space_thousands(value):
+    """
+    Formats a number with spaces as thousand separators and 2 decimal places
+    Example: 1234567.89 becomes 1 234 567.89
+    """
+    if value is None:
+        return ''
+    
+    # Format to 2 decimal places first
+    formatted = floatformat(value, 2)
+    
+    # Split the number into integer and decimal parts
+    if '.' in formatted:
+        integer_part, decimal_part = formatted.split('.')
+    else:
+        integer_part, decimal_part = formatted, '00'
+
+    # Add space thousand separators to integer part
+    int_with_spaces = ''
+    for i, digit in enumerate(reversed(integer_part)):
+        if i and i % 3 == 0:
+            int_with_spaces = ' ' + int_with_spaces
+        int_with_spaces = digit + int_with_spaces
+
+    return f'{int_with_spaces}.{decimal_part}'
+```
+
+# templatetags/check_tags.py
+
+```py
+from django import template
+
+register = template.Library()
+
+@register.filter
+def status_badge(status):
+    return {
+        'pending': 'secondary',
+        'delivered': 'warning',
+        'paid': 'success',
+        'cancelled': 'danger',
+        'unpaid': 'danger'
+    }.get(status, 'secondary')
+```
+
+# templatetags/custom_filters.py
+
+```py
+from django import template
+
+register = template.Library()
+
+@register.filter
+def divide(value, arg):
+    try:
+        return int(value) / int(arg)
+    except (ValueError, ZeroDivisionError):
+        return None
+
+@register.filter
+def status_badge(status):
+    """
+    Convert status to a bootstrap badge class
+    """
+    status_map = {
+        'pending': 'badge-secondary',
+        'approved': 'badge-success',
+        'rejected': 'badge-danger',
+        'in_progress': 'badge-warning',
+        'completed': 'badge-primary'
+    }
+    return status_map.get(status, 'badge-light')
+
 ```
 
 # templatetags/presentation_filters.py
@@ -1538,6 +1620,14 @@ def status_badge(status):
 
 ```py
 from django.urls import path, include
+from . import views
+
+from .views_bank import (
+    BankAccountListView, BankAccountCreateView, 
+    BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView,
+    bank_account_autocomplete
+)
+
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
     entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,)
@@ -1558,13 +1648,23 @@ from .views_entity import (
 )
 from .views_presentation import (
     PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
-    PresentationDetailView, AvailableReceiptsView
+    PresentationDetailView, AvailableReceiptsView, DiscountInfoView
 )
 
 
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
+
+    path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
+    path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
+    path('bank-accounts/<uuid:pk>/edit/', BankAccountUpdateView.as_view(), name='bank-account-edit'),
+    path('bank-accounts/<uuid:pk>/delete/', BankAccountDeleteView.as_view(), name='bank-account-delete'),
+    path('bank-accounts/<uuid:pk>/deactivate/', 
+         BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
+    path('bank-accounts/filter/', 
+         BankAccountFilterView.as_view(), name='bank-account-filter'),
+    path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -1612,11 +1712,272 @@ urlpatterns = [
     path('presentations/<uuid:pk>/edit/', PresentationUpdateView.as_view(), name='presentation-edit'),
     path('presentations/<uuid:pk>/delete/', PresentationDeleteView.as_view(), name='presentation-delete'),
     path('presentations/available-receipts/', AvailableReceiptsView.as_view(), name='available-receipts'),
+    path('presentations/discount-info/<uuid:bank_account_id>/', 
+        DiscountInfoView.as_view(), name='presentation-discount-info'),
     
 
 ]
 
 
+```
+
+# views_bank.py
+
+```py
+from django.views.generic import ListView, View
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from django.template.loader import render_to_string
+from .models import BankAccount
+from django.contrib import messages
+import json
+from django.core.exceptions import ValidationError
+from decimal import Decimal
+
+class BankAccountListView(ListView):
+    model = BankAccount
+    template_name = 'bank/bank_list.html'
+    context_object_name = 'accounts'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['bank_choices'] = BankAccount.BANK_CHOICES
+        return context
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Apply filters if any
+        bank = self.request.GET.get('bank')
+        if bank:
+            queryset = queryset.filter(bank=bank)
+            
+        account_type = self.request.GET.get('type')
+        if account_type:
+            queryset = queryset.filter(account_type=account_type)
+            
+        status = self.request.GET.get('status')
+        if status:
+            queryset = queryset.filter(is_active=status == 'active')
+            
+        search = self.request.GET.get('search')
+        if search:
+            queryset = queryset.filter(account_number__icontains=search)
+            
+        return queryset
+
+class BankAccountCreateView(View):
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            # Convert decimal fields
+            decimal_fields = [
+                'bank_overdraft', 'overdraft_fee', 
+                'check_discount_line_amount', 'lcn_discount_line_amount',
+                'stamp_fee_per_receipt'
+            ]
+            
+            for field in decimal_fields:
+                if data.get(field):
+                    data[field] = Decimal(str(data[field]))
+                else:
+                    data[field] = None
+            
+            # Create bank account
+            account = BankAccount.objects.create(
+                bank=data['bank'],
+                account_number=data['account_number'],
+                accounting_number=data['accounting_number'],
+                journal_number=data['journal_number'],
+                city=data['city'],
+                account_type=data['account_type'],
+                is_active=data.get('is_active', True),
+                is_current=data.get('is_current', False),
+                bank_overdraft=data['bank_overdraft'],
+                overdraft_fee=data['overdraft_fee'],
+                has_check_discount_line=data.get('has_check_discount_line', False),
+                check_discount_line_amount=data['check_discount_line_amount'],
+                has_lcn_discount_line=data.get('has_lcn_discount_line', False),
+                lcn_discount_line_amount=data['lcn_discount_line_amount'],
+                stamp_fee_per_receipt=data['stamp_fee_per_receipt']
+            )
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Bank account created successfully',
+                'id': str(account.id)
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankAccountUpdateView(View):
+    def get(self, request, pk):
+        account = get_object_or_404(BankAccount, pk=pk)
+        return JsonResponse({
+            'id': str(account.id),
+            'bank': account.bank,
+            'account_number': account.account_number,
+            'accounting_number': account.accounting_number,
+            'journal_number': account.journal_number,
+            'city': account.city,
+            'account_type': account.account_type,
+            'is_active': account.is_active,
+            'is_current': account.is_current,
+            'bank_overdraft': str(account.bank_overdraft) if account.bank_overdraft else None,
+            'overdraft_fee': str(account.overdraft_fee) if account.overdraft_fee else None,
+            'has_check_discount_line': account.has_check_discount_line,
+            'check_discount_line_amount': str(account.check_discount_line_amount) if account.check_discount_line_amount else None,
+            'has_lcn_discount_line': account.has_lcn_discount_line,
+            'lcn_discount_line_amount': str(account.lcn_discount_line_amount) if account.lcn_discount_line_amount else None,
+            'stamp_fee_per_receipt': str(account.stamp_fee_per_receipt) if account.stamp_fee_per_receipt else None
+        })
+
+    def post(self, request, pk):
+        try:
+            account = get_object_or_404(BankAccount, pk=pk)
+            data = json.loads(request.body)
+            
+            # Convert decimal fields
+            decimal_fields = [
+                'bank_overdraft', 'overdraft_fee', 
+                'check_discount_line_amount', 'lcn_discount_line_amount',
+                'stamp_fee_per_receipt'
+            ]
+            
+            for field in decimal_fields:
+                if data.get(field):
+                    setattr(account, field, Decimal(str(data[field])))
+                else:
+                    setattr(account, field, None)
+            
+            # Update other fields
+            account.bank = data['bank']
+            account.account_number = data['account_number']
+            account.accounting_number = data['accounting_number']
+            account.journal_number = data['journal_number']
+            account.city = data['city']
+            account.account_type = data['account_type']
+            account.is_active = data.get('is_active', True)
+            account.is_current = data.get('is_current', False)
+            account.has_check_discount_line = data.get('has_check_discount_line', False)
+            account.has_lcn_discount_line = data.get('has_lcn_discount_line', False)
+            
+            account.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Bank account updated successfully'
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankAccountDeleteView(View):
+    def post(self, request, pk):
+        try:
+            account = get_object_or_404(BankAccount, pk=pk)
+            account.delete()
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Bank account deleted successfully'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankAccountDeactivateView(View):
+    def post(self, request, pk):
+        try:
+            account = BankAccount.objects.get(pk=pk)
+            
+            # Check for active checkers
+            if account.checker_set.filter(is_active=True).exists():
+                return JsonResponse(
+                    {'error': 'Cannot deactivate account with active checkers'}, 
+                    status=400
+                )
+            
+            account.is_active = False
+            account.save()
+            
+            return JsonResponse({'message': 'Account deactivated successfully'})
+            
+        except BankAccount.DoesNotExist:
+            return JsonResponse({'error': 'Account not found'}, status=404)
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=500)
+
+class BankAccountFilterView(View):
+    def get(self, request):
+        try:
+            # Start with all accounts
+            queryset = BankAccount.objects.all()
+            print("Initial QuerySet Count:", queryset.count())  # Debug log
+            
+            # Apply bank filter
+            bank = request.GET.get('bank')
+            if bank:
+                print("Filter by bank:", bank)  # Debug log
+                queryset = queryset.filter(bank=bank)
+
+            # Apply account type filter
+            account_type = request.GET.get('type')
+            if account_type:
+                print("Filter by account type:", account_type)  # Debug log
+                queryset = queryset.filter(account_type=account_type)
+
+            # Apply status filter
+            status = request.GET.get('status')
+            if status:
+                print("Filter by status:", status)  # Debug log
+                queryset = queryset.filter(is_active=status == 'active')
+
+            # Apply search filter
+            search = request.GET.get('search')
+            if search:
+                print("Filter by search term:", search)  # Debug log
+                queryset = queryset.filter(account_number__icontains=search)
+
+            # Final count before rendering
+            print("Filtered QuerySet Count:", queryset.count())  # Debug log
+
+            # Render rows
+            html = render_to_string(
+                'bank/partials/accounts_table.html',
+                {'accounts': queryset},
+                request=request
+            )
+            
+            return JsonResponse({'html': html})
+            
+        except Exception as e:
+            print("Error in filter view:", str(e))  # Debug log
+            return JsonResponse({'error': str(e)}, status=500)
+
+
+
+def bank_account_autocomplete(request):
+    search_term = request.GET.get('search', '')
+    accounts = BankAccount.objects.filter(account_number__icontains=search_term)[:10]
+    results = [
+        {
+            "label": f"{account.bank} [{account.account_number}]",
+            "value": account.id,
+            "bank": account.bank
+        }
+        for account in accounts
+    ]
+    return JsonResponse(results, safe=False)
 ```
 
 # views_client.py
@@ -2065,6 +2426,7 @@ from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAc
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
+from decimal import Decimal
 
 class PresentationListView(ListView):
     """
@@ -2289,9 +2651,15 @@ class PresentationUpdateView(View):
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
+                                        # Add this line after successful unpaid update
+                                        presentation_receipt.recorded_status = 'UNPAID'
+                                        presentation_receipt.save()
                                         receipt.mark_as_unpaid(cause)
                                     else:
                                         print(f"Updating status to: {status_value.upper()}")
+                                        # Add this line after successful paid update
+                                        presentation_receipt.recorded_status = status_value.upper()
+                                        presentation_receipt.save()
                                         receipt.status = status_value.upper()
                                         receipt.save()
                                         
@@ -2425,6 +2793,149 @@ class AvailableReceiptsView(View):
         }, request=request)
         
         return JsonResponse({'html': html})
+
+class DiscountInfoView(View):
+    def get(self, request, bank_account_id):
+        try:
+            bank_account = get_object_or_404(BankAccount, id=bank_account_id)
+            receipt_type = request.GET.get('type', 'check')
+            
+            if receipt_type == 'check':
+                available = bank_account.get_available_check_discount_line()
+                total = bank_account.check_discount_line_amount or Decimal('0.00')
+            else:
+                available = bank_account.get_available_lcn_discount_line()
+                total = bank_account.lcn_discount_line_amount or Decimal('0.00')
+            
+            used = total - available
+            
+            return JsonResponse({
+                'total_amount': str(total),
+                'used_amount': str(used),
+                'available_amount': str(available)
+            })
+            
+        except Exception as e:
+            return JsonResponse({
+                'error': str(e)
+            }, status=400)
+```
+
+```py
+from django.urls import reverse_lazy
+from django.views import View
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+from .models import Product
+from .forms import ProductForm
+from django.contrib.messages.views import SuccessMessageMixin
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.shortcuts import get_object_or_404
+from django.shortcuts import render, redirect
+from django.db.models import ProtectedError
+from django.db import models
+from django.views.generic.edit import DeleteView
+from django.contrib import messages
+
+# List all Products
+class ProductListView(ListView):
+    model = Product
+    template_name = 'product/product_list.html'
+    context_object_name = 'products'
+
+# Create a new Product
+class ProductCreateView(SuccessMessageMixin, CreateView):
+    model = Product
+    fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
+    template_name = 'product/product_form.html'
+    success_url = reverse_lazy('product-list')
+    success_message = "Product successfully created."
+
+# Update an existing Product
+class ProductUpdateView(SuccessMessageMixin, UpdateView):
+    model = Product
+    form_class = ProductForm
+    template_name = 'product/product_form.html'
+    success_url = reverse_lazy('product-list')
+    success_message = "Product successfully updated."
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        product = self.get_object()
+        print("Current VAT rate:", product.vat_rate)  # Debug print
+        print("Form VAT rate:", form.initial.get('vat_rate'))  # Debug print
+        return form
+
+    def get_initial(self):
+        initial = super().get_initial()
+        product = self.get_object()
+        print("Initial VAT rate:", product.vat_rate)  # Debug print
+        initial['vat_rate'] = product.vat_rate
+        return initial
+
+# Delete a Product
+class ProductDeleteView(DeleteView):
+    model = Product
+    template_name = 'product/product_confirm_delete.html'
+    success_url = reverse_lazy('product-list')
+    success_message = "Product successfully deleted."
+
+    def get(self, request, *args, **kwargs):
+        # Check for references before showing the confirmation page
+        self.object = self.get_object()
+        if self.object.invoiceproduct_set.exists():
+            messages.error(request, f'Cannot delete "{self.object.name}". It is used in {self.object.invoiceproduct_set.count()} invoice(s).')
+            return redirect('product-list')
+        return super().get(request, *args, **kwargs)
+
+    def post(self, request, *args, **kwargs):
+        try:
+            return super().post(request, *args, **kwargs)
+        except ProtectedError:
+            messages.error(request, 'Cannot delete product. It is referenced by one or more invoices.')
+            return redirect('product-list')
+
+
+# AJAX view for creating a new Product
+@method_decorator(csrf_exempt, name='dispatch')
+class ProductAjaxCreateView(View):
+    def post(self, request):
+        try:
+            name = request.POST.get('name')
+            # Check for existing product with same name
+            if Product.objects.filter(name__iexact=name).exists():
+                return JsonResponse({
+                    'error': f'A product with the name "{name}" already exists.'
+                }, status=400)
+
+            product = Product.objects.create(
+                name=name,
+                fiscal_label=request.POST.get('fiscal_label'),
+                is_energy=request.POST.get('is_energy') == 'true',
+                expense_code=request.POST.get('expense_code'),
+                vat_rate=request.POST.get('vat_rate')
+            )
+            return JsonResponse({
+                'message': 'Product created successfully',
+                'product_id': str(product.id)
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ProductDetailsView(View):
+    def get(self, request, pk):
+        try:
+            product = get_object_or_404(Product, pk=pk)
+            return JsonResponse({
+                'expense_code': product.expense_code,
+                'vat_rate': str(product.vat_rate)
+            })
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+
 ```
 
 # views_receipts.py
@@ -3092,4 +3603,3 @@ def logout_view(request):
     response['Expires'] = '0'
     return response
 ```
-

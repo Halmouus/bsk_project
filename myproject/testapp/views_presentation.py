@@ -11,6 +11,7 @@ from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 from decimal import Decimal
+from django.utils import timezone
 
 class PresentationListView(ListView):
     """
@@ -345,6 +346,7 @@ class AvailableReceiptsView(View):
     """
     def get(self, request):
         receipt_type = request.GET.get('type')
+        presentation_type = request.GET.get('presentation_type')  # Add this line
         
         if receipt_type == 'check':
             receipts = CheckReceipt.objects.filter(
@@ -360,6 +362,15 @@ class AvailableReceiptsView(View):
                     LCN.STATUS_UNPAID
                 ]
             ).select_related('client', 'entity')
+            
+            # Add LCN discount validation
+            if presentation_type == 'DISCOUNT':
+                valid_receipts = []
+                for receipt in receipts:
+                    days_to_due = (receipt.due_date - timezone.now().date()).days
+                    if 20 <= days_to_due <= 120:
+                        valid_receipts.append(receipt)
+                receipts = valid_receipts
         
         # Get presentation info for unpaid receipts
         for receipt in receipts:
@@ -371,6 +382,10 @@ class AvailableReceiptsView(View):
                 
                 if presentation:
                     receipt.last_presentation_date = presentation.presentation.date
+            
+            # Add days to due calculation for all receipts
+            if hasattr(receipt, 'due_date'):
+                receipt.days_to_due = (receipt.due_date - timezone.now().date()).days
 
         html = render_to_string('presentation/available_receipts.html', {
             'receipts': receipts

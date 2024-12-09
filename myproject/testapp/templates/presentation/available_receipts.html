@@ -1,3 +1,4 @@
+{% load accounting_filters %}
 <div class="receipt-container">
     <!-- Summary info -->
     <div class="alert alert-info">
@@ -24,6 +25,7 @@
                     <th>Due Date</th>
                     <th>Amount</th>
                     <th>Days to Due</th>
+                    <th>Status</th>
                 </tr>
             </thead>
             <tbody>
@@ -42,7 +44,12 @@
                     <td>{{ receipt.entity.name }}</td>
                     <td>{{ receipt.operation_date|date:"Y-m-d" }}</td>
                     <td>{{ receipt.due_date|date:"Y-m-d" }}</td>
-                    <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
+                    <td class="text-right">{{ receipt.amount|format_balance }}</td>
+                    <td>
+                        {% with days_to_due=receipt.due_date|timeuntil %}
+                        {{ days_to_due }}
+                        {% endwith %}
+                    </td>
                     <td>
                         <span class="badge badge-{{ receipt.status|lower }}">
                             {{ receipt.get_status_display }}

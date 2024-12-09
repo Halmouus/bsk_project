@@ -194,6 +194,10 @@ class ReceiptCreateView(View):
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptUpdateView(View):
     def get(self, request, receipt_type, pk):
+        print("\n=== Starting ReceiptUpdateView.get ===")
+        print(f"Receipt type: {receipt_type}")
+        print(f"Receipt ID: {pk}")
+        
         model_map = {
             'check': CheckReceipt,
             'lcn': LCN,
@@ -202,19 +206,22 @@ class ReceiptUpdateView(View):
         }
         
         try:
+            print(f"Looking for receipt with pk: {pk}")
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
-            
-            
+            print(f"Found receipt: {receipt}")
+            print(f"Receipt attributes: {receipt.__dict__}")
+
             # Get current date info for form
             today = timezone.now()
             year_choices = range(today.year - 2, today.year + 1)
             month_choices = [(i, calendar.month_name[i]) for i in range(1, 13)]
             bank_accounts = BankAccount.objects.filter(is_active=True)
 
+            print("\nPreparing context:")
             context = {
                 'receipt_type': receipt_type,
                 'receipt': receipt,
-                'title': f'Edit {receipt_type.title()}',
+                'title': f'Edit {receipt_type.title()} Receipt',
                 'year_choices': year_choices,
                 'month_choices': month_choices,
                 'bank_accounts': bank_accounts,
@@ -228,11 +235,29 @@ class ReceiptUpdateView(View):
                 },
                 'bank_choices': MOROCCAN_BANKS,
             }
-
-            return render(request, 'receipt/receipt_form_modal.html', context)
+            print("Context prepared:", context)
+            
+            try:
+                print("\nAttempting to render template...")
+                rendered = render(request, 'receipt/receipt_form_modal.html', context)
+                print("Template rendered successfully")
+                return rendered
+            except Exception as template_error:
+                import traceback
+                print("\nTemplate rendering error:")
+                print(traceback.format_exc())
+                raise template_error
 
         except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
+            import traceback
+            print("\n=== Error in ReceiptUpdateView ===")
+            print(traceback.format_exc())
+            print("=======================================")
+            return JsonResponse({
+                'status': 'error',
+                'message': f"Detail view error: {str(e)}",
+                'traceback': traceback.format_exc()
+            }, status=400)
 
     def post(self, request, receipt_type, pk):
         import traceback

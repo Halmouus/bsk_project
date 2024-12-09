@@ -3,232 +3,365 @@
     Receipt type from context: {{ receipt_type }}
     Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %}
 </div>
+
 <!-- Modal Header -->
-<div class="modal-header">
+<div class="modal-header bg-gradient-primary text-white">
     <h5 class="modal-title">
         {% if receipt_type == 'check' %}
-        <i class="fas fa-money-check"></i>
+            <i class="fas fa-money-check me-2"></i>
         {% elif receipt_type == 'lcn' %}
-        <i class="fas fa-file-invoice-dollar"></i>
+            <i class="fas fa-file-invoice-dollar me-2"></i>
         {% elif receipt_type == 'cash' %}
-        <i class="fas fa-money-bill"></i>
+            <i class="fas fa-money-bill me-2"></i>
         {% else %}
-        <i class="fas fa-exchange-alt"></i>
+            <i class="fas fa-exchange-alt me-2"></i>
         {% endif %}
         {{ title }}
     </h5>
-    <button type="button" class="close" data-dismiss="modal">&times;</button>
+    <button type="button" class="btn-close btn-close-white" data-dismiss="modal"></button>
 </div>
 
-<!-- Modal Body -->
-<div class="modal-body">
+<div class="modal-body bg-light">
     <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}">
         {% csrf_token %}
-        
-        <!-- Common Fields -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="client">Client</label>
-                    <input type="text" class="form-control" id="client" name="client_display" 
-                           placeholder="Search for a client..." required
-                           value="{% if receipt %}{{ receipt.client.name }}{% endif %}">
-                    <input type="hidden" id="client_id" name="client" 
-                           value="{% if receipt %}{{ receipt.client.id }}{% endif %}" required>
-                </div>
+
+        <!-- Basic Information Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-info-circle me-2"></i> Basic Information
+                </h6>
             </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="entity">Entity</label>
-                    <input type="text" class="form-control" id="entity" name="entity_display" 
-                           placeholder="Search for an entity..." required
-                           value="{% if receipt %}{{ receipt.entity.name }}{% endif %}">
-                    <input type="hidden" id="entity_id" name="entity" 
-                           value="{% if receipt %}{{ receipt.entity.id }}{% endif %}" required>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="client" name="client_display" required
+                                   placeholder="Search client..." value="{% if receipt %}{{ receipt.client.name }}{% endif %}">
+                            <label for="client">
+                                <i class="fas fa-user text-primary me-2"></i> Client
+                            </label>
+                            <input type="hidden" id="client_id" name="client" value="{% if receipt %}{{ receipt.client.id }}{% endif %}">
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="entity" name="entity_display" required
+                                   placeholder="Search entity..." value="{% if receipt %}{{ receipt.entity.name }}{% endif %}">
+                            <label for="entity">
+                                <i class="fas fa-building text-primary me-2"></i> Entity
+                            </label>
+                            <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}">
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label for="operation_date">Operation Date</label>
-                    <input type="date" class="form-control" id="operation_date" name="operation_date" 
-                           value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required>
-                </div>
+        <!-- Transaction Details Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-file-invoice me-2"></i> Transaction Details
+                </h6>
             </div>
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label for="client_year">Year</label>
-                    <select class="form-control" id="client_year" name="client_year" required>
-                        {% for year in year_choices %}
-                        <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>{{ year }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="form-group">
-                    <label for="client_month">Month</label>
-                    <select class="form-control" id="client_month" name="client_month" required>
-                        {% for month in month_choices %}
-                        <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>{{ month.1 }}</option>
-                        {% endfor %}
-                    </select>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            <input type="date" class="form-control" id="operation_date" name="operation_date" required
+                                   value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}">
+                            <label for="operation_date">
+                                <i class="fas fa-calendar text-primary me-2"></i> Operation Date
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            <select class="form-control" id="client_year" name="client_year" required>
+                                {% for year in year_choices %}
+                                    <option value="{{ year }}" {% if receipt and receipt.client_year == year or year == current_year %}selected{% endif %}>
+                                        {{ year }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <label for="client_year">
+                                <i class="fas fa-calendar-alt text-primary me-2"></i> Year
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="form-floating">
+                            <select class="form-control" id="client_month" name="client_month" required>
+                                {% for month in month_choices %}
+                                    <option value="{{ month.0 }}" {% if receipt and receipt.client_month == month.0 or month.0 == current_month %}selected{% endif %}>
+                                        {{ month.1 }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <label for="client_month">
+                                <i class="fas fa-calendar-day text-primary me-2"></i> Month
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="number" class="form-control" id="amount" name="amount" required
+                                   step="0.01" min="0.01" value="{% if receipt %}{{ receipt.amount }}{% endif %}">
+                            <label for="amount">
+                                <i class="fas fa-coins text-primary me-2"></i> Amount
+                            </label>
+                        </div>
+                    </div>
+
+                    {% if receipt_type == 'check' or receipt_type == 'lcn' %}
+                        <div class="col-md-6">
+                            <div class="form-floating">
+                                <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" required
+                                       placeholder="Select bank..." value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                                <label for="issuingBank">
+                                    <i class="fas fa-university text-primary me-2"></i> Issuing Bank
+                                </label>
+                                <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
+                            </div>
+                        </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="amount">Amount</label>
-                    <input type="number" class="form-control" id="amount" name="amount" 
-                           value="{% if receipt %}{{ receipt.amount }}{% endif %}"
-                           step="0.01" min="0.01" required>
-                </div>
+        <!-- Receipt Specific Details Card -->
+        {% if receipt_type == 'check' or receipt_type == 'lcn' %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|upper }} Details
+                </h6>
             </div>
-        </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            {% if receipt_type == 'check' %}
+                            <input type="text" class="form-control" id="check_number" 
+                                   name="check_number" required
+                                   value="{% if receipt %}{{ receipt.check_number }}{% endif %}">
+                            <label for="check_number">
+                                <i class="fas fa-hashtag text-primary me-2"></i> Check Number
+                            </label>
+                            {% elif receipt_type == 'lcn' %}
+                            <input type="text" class="form-control" id="lcn_number" 
+                                   name="lcn_number" required
+                                   value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}">
+                            <label for="lcn_number">
+                                <i class="fas fa-hashtag text-primary me-2"></i> LCN Number
+                            </label>
+                            {% endif %}
+                        </div>
+                    </div>
 
-        {% if receipt_type == 'check' %}
-        <!-- Check-specific fields -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="check_number">Check Number</label>
-                    <input type="text" class="form-control" id="check_number" name="check_number" 
-                           value="{% if receipt %}{{ receipt.check_number }}{% endif %}" required>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="due_date">Due Date</label>
-                    <input type="date" class="form-control" id="due_date" name="due_date" 
-                           value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="form-group">
-                <label for="issuingBank">Issuing Bank</label>
-                <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
-                       value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
-                <input type="hidden" id="issuingBankCode" name="issuing_bank" 
-                       value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
-            </div>
-        </div>
-        <div class="form-group">
-            <label>Compensate Unpaid Receipt</label>
-            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
-            <input type="hidden" id="compensate-receipt-id" name="compensates">
-        </div>
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="branch">Branch</label>
-                    <input type="text" class="form-control" id="branch" name="branch" 
-                           value="{% if receipt %}{{ receipt.branch }}{% endif %}">
-                </div>
-            </div>
-        </div>
-        {% endif %}
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="date" class="form-control" id="due_date" name="due_date" required
+                                   value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}">
+                            <label for="due_date">
+                                <i class="fas fa-clock text-primary me-2"></i> Due Date
+                            </label>
+                        </div>
+                    </div>
 
-        {% if receipt_type == 'lcn' %}
-        <!-- LCN-specific fields -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="lcn_number">LCN Number</label>
-                    <input type="text" class="form-control" id="lcn_number" name="lcn_number" 
-                           value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}" required>
+                    {% if receipt_type == 'check' %}
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="branch" name="branch"
+                                   value="{% if receipt %}{{ receipt.branch }}{% endif %}">
+                            <label for="branch">
+                                <i class="fas fa-code-branch text-primary me-2"></i> Branch
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="due_date">Due Date</label>
-                    <input type="date" class="form-control" id="due_date" name="due_date" 
-                           value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}" required>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="issuingBank">Issuing Bank</label>
-                    <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" placeholder="Select bank..." required 
-                           value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
-                    <input type="hidden" id="issuingBankCode" name="issuing_bank" 
-                           value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
-                </div>
-            </div>
-            <div class="form-group col-md-6">
-                <label>Compensate Unpaid Receipt</label>
-                <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
-                <input type="hidden" id="compensate-receipt-id" name="compensates">
             </div>
         </div>
         {% endif %}
 
         {% if receipt_type == 'cash' or receipt_type == 'transfer' %}
-        <!-- Cash/Transfer-specific fields -->
-        <div class="row">
-            <div class="col-md-12">
-                <div class="form-group">
-                    <label for="credited_account">Credited Account</label>
-                    <select class="form-control" id="credited_account" name="credited_account" required>
-                        {% for account in bank_accounts %}
-                        <option value="{{ account.id }}" {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}>
-                            {{ account.bank }} - {{ account.account_number }}
-                        </option>
-                        {% endfor %}
-                    </select>
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|title }} Details
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-12">
+                        <div class="form-floating">
+                            <select class="form-control" id="credited_account" name="credited_account" required>
+                                {% for account in bank_accounts %}
+                                    <option value="{{ account.id }}" 
+                                        {% if receipt and receipt.credited_account.id == account.id %}selected{% endif %}>
+                                        {{ account.bank }} - {{ account.account_number }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <label for="credited_account">
+                                <i class="fas fa-university text-primary me-2"></i> Credited Account
+                            </label>
+                        </div>
+                    </div>
+
+                    {% if receipt_type == 'transfer' %}
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="text" class="form-control" id="transfer_reference" 
+                                   name="transfer_reference" required
+                                   value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}">
+                            <label for="transfer_reference">
+                                <i class="fas fa-hashtag text-primary me-2"></i> Transfer Reference
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="form-floating">
+                            <input type="date" class="form-control" id="transfer_date" 
+                                   name="transfer_date" required
+                                   value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}">
+                            <label for="transfer_date">
+                                <i class="fas fa-calendar-check text-primary me-2"></i> Transfer Date
+                            </label>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
-        </div>
-        <div class="form-group">
-            <label>Compensate Unpaid Receipt</label>
-            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
-            <input type="hidden" id="compensate-receipt-id" name="compensates">
-        </div>
         </div>
         {% endif %}
 
-        {% if receipt_type == 'transfer' %}
-        <!-- Transfer-specific fields -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="transfer_reference">Transfer Reference</label>
-                    <input type="text" class="form-control" id="transfer_reference" name="transfer_reference" 
-                           value="{% if receipt %}{{ receipt.transfer_reference }}{% endif %}" required>
-                </div>
+        <!-- Compensation Details Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-sync me-2"></i> Compensation Details
+                </h6>
             </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="transfer_date">Transfer Date</label>
-                    <input type="date" class="form-control" id="transfer_date" name="transfer_date" 
-                           value="{% if receipt %}{{ receipt.transfer_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}" required>
+            <div class="card-body">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="compensate-receipt-autocomplete" name="compensates"
+                           placeholder="Search for unpaid receipt...">
+                    <label for="compensate-receipt-autocomplete">
+                        <i class="fas fa-search text-primary me-2"></i> Compensate Unpaid Receipt
+                    </label>
+                    <input type="hidden" id="compensate-receipt-id" name="compensates">
                 </div>
+                <div id="compensation-details" class="mt-2 small text-muted"></div>
             </div>
         </div>
-        <div class="form-group">
-            <label>Compensate Unpaid Receipt</label>
-            <input type="text" id="compensate-receipt-autocomplete" class="form-control" name="compensates">
-            <input type="hidden" id="compensate-receipt-id" name="compensates">
-        </div>
-        </div>
-        {% endif %}
 
-        <div class="form-group">
-            <label for="notes">Notes</label>
-            <textarea class="form-control" id="notes" name="notes" rows="2">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea>
+        <!-- Notes Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-sticky-note me-2"></i> Additional Notes
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="form-floating">
+                    <textarea class="form-control" id="notes" name="notes" rows="3" 
+                              style="height: 100px">{% if receipt %}{{ receipt.notes }}{% endif %}</textarea>
+                    <label for="notes">Notes</label>
+                </div>
+            </div>
         </div>
     </form>
 </div>
 
-<!-- Modal Footer -->
 <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-    <button type="submit" class="btn btn-primary" form="receiptForm">Save Receipt</button>
+    <button type="button" class="btn btn-light" data-dismiss="modal">
+        <i class="fas fa-times me-2"></i> Cancel
+    </button>
+    <button type="submit" class="btn btn-primary" form="receiptForm">
+        <i class="fas fa-save me-2"></i> Save Receipt
+    </button>
 </div>
+
+<style>
+.modal-header.bg-gradient-primary {
+    background: linear-gradient(45deg, #4e73df, #224abe);
+}
+
+.form-floating > label {
+    padding-left: 1.75rem;
+}
+
+.form-floating > .form-control {
+    padding-left: 2.5rem;
+}
+
+.form-floating > .form-control:focus {
+    border-color: #4e73df;
+    box-shadow: 0 0 0 0.2rem rgba(78,115,223,.25);
+}
+
+.card {
+    border: none;
+    transition: transform 0.2s ease-in-out;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+}
+
+.card-header {
+    border-bottom: 2px solid rgba(0,0,0,.05);
+    background-color: #fff;
+}
+
+.form-control {
+    border-radius: 0.5rem;
+}
+
+.form-floating .invalid-feedback {
+    margin-left: 2.5rem;
+}
+
+.btn-close-white {
+    filter: brightness(0) invert(1);
+}
+
+.text-primary {
+    color: #4e73df !important;
+}
+
+/* Autocomplete dropdown styling */
+.ui-autocomplete {
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 9999;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(0,0,0,.1);
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
+}
+
+.ui-autocomplete .ui-menu-item {
+    padding: 0.5rem 1rem;
+    border-bottom: 1px solid rgba(0,0,0,.05);
+}
+
+.ui-autocomplete .ui-menu-item:last-child {
+    border-bottom: none;
+}
+
+.ui-autocomplete .ui-menu-item:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+</style>
 
 <!-- Initialize autocomplete -->
 <script>
@@ -328,46 +461,46 @@ $("#client").autocomplete({
         });
 
         $("#compensate-receipt-autocomplete").autocomplete({
-    source: function(request, response) {
-        console.log('Unpaid Receipt search term:', request.term);
-        $.ajax({
-            url: "{% url 'unpaid-receipt-autocomplete' %}",
-            dataType: "json",
-            data: { term: request.term },
-            success: function(data) {
-                console.log('Unpaid Receipt data received:', data);
-                response($.map(data.results, function(item) {
-                    return {
-                        label: item.description,
-                        value: item.description,  // Display full description
-                        id: item.id
-                    };
-                }));
+            source: function(request, response) {
+                console.log('Unpaid Receipt search term:', request.term);
+                $.ajax({
+                    url: "{% url 'unpaid-receipt-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        console.log('Unpaid Receipt data received:', data);
+                        response($.map(data.results, function(item) {
+                            return {
+                                label: item.description,
+                                value: item.description,  // Display full description
+                                id: item.id
+                            };
+                        }));
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Unpaid Receipt autocomplete error:', error);
+                        console.log('XHR response:', xhr.responseText);
+                    }
+                });
             },
-            error: function(xhr, status, error) {
-                console.error('Unpaid Receipt autocomplete error:', error);
-                console.log('XHR response:', xhr.responseText);
+            minLength: 0,
+            select: function(event, ui) {
+                console.log('Unpaid Receipt selected:', ui.item);
+                $("#compensate-receipt-id").val(ui.item.id);
+                $("#compensate-receipt-autocomplete").val(ui.item.label);
+                $("#compensation-details").html(`
+                    Selected Receipt: ${ui.item.label}
+                `);
+            },
+            change: function(event, ui) {
+                console.log('Unpaid Receipt change event triggered');
+                if (!ui.item) {
+                    $("#compensate-receipt-id").val('');
+                    $("#compensate-receipt-autocomplete").val('');
+                    $("#compensation-details").empty();
+                }
             }
         });
-    },
-    minLength: 0,
-    select: function(event, ui) {
-        console.log('Unpaid Receipt selected:', ui.item);
-        $("#compensate-receipt-id").val(ui.item.id);
-        $("#compensate-receipt-autocomplete").val(ui.item.label);
-        $("#compensation-details").html(`
-            Selected Receipt: ${ui.item.label}
-        `);
-    },
-    change: function(event, ui) {
-        console.log('Unpaid Receipt change event triggered');
-        if (!ui.item) {
-            $("#compensate-receipt-id").val('');
-            $("#compensate-receipt-autocomplete").val('');
-            $("#compensation-details").empty();
-        }
-    }
-});
 
 // Initialize tooltips
 $('[data-toggle="tooltip"]').tooltip();
@@ -433,8 +566,128 @@ $('[data-toggle="tooltip"]').tooltip();
         const amount = $(this).data('amount');
         $(this).text(formatCurrency(amount));
     });
+    class ReceiptValidator {
+    constructor(formId) {
+        this.form = document.getElementById(formId);
+        this.submitBtn = this.form.querySelector('button[type="submit"]');
+        this.fields = {
+            client: {
+                element: this.form.querySelector('#client'),
+                required: true,
+                validate: value => value.trim().length > 0
+            },
+            entity: {
+                element: this.form.querySelector('#entity'),
+                required: true,
+                validate: value => value.trim().length > 0
+            },
+            amount: {
+                element: this.form.querySelector('#amount'),
+                required: true,
+                validate: value => {
+                    const num = parseFloat(value);
+                    return !isNaN(num) && num > 0;
+                }
+            },
+            operation_date: {
+                element: this.form.querySelector('#operation_date'),
+                required: true,
+                validate: value => value.trim().length > 0
+            }
+        };
+
+        // Add type-specific validations
+        if (this.form.querySelector('#check_number')) {
+            this.fields.check_number = {
+                element: this.form.querySelector('#check_number'),
+                required: true,
+                validate: value => value.trim().length > 0
+            };
+            this.fields.due_date = {
+                element: this.form.querySelector('#due_date'),
+                required: true,
+                validate: value => {
+                    if (!value) return false;
+                    const dueDate = new Date(value);
+                    const today = new Date();
+                    return dueDate >= today;
+                }
+            };
+        }
+
+        if (this.form.querySelector('#lcn_number')) {
+            this.fields.lcn_number = {
+                element: this.form.querySelector('#lcn_number'),
+                required: true,
+                validate: value => value.trim().length > 0
+            };
+        }
+
+        if (this.form.querySelector('#transfer_reference')) {
+            this.fields.transfer_reference = {
+                element: this.form.querySelector('#transfer_reference'),
+                required: true,
+                validate: value => value.trim().length > 0
+            };
+        }
+
+        this.setupValidation();
+    }
+
+    setupValidation() {
+        Object.entries(this.fields).forEach(([name, field]) => {
+            const element = field.element;
+            if (!element) return;
+
+            element.addEventListener('input', () => this.validateField(name));
+            element.addEventListener('blur', () => this.validateField(name));
+        });
+
+        // Validate all fields on form submit
+        this.form.addEventListener('submit', (e) => {
+            const isValid = this.validateAll();
+            if (!isValid) {
+                e.preventDefault();
+            }
+        });
+    }
+
+    validateField(fieldName) {
+        const field = this.fields[fieldName];
+        if (!field || !field.element) return true;
+
+        const value = field.element.value;
+        const isValid = field.validate(value);
+
+        field.element.classList.remove('is-valid', 'is-invalid');
+        field.element.classList.add(isValid ? 'is-valid' : 'is-invalid');
+
+        this.updateSubmitButton();
+        return isValid;
+    }
+
+    validateAll() {
+        let isValid = true;
+        Object.keys(this.fields).forEach(fieldName => {
+            if (!this.validateField(fieldName)) {
+                isValid = false;
+            }
+        });
+        return isValid;
+    }
+
+    updateSubmitButton() {
+        this.submitBtn.disabled = !this.validateAll();
+    }
+}
+
+$('#receiptModal').on('shown.bs.modal', function() {
+    new ReceiptValidator('receiptForm');
+});
 
 });
+
+
 </script>
 
 <style>

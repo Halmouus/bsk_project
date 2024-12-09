@@ -1,4 +1,5 @@
 {% load presentation_filters %}
+{% load accounting_filters %}
 
 <!-- Debug info -->
 {% comment %}
@@ -27,7 +28,7 @@ Available filters:
                     <div class="col-md-6">
                         <p><strong>Date:</strong> {{ presentation.date|date:"Y-m-d" }}</p>
                         <p><strong>Bank Account:</strong> {{ presentation.bank_account }}</p>
-                        <p><strong>Total Amount:</strong> {{ presentation.total_amount|floatformat:2 }}</p>
+                        <p><strong>Total Amount:</strong> {{ presentation.total_amount|format_balance }}</p>
                     </div>
                     <div class="col-md-6 d-flex flex-column">
                         {% if presentation.status == 'pending' %}
@@ -127,7 +128,7 @@ Available filters:
                                 {{ receipt.lcn.due_date|date:"Y-m-d" }}
                             {% endif %}
                         </td>
-                        <td class="text-right">{{ receipt.amount|floatformat:2 }}</td>
+                        <td class="text-right">{{ receipt.amount|format_balance }}</td>
                         <td>
                             {% if receipt.checkreceipt %}
                                 <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}">
@@ -168,7 +169,7 @@ Available filters:
                 <tfoot>
                     <tr class="font-weight-bold">
                         <td colspan="5" class="text-right">Total:</td>
-                        <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td>
+                        <td class="text-right">{{ presentation.total_amount|format_balance }}</td>
                         <td colspan="2"></td>
                     </tr>
                 </tfoot>

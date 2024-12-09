@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load accounting_filters %}
 {% block content %}
 <div class="container-fluid">
     <!-- Header Section -->
@@ -33,7 +34,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Total Debit</h5>
-                    <p class="card-text text-danger h4">{{ total_debit|floatformat:2 }}</p>
+                    <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p>
                 </div>
             </div>
         </div>
@@ -41,7 +42,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Total Credit</h5>
-                    <p class="card-text text-success h4">{{ total_credit|floatformat:2 }}</p>
+                    <p class="card-text text-success h4">{{ total_credit|format_balance}}</p>
                 </div>
             </div>
         </div>
@@ -50,7 +51,7 @@
                 <div class="card-body">
                     <h5 class="card-title">Balance</h5>
                     <p class="card-text h4 {% if final_balance > 0 %}text-danger{% else %}text-success{% endif %}">
-                        {{ final_balance|floatformat:2 }}
+                        {{ final_balance|format_balance }} {# Use absolute value #}
                     </p>
                 </div>
             </div>
@@ -75,13 +76,13 @@
                     <td>{{ t.date|date:"Y-m-d" }}</td>
                     <td>{{ t.description }}</td>
                     <td class="text-right text-danger">
-                        {% if t.debit %}{{ t.debit|floatformat:2 }}{% endif %}
+                        {% if t.debit %}{{ t.debit|format_balance }}{% endif %}
                     </td>
                     <td class="text-right text-success">
-                        {% if t.credit %}{{ t.credit|floatformat:2 }}{% endif %}
+                        {% if t.credit %}{{ t.credit|format_balance }}{% endif %}
                     </td>
                     <td class="text-right {% if t.balance > 0 %}text-danger{% else %}text-success{% endif %}">
-                        {{ t.balance|floatformat:2 }}
+                        {{ t.balance|format_balance }}
                     </td>
                 </tr>
                 {% empty %}

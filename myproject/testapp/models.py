@@ -1679,6 +1679,15 @@ class LCN(NegotiableReceipt):
     lcn_number = models.CharField(max_length=50)
     branch = models.CharField(max_length=100, blank=True)
 
+    def can_be_discounted(self):
+        """Check if LCN can be discounted based on due date"""
+        if not self.due_date:
+            return False
+            
+        days_to_due = (self.due_date - timezone.now().date()).days
+        return 20 <= days_to_due <= 120
+
+
     def __str__(self):
         return f"LCN {self.lcn_number} - {self.amount}"
 

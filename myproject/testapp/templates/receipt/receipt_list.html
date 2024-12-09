@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 
 {% load presentation_filters %}
+{% load accounting_filters %}
 
 <!-- Debug info -->
 {% comment %}
@@ -74,7 +75,7 @@ Available filters:
                             <th>Check Number</th>
                             <th>Issuing Bank</th>
                             <th>Due Date</th>
-                            <th>Amount</th>
+                            <th class="text-right" style="min-width: 120px;">Amount</th>
                             <th>Bank Issued To</th>
                             <th>Presentation</th>
                             <th>Status</th>
@@ -95,7 +96,7 @@ Available filters:
                             <td>{{ check.check_number }}</td>
                             <td>{{ check.get_issuing_bank_display }}</td>
                             <td>{{ check.due_date|date:"Y-m-d" }}</td>
-                            <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+                            <td class="text-right" style="min-width: 120px;">{{ check.amount|format_balance }}</td>
 
                             <!-- Bank Issued To column -->
                             <td>
@@ -176,7 +177,7 @@ Available filters:
                             <th>LCN Number</th>
                             <th>Issuing Bank</th>
                             <th>Due Date</th>
-                            <th>Amount</th>
+                            <th class="text-right" style="min-width: 120px;">Amount</th>
                             <th>Bank Issued To</th>
                             <th>Presentation</th>
                             <th>Status</th>
@@ -197,7 +198,7 @@ Available filters:
                             <td>{{ lcn.lcn_number }}</td>
                             <td>{{ lcn.get_issuing_bank_display }}</td>
                             <td>{{ lcn.due_date|date:"Y-m-d" }}</td>
-                            <td class="text-right">{{ lcn.amount|floatformat:2 }}</td>
+                            <td class="text-right" style="min-width: 120px;">{{ lcn.amount|format_balance }}</td>
                             <!-- Bank Issued To column -->
                             <td>
                                 {% with pres=lcn.lcn_presentations.first %}
@@ -270,7 +271,7 @@ Available filters:
                             <th>Client</th>
                             <th>Reference</th>
                             <th>Credited Account</th>
-                            <th>Amount</th>
+                            <th class="text-right" style="min-width: 120px;">Amount</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -281,7 +282,7 @@ Available filters:
                             <td>{{ cash.client.name }}</td>
                             <td>{{ cash.reference_number }}</td>
                             <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td>
-                            <td class="text-right">{{ cash.amount|floatformat:2 }}</td>
+                            <td class="text-right" style="min-width: 120px;">{{ cash.amount|format_balance }}</td>
                             <td>
                                 <div class="btn-group">
                                     {% if cash.can_edit %}
@@ -320,7 +321,7 @@ Available filters:
                             <th>Transfer Reference</th>
                             <th>Transfer Date</th>
                             <th>Credited Account</th>
-                            <th>Amount</th>
+                            <th class="text-right" style="min-width: 120px;">Amount</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -332,7 +333,7 @@ Available filters:
                             <td>{{ transfer.transfer_reference }}</td>
                             <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
                             <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td>
-                            <td class="text-right">{{ transfer.amount|floatformat:2 }}</td>
+                            <td class="text-right" style="min-width: 120px;">{{ transfer.amount|format_balance }}</td>
                             <td>
                                 <div class="btn-group">
                                     {% if transfer.can_edit %}

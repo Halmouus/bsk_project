@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load presentation_filters %}
-
+{% load accounting_filters %}
 {% block content %}
 {% csrf_token %}
 <div class="container-fluid">
@@ -69,7 +69,7 @@
                     <th>Type</th>
                     <th>Bank Account</th>
                     <th>Bank Reference</th>
-                    <th>Total Amount</th>
+                    <th class="text-right" style="min-width: 120px;">Total Amount</th>
                     <th>Receipt Count</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -82,7 +82,7 @@
                     <td>{{ presentation.get_presentation_type_display }}</td>
                     <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td>
                     <td>{{ presentation.bank_reference|default:"-" }}</td>
-                    <td class="text-right">{{ presentation.total_amount|floatformat:2 }}</td>
+                    <td class="text-right" style="min-width: 120px;">{{ presentation.total_amount|format_balance }}</td>
                     <td class="text-center">{{ presentation.receipt_count }}</td>
                     <td>
                         <span class="badge badge-{{ presentation.status|status_badge }}">
@@ -319,6 +319,7 @@ const PresentationManager = {
         };
         
         this.updateDiscountDisplay();
+        NumberFormatter.updateDiscountDisplay();
     } catch (error) {
         console.error('Failed to load discount information:', error);
     }
@@ -388,7 +389,8 @@ const PresentationManager = {
     async loadAvailableReceipts() {
         try {
             const response = await $.get('/testapp/presentations/available-receipts/', {
-                type: this.receiptType
+                type: this.receiptType,
+                presentation_type: $('#presentationType').val()
             });
             
             $('.receipt-selection-container').html(response.html);
@@ -405,6 +407,7 @@ const PresentationManager = {
         this.discountInfo.selected = Array.from($('.receipt-checkbox:checked'))
             .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0);
         this.updateDiscountDisplay();
+        NumberFormatter.updateDiscountDisplay();
         }
     });
     
@@ -416,6 +419,7 @@ const PresentationManager = {
             Array.from($('.receipt-checkbox'))
             .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0) : 0;
         this.updateDiscountDisplay();
+        NumberFormatter.updateDiscountDisplay();
         }
     });
     },
@@ -560,10 +564,32 @@ const PresentationManager = {
             const errorMessage = error.responseJSON?.message || 'Failed to create presentation';
             showError(errorMessage);
         }
-    }
+    },
+
+    
 };
 
-
+const NumberFormatter = {
+    formatCurrency: (amount) => {
+        return new Intl.NumberFormat('fr-MA', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(amount);
+    },
+    
+    updateDiscountDisplay: function() {
+        ['totalDiscountLine', 'usedDiscountAmount', 
+         'availableDiscountAmount', 'selectedDiscountAmount'].forEach(id => {
+            const element = document.getElementById(id);
+            if (element) {
+                const value = parseFloat(element.textContent);
+                if (!isNaN(value)) {
+                    element.textContent = this.formatCurrency(value);
+                }
+            }
+        });
+    }
+}
 async function viewPresentation(id) {
     try {
         const response = await $.get(`/testapp/presentations/${id}/`);
