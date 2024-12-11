@@ -1,0 +1,76 @@
+{% load status_filters %}
+{% for check in receipts %}
+<tr class="status-{{ check.status|lower }}">
+    <td>{{ check.operation_date|date:"Y-m-d" }}</td>
+    <td>
+        <strong>{{ check.entity.name }}</strong><br>
+        <small class="text-muted">{{ check.entity.ice_code }}</small>
+    </td>
+    <td>
+        <small>{{ check.client.name }}</small>
+    </td>
+    <td>{{ check.check_number }}</td>
+    <td>{{ check.get_issuing_bank_display }}</td>
+    <td>{{ check.due_date|date:"Y-m-d" }}</td>
+    <td class="text-right">{{ check.amount|floatformat:2 }}</td>
+    <td>
+        {% with pres=check.check_presentations.first %}
+        {% if pres %}
+            {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }}
+        {% else %}
+            -
+        {% endif %}
+        {% endwith %}
+    </td>
+    <td>
+        {% with pres=check.check_presentations.first %}
+        {% if pres %}
+            {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br>
+            <span class="badge badge-{{ pres.presentation.status|status_badge }}">
+                {{ pres.presentation.get_status_display }}
+            </span>
+        {% else %}
+            -
+        {% endif %}
+        {% endwith %}
+    </td>
+    <td>
+        <span class="badge badge-{{ check.status|status_badge }}">
+            {{ check.get_status_display }}
+        </span>
+        {% if check.status == 'UNPAID' and check.rejection_cause %}
+            <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small>
+            {% with last_pres=check.check_presentations.last %}
+            {% if last_pres %}
+                <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+            {% endif %}
+            {% endwith %}
+        {% endif %}
+        {% if check.compensation_info %}
+            <br><small class="text-muted">{{ check.compensation_info }}</small>
+        {% endif %}
+    </td>
+    <td>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')">
+                <i class="fas fa-history"></i>
+            </button>
+            {% with pres=check.check_presentations.first %}
+            {% if not pres %}
+                <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
+                        data-type="check" data-action="edit" data-id="{{ check.id }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            {% endif %}
+            {% endwith %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="11" class="text-center">No checks found</td>
+</tr>
+{% endfor %}

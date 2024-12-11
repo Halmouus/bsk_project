@@ -1,7 +1,7 @@
 from django.views import View
 from django.views.generic import ListView
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse
+from django.http import JsonResponse, request
 from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils.decorators import method_decorator
@@ -49,6 +49,16 @@ class ReceiptListView(ListView):
             'cash': CashReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all(),
             'transfers': TransferReceipt.objects.select_related('client', 'entity', 'bank_account','credited_account').all()
         }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Add active bank accounts to context
+        context['bank_accounts'] = BankAccount.objects.filter(is_active=True)
+        print("Bank accounts added to context:", [
+            f"{account.get_bank_display()} - {account.account_number}" 
+            for account in context['bank_accounts']
+        ])  # Debug log
+        return context 
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptCreateView(View):
@@ -627,3 +637,72 @@ def unpaid_receipt_autocomplete(request):
     
     print(f"Unpaid Receipt results({len(results)}): {results}")
     return JsonResponse({'results': results})
+
+class ReceiptFilterView(View):
+    def get(self, request):
+        receipt_type = request.GET.get('type')
+        filters = Q()
+
+        # Log incoming request
+        print(f"\n=== Filter Request ===")
+        print(f"Receipt type: {receipt_type}")
+        print(f"Parameters: {request.GET}")
+
+        try:
+            # Common filters
+            client_id = request.GET.get('client')
+            entity_id = request.GET.get('entity')
+            if client_id:
+                filters &= Q(client_id=client_id)
+            if entity_id:
+                filters &= Q(entity_id=entity_id)
+
+            # Type-specific filters
+            if receipt_type in ['checks', 'lcns']:
+                status = request.GET.get('status')
+                number = request.GET.get('number')
+                
+                if status:
+                    filters &= Q(status=status)
+                if number:
+                    field_name = 'check_number' if receipt_type == 'checks' else 'lcn_number'
+                    filters &= Q(**{f'{field_name}__icontains': number})
+            
+            elif receipt_type in ['cash', 'transfers']:
+                credited_account = request.GET.get('credited_account')
+                if credited_account:
+                    filters &= Q(credited_account=credited_account)
+
+            # Get base queryset based on type
+            model_map = {
+                'checks': CheckReceipt,
+                'lcns': LCN,
+                'cash': CashReceipt,
+                'transfers': TransferReceipt
+            }
+
+            print(f"Applied filters: {filters}")
+
+            queryset = model_map[receipt_type].objects.filter(filters)
+            
+            print(f"Found {queryset.count()} records")
+
+            html = render_to_string(f'receipt/partials/{receipt_type}_list.html', {
+                'receipts': queryset
+            }, request=request)
+
+            return JsonResponse({'html': html})
+
+        except Exception as e:
+            print(f"Error in filter view: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['bank_choices'] = MOROCCAN_BANKS
+        bank_accounts = BankAccount.objects.filter(is_active=True)
+        print("Bank accounts being passed to context:", bank_accounts.count())  # Debug log
+        context['bank_accounts'] = bank_accounts
+        return context

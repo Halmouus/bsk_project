@@ -23,7 +23,8 @@ from .views_bank import (
 
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
-    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,)
+    entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,
+    ReceiptFilterView)
 
 from .views_client import (
     client_management,
@@ -152,6 +153,9 @@ urlpatterns = [
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
     path('receipts/entity/autocomplete', entity_autocomplete, name='entity-autocomplete'),
     path('receipts/unpaid/autocomplete', unpaid_receipt_autocomplete, name='unpaid-receipt-autocomplete'),
+
+    # Filter receipts
+    path('receipts/filter/', ReceiptFilterView.as_view(), name='receipt-filter'),
 
     # Presentation URLs
     path('presentations/', PresentationListView.as_view(), name='presentation-list'),

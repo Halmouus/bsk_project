@@ -1,0 +1,71 @@
+{% load status_filters %}
+{% for lcn in receipts %}
+<tr class="status-{{ lcn.status|lower }}">
+    <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
+    <td>
+        <strong>{{ lcn.entity.name }}</strong><br>
+        <small class="text-muted">{{ lcn.entity.ice_code }}</small>
+    </td>
+    <td>
+        <small>{{ lcn.client.name }}</small>
+    </td>
+    <td>{{ lcn.lcn_number }}</td>
+    <td>{{ lcn.get_issuing_bank_display }}</td>
+    <td>{{ lcn.due_date|date:"Y-m-d" }}</td>
+    <td class="text-right">{{ lcn.amount|floatformat:2 }}</td>
+    <td>
+        {% with pres=lcn.lcn_presentations.first %}
+        {% if pres %}
+            {{ pres.presentation.bank_account.bank }} - {{ pres.presentation.bank_account.account_number }}
+        {% else %}
+            -
+        {% endif %}
+        {% endwith %}
+    </td>
+    <td>
+        {% with pres=lcn.lcn_presentations.first %}
+        {% if pres %}
+            {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br>
+            <span class="badge badge-{{ pres.presentation.status|status_badge }}">
+                {{ pres.presentation.get_status_display }}
+            </span>
+        {% else %}
+            -
+        {% endif %}
+        {% endwith %}
+    </td>
+    <td>
+        <span class="badge badge-{{ lcn.status|status_badge }}">
+            {{ lcn.get_status_display }}
+        </span>
+        {% if lcn.status == 'UNPAID' and lcn.rejection_cause %}
+            <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
+        {% endif %}
+        {% if lcn.compensation_info %}
+            <br><small class="text-muted">{{ lcn.compensation_info }}</small>
+        {% endif %}
+    </td>
+    <td>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')">
+                <i class="fas fa-history"></i>
+            </button>
+            {% with pres=lcn.lcn_presentations.first %}
+            {% if not pres %}
+                <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
+                        data-type="lcn" data-action="edit" data-id="{{ lcn.id }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            {% endif %}
+            {% endwith %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="11" class="text-center">No LCNs found</td>
+</tr>
+{% endfor %}

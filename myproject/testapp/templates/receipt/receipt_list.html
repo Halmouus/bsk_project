@@ -268,6 +268,7 @@ Available filters:
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Entity</th>
                             <th>Client</th>
                             <th>Reference</th>
                             <th>Credited Account</th>
@@ -279,6 +280,7 @@ Available filters:
                         {% for cash in receipts.cash %}
                         <tr>
                             <td>{{ cash.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ cash.entity.name }}</td>
                             <td>{{ cash.client.name }}</td>
                             <td>{{ cash.reference_number }}</td>
                             <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td>
@@ -317,6 +319,7 @@ Available filters:
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Entity</th>
                             <th>Client</th>
                             <th>Transfer Reference</th>
                             <th>Transfer Date</th>
@@ -329,6 +332,7 @@ Available filters:
                         {% for transfer in receipts.transfers %}
                         <tr>
                             <td>{{ transfer.operation_date|date:"Y-m-d" }}</td>
+                            <td>{{ transfer.entity.name }}</td>
                             <td>{{ transfer.client.name }}</td>
                             <td>{{ transfer.transfer_reference }}</td>
                             <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
@@ -398,11 +402,83 @@ Available filters:
     .table-hover tbody tr:hover {
         background-color: rgba(0, 0, 0, 0.075) !important;
     }
+
+    .form-floating > .form-control {
+        padding-left: 2.5rem;
+    }
+
+    .form-floating > label {
+        padding-left: 1.75rem;
+    }
+
+    /* Autocomplete dropdown styling */
+    .ui-autocomplete {
+        max-height: 200px;
+        overflow-y: auto;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(0,0,0,.1);
+        box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
+        z-index: 1050;
+    }
 </style>
 
 <script>
     console.log("Extra JS loaded");
+
+    const MOROCCAN_BANKS = [
+        {% for code, name in bank_choices %}
+            ['{{ code }}', '{{ name }}'],
+        {% endfor %}
+    ];
+
+    var bankAccountsList = [
+    {value: '', label: 'Select Bank Account'},
+    {% for account in bank_accounts %}
+        {
+            value: "{{ account.id }}",
+            label: "{{ account.get_bank_display }} - {{ account.account_number }}"
+        }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
+
+    // Debug helper
+    const debug = {
+        log: function(component, message, data = null) {
+            console.log(`[${component}]`, message, data || '');
+        }
+    };
+
+// Track filters per tab
+let activeFilters = null;
+
+// Handle tab switching
+$('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+    debug.log('TabSwitch', 'Tab changed to:', e.target.id);
+    
+    // Get the target tab id (checks, lcns, cash, or transfers)
+    const targetTab = $(e.target).attr('href').replace('#', '');
+    debug.log('TabSwitch', 'Target tab:', targetTab);
+
+    // Clean up existing filters if any
+    if (activeFilters) {
+        debug.log('TabSwitch', 'Cleaning up old filters');
+        activeFilters.destroy();
+        activeFilters = null;
+    }
+
+    // Initialize new filters based on tab type
+    debug.log('TabSwitch', 'Initializing filters for:', targetTab);
+    activeFilters = new ReceiptFilters(targetTab, '/testapp/receipts/filter/?type=' + targetTab);
+});
+    
 $(document).ready(function() {
+
+    // Initialize filters for each tab
+    debug.log('Init', 'Initializing filters for active tab');
+    const activeTab = $('.tab-pane.active').attr('id');
+    debug.log('Init', 'Active tab:', activeTab);
+    activeFilters = new ReceiptFilters(activeTab, '/testapp/receipts/filter/?type=' + activeTab);
+
 
     $('#receiptModal').on('show.bs.modal', function(e) {
         const button = $(e.relatedTarget);
@@ -577,6 +653,7 @@ $(document).ready(function() {
                     },
                     error: function(xhr, status, error) {
                         console.error('Entity autocomplete error:', error);
+                        console.log('XHR response:', xhr.responseText);
                     }
                 });
             },
@@ -590,6 +667,8 @@ $(document).ready(function() {
             console.log('Entity input focused');
         });
 
+        
+
         // Add some basic styling to autocomplete dropdown
         $(".ui-autocomplete").addClass("dropdown-menu").css({
             'max-height': '200px',
@@ -598,6 +677,8 @@ $(document).ready(function() {
             'z-index': '9999'
         });
     }
+
+
     function initializeBankAutocomplete() {
     const banksList = [
         {% for code, name in bank_choices %}
@@ -668,7 +749,363 @@ $(document).ready(function() {
             });
         }
     });
+    class ReceiptFilters {
+        constructor(tabId, filterEndpoint) {
+        debug.log('ReceiptFilters', 'Initializing for tab:', tabId);
+        this.tab = $(`#${tabId}`);
+        this.endpoint = filterEndpoint;
+        this.currentFilters = {};
+        this.type = tabId; // 'checks', 'lcns', 'cash', 'transfers'
+        
+        this.createFilterUI();
+        this.initializeFilters();
+    }
 
+    getFilterConfig() {
+        debug.log('ReceiptFilters', 'Getting filter config for type:', this.type);
+        
+        const configs = {
+            'checks': [
+                {
+                    type: 'client',
+                    icon: 'user',
+                    label: 'Client',
+                    col: 3
+                },
+                {
+                    type: 'entity',
+                    icon: 'building',
+                    label: 'Entity',
+                    col: 3
+                },
+                {
+                    type: 'status',
+                    icon: 'tag',
+                    label: 'Status',
+                    col: 3,
+                    isSelect: true,
+                    options: [
+                        {value: '', label: 'All Statuses'},
+                        {value: 'PORTFOLIO', label: 'In Portfolio'},
+                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
+                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
+                        {value: 'DISCOUNTED', label: 'Discounted'},
+                        {value: 'PAID', label: 'Paid'},
+                        {value: 'UNPAID', label: 'Unpaid'},
+                        {value: 'COMPENSATED', label: 'Compensated'}
+                    ]
+                },
+                {
+                    type: 'number',
+                    icon: 'hashtag',
+                    label: 'Check Number',
+                    col: 3
+                }
+            ],
+            'lcns': [
+                {
+                    type: 'client',
+                    icon: 'user',
+                    label: 'Client',
+                    col: 3
+                },
+                {
+                    type: 'entity',
+                    icon: 'building',
+                    label: 'Entity',
+                    col: 3
+                },
+                {
+                    type: 'status',
+                    icon: 'tag',
+                    label: 'Status',
+                    col: 3,
+                    isSelect: true,
+                    options: [
+                        {value: '', label: 'All Statuses'},
+                        {value: 'PORTFOLIO', label: 'In Portfolio'},
+                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
+                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
+                        {value: 'DISCOUNTED', label: 'Discounted'},
+                        {value: 'PAID', label: 'Paid'},
+                        {value: 'UNPAID', label: 'Unpaid'},
+                        {value: 'COMPENSATED', label: 'Compensated'}
+                    ]
+                },
+                {
+                    type: 'number',
+                    icon: 'hashtag',
+                    label: 'LCN Number',
+                    col: 3
+                }
+            ],
+            'cash': [
+                {
+                    type: 'client',
+                    icon: 'user',
+                    label: 'Client',
+                    col: 4
+                },
+                {
+                    type: 'entity',
+                    icon: 'building',
+                    label: 'Entity',
+                    col: 4
+                },
+                {
+                    type: 'credited_account',
+                    icon: 'university',
+                    label: 'Credited Account',
+                    col: 4,
+                    isSelect: true,
+                    options: bankAccountsList
+                }
+            ],
+            'transfers': [
+                {
+                    type: 'client',
+                    icon: 'user',
+                    label: 'Client',
+                    col: 4
+                },
+                {
+                    type: 'entity',
+                    icon: 'building',
+                    label: 'Entity',
+                    col: 4
+                },
+                {
+                    type: 'credited_account',
+                    icon: 'university',
+                    label: 'Credited Account',
+                    col: 4,
+                    isSelect: true,
+                    options: bankAccountsList
+                }
+            ]
+        };
+
+        const config = configs[this.type];
+        debug.log('ReceiptFilters', 'Filter config:', config);
+        return config || [];
+    }
+
+    createFilterUI() {
+        debug.log('ReceiptFilters', 'Creating filter UI');
+        
+        const filters = this.getFilterConfig();
+        let filterElements = [];
+        
+        filters.forEach(filter => {
+            filterElements.push(this.createFilterElement(filter));
+        });
+
+        const filterHtml = `
+            <div class="card mb-4" id="${this.type}-filters">
+                <div class="card-body">
+                    <div class="row g-3">
+                        ${filterElements.join('')}
+                    </div>
+                </div>
+            </div>`;
+
+        debug.log('ReceiptFilters', 'Inserting filter HTML');
+        this.tab.find('.table-responsive').before(filterHtml);
+    }
+
+    createFilterElement(filter) {
+        if (filter.isSelect) {
+            return `
+                <div class="col-md-${filter.col}">
+                    <div class="form-floating">
+                        <select class="form-control" id="${this.type}-${filter.type}-filter">
+                            ${filter.options.map(opt => 
+                                `<option value="${opt.value}">${opt.label}</option>`
+                            ).join('')}
+                        </select>
+                        <label>
+                            <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                        </label>
+                    </div>
+                </div>`;
+        }
+
+        return `
+            <div class="col-md-${filter.col}">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="${this.type}-${filter.type}-filter" 
+                           placeholder="Search ${filter.label.toLowerCase()}...">
+                    <label>
+                        <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                    </label>
+                </div>
+            </div>`;
+    }
+
+    initializeFilters() {
+        debug.log('ReceiptFilters', 'Initializing filter handlers');
+        const filters = this.getFilterConfig();
+
+        filters.forEach(filter => {
+            const elementId = `#${this.type}-${filter.type}-filter`;
+            
+            if (filter.type === 'client') {
+                this.initializeClientAutocomplete();
+                // Add blur handler for client autocomplete
+                $(elementId).on('blur', () => {
+                    if (!$(elementId).val()) {
+                        debug.log('Filter', 'Client input emptied on blur');
+                        this.updateFilter('client', '');
+                    }
+                });
+            } else if (filter.type === 'entity') {
+                this.initializeEntityAutocomplete();
+                // Add blur handler for entity autocomplete
+                $(elementId).on('blur', () => {
+                    if (!$(elementId).val()) {
+                        debug.log('Filter', 'Entity input emptied on blur');
+                        this.updateFilter('entity', '');
+                    }
+                });
+            } else if (filter.isSelect) {
+                $(elementId).on('change', () => {
+                    debug.log('Filter', `${filter.type} changed:`, $(elementId).val());
+                    this.updateFilter(filter.type, $(elementId).val());
+                });
+            } else {
+                let timeout;
+                $(elementId).on('input', (e) => {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        debug.log('Filter', `${filter.type} input:`, e.target.value);
+                        this.updateFilter(filter.type, e.target.value);
+                    }, 300);
+                });
+                // Add blur handler for text inputs
+                $(elementId).on('blur', (e) => {
+                    if (!e.target.value) {
+                        debug.log('Filter', `${filter.type} input emptied on blur`);
+                        this.updateFilter(filter.type, '');
+                    }
+                });
+            }
+        });
+
+        // Initialize credited account for cash/transfers
+        if (this.type === 'cash' || this.type === 'transfers') {
+            const creditedAccountId = `#${this.type}-credited_account-filter`;
+            debug.log('Filter', 'Initializing credited account select:', creditedAccountId);
+            $(creditedAccountId).on('change', () => {
+                const value = $(creditedAccountId).val();
+                debug.log('Filter', 'Credited account changed:', value);
+                this.updateFilter('credited_account', value);
+            });
+        }
+    }
+
+    initializeClientAutocomplete() {
+        debug.log('ReceiptFilters', 'Initializing client autocomplete');
+        $(`#${this.type}-client-filter`).autocomplete({
+            minLength: 0,
+            source: (request, response) => {
+                $.get('/testapp/client/autocomplete', { term: request.term }).done(data => {
+                    debug.log('Autocomplete', 'Client results:', data);
+                    response(data.results.map(item => ({
+                        label: item.text,
+                        value: item.id
+                    })));
+                });
+            },
+            select: (event, ui) => {
+                debug.log('Autocomplete', 'Client selected:', ui.item);
+                $(`#${this.type}-client-filter`).val(ui.item.label);
+                this.updateFilter('client', ui.item.value);
+                return false;
+            }
+        });
+    }
+
+    initializeEntityAutocomplete() {
+        debug.log('ReceiptFilters', 'Initializing entity autocomplete');
+        $(`#${this.type}-entity-filter`).autocomplete({
+            minLength: 0,
+            source: function(request, response) {
+                console.log('Entity search term:', request.term);
+                $.ajax({
+                    url: "{% url 'entity-autocomplete' %}",
+                    dataType: "json",
+                    data: { term: request.term },
+                    success: function(data) {
+                        console.log('Entity data received:', data);
+                        response($.map(data.results, function(item) {
+                            return {
+                                label: item.text,
+                                value: item.id
+                            };
+                        }));
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Entity autocomplete error:', error);
+                    }
+                });
+            },
+            select: (event, ui) => {
+                console.log('Entity selected:', ui.item);
+                $(`#${this.type}-entity-filter`).val(ui.item.label);
+                this.updateFilter('entity', ui.item.value);
+                return false;
+            }
+        });
+    }
+
+
+    updateFilter(type, value) {
+        debug.log('Filter', `Updating ${type} filter with value:`, value);
+
+        // Handle empty values correctly
+        if (value === '' || value === null || value === undefined) {
+            debug.log('Filter', `Removing ${type} filter due to empty value`);
+            delete this.currentFilters[type];
+        } else {
+            debug.log('Filter', `Setting ${type} filter to:`, value);
+            this.currentFilters[type] = value;
+        }
+
+        // Debugging for current filters state
+        debug.log('Filter', 'Current filters state:', this.currentFilters);
+
+        // Apply filters immediately
+        this.applyFilters();
+    }
+
+    applyFilters() {
+        debug.log('ReceiptFilters', 'Applying filters:', this.currentFilters);
+        
+        $.get(this.endpoint, this.currentFilters)
+            .done(response => {
+                debug.log('ReceiptFilters', 'Filter response received');
+                this.tab.find('tbody').html(response.html);
+            })
+            .fail(error => {
+                console.error('Filter error:', error);
+            });
+    }
+
+    destroy() {
+        debug.log('ReceiptFilters', 'Destroying filters');
+        // Remove filter UI
+        $(`#${this.type}-filters`).remove();
+        // Clean up event handlers
+        const filters = this.getFilterConfig();
+        filters.forEach(filter => {
+            const elementId = `#${this.type}-${filter.type}-filter`;
+            $(elementId).off();
+            if (filter.type === 'client' || filter.type === 'entity') {
+                $(elementId).autocomplete('destroy');
+            }
+        });
+    }
+}
 // Keyboard shortcuts
 $(document).keydown(function(e) {
     // Only trigger if no modal is open and no input is focused

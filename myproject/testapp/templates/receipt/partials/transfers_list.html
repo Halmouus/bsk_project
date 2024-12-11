@@ -1,0 +1,30 @@
+{% load status_filters %}
+{% for transfer in receipts %}
+<tr>
+    <td>{{ transfer.operation_date|date:"Y-m-d" }}</td>
+    <td>{{ transfer.client.name }}</td>
+    <td>{{ transfer.transfer_reference }}</td>
+    <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
+    <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td>
+    <td class="text-right">{{ transfer.amount|floatformat:2 }}</td>
+    <td>
+        <div class="btn-group">
+            {% if transfer.can_edit %}
+            <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
+                    data-type="transfer" data-action="edit" data-id="{{ transfer.id }}">
+                <i class="fas fa-edit"></i>
+            </button>
+            {% endif %}
+            {% if transfer.can_delete %}
+            <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}">
+                <i class="fas fa-trash"></i>
+            </button>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="7" class="text-center">No transfers found</td>
+</tr>
+{% endfor %}
