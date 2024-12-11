@@ -1,0 +1,37 @@
+<!-- templates/presentation/partials/presentations_table.html -->
+{% load accounting_filters %}
+{% load presentation_filters %}
+{% for presentation in presentations %}
+<tr>
+    <td>{{ presentation.date|date:"Y-m-d" }}</td>
+    <td>{{ presentation.get_presentation_type_display }}</td>
+    <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td>
+    <td>{{ presentation.bank_reference|default:"-" }}</td>
+    <td class="text-right">{{ presentation.total_amount|format_balance }}</td>
+    <td>{{ presentation.receipt_count }}</td>
+    <td>
+        <span class="badge badge-{{ presentation.status|status_badge }}">
+            {{ presentation.get_status_display }}
+        </span>
+    </td>
+    <td>
+        <div class="btn-group">
+            <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')">
+                <i class="fas fa-eye"></i>
+            </button>
+            <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')"
+                    {% if presentation.status == 'paid' %}disabled{% endif %}>
+                <i class="fas fa-edit"></i>
+            </button>
+            <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')"
+                    {% if presentation.status != 'pending' %}disabled{% endif %}>
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="8" class="text-center">No presentations found</td>
+</tr>
+{% endfor %}

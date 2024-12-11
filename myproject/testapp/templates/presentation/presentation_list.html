@@ -22,44 +22,6 @@
         </div>
     </div>
 
-    <!-- Filter Section -->
-    <div class="card mb-4">
-        <div class="card-body">
-            <div class="row">
-                <div class="col-md-3">
-                    <select class="form-control" id="typeFilter">
-                        <option value="">All Types</option>
-                        <option value="COLLECTION">Collection</option>
-                        <option value="DISCOUNT">Discount</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <select class="form-control" id="statusFilter">
-                        <option value="">All Status</option>
-                        <option value="pending">Pending</option>
-                        <option value="presented">Presented</option>
-                        <option value="paid">Paid</option>
-                        <option value="rejected">Rejected</option>
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <select class="form-control" id="bankFilter">
-                        <option value="">All Banks</option>
-                        {% for account in bank_accounts %}
-                        <option value="{{ account.id }}">
-                            {{ account.bank }} - {{ account.account_number }}
-                        </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <input type="text" class="form-control" id="searchPresentation" 
-                           placeholder="Search by reference...">
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Presentations Table -->
     <div class="table-responsive">
         <table class="table table-hover">
@@ -278,6 +240,15 @@
 
 {% block extra_js %}
 <script>
+var bankAccountsList = [
+    {value: '', label: 'Select Bank Account'},
+    {% for account in bank_accounts %}
+        {
+            value: "{{ account.id }}",
+            label: "{{ account.get_bank_display }} - {{ account.account_number }}"
+        }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+];
 function showError(error) {
     console.error(error);
     alert('An error occurred: ' + error);
@@ -568,7 +539,242 @@ const PresentationManager = {
 
     
 };
+class PresentationFilters {
+    constructor() {
+        console.log('PresentationFilters', 'Initializing filters');
+        this.currentFilters = {};
+        this.createFilterUI();
+        this.initializeFilters();
+    }
 
+    getFilterConfig() {
+        return [
+            {
+                type: 'presentation_type',
+                icon: 'tag',
+                label: 'Type',
+                col: 3,
+                isSelect: true,
+                options: [
+                    {value: '', label: 'All Types'},
+                    {value: 'COLLECTION', label: 'Collection'},
+                    {value: 'DISCOUNT', label: 'Discount'}
+                ]
+            },
+            {
+                type: 'bank_account',
+                icon: 'university',
+                label: 'Bank Account',
+                col: 3,
+                isSelect: true,
+                options: [
+                    {value: '', label: 'All Banks'},
+                    ...bankAccountsList
+                ]
+            },
+            {
+                type: 'bank_reference',
+                icon: 'hashtag',
+                label: 'Bank Reference',
+                col: 3
+            },
+            {
+                type: 'date_from',
+                icon: 'calendar',
+                label: 'Date From',
+                col: 3,
+                isDate: true
+            },
+            {
+                type: 'date_to',
+                icon: 'calendar',
+                label: 'Date To',
+                col: 3,
+                isDate: true
+            },
+            {
+                type: 'receipt_number',
+                icon: 'receipt',
+                label: 'Receipt Number',
+                col: 3
+            }
+        ];
+    }
+
+    createFilterUI() {
+        console.log('PresentationFilters', 'Creating filter UI');
+        const filters = this.getFilterConfig();
+        let filterElements = [];
+        filters.forEach(filter => {
+            filterElements.push(this.createFilterElement(filter));
+        });
+
+        const filterHtml = `
+            <div class="card mb-4" id="presentation-filters">
+                <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                    <h6 class="mb-0">Filters</h6>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="presentation-reset-filters">
+                            <i class="fas fa-undo me-1"></i>Reset
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="presentation-toggle-filters">
+                            <i class="fas fa-filter me-1"></i>Hide Filters
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body filter-content">
+                    <div class="row g-3">
+                        ${filterElements.join('')}
+                    </div>
+                </div>
+            </div>`;
+
+        $('.table-responsive').before(filterHtml);
+
+        // Set up toggle button
+        $('#presentation-toggle-filters').click(() => {
+            const $button = $('#presentation-toggle-filters');
+            const $content = $button.closest('.card').find('.filter-content');
+            $content.slideToggle();
+            $button.html(
+                $content.is(':visible') 
+                ? '<i class="fas fa-filter me-1"></i>Hide Filters'
+                : '<i class="fas fa-filter me-1"></i>Show Filters'
+            );
+        });
+
+        // Set up reset button
+        $('#presentation-reset-filters').click(() => {
+            this.resetFilters();
+        });
+    }
+
+    createFilterElement(filter) {
+        console.log('Creating filter element:', filter);
+
+        if (filter.isSelect) {
+            return `
+                <div class="col-md-${filter.col}">
+                    <div class="form-floating">
+                        <select class="form-control" id="presentation-${filter.type}-filter">
+                            ${filter.options.map(opt => `
+                                <option value="${opt.value}">${opt.label}</option>
+                            `).join('')}
+                        </select>
+                        <label>
+                            <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                        </label>
+                    </div>
+                </div>`;
+        } else if (filter.isDate) {
+            return `
+                <div class="col-md-${filter.col}">
+                    <div class="form-floating">
+                        <input type="date" class="form-control" id="presentation-${filter.type}-filter">
+                        <label>
+                            <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                        </label>
+                    </div>
+                </div>`;
+        }
+
+        return `
+            <div class="col-md-${filter.col}">
+                <div class="form-floating">
+                    <input type="text" class="form-control" id="presentation-${filter.type}-filter">
+                    <label>
+                        <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                    </label>
+                </div>
+            </div>`;
+    }
+
+    initializeFilters() {
+        console.log('PresentationFilters', 'Initializing filter handlers');
+        const filters = this.getFilterConfig();
+
+        filters.forEach(filter => {
+            const elementId = `#presentation-${filter.type}-filter`;
+            
+            if (filter.isSelect || filter.isDate) {
+                $(elementId).on('change', () => {
+                    const value = $(elementId).val();
+                    console.log('Filter', `${filter.type} changed:`, value);
+                    this.updateFilter(filter.type, value);
+                });
+
+                if (filter.isDate) {
+                    $(elementId).on('blur', () => {
+                        if (!$(elementId).val()) {
+                            console.log('Filter', `${filter.type} input emptied on blur`);
+                            this.updateFilter(filter.type, '');
+                        }
+                    });
+                }
+            } else {
+                let timeout;
+                $(elementId).on('input', (e) => {
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => {
+                        console.log('Filter', `${filter.type} input:`, e.target.value);
+                        this.updateFilter(filter.type, e.target.value);
+                    }, 300);
+                });
+                $(elementId).on('blur', (e) => {
+                    if (!e.target.value) {
+                        console.log('Filter', `${filter.type} input emptied on blur`);
+                        this.updateFilter(filter.type, '');
+                    }
+                });
+            }
+        });
+    }
+
+    updateFilter(type, value) {
+        console.log('Filter', `Updating ${type} filter with value:`, value);
+
+        if (value === '' || value === null || value === undefined) {
+            console.log('Filter', `Removing ${type} filter due to empty value`);
+            delete this.currentFilters[type];
+        } else {
+            console.log('Filter', `Setting ${type} filter to:`, value);
+            this.currentFilters[type] = value;
+        }
+
+        console.log('Filter', 'Current filters state:', this.currentFilters);
+        this.applyFilters();
+    }
+
+    applyFilters() {
+        console.log('PresentationFilters', 'Applying filters:', this.currentFilters);
+        
+        $.get('/testapp/presentations/filter/', this.currentFilters)
+            .done(response => {
+                console.log('PresentationFilters', 'Filter response received');
+                $('.table-responsive tbody').html(response.html);
+            })
+            .fail(error => {
+                console.error('Filter error:', error);
+            });
+    }
+
+    resetFilters() {
+        console.log('PresentationFilters', 'Resetting all filters');
+        
+        const filters = this.getFilterConfig();
+        filters.forEach(filter => {
+            const $element = $(`#presentation-${filter.type}-filter`);
+            if ($element.is('select')) {
+                $element.val('').trigger('change');
+            } else {
+                $element.val('').trigger('blur');
+            }
+        });
+
+        this.currentFilters = {};
+        this.applyFilters();
+    }
+}
 const NumberFormatter = {
     formatCurrency: (amount) => {
         return new Intl.NumberFormat('fr-MA', {
@@ -679,6 +885,7 @@ async function deletePresentation(id) {
 // Initialize on document ready
 $(document).ready(function() {
     PresentationManager.init();
+    window.presentationFilters = new PresentationFilters();
 });
 
 // Global function to start presentation creation

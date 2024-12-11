@@ -42,7 +42,7 @@ from .views_entity import (
 )
 from .views_presentation import (
     PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
-    PresentationDetailView, AvailableReceiptsView, DiscountInfoView
+    PresentationDetailView, AvailableReceiptsView, DiscountInfoView, PresentationFilterView
 )
 
 
@@ -166,6 +166,7 @@ urlpatterns = [
     path('presentations/available-receipts/', AvailableReceiptsView.as_view(), name='available-receipts'),
     path('presentations/discount-info/<uuid:bank_account_id>/', 
         DiscountInfoView.as_view(), name='presentation-discount-info'),
+    path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
     
 
 ]

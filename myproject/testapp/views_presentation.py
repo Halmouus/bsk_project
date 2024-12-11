@@ -6,12 +6,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory
+from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 from decimal import Decimal
 from django.utils import timezone
+from django.db.models import Q
 
 class PresentationListView(ListView):
     """
@@ -25,6 +26,10 @@ class PresentationListView(ListView):
         context = super().get_context_data(**kwargs)
         # Add bank accounts for the filter dropdown
         context['bank_accounts'] = BankAccount.objects.filter(is_active=True)
+        context['bank_choices'] = MOROCCAN_BANKS
+        
+        print("Debug - Context data:")
+        print(f"Bank accounts: {[f'{acc.bank} - {acc.account_number}' for acc in context['bank_accounts']]}")
         return context
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -418,3 +423,68 @@ class DiscountInfoView(View):
             return JsonResponse({
                 'error': str(e)
             }, status=400)
+
+class PresentationFilterView(View):
+    def get(self, request):
+        filters = Q()
+        print("\n=== Presentation Filter Request ===")
+        print(f"Parameters: {request.GET}")
+
+        try:
+            # Type filter
+            pres_type = request.GET.get('presentation_type')
+            if pres_type:
+                filters &= Q(presentation_type=pres_type)
+
+            # Bank account filter
+            bank_account = request.GET.get('bank_account')
+            if bank_account:
+                filters &= Q(bank_account_id=bank_account)
+
+            # Bank reference filter
+            bank_ref = request.GET.get('bank_reference')
+            if bank_ref:
+                filters &= Q(bank_reference__icontains=bank_ref)
+
+            # Date range filters
+            date_from = request.GET.get('date_from')
+            date_to = request.GET.get('date_to')
+            if date_from:
+                filters &= Q(date__gte=date_from)
+            if date_to:
+                filters &= Q(date__lte=date_to)
+
+            # Receipt number filter
+            receipt_number = request.GET.get('receipt_number')
+            if receipt_number:
+                # Search in both check and LCN presentations
+                receipt_presentations = PresentationReceipt.objects.filter(
+                    Q(checkreceipt__check_number__icontains=receipt_number) |
+                    Q(lcn__lcn_number__icontains=receipt_number)
+                ).values_list('presentation_id', flat=True)
+                filters &= Q(id__in=receipt_presentations)
+
+            print(f"Applied filters: {filters}")
+
+            # Get filtered presentations
+            presentations = Presentation.objects.filter(filters).select_related(
+                'bank_account'
+            ).prefetch_related(
+                'presentation_receipts__checkreceipt',
+                'presentation_receipts__lcn'
+            )
+
+            print(f"Found {presentations.count()} presentations")
+
+            # Render filtered results
+            html = render_to_string('presentation/partials/presentations_table.html', {
+                'presentations': presentations
+            }, request=request)
+
+            return JsonResponse({'html': html})
+
+        except Exception as e:
+            print(f"Error in presentation filter: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return JsonResponse({'error': str(e)}, status=400)

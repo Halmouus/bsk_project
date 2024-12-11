@@ -52,13 +52,18 @@ class ReceiptListView(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Add active bank accounts to context
-        context['bank_accounts'] = BankAccount.objects.filter(is_active=True)
-        print("Bank accounts added to context:", [
-            f"{account.get_bank_display()} - {account.account_number}" 
-            for account in context['bank_accounts']
-        ])  # Debug log
-        return context 
+        
+        print("\n=== Debug Context Data ===")
+        # Add bank accounts for credited_account filter
+        bank_accounts = BankAccount.objects.filter(is_active=True)
+        context['bank_accounts'] = bank_accounts
+        print(f"Added {bank_accounts.count()} bank accounts")
+
+        # Add Moroccan banks for issuing_bank filter
+        context['bank_choices'] = MOROCCAN_BANKS
+        print(f"Added bank choices: {MOROCCAN_BANKS}")
+
+        return context
 
 @method_decorator(csrf_exempt, name='dispatch')
 class ReceiptCreateView(View):
@@ -643,6 +648,14 @@ class ReceiptFilterView(View):
         receipt_type = request.GET.get('type')
         filters = Q()
 
+        # Get base queryset based on type
+        model_map = {
+                'checks': CheckReceipt,
+                'lcns': LCN,
+                'cash': CashReceipt,
+                'transfers': TransferReceipt
+            }
+        
         # Log incoming request
         print(f"\n=== Filter Request ===")
         print(f"Receipt type: {receipt_type}")
@@ -657,11 +670,34 @@ class ReceiptFilterView(View):
             if entity_id:
                 filters &= Q(entity_id=entity_id)
 
+            # Amount range filters
+            amount_from = request.GET.get('amount_from')
+            amount_to = request.GET.get('amount_to')
+            if amount_from:
+                filters &= Q(amount__gte=amount_from)
+            if amount_to:
+                filters &= Q(amount__lte=amount_to)
+
+            # Creation date range filters
+            creation_date_from = request.GET.get('creation_date_from')
+            creation_date_to = request.GET.get('creation_date_to')
+            if creation_date_from:
+                filters &= Q(operation_date__gte=creation_date_from)
+            if creation_date_to:
+                filters &= Q(operation_date__lte=creation_date_to)
+
+            # Due date range filters
+            due_date_from = request.GET.get('due_date_from')
+            due_date_to = request.GET.get('due_date_to')
+            if due_date_from:
+                filters &= Q(due_date__gte=due_date_from)
+            if due_date_to:
+                filters &= Q(due_date__lte=due_date_to)
+
             # Type-specific filters
             if receipt_type in ['checks', 'lcns']:
                 status = request.GET.get('status')
                 number = request.GET.get('number')
-                
                 if status:
                     filters &= Q(status=status)
                 if number:
@@ -673,13 +709,43 @@ class ReceiptFilterView(View):
                 if credited_account:
                     filters &= Q(credited_account=credited_account)
 
-            # Get base queryset based on type
-            model_map = {
-                'checks': CheckReceipt,
-                'lcns': LCN,
-                'cash': CashReceipt,
-                'transfers': TransferReceipt
-            }
+            # Historical status filter
+            historical_status = request.GET.get('historical_status')
+            if historical_status:
+                content_type = ContentType.objects.get_for_model(model_map[receipt_type])
+                # Sample of recent history records for this receipt type
+                print("\n=== Recent History Records Sample ===")
+                recent_records = ReceiptHistory.objects.filter(
+                    content_type=content_type
+                ).order_by('-timestamp')[:5]
+
+                print("Last 5 history records structure:")
+                for record in recent_records:
+                    print(f"\nRecord ID: {record.id}")
+                    print(f"Object ID: {record.object_id}")
+                    print(f"Action: {record.action}")
+                    print(f"New Value: {record.new_value}")
+
+
+                print("\n=== Historical Status Debug ===")
+                print(f"Looking for status: {historical_status}")
+                print(f"Content type: {content_type}")
+                
+                # Check what's in ReceiptHistory
+                history_records = ReceiptHistory.objects.filter(
+                    content_type=content_type,
+                    new_value__status=historical_status
+                )
+                
+                print(f"Found {history_records.count()} history records:")
+                for record in history_records:
+                    print(f"- Receipt {record.object_id}: {record.new_value}")
+                
+                receipt_ids = history_records.values_list('object_id', flat=True)
+                print(f"Receipt IDs found: {list(receipt_ids)}")
+                
+                filters &= Q(id__in=receipt_ids)
+
 
             print(f"Applied filters: {filters}")
 

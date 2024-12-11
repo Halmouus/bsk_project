@@ -800,6 +800,85 @@ $(document).ready(function() {
                     icon: 'hashtag',
                     label: 'Check Number',
                     col: 3
+                },
+                // Add issuing bank dropdown
+                { 
+                    type: 'issuing_bank', 
+                    icon: 'university', 
+                    label: 'Issuing Bank', 
+                    col: 4,
+                    isSelect: true,
+                    options: MOROCCAN_BANKS
+                },
+                // Add bank issued to dropdown
+                { 
+                    type: 'bank_issued_to', 
+                    icon: 'university', 
+                    label: 'Bank Issued To', 
+                    col: 4,
+                    isSelect: true,
+                    options: bankAccountsList
+                },
+                // Add date ranges
+                { 
+                    type: 'creation_date_from', 
+                    icon: 'calendar', 
+                    label: 'Creation Date From', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'creation_date_to', 
+                    icon: 'calendar', 
+                    label: 'Creation Date To', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'due_date_from', 
+                    icon: 'calendar', 
+                    label: 'Due Date From', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'due_date_to', 
+                    icon: 'calendar', 
+                    label: 'Due Date To', 
+                    col: 4,
+                    isDate: true 
+                },
+                // Add amount ranges
+                { 
+                    type: 'amount_from', 
+                    icon: 'money-bill', 
+                    label: 'Amount From', 
+                    col: 4,
+                    isNumber: true 
+                },
+                { 
+                    type: 'amount_to', 
+                    icon: 'money-bill', 
+                    label: 'Amount To', 
+                    col: 4,
+                    isNumber: true 
+                },
+                { 
+                    type: 'historical_status', 
+                    icon: 'history', 
+                    label: 'Was Status', 
+                    col: 4,
+                    isSelect: true,
+                    options: [
+                        {value: '', label: 'All Statuses'},
+                        {value: 'PORTFOLIO', label: 'In Portfolio'},
+                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
+                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
+                        {value: 'PAID', label: 'Paid'},
+                        {value: 'REJECTED', label: 'Rejected'},
+                        {value: 'COMPENSATED', label: 'Compensated'},
+                        {value: 'UNPAID', label: 'Unpaid'}
+                    ]
                 }
             ],
             'lcns': [
@@ -837,6 +916,82 @@ $(document).ready(function() {
                     icon: 'hashtag',
                     label: 'LCN Number',
                     col: 3
+                },
+                // Add issuing bank dropdown
+                { 
+                    type: 'issuing_bank', 
+                    icon: 'university', 
+                    label: 'Issuing Bank', 
+                    col: 4,
+                    isSelect: true,
+                    options: MOROCCAN_BANKS
+                },
+                { 
+                    type: 'bank_issued_to', 
+                    icon: 'university', 
+                    label: 'Bank Issued To', 
+                    col: 4,
+                    isSelect: true,
+                    options: bankAccountsList
+                },
+                { 
+                    type: 'creation_date_from', 
+                    icon: 'calendar', 
+                    label: 'Creation Date From', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'creation_date_to', 
+                    icon: 'calendar', 
+                    label: 'Creation Date To', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'due_date_from', 
+                    icon: 'calendar', 
+                    label: 'Due Date From', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'due_date_to', 
+                    icon: 'calendar', 
+                    label: 'Due Date To', 
+                    col: 4,
+                    isDate: true 
+                },
+                { 
+                    type: 'amount_from', 
+                    icon: 'money-bill', 
+                    label: 'Amount From', 
+                    col: 4,
+                    isNumber: true 
+                },
+                { 
+                    type: 'amount_to', 
+                    icon: 'money-bill', 
+                    label: 'Amount To', 
+                    col: 4,
+                    isNumber: true 
+                },
+                { 
+                    type: 'historical_status', 
+                    icon: 'history', 
+                    label: 'Was Status', 
+                    col: 4,
+                    isSelect: true,
+                    options: [
+                        {value: '', label: 'All Statuses'},
+                        {value: 'PORTFOLIO', label: 'In Portfolio'},
+                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
+                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
+                        {value: 'PAID', label: 'Paid'},
+                        {value: 'REJECTED', label: 'Rejected'},
+                        {value: 'COMPENSATED', label: 'Compensated'},
+                        {value: 'UNPAID', label: 'Unpaid'}
+                    ]
                 }
             ],
             'cash': [
@@ -892,17 +1047,26 @@ $(document).ready(function() {
 
     createFilterUI() {
         debug.log('ReceiptFilters', 'Creating filter UI');
-        
         const filters = this.getFilterConfig();
         let filterElements = [];
-        
         filters.forEach(filter => {
             filterElements.push(this.createFilterElement(filter));
         });
 
         const filterHtml = `
             <div class="card mb-4" id="${this.type}-filters">
-                <div class="card-body">
+                <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                    <h6 class="mb-0">Filters</h6>
+                    <div class="btn-group">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="${this.type}-reset-filters">
+                            <i class="fas fa-undo me-1"></i>Reset
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="${this.type}-toggle-filters">
+                            <i class="fas fa-filter me-1"></i>Hide Filters
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body filter-content">
                     <div class="row g-3">
                         ${filterElements.join('')}
                     </div>
@@ -911,18 +1075,79 @@ $(document).ready(function() {
 
         debug.log('ReceiptFilters', 'Inserting filter HTML');
         this.tab.find('.table-responsive').before(filterHtml);
+
+        // Set up toggle button
+        $(`#${this.type}-toggle-filters`).click(() => {
+            const $button = $(`#${this.type}-toggle-filters`);
+            const $content = $button.closest('.card').find('.filter-content');
+            $content.slideToggle();
+            $button.html(
+                $content.is(':visible') 
+                ? '<i class="fas fa-filter me-1"></i>Hide Filters'
+                : '<i class="fas fa-filter me-1"></i>Show Filters'
+            );
+        });
+
+        // Set up reset button
+        $(`#${this.type}-reset-filters`).click(() => {
+            this.resetFilters();
+        });
     }
 
+    // Add resetFilters method to your class
+    resetFilters() {
+        debug.log('ReceiptFilters', 'Resetting all filters');
+        
+        // Reset all inputs and selects
+        const filters = this.getFilterConfig();
+        filters.forEach(filter => {
+            const $element = $(`#${this.type}-${filter.type}-filter`);
+            if ($element.is('select')) {
+                $element.val('').trigger('change');
+            } else {
+                $element.val('').trigger('blur');
+            }
+        });
+
+        // Clear current filters
+        this.currentFilters = {};
+        this.applyFilters();
+    }
+
+    
+
     createFilterElement(filter) {
+        debug.log('Creating filter element:', filter);
+
         if (filter.isSelect) {
-            return `
+            return ` 
                 <div class="col-md-${filter.col}">
                     <div class="form-floating">
                         <select class="form-control" id="${this.type}-${filter.type}-filter">
-                            ${filter.options.map(opt => 
-                                `<option value="${opt.value}">${opt.label}</option>`
-                            ).join('')}
+                            ${filter.options.map(opt => `
+                                <option value="${opt.value}">${opt.label}</option>
+                            `).join('')}
                         </select>
+                        <label>
+                            <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                        </label>
+                    </div>
+                </div>`;
+        } else if (filter.isDate) {
+            return `
+                <div class="col-md-${filter.col}">
+                    <div class="form-floating">
+                        <input type="date" class="form-control" id="${this.type}-${filter.type}-filter">
+                        <label>
+                            <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
+                        </label>
+                    </div>
+                </div>`;
+        } else if (filter.isNumber) {
+            return `
+                <div class="col-md-${filter.col}">
+                    <div class="form-floating">
+                        <input type="number" step="0.01" class="form-control" id="${this.type}-${filter.type}-filter">
                         <label>
                             <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
                         </label>
@@ -930,11 +1155,11 @@ $(document).ready(function() {
                 </div>`;
         }
 
+        // Default text input
         return `
             <div class="col-md-${filter.col}">
                 <div class="form-floating">
-                    <input type="text" class="form-control" id="${this.type}-${filter.type}-filter" 
-                           placeholder="Search ${filter.label.toLowerCase()}...">
+                    <input type="text" class="form-control" id="${this.type}-${filter.type}-filter">
                     <label>
                         <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label}
                     </label>
@@ -948,10 +1173,16 @@ $(document).ready(function() {
 
         filters.forEach(filter => {
             const elementId = `#${this.type}-${filter.type}-filter`;
-            
+            debug.log('Processing filter:', {
+                type: filter.type,
+                elementId: elementId,
+                elementExists: $(elementId).length > 0,
+                isSelect: filter.isSelect,
+                isDate: filter.isDate,
+                isNumber: filter.isNumber
+            });
             if (filter.type === 'client') {
                 this.initializeClientAutocomplete();
-                // Add blur handler for client autocomplete
                 $(elementId).on('blur', () => {
                     if (!$(elementId).val()) {
                         debug.log('Filter', 'Client input emptied on blur');
@@ -960,18 +1191,29 @@ $(document).ready(function() {
                 });
             } else if (filter.type === 'entity') {
                 this.initializeEntityAutocomplete();
-                // Add blur handler for entity autocomplete
                 $(elementId).on('blur', () => {
                     if (!$(elementId).val()) {
                         debug.log('Filter', 'Entity input emptied on blur');
                         this.updateFilter('entity', '');
                     }
                 });
-            } else if (filter.isSelect) {
+            } else if (filter.isSelect || filter.isDate || filter.isNumber) {
+                debug.log('Setting up select/date/number filter:', filter.type);
                 $(elementId).on('change', () => {
-                    debug.log('Filter', `${filter.type} changed:`, $(elementId).val());
-                    this.updateFilter(filter.type, $(elementId).val());
+                    const value = $(elementId).val();
+                    debug.log('Filter', `${filter.type} changed:`, value);
+                    this.updateFilter(filter.type, value);
                 });
+                // Blur handler for date and number inputs
+                if (filter.isDate || filter.isNumber) {
+                    debug.log('Adding blur handler for:', filter.type);
+                    $(elementId).on('blur', () => {
+                        if (!$(elementId).val()) {
+                            debug.log('Filter', `${filter.type} input emptied on blur`);
+                            this.updateFilter(filter.type, '');
+                        }
+                    });
+                }
             } else {
                 let timeout;
                 $(elementId).on('input', (e) => {
@@ -981,7 +1223,6 @@ $(document).ready(function() {
                         this.updateFilter(filter.type, e.target.value);
                     }, 300);
                 });
-                // Add blur handler for text inputs
                 $(elementId).on('blur', (e) => {
                     if (!e.target.value) {
                         debug.log('Filter', `${filter.type} input emptied on blur`);
@@ -991,7 +1232,6 @@ $(document).ready(function() {
             }
         });
 
-        // Initialize credited account for cash/transfers
         if (this.type === 'cash' || this.type === 'transfers') {
             const creditedAccountId = `#${this.type}-credited_account-filter`;
             debug.log('Filter', 'Initializing credited account select:', creditedAccountId);
