@@ -45,6 +45,10 @@ from .views_presentation import (
     PresentationDetailView, AvailableReceiptsView, DiscountInfoView, PresentationFilterView
 )
 
+from .views_statement import (
+    BankStatementView, AccountingView, OtherOperationsView
+)
+
 
 urlpatterns = [
     path('', views.home, name='home'),  # Home view
@@ -167,6 +171,15 @@ urlpatterns = [
     path('presentations/discount-info/<uuid:bank_account_id>/', 
         DiscountInfoView.as_view(), name='presentation-discount-info'),
     path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
+
+
+    # Bank Statement URLs
+    path('bank-accounts/<uuid:pk>/statement/', 
+         BankStatementView.as_view(), name='bank-statement'),
+    path('bank-accounts/<uuid:pk>/accounting/', 
+         AccountingView.as_view(), name='bank-accounting'),
+    path('bank-accounts/<uuid:pk>/other-operations/', 
+         OtherOperationsView.as_view(), name='other-operations'),
     
 
 ]

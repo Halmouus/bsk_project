@@ -2031,3 +2031,366 @@ class ClientSale(BaseModel):
         if not self.month:
             self.month = self.date.month
         super().save(*args, **kwargs)
+
+
+class BankStatement(models.Model):
+    """
+    Virtual model that dynamically generates bank statement entries.
+    Does not store records directly - serves as a view model.
+    """
+    class Meta:
+        managed = False
+
+    @classmethod
+    def get_statement(cls, bank_account, start_date=None, end_date=None):
+        """
+        Dynamically generates statement entries for a bank account.
+        Now includes historical unpaid records.
+        """
+        entries = []
+        
+        # Get all relevant receipts and presentations
+        cash_receipts = CashReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        transfer_receipts = TransferReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        presentations = Presentation.objects.filter(
+            bank_account=bank_account
+        ).prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+        
+        # Process cash and transfer receipts
+        for receipt in cash_receipts:
+            entries.append({
+                'date': receipt.operation_date,
+                'label': f"Cash payment from {receipt.entity.name}",
+                'type': 'CASH',
+                'debit': None,
+                'credit': receipt.amount,
+                'reference': receipt.reference_number or 'N/A',
+                'source_type': 'cash_receipt',
+                'source_id': receipt.id
+            })
+            
+        for receipt in transfer_receipts:
+            entries.append({
+                'date': receipt.operation_date,
+                'label': f"Bank transfer from {receipt.entity.name}",
+                'type': 'TRANSFER',
+                'debit': None,
+                'credit': receipt.amount,
+                'reference': receipt.transfer_reference,
+                'source_type': 'transfer_receipt',
+                'source_id': receipt.id
+            })
+            
+         # Process presentations
+        presentations = Presentation.objects.filter(
+            bank_account=bank_account
+        ).prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+
+        for pres in presentations:
+            for pr in pres.presentation_receipts.all():
+                receipt = pr.checkreceipt or pr.lcn
+                receipt_type = 'check' if pr.checkreceipt else 'lcn'
+                
+                # For collection presentations - only record if marked as PAID in this presentation
+                if pres.presentation_type == 'COLLECTION':
+                    if pr.recorded_status == 'PAID':
+                        entries.append({
+                            'date': pres.date,  # Use presentation date since that's when it was recorded as paid
+                            'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                            'type': f'{receipt_type.upper()}_COLLECTION',
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id
+                        })
+                
+                # For discount presentations
+                elif pres.presentation_type == 'DISCOUNT':
+                    # Record initial discount
+                    entries.append({
+                        'date': pres.date,
+                        'label': f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                        'type': f'{receipt_type.upper()}_DISCOUNT',
+                        'debit': None,
+                        'credit': receipt.amount,
+                        'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                        'source_type': 'presentation_receipt',
+                        'source_id': pr.id
+                    })
+
+                    # Add reversal if marked as UNPAID in this presentation
+                    if pr.recorded_status == 'UNPAID':
+                        entries.append({
+                            'date': pres.date,  # Use presentation date since that's when it was recorded as unpaid
+                            'label': (f"Reversal of {receipt_type} "
+                                    f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
+                            'type': f'{receipt_type.upper()}_REVERSAL',
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id
+                        })
+
+        # Sort entries by date
+        entries.sort(key=lambda x: x['date'])
+        
+        # Calculate running balance
+        balance = Decimal('0.00')
+        for entry in entries:
+            balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
+            entry['balance'] = balance
+            
+        return entries
+
+class AccountingEntry(models.Model):
+    """
+    Virtual model that dynamically generates accounting entries.
+    Does not store records directly - serves as a view model.
+    """
+    class Meta:
+        managed = False
+
+    @classmethod
+    def get_entries(cls, bank_account, start_date=None, end_date=None):
+        """
+        Dynamically generates double-entry accounting records.
+        Returns chronologically ordered list of debit/credit pairs.
+        """
+        entries = []
+        
+        # Get all relevant receipts and presentations
+        cash_receipts = CashReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        transfer_receipts = TransferReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        presentations = Presentation.objects.filter(
+            bank_account=bank_account
+        ).prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+        
+        # Process cash receipts
+        for receipt in cash_receipts:
+            label = f"Cash payment from {receipt.entity.name}"
+            reference = receipt.reference_number or 'N/A'
+            
+            # Add debit and credit pair
+            entries.extend([
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': receipt.amount,
+                    'credit': None,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': None,
+                    'credit': receipt.amount,
+                    'account_code': receipt.entity.accounting_code,  # Entity account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+            
+        # Process transfer receipts
+        for receipt in transfer_receipts:
+            label = f"Bank transfer from {receipt.entity.name}"
+            reference = receipt.transfer_reference
+            
+            # Add debit and credit pair
+            entries.extend([
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': receipt.amount,
+                    'credit': None,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'transfer_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': None,
+                    'credit': receipt.amount,
+                    'account_code': receipt.entity.accounting_code,  # Entity account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'transfer_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+
+        # Process presentations
+        for pres in presentations:
+            for pr in pres.presentation_receipts.all():
+                receipt = pr.checkreceipt or pr.lcn
+                receipt_type = 'check' if pr.checkreceipt else 'lcn'
+                reference = pres.bank_reference or f"Pres. #{pres.id}"
+                
+                # For collection presentations - only record if marked as PAID
+                if pres.presentation_type == 'COLLECTION' and pr.recorded_status == 'PAID':
+                    label = f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                    
+                    # Add debit and credit pair
+                    entries.extend([
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'account_code': bank_account.accounting_number,  # Bank account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        },
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'account_code': receipt.entity.accounting_code,  # Entity account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        }
+                    ])
+                
+                # For discount presentations
+                elif pres.presentation_type == 'DISCOUNT':
+                    # Initial discount entry
+                    label = f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                    
+                    # Add debit and credit pair
+                    entries.extend([
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'account_code': bank_account.accounting_number,  # Bank account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        },
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'account_code': '5000',  # On-hold account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        }
+                    ])
+
+                    # If marked as unpaid in this presentation, add reversal
+                    if pr.recorded_status == 'UNPAID':
+                        label = f"Reversal of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                        
+                        # Add debit and credit pair for reversal
+                        entries.extend([
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'account_code': bank_account.accounting_number,  # Bank account
+                                'reference': reference,
+                                'journal_code': bank_account.journal_number,
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            },
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': receipt.amount,
+                                'credit': None,
+                                'account_code': '5000',  # On-hold account
+                                'reference': reference,
+                                'journal_code': bank_account.journal_number,
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            }
+                        ])
+                        
+                    # If paid, record other operations entry
+                    elif pr.recorded_status == 'PAID':
+                        label = f"Payment of discounted {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                        
+                        # Add debit and credit pair for other operations
+                        entries.extend([
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': receipt.amount,
+                                'credit': None,
+                                'account_code': '5000',  # On-hold account
+                                'reference': reference,
+                                'journal_code': '06',  # Other operations
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            },
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'account_code': receipt.entity.accounting_code,  # Entity account
+                                'reference': reference,
+                                'journal_code': '06',  # Other operations
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            }
+                        ])
+
+        # Sort entries keeping pairs together
+        entries.sort(key=lambda x: (x['date'], x['pair_index']))
+        
+        return entries

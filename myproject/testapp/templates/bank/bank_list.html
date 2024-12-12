@@ -65,10 +65,19 @@
                                 </td>
                                 <td>
                                     <div class="btn-group">
-                                        <button class="btn btn-sm btn-primary" onclick="editBankAccount('{{ account.id }}')">
+                                        <a href="{% url 'bank-statement' account.id %}" class="btn btn-sm btn-info" title="View Statement">
+                                            <i class="fas fa-file-alt"></i>
+                                        </a>
+                                        <a href="{% url 'bank-accounting' account.id %}" class="btn btn-sm btn-secondary" title="View Accounting">
+                                            <i class="fas fa-book"></i>
+                                        </a>
+                                        <a href="{% url 'other-operations' account.id %}" class="btn btn-sm btn-warning" title="Other Operations">
+                                            <i class="fas fa-exchange-alt"></i>
+                                        </a>
+                                        <button class="btn btn-sm btn-primary" onclick="editBankAccount('{{ account.id }}')" title="Edit">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button class="btn btn-sm btn-danger" onclick="deleteBankAccount('{{ account.id }}')">
+                                        <button class="btn btn-sm btn-danger" onclick="deleteBankAccount('{{ account.id }}')" title="Delete">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>

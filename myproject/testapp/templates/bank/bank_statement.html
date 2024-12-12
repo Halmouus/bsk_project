@@ -1,0 +1,145 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Statement</h2>
+        <div class="d-flex gap-2">
+            <!-- Filter Form -->
+            <form class="form-inline" id="statementFilterForm">
+                <div class="input-group">
+                    <input type="date" class="form-control" name="start_date" id="startDate">
+                    <input type="date" class="form-control" name="end_date" id="endDate">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Debit</h5>
+                    <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Total Credit</h5>
+                    <p class="card-text text-success h4">{{ total_credit|format_balance }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Balance</h5>
+                    <p class="card-text h4 {% if final_balance > 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ final_balance|format_balance }}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Statement Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Label</th>
+                    <th>Type</th>
+                    <th class="text-right">Debit</th>
+                    <th class="text-right">Credit</th>
+                    <th>Reference</th>
+                    <th class="text-right">Balance</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="statementTableBody">
+                {% include 'bank/partials/statement_table.html' %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- JavaScript for handling filters -->
+<script>
+$(document).ready(function() {
+    // Existing filter form handler
+    $('#statementFilterForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const startDate = this.querySelector('[name="start_date"]').value;
+        const endDate = this.querySelector('[name="end_date"]').value;
+        
+        if (!validateDateRange(startDate, endDate)) {
+            showToast('Start date must be before or equal to end date', 'error');
+            return;
+        }
+        
+        $.get(window.location.pathname, $(this).serialize())
+            .done(function(response) {
+                $('#statementTableBody').html(response.html);
+            })
+            .fail(function(xhr) {
+                showToast('Error loading statement data', 'error');
+            });
+    });
+    
+    // Add helper functions
+    function validateDateRange(startDate, endDate) {
+        if (!startDate || !endDate) return true;
+        return new Date(startDate) <= new Date(endDate);
+    }
+    
+    function showToast(message, type = 'error') {
+        const toast = `
+            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>')
+            .append(toast)
+            .appendTo('body');
+            
+        $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
+    }
+});
+
+// View functions
+function viewReceipt(type, id) {
+    $.get(`/testapp/receipts/details/${type}/${id}/`)
+        .done(function(response) {
+            $('#receiptDetailModal .modal-content').html(response.html);
+            $('#receiptDetailModal').modal('show');
+        })
+        .fail(function(xhr) {
+            showToast('Error loading receipt details', 'error');
+        });
+}
+
+function viewPresentation(id) {
+    $.get(`/testapp/presentations/${id}/`)
+        .done(function(response) {
+            $('#presentationDetailModal .modal-content').html(response);
+            $('#presentationDetailModal').modal('show');
+        })
+        .fail(function(xhr) {
+            showToast('Error loading presentation details', 'error');
+        });
+}
+</script>
+{% endblock %}
