@@ -1,3 +1,5 @@
+# templates/bank/bank_statement.html
+
 {% extends 'base.html' %}
 {% load accounting_filters %}
 
@@ -7,6 +9,15 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Statement</h2>
         <div class="d-flex gap-2">
+            <!-- Transfer Button -->
+            <button id="transferBtn" class="btn btn-primary" disabled>
+                <i class="fas fa-exchange-alt me-2"></i> Transfer Selected
+            </button>
+            <!-- Add button to header section -->
+            <button class="btn btn-info ms-2" id="addBankFee">
+                <i class="fas fa-coins me-2"></i>
+                Add Bank Fee
+            </button>
             <!-- Filter Form -->
             <form class="form-inline" id="statementFilterForm">
                 <div class="input-group">
@@ -53,6 +64,12 @@
         <table class="table table-hover">
             <thead>
                 <tr>
+                    <th style="width: 40px;">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" id="selectAll">
+                            <label class="custom-control-label" for="selectAll"></label>
+                        </div>
+                    </th>
                     <th>Date</th>
                     <th>Label</th>
                     <th>Type</th>
@@ -64,82 +81,539 @@
                 </tr>
             </thead>
             <tbody id="statementTableBody">
-                {% include 'bank/partials/statement_table.html' %}
+                {% for entry in entries %}
+                <tr>
+                    <td>
+                        {% if entry.can_transfer %}
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input record-checkbox" 
+                                   id="record{{ entry.source_id }}"
+                                   data-amount="{{ entry.credit }}"
+                                   data-source-type="{{ entry.source_type }}"
+                                   data-source-id="{{ entry.source_id }}"
+                                   data-date="{{ entry.date|date:'Y-m-d' }}"
+                                   data-label="{{ entry.label }}"
+                                   data-reference="{{ entry.reference }}">
+                            <label class="custom-control-label" for="record{{ entry.source_id }}"></label>
+                        </div>
+                        {% endif %}
+                        {% if entry.is_transferred %}
+                        <span class="badge badge-info" title="Transferred">
+                            <i class="fas fa-exchange-alt"></i>
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.date|date:"Y-m-d" }}</td>
+                    <td>{{ entry.label }}</td>
+                    <td>
+                        <span class="badge badge-{{ entry.type|lower }}">
+                            {{ entry.type }}
+                        </span>
+                    </td>
+                    <td class="text-right text-danger">
+                        {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}
+                    </td>
+                    <td class="text-right text-success">
+                        {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %}
+                    </td>
+                    <td>{{ entry.reference }}</td>
+                    <td class="text-right {% if entry.balance > 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ entry.balance|format_balance }}
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            {% if entry.can_delete %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% endif %}
+                            {% if entry.source_type == 'presentation_receipt' %}
+                            <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% else %}
+                            <button class="btn btn-sm btn-info" 
+                                    onclick="viewReceipt('{{ entry.source_type }}', '{{ entry.source_id }}')">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center">No entries found for this period</td>
+                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
 
-<!-- JavaScript for handling filters -->
+<!-- Transfer Modal -->
+<div class="modal fade" id="transferModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-exchange-alt me-2"></i>
+                    Create Interbank Transfer
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="transferForm">
+                    {% csrf_token %}
+                    <!-- Transfer Details -->
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Transfer To</label>
+                                        <select class="form-control" id="toBankAccount" required>
+                                            <option value="">Select Bank Account</option>
+                                            {% for account in bank_accounts %}
+                                                {% if account.id != bank_account.id %}
+                                                    <option value="{{ account.id }}">
+                                                        {{ account.bank }} - {{ account.account_number }}
+                                                    </option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Transfer Date</label>
+                                        <input type="date" class="form-control" id="transferDate" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-group">
+                                        <label>Label</label>
+                                        <input type="text" class="form-control" id="transferLabel" 
+                                               value="Interbank Transfer">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected Records -->
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Selected Records</h6>
+                            <span class="text-primary">
+                                Total: <strong id="selectedTotal">0.00</strong> MAD
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <div id="selectedRecordsList" class="list-group list-group-flush">
+                                <!-- Will be populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveTransfer">
+                    <i class="fas fa-save me-2"></i>
+                    Create Transfer
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bank Fee Modal -->
+<div class="modal fade" id="bankFeeModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-coins me-2"></i>
+                    Record Bank Fee
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="bankFeeForm">
+                    {% csrf_token %}
+                    <!-- Fee Details -->
+                    <div class="card mb-3">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Fee Type</label>
+                                        <select class="form-control" id="feeType" required>
+                                            <option value="">Select Fee Type</option>
+                                            {% for fee_type in fee_types %}
+                                            <option value="{{ fee_type.id }}">
+                                                {{ fee_type.name }}
+                                            </option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Date</label>
+                                        <input type="date" class="form-control" id="feeDate" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group mt-3">
+                                <label>Related Presentation</label>
+                                <select class="form-control" id="relatedPresentation">
+                                    <option value="">None</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Amount Details -->
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Fee Amount</label>
+                                        <input type="number" class="form-control" id="rawAmount" 
+                                               step="0.01" min="0.01" required>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>VAT Rate (%)</label>
+                                        <select class="form-control" id="vatRate">
+                                            <option value="">No VAT</option>
+                                            <option value="20">20%</option>
+                                            <option value="16">16%</option>
+                                            <option value="11">11%</option>
+                                            <option value="10" selected>10%</option>
+                                            <option value="7">7%</option>
+                                            <option value="0">0%</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-check mt-3">
+                                <input type="checkbox" class="form-check-input" id="vatIncluded">
+                                <label class="form-check-label" for="vatIncluded">
+                                    VAT Included in Amount
+                                </label>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>VAT Amount</label>
+                                        <input type="number" class="form-control" id="vatAmount" 
+                                               step="0.01" min="0" readonly>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>Total Amount</label>
+                                        <input type="number" class="form-control" id="totalAmount" 
+                                               step="0.01" min="0.01" readonly>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveBankFee">
+                    <i class="fas fa-save me-2"></i>
+                    Record Fee
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
 <script>
 $(document).ready(function() {
-    // Existing filter form handler
-    $('#statementFilterForm').on('submit', function(e) {
-        e.preventDefault();
+
+     // Initialize presentation autocomplete
+     $("#relatedPresentation").autocomplete({
+        minLength: 2,
+        source: function(request, response) {
+            $.ajax({
+                url: '{% url "presentation-autocomplete" %}',
+                data: { term: request.term },
+                success: function(data) {
+                    response(data.results.map(function(item) {
+                        return {
+                            label: item.text,
+                            value: item.id
+                        };
+                    }));
+                }
+            });
+        },
+        select: function(event, ui) {
+            $("#relatedPresentation").val(ui.item.label);
+            $("#relatedPresentation").data('selected-id', ui.item.value);
+            return false;
+        }
+    }).on('blur', function() {
+        if (!$(this).val()) {
+            $(this).data('selected-id', '');
+        }
+    });
+
+    // Show bank fee modal
+    $('#addBankFee').click(function() {
+        $('#feeDate').val(new Date().toISOString().split('T')[0]);
+        $('#bankFeeModal').modal('show');
+    });
+
+    // Handle amount calculations
+    function calculateAmounts() {
+        const rawAmount = parseFloat($('#rawAmount').val()) || 0;
+        const vatRate = parseFloat($('#vatRate').val()) || 0;
+        const vatIncluded = $('#vatIncluded').prop('checked');
+
+        let vatAmount = 0;
+        let totalAmount = 0;
+
+        if (vatRate === 0) {
+            totalAmount = rawAmount;
+        } else if (vatIncluded) {
+            const vatMultiplier = (vatRate / 100) + 1;
+            const rawAmountCalculated = rawAmount / vatMultiplier;
+            vatAmount = rawAmount - rawAmountCalculated;
+            totalAmount = rawAmount;
+            $('#rawAmount').val(rawAmountCalculated.toFixed(2));
+        } else {
+            vatAmount = rawAmount * (vatRate / 100);
+            totalAmount = rawAmount + vatAmount;
+        }
+
+        $('#vatAmount').val(vatAmount.toFixed(2));
+        $('#totalAmount').val(totalAmount.toFixed(2));
+    }
+
+    $('#rawAmount, #vatRate').on('input change', calculateAmounts);
+    $('#vatIncluded').on('change', calculateAmounts);
+
+    // Toggle fee details
+    $('.toggle-fee-details').click(function() {
+        const feeId = $(this).closest('tr').data('fee-id');
+        const detailsRow = $(`.fee-details-row[data-fee-id="${feeId}"]`);
+        const icon = $(this).find('i');
         
-        const startDate = this.querySelector('[name="start_date"]').value;
-        const endDate = this.querySelector('[name="end_date"]').value;
+        detailsRow.toggleClass('d-none');
+        icon.toggleClass('fa-chevron-down fa-chevron-up');
+    });
+
+    // Handle fee creation
+    $('#saveBankFee').click(async function() {
+        if (!$('#bankFeeForm')[0].checkValidity()) {
+            $('#bankFeeForm')[0].reportValidity();
+            return;
+        }
+
+        const data = {
+            bank_account: '{{ bank_account.id }}',
+            fee_type: $('#feeType').val(),
+            date: $('#feeDate').val(),
+            related_presentation: $('#relatedPresentation').data('selected-id'),
+            raw_amount: $('#rawAmount').val(),
+            vat_rate: $('#vatRate').val(),
+            vat_included: $('#vatIncluded').prop('checked'),
+            vat_amount: $('#vatAmount').val(),
+            total_amount: $('#totalAmount').val()
+        };
+
+        try {
+            const response = await fetch('{% url "create-bank-fee" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                $('#bankFeeModal').modal('hide');
+                showToast('Bank fee recorded successfully', 'success');
+                location.reload();
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Fee creation error:', error);
+            showToast('Failed to record bank fee', 'error');
+        }
+    });
+    // Store selected records
+    let selectedRecords = new Map();
+    
+    // Handle individual record selection
+    $('.record-checkbox').change(function() {
+        const $checkbox = $(this);
+        const recordData = {
+            source_type: $checkbox.data('source-type'),
+            source_id: $checkbox.data('source-id'),
+            amount: $checkbox.data('amount'),
+            date: $checkbox.data('date'),
+            label: $checkbox.data('label'),
+            reference: $checkbox.data('reference')
+        };
         
-        if (!validateDateRange(startDate, endDate)) {
-            showToast('Start date must be before or equal to end date', 'error');
+        if (this.checked) {
+            selectedRecords.set(recordData.source_id, recordData);
+        } else {
+            selectedRecords.delete(recordData.source_id);
+        }
+        
+        updateSelectionUI();
+    });
+    
+    // Handle select all checkbox
+    $('#selectAll').change(function() {
+        $('.record-checkbox:not(:disabled)').prop('checked', this.checked).trigger('change');
+    });
+    
+    // Update UI based on selection
+    function updateSelectionUI() {
+        const totalAmount = Array.from(selectedRecords.values())
+            .reduce((sum, record) => sum + parseFloat(record.amount), 0);
+            
+        // Update transfer button state
+        $('#transferBtn').prop('disabled', selectedRecords.size === 0);
+        
+        // Update total in modal
+        $('#selectedTotal').text(totalAmount.toFixed(2));
+        
+        // Update selected records list in modal
+        const $list = $('#selectedRecordsList');
+        $list.empty();
+        
+        selectedRecords.forEach(record => {
+            $list.append(`
+                <div class="list-group-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <div class="font-weight-bold">${record.label}</div>
+                        <small class="text-muted">
+                            ${record.date} | Ref: ${record.reference}
+                        </small>
+                    </div>
+                    <span class="text-success">${parseFloat(record.amount).toFixed(2)} MAD</span>
+                </div>
+            `);
+        });
+    }
+    
+    // Show transfer modal
+    $('#transferBtn').click(function() {
+        // Set default date to today
+        $('#transferDate').val(new Date().toISOString().split('T')[0]);
+        $('#transferModal').modal('show');
+    });
+    
+    // Handle transfer creation
+    $('#saveTransfer').click(async function() {
+        if (!$('#transferForm')[0].checkValidity()) {
+            $('#transferForm')[0].reportValidity();
             return;
         }
         
-        $.get(window.location.pathname, $(this).serialize())
-            .done(function(response) {
-                $('#statementTableBody').html(response.html);
-            })
-            .fail(function(xhr) {
-                showToast('Error loading statement data', 'error');
+        const data = {
+            from_bank: '{{ bank_account.id }}',
+            to_bank: $('#toBankAccount').val(),
+            date: $('#transferDate').val(),
+            label: $('#transferLabel').val(),
+            records: Array.from(selectedRecords.values())
+        };
+        
+        try {
+            const response = await fetch('{% url "create-transfer" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
             });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                $('#transferModal').modal('hide');
+                showToast('Transfer created successfully', 'success');
+                location.reload();
+            } else {
+                showToast(result.message, 'error');
+            }
+        } catch (error) {
+            console.error('Transfer creation error:', error);
+            showToast('Failed to create transfer', 'error');
+        }
     });
     
-    // Add helper functions
-    function validateDateRange(startDate, endDate) {
-        if (!startDate || !endDate) return true;
-        return new Date(startDate) <= new Date(endDate);
-    }
-    
-    function showToast(message, type = 'error') {
-        const toast = `
-            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
-                <div class="toast-header bg-${type} text-white">
-                    <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
-                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
-                </div>
-                <div class="toast-body">${message}</div>
-            </div>
-        `;
-        
-        const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>')
-            .append(toast)
-            .appendTo('body');
-            
-        $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
-    }
+    // Initialize tooltips
+    $('[data-toggle="tooltip"]').tooltip();
 });
 
-// View functions
-function viewReceipt(type, id) {
-    $.get(`/testapp/receipts/details/${type}/${id}/`)
-        .done(function(response) {
-            $('#receiptDetailModal .modal-content').html(response.html);
-            $('#receiptDetailModal').modal('show');
-        })
-        .fail(function(xhr) {
-            showToast('Error loading receipt details', 'error');
+// Handle transfer deletion
+async function deleteTransfer(transferId) {
+    if (!confirm('Are you sure you want to delete this transfer? This will make the transferred records available for transfer again.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/testapp/bank-accounts/transfers/${transferId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
         });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showToast('Transfer deleted successfully', 'success');
+            location.reload();
+        } else {
+            showToast(result.message, 'error');
+        }
+    } catch (error) {
+        console.error('Transfer deletion error:', error);
+        showToast('Failed to delete transfer', 'error');
+    }
 }
 
-function viewPresentation(id) {
-    $.get(`/testapp/presentations/${id}/`)
-        .done(function(response) {
-            $('#presentationDetailModal .modal-content').html(response);
-            $('#presentationDetailModal').modal('show');
-        })
-        .fail(function(xhr) {
-            showToast('Error loading presentation details', 'error');
-        });
+// Toast notification function
+function showToast(message, type = 'success') {
+    const toast = `
+        <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+            <div class="toast-header bg-${type} text-white">
+                <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+            </div>
+            <div class="toast-body">${message}</div>
+        </div>
+    `;
+    
+    const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>')
+        .append(toast)
+        .appendTo('body');
+        
+    $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
 }
 </script>
 {% endblock %}

@@ -2045,27 +2045,14 @@ class BankStatement(models.Model):
     def get_statement(cls, bank_account, start_date=None, end_date=None):
         """
         Dynamically generates statement entries for a bank account.
-        Now includes historical unpaid records.
         """
         entries = []
         
-        # Get all relevant receipts and presentations
+        # Get cash receipts
         cash_receipts = CashReceipt.objects.filter(
             credited_account=bank_account
         ).select_related('entity', 'client')
         
-        transfer_receipts = TransferReceipt.objects.filter(
-            credited_account=bank_account
-        ).select_related('entity', 'client')
-        
-        presentations = Presentation.objects.filter(
-            bank_account=bank_account
-        ).prefetch_related(
-            'presentation_receipts__checkreceipt',
-            'presentation_receipts__lcn'
-        )
-        
-        # Process cash and transfer receipts
         for receipt in cash_receipts:
             entries.append({
                 'date': receipt.operation_date,
@@ -2075,9 +2062,16 @@ class BankStatement(models.Model):
                 'credit': receipt.amount,
                 'reference': receipt.reference_number or 'N/A',
                 'source_type': 'cash_receipt',
-                'source_id': receipt.id
+                'source_id': receipt.id,
+                'can_transfer': True,
+                'is_transferred': False
             })
             
+        # Get transfer receipts
+        transfer_receipts = TransferReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
         for receipt in transfer_receipts:
             entries.append({
                 'date': receipt.operation_date,
@@ -2087,10 +2081,12 @@ class BankStatement(models.Model):
                 'credit': receipt.amount,
                 'reference': receipt.transfer_reference,
                 'source_type': 'transfer_receipt',
-                'source_id': receipt.id
+                'source_id': receipt.id,
+                'can_transfer': True,
+                'is_transferred': False
             })
-            
-         # Process presentations
+
+        # Get presentations
         presentations = Presentation.objects.filter(
             bank_account=bank_account
         ).prefetch_related(
@@ -2103,18 +2099,20 @@ class BankStatement(models.Model):
                 receipt = pr.checkreceipt or pr.lcn
                 receipt_type = 'check' if pr.checkreceipt else 'lcn'
                 
-                # For collection presentations - only record if marked as PAID in this presentation
+                # For collection presentations - only record if marked as PAID
                 if pres.presentation_type == 'COLLECTION':
                     if pr.recorded_status == 'PAID':
                         entries.append({
-                            'date': pres.date,  # Use presentation date since that's when it was recorded as paid
+                            'date': pres.date,
                             'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
                             'type': f'{receipt_type.upper()}_COLLECTION',
                             'debit': None,
                             'credit': receipt.amount,
                             'reference': pres.bank_reference or f"Pres. #{pres.id}",
                             'source_type': 'presentation_receipt',
-                            'source_id': pr.id
+                            'source_id': pr.id,
+                            'can_transfer': True,
+                            'is_transferred': False
                         })
                 
                 # For discount presentations
@@ -2128,13 +2126,15 @@ class BankStatement(models.Model):
                         'credit': receipt.amount,
                         'reference': pres.bank_reference or f"Pres. #{pres.id}",
                         'source_type': 'presentation_receipt',
-                        'source_id': pr.id
+                        'source_id': pr.id,
+                        'can_transfer': True,
+                        'is_transferred': False
                     })
 
                     # Add reversal if marked as UNPAID in this presentation
                     if pr.recorded_status == 'UNPAID':
                         entries.append({
-                            'date': pres.date,  # Use presentation date since that's when it was recorded as unpaid
+                            'date': pres.date,
                             'label': (f"Reversal of {receipt_type} "
                                     f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
                             'type': f'{receipt_type.upper()}_REVERSAL',
@@ -2142,8 +2142,104 @@ class BankStatement(models.Model):
                             'credit': None,
                             'reference': pres.bank_reference or f"Pres. #{pres.id}",
                             'source_type': 'presentation_receipt',
-                            'source_id': pr.id
+                            'source_id': pr.id,
+                            'can_transfer': False,
+                            'is_transferred': False
                         })
+
+        # Add outgoing transfers
+        outgoing_transfers = InterBankTransfer.objects.filter(
+            from_bank=bank_account,
+            is_deleted=False
+        )
+        
+        for transfer in outgoing_transfers:
+            entries.append({
+                'date': transfer.date,
+                'label': transfer.label,
+                'type': 'INTERBANK_TRANSFER_OUT',
+                'debit': transfer.total_amount,
+                'credit': None,
+                'reference': f'Transfer #{transfer.id}',
+                'source_type': 'interbank_transfer',
+                'source_id': transfer.id,
+                'can_delete': True,
+                'can_transfer': False,
+                'is_transferred': False
+            })
+            
+        # Add incoming transfer records
+        incoming_transfers = InterBankTransfer.objects.filter(
+            to_bank=bank_account,
+            is_deleted=False
+        ).prefetch_related('transferred_records')
+        
+        for transfer in incoming_transfers:
+            for record in transfer.transferred_records.all():
+                entries.append({
+                    'date': transfer.date,
+                    'label': f"{transfer.label} - {record.original_label}",
+                    'type': 'INTERBANK_TRANSFER_IN',
+                    'debit': None,
+                    'credit': record.amount,
+                    'reference': record.original_reference,
+                    'source_type': 'transferred_record',
+                    'source_id': record.id,
+                    'can_delete': False,
+                    'can_transfer': True,
+                    'is_transferred': False
+                })
+
+        # Check for transferred status
+        transferred_records = TransferredRecord.objects.filter(
+            source_type__in=[entry['source_type'] for entry in entries],
+            source_id__in=[entry['source_id'] for entry in entries]
+        ).values_list('source_type', 'source_id')
+        
+        transferred_set = {(t, i) for t, i in transferred_records}
+        
+        # Mark transferred entries
+        for entry in entries:
+            if (entry['source_type'], entry['source_id']) in transferred_set:
+                entry['is_transferred'] = True
+                entry['can_transfer'] = False
+
+         # Add bank fee transactions
+        fee_transactions = BankFeeTransaction.objects.filter(
+            bank_account=bank_account
+        ).select_related('fee_type', 'related_presentation')
+
+        for fee in fee_transactions:
+            entries.append({
+                'date': fee.date,
+                'label': (f"{fee.fee_type.name}"
+                        f"{' - Pres. ' + fee.related_presentation.bank_reference if fee.related_presentation else ''}"),
+                'type': 'BANK_FEE',
+                'debit': fee.total_amount,
+                'credit': None,
+                'reference': fee.fee_type.code,
+                'source_type': 'bank_fee',
+                'source_id': fee.id,
+                'can_delete': True,
+                'can_transfer': False,
+                'is_transferred': False,
+                'is_expandable': True,
+                'details': {
+                    'fee_type': fee.fee_type.name,
+                    'raw_amount': fee.raw_amount,
+                    'vat_rate': fee.vat_rate,
+                    'vat_included': fee.vat_included,
+                    'vat_amount': fee.vat_amount,
+                    'total_amount': fee.total_amount,
+                    'related_presentation': fee.related_presentation.bank_reference if fee.related_presentation else None
+                }
+        })
+
+        # Apply date filters if provided
+        if start_date:
+            entries = [e for e in entries if e['date'] >= start_date]
+        if end_date:
+            entries = [e for e in entries if e['date'] <= end_date]
 
         # Sort entries by date
         entries.sort(key=lambda x: x['date'])
@@ -2390,7 +2486,275 @@ class AccountingEntry(models.Model):
                             }
                         ])
 
+        incoming_transfers = InterBankTransfer.objects.filter(
+            to_bank=bank_account,
+            is_deleted=False
+        ).prefetch_related('transferred_records')
+        
+        for transfer in incoming_transfers:
+            for transferred_record in transfer.transferred_records.all():
+                # Need to get the original record's entity
+                if transferred_record.source_type == 'cash_receipt':
+                    original_record = CashReceipt.objects.get(id=transferred_record.source_id)
+                elif transferred_record.source_type == 'transfer_receipt':
+                    original_record = TransferReceipt.objects.get(id=transferred_record.source_id)
+                else:  # presentation_receipt
+                    pres_receipt = PresentationReceipt.objects.get(id=transferred_record.source_id)
+                    original_record = pres_receipt.checkreceipt or pres_receipt.lcn
+
+                # Now we can access the entity
+                entries.extend([
+                    {
+                        'date': transfer.date,
+                        'label': f"{transfer.label} - {transferred_record.original_label}",
+                        'debit': transferred_record.amount,
+                        'credit': None,
+                        'account_code': bank_account.accounting_number,  # Bank account
+                        'reference': transferred_record.original_reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'transferred_record',
+                        'source_id': transferred_record.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': transfer.date,
+                        'label': f"{transfer.label} - {transferred_record.original_label}",
+                        'debit': None,
+                        'credit': transferred_record.amount,
+                        'account_code': original_record.entity.accounting_code,  # Entity account
+                        'reference': transferred_record.original_reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'transferred_record',
+                        'source_id': transferred_record.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+        
+        # Bank fee entries
+        fee_transactions = BankFeeTransaction.objects.filter(
+            bank_account=bank_account
+        ).select_related('fee_type')
+
+        for fee in fee_transactions:
+            # Raw amount entry
+            entries.extend([
+                {
+                    'date': fee.date,
+                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'debit': fee.raw_amount,
+                    'credit': None,
+                    'account_code': fee.fee_type.accounting_code,  # Fee account
+                    'reference': fee.fee_type.code,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'bank_fee',
+                    'source_id': fee.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': fee.date,
+                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'debit': None,
+                    'credit': fee.raw_amount,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': fee.fee_type.code,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'bank_fee',
+                    'source_id': fee.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+
+            # VAT entry if applicable
+            if fee.vat_amount > 0:
+                entries.extend([
+                    {
+                        'date': fee.date,
+                        'label': f"{fee.fee_type.name} - VAT",
+                        'debit': fee.vat_amount,
+                        'credit': None,
+                        'account_code': fee.fee_type.vat_code,  # VAT account
+                        'reference': fee.fee_type.code,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'bank_fee',
+                        'source_id': fee.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': fee.date,
+                        'label': f"{fee.fee_type.name} - VAT",
+                        'debit': None,
+                        'credit': fee.vat_amount,
+                        'account_code': bank_account.accounting_number,  # Bank account
+                        'reference': fee.fee_type.code,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'bank_fee',
+                        'source_id': fee.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+
         # Sort entries keeping pairs together
         entries.sort(key=lambda x: (x['date'], x['pair_index']))
         
         return entries
+
+class InterBankTransfer(BaseModel):
+    """
+    Tracks transfers between bank accounts and their related records.
+    """
+    from_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfers'
+    )
+    to_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        related_name='incoming_transfers'
+    )
+    date = models.DateField()
+    label = models.CharField(max_length=255, default="Interbank Transfer")
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    is_deleted = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Transfer from {self.from_bank} to {self.to_bank} on {self.date}"
+
+class TransferredRecord(BaseModel):
+    """
+    Links original statement records to their transfer.
+    """
+    transfer = models.ForeignKey(
+        InterBankTransfer, 
+        on_delete=models.CASCADE,
+        related_name='transferred_records'
+    )
+    # Source type and id for the original record
+    source_type = models.CharField(max_length=50)  # 'cash_receipt', 'transfer_receipt', 'presentation_receipt'
+    source_id = models.UUIDField()
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    original_date = models.DateField()
+    original_label = models.CharField(max_length=255)
+    original_reference = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ['source_type', 'source_id']  # Prevent double transfers
+
+    def __str__(self):
+        return f"Transferred record {self.source_type}:{self.source_id}"
+    
+class BankFeeType(BaseModel):
+    """Defines bank fee types and their accounting codes"""
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=10)  # For reference/initials
+    accounting_code = models.CharField(max_length=5)  # Fee account code
+    vat_code = models.CharField(max_length=5)  # VAT account code
+    description = models.TextField(blank=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+    class Meta:
+        ordering = ['name']
+
+class BankFeeTransaction(BaseModel):
+    """Records bank fee transactions"""
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    fee_type = models.ForeignKey(BankFeeType, on_delete=models.PROTECT)
+    date = models.DateField()
+    related_presentation = models.ForeignKey(
+        'Presentation', 
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    raw_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    vat_rate = models.DecimalField(
+        max_digits=4, 
+        decimal_places=2,
+        default=10.00,
+        null=True,
+        blank=True
+    )
+    vat_included = models.BooleanField(default=False)
+    vat_amount = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+
+    def calculate_amounts(self):
+        """Calculate VAT and total amounts based on settings"""
+        if not self.vat_rate or self.vat_rate == 0:
+            self.vat_amount = Decimal('0.00')
+            self.total_amount = self.raw_amount
+        elif self.vat_included:
+            # If VAT included, calculate backwards
+            vat_multiplier = (self.vat_rate / 100) + 1
+            self.raw_amount = self.total_amount / vat_multiplier
+            self.vat_amount = self.total_amount - self.raw_amount
+        else:
+            # Calculate VAT and total from raw amount
+            self.vat_amount = self.raw_amount * (self.vat_rate / 100)
+            self.total_amount = self.raw_amount + self.vat_amount
+
+    def save(self, *args, **kwargs):
+        if not self.total_amount:
+            self.calculate_amounts()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.fee_type.name} - {self.date}"
+
+# Add initial fee types
+INITIAL_FEE_TYPES = [
+    {
+        'name': 'Account Management Fee',
+        'code': 'AMF',
+        'accounting_code': '61411',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Statement Fee',
+        'code': 'STF',
+        'accounting_code': '61412',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Processing Fee',
+        'code': 'CPF',
+        'accounting_code': '61413',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Transfer Commission',
+        'code': 'TRC',
+        'accounting_code': '61414',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Book Fee',
+        'code': 'CBF',
+        'accounting_code': '61415',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Payment Rejection Fee',
+        'code': 'PRF',
+        'accounting_code': '61416',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Discount Commission',
+        'code': 'CDC',
+        'accounting_code': '61417',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'LCN Discount Commission',
+        'code': 'LDC',
+        'accounting_code': '61418',
+        'vat_code': '34551'
+    }
+]

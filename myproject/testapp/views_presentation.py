@@ -6,13 +6,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models import Q
 
 class PresentationListView(ListView):
     """

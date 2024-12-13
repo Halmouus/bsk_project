@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import BankAccount, BankStatement, AccountingEntry
+from .models import BankAccount, BankStatement, AccountingEntry, BankFeeType
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -26,9 +26,21 @@ class BankStatementView(View):
                 end_date=end_date
             )
             
+            # Get all other active bank accounts except current one
+            other_bank_accounts = BankAccount.objects.filter(
+                is_active=True
+            ).exclude(
+                id=bank_account.id
+            )
+            
+            # Get fee types for the modal
+            fee_types = BankFeeType.objects.all()
+            
             context = {
                 'bank_account': bank_account,
                 'entries': entries,
+                'bank_accounts': other_bank_accounts,
+                'fee_types': fee_types,
                 'total_debit': sum(entry['debit'] or 0 for entry in entries),
                 'total_credit': sum(entry['credit'] or 0 for entry in entries),
                 'final_balance': entries[-1]['balance'] if entries else Decimal('0.00')

@@ -18,7 +18,7 @@ from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
 from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
     BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView,
-    bank_account_autocomplete
+    bank_account_autocomplete, BankFeeCreateView, BankFeeDeleteView, PresentationAutocompleteView
 )
 
 from .views_receipts import (
@@ -47,6 +47,10 @@ from .views_presentation import (
 
 from .views_statement import (
     BankStatementView, AccountingView, OtherOperationsView
+)
+
+from .views_transfer import (
+    CreateTransferView, DeleteTransferView
 )
 
 
@@ -109,6 +113,7 @@ urlpatterns = [
     CheckerPositionStatusView.as_view(),
     name='checker-position-status'),
 
+
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
     path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
     path('bank-accounts/<uuid:pk>/edit/', BankAccountUpdateView.as_view(), name='bank-account-edit'),
@@ -118,6 +123,30 @@ urlpatterns = [
     path('bank-accounts/filter/', 
          BankAccountFilterView.as_view(), name='bank-account-filter'),
     path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
+
+    # Bank Statement URLs
+    path('bank-accounts/<uuid:pk>/statement/', 
+         BankStatementView.as_view(), name='bank-statement'),
+    path('bank-accounts/<uuid:pk>/accounting/', 
+         AccountingView.as_view(), name='bank-accounting'),
+    path('bank-accounts/<uuid:pk>/other-operations/', 
+         OtherOperationsView.as_view(), name='other-operations'),
+
+    # Transfer URLs
+    path('bank-accounts/transfers/create/', 
+         CreateTransferView.as_view(), name='create-transfer'),
+    path('bank-accounts/transfers/<uuid:pk>/delete/', 
+         DeleteTransferView.as_view(), name='delete-transfer'),
+
+    # Bank Fees
+    path('bank-accounts/fees/create/', 
+         BankFeeCreateView.as_view(), name='create-bank-fee'),
+    path('bank-accounts/fees/<uuid:pk>/delete/', 
+         BankFeeDeleteView.as_view(), name='delete-bank-fee'),
+    path('presentations/autocomplete/', 
+         PresentationAutocompleteView.as_view(), name='presentation-autocomplete'),
+
+
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -173,13 +202,6 @@ urlpatterns = [
     path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
 
 
-    # Bank Statement URLs
-    path('bank-accounts/<uuid:pk>/statement/', 
-         BankStatementView.as_view(), name='bank-statement'),
-    path('bank-accounts/<uuid:pk>/accounting/', 
-         AccountingView.as_view(), name='bank-accounting'),
-    path('bank-accounts/<uuid:pk>/other-operations/', 
-         OtherOperationsView.as_view(), name='other-operations'),
     
 
 ]
