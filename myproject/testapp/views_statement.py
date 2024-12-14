@@ -18,6 +18,13 @@ class BankStatementView(View):
             # Get filter parameters
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
+
+            # Convert string dates to datetime.date objects if they exist
+            from datetime import datetime
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if end_date:
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             
             # Get statement entries
             entries = BankStatement.get_statement(
@@ -26,33 +33,40 @@ class BankStatementView(View):
                 end_date=end_date
             )
             
-            # Get all other active bank accounts except current one
-            other_bank_accounts = BankAccount.objects.filter(
-                is_active=True
-            ).exclude(
-                id=bank_account.id
-            )
+            # Calculate totals just once
+            total_debit = sum(entry['debit'] or 0 for entry in entries)
+            total_credit = sum(entry['credit'] or 0 for entry in entries)
+            final_balance = total_credit - total_debit  # Changed to use the calculation instead of last entry
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'html': render_to_string(
+                        'bank/partials/statement_table.html',
+                        {
+                            'entries': entries,
+                            'total_debit': total_debit,
+                            'total_credit': total_credit,
+                            'final_balance': final_balance
+                        },
+                        request=request
+                    ),
+                    'totals': {
+                        'debit': str(total_debit),
+                        'credit': str(total_credit),
+                        'balance': str(final_balance)
+                    }
+                })
             
-            # Get fee types for the modal
-            fee_types = BankFeeType.objects.all()
-            
+            # Get additional data for full page render
             context = {
                 'bank_account': bank_account,
                 'entries': entries,
-                'bank_accounts': other_bank_accounts,
-                'fee_types': fee_types,
-                'total_debit': sum(entry['debit'] or 0 for entry in entries),
-                'total_credit': sum(entry['credit'] or 0 for entry in entries),
-                'final_balance': entries[-1]['balance'] if entries else Decimal('0.00')
+                'bank_accounts': BankAccount.objects.filter(is_active=True).exclude(id=bank_account.id),
+                'fee_types': BankFeeType.objects.all(),
+                'total_debit': total_debit,
+                'total_credit': total_credit,
+                'final_balance': final_balance
             }
-            
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-                html = render_to_string(
-                    'bank/partials/statement_table.html',
-                    context,
-                    request=request
-                )
-                return JsonResponse({'html': html})
             
             return render(request, 'bank/bank_statement.html', context)
             

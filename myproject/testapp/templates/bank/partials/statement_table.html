@@ -1,9 +1,28 @@
-{% load accounting_filters %}
+{% load accounting_filters %} 
 
 {% for entry in entries %}
-    <!-- Handle different entry types -->
     {% if entry.type == 'BANK_FEE' %}
         <tr class="fee-row" data-fee-id="{{ entry.source_id }}">
+            <td>
+                {% if entry.can_transfer %}
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input record-checkbox" 
+                           id="record{{ entry.source_id }}"
+                           data-amount="{{ entry.credit }}"
+                           data-source-type="{{ entry.source_type }}"
+                           data-source-id="{{ entry.source_id }}"
+                           data-date="{{ entry.date|date:'Y-m-d' }}"
+                           data-label="{{ entry.label }}"
+                           data-reference="{{ entry.reference }}">
+                    <label class="custom-control-label" for="record{{ entry.source_id }}"></label>
+                </div>
+                {% endif %}
+                {% if entry.is_transferred %}
+                <span class="badge badge-info" title="Transferred">
+                    <i class="fas fa-exchange-alt"></i>
+                </span>
+                {% endif %}
+            </td>
             <td>{{ entry.date|date:"Y-m-d" }}</td>
             <td>
                 {{ entry.label }}
@@ -76,6 +95,26 @@
         {% endif %}
     {% else %}
         <tr>
+            <td>
+                {% if entry.can_transfer %}
+                <div class="custom-control custom-checkbox">
+                    <input type="checkbox" class="custom-control-input record-checkbox" 
+                           id="record{{ entry.source_id }}"
+                           data-amount="{{ entry.credit }}"
+                           data-source-type="{{ entry.source_type }}"
+                           data-source-id="{{ entry.source_id }}"
+                           data-date="{{ entry.date|date:'Y-m-d' }}"
+                           data-label="{{ entry.label }}"
+                           data-reference="{{ entry.reference }}">
+                    <label class="custom-control-label" for="record{{ entry.source_id }}"></label>
+                </div>
+                {% endif %}
+                {% if entry.is_transferred %}
+                <span class="badge badge-info" title="Transferred">
+                    <i class="fas fa-exchange-alt"></i>
+                </span>
+                {% endif %}
+            </td>
             <td>{{ entry.date|date:"Y-m-d" }}</td>
             <td>{{ entry.label }}</td>
             <td>
@@ -98,15 +137,12 @@
                 <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')">
                     <i class="fas fa-eye"></i>
                 </button>
-                {% else %}
-                <button class="btn btn-sm btn-info" onclick="viewReceipt('{{ entry.source_type }}', '{{ entry.source_id }}')">
-                    <i class="fas fa-eye"></i>
-                </button>
                 {% endif %}
             </td>
         </tr>
-        {% empty %}
-        <tr>
-            <td colspan="8" class="text-center">No entries found for this period</td>
-        </tr>
+    {% endif %}
+{% empty %}
+    <tr>
+        <td colspan="8" class="text-center">No entries found</td>
+    </tr>
 {% endfor %}

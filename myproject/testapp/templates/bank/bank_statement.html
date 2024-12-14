@@ -1,5 +1,3 @@
-# templates/bank/bank_statement.html
-
 {% extends 'base.html' %}
 {% load accounting_filters %}
 
@@ -35,7 +33,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Total Debit</h5>
-                    <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p>
+                    <p class="card-text text-danger h4" id="total-debit">{{ total_debit|format_balance }}</p>
                 </div>
             </div>
         </div>
@@ -43,7 +41,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Total Credit</h5>
-                    <p class="card-text text-success h4">{{ total_credit|format_balance }}</p>
+                    <p class="card-text text-success h4" id="total-credit">{{ total_credit|format_balance }}</p>
                 </div>
             </div>
         </div>
@@ -51,7 +49,7 @@
             <div class="card">
                 <div class="card-body">
                     <h5 class="card-title">Balance</h5>
-                    <p class="card-text h4 {% if final_balance > 0 %}text-success{% else %}text-danger{% endif %}">
+                    <p class="card-text h4 {% if final_balance > 0 %}text-success{% else %}text-danger{% endif %}" id="final-balance">
                         {{ final_balance|format_balance }}
                     </p>
                 </div>
@@ -82,6 +80,99 @@
             </thead>
             <tbody id="statementTableBody">
                 {% for entry in entries %}
+                {% if entry.type == 'BANK_FEE' %}
+                <tr class="fee-row" data-fee-id="{{ entry.source_id }}">
+                    <td>
+                        {% if entry.can_transfer %}
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input record-checkbox" 
+                                id="record{{ entry.source_id }}"
+                                data-amount="{{ entry.credit }}"
+                                data-source-type="{{ entry.source_type }}"
+                                data-source-id="{{ entry.source_id }}"
+                                data-date="{{ entry.date|date:'Y-m-d' }}"
+                                data-label="{{ entry.label }}"
+                                data-reference="{{ entry.reference }}">
+                            <label class="custom-control-label" for="record{{ entry.source_id }}"></label>
+                        </div>
+                        {% endif %}
+                        {% if entry.is_transferred %}
+                        <span class="badge badge-info" title="Transferred">
+                            <i class="fas fa-exchange-alt"></i>
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td>{{ entry.date|date:"Y-m-d" }}</td>
+                    <td>
+                        {{ entry.label }}
+                        {% if entry.is_expandable %}
+                        <button class="btn btn-sm btn-link toggle-fee-details">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-warning">
+                            {{ entry.type }}
+                        </span>
+                    </td>
+                    <td class="text-right text-danger">{{ entry.debit|format_balance }}</td>
+                    <td class="text-right text-success">{{ entry.credit|format_balance }}</td>
+                    <td>{{ entry.reference }}</td>
+                    <td class="text-right">{{ entry.balance|format_balance }}</td>
+                    <td>
+                        <div class="btn-group">
+                            {% if entry.can_delete %}
+                            <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% if entry.is_expandable %}
+                <tr class="fee-details-row d-none" data-fee-id="{{ entry.source_id }}">
+                    <td colspan="8">
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <strong>Fee Type:</strong><br>
+                                        {{ entry.details.fee_type }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>Raw Amount:</strong><br>
+                                        {{ entry.details.raw_amount|format_balance }}
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>VAT Rate:</strong><br>
+                                        {{ entry.details.vat_rate }}%
+                                    </div>
+                                    <div class="col-md-3">
+                                        <strong>VAT Included:</strong><br>
+                                        {{ entry.details.vat_included|yesno:"Yes,No" }}
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-4">
+                                        <strong>VAT Amount:</strong><br>
+                                        {{ entry.details.vat_amount|format_balance }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Total Amount:</strong><br>
+                                        {{ entry.details.total_amount|format_balance }}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <strong>Related Presentation:</strong><br>
+                                        {{ entry.details.related_presentation|default:"None" }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endif %}
+                {% else %}
                 <tr>
                     <td>
                         {% if entry.can_transfer %}
@@ -123,9 +214,15 @@
                     <td>
                         <div class="btn-group">
                             {% if entry.can_delete %}
-                            <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                                {% if entry.type == 'BANK_FEE' %}
+                                    <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                {% endif %}
                             {% endif %}
                             {% if entry.source_type == 'presentation_receipt' %}
                             <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')">
@@ -140,15 +237,14 @@
                         </div>
                     </td>
                 </tr>
+                {% endif %}
                 {% empty %}
                 <tr>
                     <td colspan="9" class="text-center">No entries found for this period</td>
                 </tr>
                 {% endfor %}
             </tbody>
-        </table>
-    </div>
-</div>
+            
 
 <!-- Transfer Modal -->
 <div class="modal fade" id="transferModal" tabindex="-1">
@@ -267,9 +363,7 @@
                             </div>
                             <div class="form-group mt-3">
                                 <label>Related Presentation</label>
-                                <select class="form-control" id="relatedPresentation">
-                                    <option value="">None</option>
-                                </select>
+                                <input type="text" class="form-control" id="relatedPresentation" placeholder="Search by reference...">
                             </div>
                         </div>
                     </div>
@@ -336,22 +430,147 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
+
+<style>
+    /* Fee Row Styling */
+    .fee-row {
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .fee-row:hover {
+        background-color: rgba(0, 0, 0, 0.02);
+    }
+
+    .fee-row .toggle-fee-details {
+        padding: 0;
+        margin-left: 8px;
+        color: #6c757d;
+        transition: transform 0.3s;
+    }
+
+    /* Details Row Styling */
+    .fee-details-row {
+        background-color: #f8f9fa;
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+
+    .fee-details-row .card {
+        border: none;
+        margin: 0;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .fee-details-row .card-body {
+        padding: 1.5rem;
+    }
+
+    .fee-details-row strong {
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
+
+    /* Button Spacing & Styling */
+    .btn-group {
+        gap: 0.5rem;
+    }
+
+    .btn-group > .btn {
+        border-radius: 0.375rem !important;
+        margin: 0;
+    }
+
+    /* Modal Enhancements */
+    .modal-content {
+        border: none;
+        border-radius: 0.5rem;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+
+    .modal-header {
+        background: linear-gradient(45deg, #4e73df, #224abe);
+        color: white;
+        border-top-left-radius: 0.5rem;
+        border-top-right-radius: 0.5rem;
+        padding: 1.5rem;
+    }
+
+    .modal-body {
+        padding: 1.5rem;
+    }
+
+    .modal-footer {
+        padding: 1rem 1.5rem;
+        background-color: #f8f9fa;
+        border-bottom-left-radius: 0.5rem;
+        border-bottom-right-radius: 0.5rem;
+    }
+
+    /* Form Styling */
+    .form-group {
+        margin-bottom: 1.25rem;
+    }
+
+    .form-control {
+        border-radius: 0.375rem;
+        padding: 0.625rem 0.875rem;
+        border-color: #e2e8f0;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .form-control:focus {
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15);
+    }
+
+    /* Table Enhancements */
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table th {
+        font-weight: 600;
+        color: #4a5568;
+        border-top: none;
+        padding: 1rem;
+    }
+
+    .table td {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+
+    /* Badge Enhancements */
+    .badge {
+        padding: 0.5em 0.75em;
+        font-weight: 500;
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        letter-spacing: 0.025em;
+    }
+</style>
 
 {% block extra_js %}
 <script>
 $(document).ready(function() {
+    // ===== Bank Fee Management =====
+    $('#addBankFee').click(function() {
+        $('#feeDate').val(new Date().toISOString().split('T')[0]);
+        $('#bankFeeModal').modal('show');
+    });
 
-     // Initialize presentation autocomplete
-     $("#relatedPresentation").autocomplete({
+    // Initialize presentation autocomplete
+    $("#relatedPresentation").autocomplete({
         minLength: 2,
         source: function(request, response) {
             $.ajax({
                 url: '{% url "presentation-autocomplete" %}',
+                dataType: 'json',
                 data: { term: request.term },
                 success: function(data) {
-                    response(data.results.map(function(item) {
+                    response($.map(data.results, function(item) {
                         return {
                             label: item.text,
                             value: item.id
@@ -361,23 +580,13 @@ $(document).ready(function() {
             });
         },
         select: function(event, ui) {
-            $("#relatedPresentation").val(ui.item.label);
-            $("#relatedPresentation").data('selected-id', ui.item.value);
+            $(this).val(ui.item.label);
+            $(this).data('selected-id', ui.item.value);
             return false;
         }
-    }).on('blur', function() {
-        if (!$(this).val()) {
-            $(this).data('selected-id', '');
-        }
     });
 
-    // Show bank fee modal
-    $('#addBankFee').click(function() {
-        $('#feeDate').val(new Date().toISOString().split('T')[0]);
-        $('#bankFeeModal').modal('show');
-    });
-
-    // Handle amount calculations
+    // ===== VAT Calculations =====
     function calculateAmounts() {
         const rawAmount = parseFloat($('#rawAmount').val()) || 0;
         const vatRate = parseFloat($('#vatRate').val()) || 0;
@@ -406,17 +615,22 @@ $(document).ready(function() {
     $('#rawAmount, #vatRate').on('input change', calculateAmounts);
     $('#vatIncluded').on('change', calculateAmounts);
 
-    // Toggle fee details
-    $('.toggle-fee-details').click(function() {
-        const feeId = $(this).closest('tr').data('fee-id');
+    // ===== Fee Row Collapsing =====
+    $(document).on('click', '.fee-row', function(e) {
+        // Don't trigger if clicking button
+        if ($(e.target).closest('.btn-group').length || $(e.target).is('input')) {
+            return;
+        }
+        
+        const feeId = $(this).data('fee-id');
         const detailsRow = $(`.fee-details-row[data-fee-id="${feeId}"]`);
-        const icon = $(this).find('i');
+        const icon = $(this).find('.toggle-fee-details i');
         
         detailsRow.toggleClass('d-none');
         icon.toggleClass('fa-chevron-down fa-chevron-up');
     });
 
-    // Handle fee creation
+    // ===== Bank Fee Creation =====
     $('#saveBankFee').click(async function() {
         if (!$('#bankFeeForm')[0].checkValidity()) {
             $('#bankFeeForm')[0].reportValidity();
@@ -452,17 +666,90 @@ $(document).ready(function() {
                 showToast('Bank fee recorded successfully', 'success');
                 location.reload();
             } else {
-                showToast(result.message, 'error');
+                showToast(result.message || 'Failed to record bank fee', 'error');
             }
         } catch (error) {
             console.error('Fee creation error:', error);
             showToast('Failed to record bank fee', 'error');
         }
     });
-    // Store selected records
+
+    // ===== Date Range Filtering =====
+$('#startDate, #endDate').on('change', function() {
+    const startDate = $('#startDate').val();
+    const endDate = $('#endDate').val();
+    
+    // Don't filter if one date is set and the other isn't
+    if ((startDate && !endDate) || (!startDate && endDate)) {
+        return;
+    }
+    
+    // Don't filter if end date is before start date
+    if (startDate && endDate && startDate > endDate) {
+        showToast('Start date must be before end date', 'error');
+        return;
+    }
+
+    console.log('Applying filters:', { startDate, endDate });
+
+    // Show loading state
+    $('#statementTableBody').html('<tr><td colspan="9" class="text-center"><div class="spinner-border text-primary" role="status"></div></td></tr>');
+    
+    $.ajax({
+        url: window.location.pathname,
+        method: 'GET',
+        data: startDate || endDate ? {
+            start_date: startDate,
+            end_date: endDate
+        } : {},
+        success: function(response) {
+            if (response && response.html) {
+                $('#statementTableBody').html(response.html);
+            }
+            
+            if (response && response.totals) {
+                // Update summary cards using your format_balance filter
+                $('#total-debit').text(formatBalance(response.totals.debit));
+                $('#total-credit').text(formatBalance(response.totals.credit));
+                
+                const balance = response.totals.balance;
+                const balanceElement = $('#final-balance');
+                balanceElement.text(formatBalance(Math.abs(balance)));
+                balanceElement
+                    .removeClass('text-success text-danger')
+                    .addClass(parseFloat(balance) >= 0 ? 'text-success' : 'text-danger');
+            }
+        },
+
+        
+        
+        error: function(xhr, status, error) {
+            console.error('Filter error details:', {
+                status: xhr.status,
+                statusText: xhr.statusText,
+                responseText: xhr.responseText,
+                error: error
+            });
+            
+            let message = 'Failed to filter statement';
+            try {
+                const response = JSON.parse(xhr.responseText);
+                message = response.error || message;
+            } catch(e) {
+                console.error('Error parsing response:', e);
+            }
+            showToast(message, 'error');
+        }
+    });
+});
+
+// Remove the form submit handler since we're using change events
+$('#statementFilterForm').on('submit', function(e) {
+    e.preventDefault();
+});
+    // ===== Transfer Management =====
     let selectedRecords = new Map();
     
-    // Handle individual record selection
     $('.record-checkbox').change(function() {
         const $checkbox = $(this);
         const recordData = {
@@ -483,23 +770,17 @@ $(document).ready(function() {
         updateSelectionUI();
     });
     
-    // Handle select all checkbox
     $('#selectAll').change(function() {
         $('.record-checkbox:not(:disabled)').prop('checked', this.checked).trigger('change');
     });
     
-    // Update UI based on selection
     function updateSelectionUI() {
         const totalAmount = Array.from(selectedRecords.values())
             .reduce((sum, record) => sum + parseFloat(record.amount), 0);
             
-        // Update transfer button state
         $('#transferBtn').prop('disabled', selectedRecords.size === 0);
-        
-        // Update total in modal
         $('#selectedTotal').text(totalAmount.toFixed(2));
         
-        // Update selected records list in modal
         const $list = $('#selectedRecordsList');
         $list.empty();
         
@@ -518,14 +799,11 @@ $(document).ready(function() {
         });
     }
     
-    // Show transfer modal
     $('#transferBtn').click(function() {
-        // Set default date to today
         $('#transferDate').val(new Date().toISOString().split('T')[0]);
         $('#transferModal').modal('show');
     });
     
-    // Handle transfer creation
     $('#saveTransfer').click(async function() {
         if (!$('#transferForm')[0].checkValidity()) {
             $('#transferForm')[0].reportValidity();
@@ -557,47 +835,28 @@ $(document).ready(function() {
                 showToast('Transfer created successfully', 'success');
                 location.reload();
             } else {
-                showToast(result.message, 'error');
+                showToast(result.message || 'Failed to create transfer', 'error');
             }
         } catch (error) {
             console.error('Transfer creation error:', error);
             showToast('Failed to create transfer', 'error');
         }
     });
-    
+
+    // Reset modals on hide
+    $('#bankFeeModal').on('hidden.bs.modal', function() {
+        $('#bankFeeForm')[0].reset();
+        $('#relatedPresentation').val('').data('selected-id', '');
+        $('#vatAmount').prop('readonly', true);
+        $('#vatIncluded').prop('disabled', false);
+        $('.is-invalid').removeClass('is-invalid');
+    });
+
     // Initialize tooltips
     $('[data-toggle="tooltip"]').tooltip();
 });
 
-// Handle transfer deletion
-async function deleteTransfer(transferId) {
-    if (!confirm('Are you sure you want to delete this transfer? This will make the transferred records available for transfer again.')) {
-        return;
-    }
-    
-    try {
-        const response = await fetch(`/testapp/bank-accounts/transfers/${transferId}/delete/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-            }
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showToast('Transfer deleted successfully', 'success');
-            location.reload();
-        } else {
-            showToast(result.message, 'error');
-        }
-    } catch (error) {
-        console.error('Transfer deletion error:', error);
-        showToast('Failed to delete transfer', 'error');
-    }
-}
-
-// Toast notification function
+// ===== Global Functions =====
 function showToast(message, type = 'success') {
     const toast = `
         <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
@@ -614,6 +873,65 @@ function showToast(message, type = 'success') {
         .appendTo('body');
         
     $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
+}
+
+function deleteBankFee(feeId) {
+    if (!confirm('Are you sure you want to delete this bank fee?')) {
+        return;
+    }
+    
+    fetch(`/testapp/bank-accounts/fees/${feeId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === 'success') {
+            showToast('Bank fee deleted successfully', 'success');
+            location.reload();
+        } else {
+            throw new Error(result.message || 'Failed to delete bank fee');
+        }
+    })
+    .catch(error => {
+        console.error('Fee deletion error:', error);
+        showToast(error.message || 'Failed to delete bank fee', 'error');
+    });
+}
+
+function deleteTransfer(transferId) {
+    if (!confirm('Are you sure you want to delete this transfer? This will make the transferred records available for transfer again.')) {
+        return;
+    }
+    
+    fetch(`/testapp/bank-accounts/transfers/${transferId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.status === 'success') {
+            showToast('Transfer deleted successfully', 'success');
+            location.reload();
+        } else {
+            throw new Error(result.message || 'Failed to delete transfer');
+        }
+    })
+    .catch(error => {
+        console.error('Transfer deletion error:', error);
+        showToast(error.message || 'Failed to delete transfer', 'error');
+    });
+}
+
+function formatBalance(value) {
+    return new Intl.NumberFormat('fr-MA', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    }).format(value);
 }
 </script>
 {% endblock %}

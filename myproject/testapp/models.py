@@ -2236,20 +2236,26 @@ class BankStatement(models.Model):
         })
 
         # Apply date filters if provided
-        if start_date:
-            entries = [e for e in entries if e['date'] >= start_date]
-        if end_date:
-            entries = [e for e in entries if e['date'] <= end_date]
+        if start_date or end_date:
+            filtered_entries = []
+            for entry in entries:
+                entry_date = entry['date']
+                if start_date and entry_date < start_date:
+                    continue
+                if end_date and entry_date > end_date:
+                    continue
+                filtered_entries.append(entry)
+            entries = filtered_entries
 
         # Sort entries by date
-        entries.sort(key=lambda x: x['date'])
+        entries.sort(key=lambda x: x['date'], reverse=True)
         
         # Calculate running balance
         balance = Decimal('0.00')
-        for entry in entries:
+        for entry in reversed(entries):  # Iterate from the last entry to the first
             balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
             entry['balance'] = balance
-            
+
         return entries
 
 class AccountingEntry(models.Model):
@@ -2593,8 +2599,20 @@ class AccountingEntry(models.Model):
                     }
                 ])
 
+        # Filter entries
+        if start_date or end_date:
+            filtered_entries = []
+            for entry in entries:
+                entry_date = entry['date']
+                if start_date and entry_date < start_date:
+                    continue
+                if end_date and entry_date > end_date:
+                    continue
+                filtered_entries.append(entry)
+            entries = filtered_entries
+
         # Sort entries keeping pairs together
-        entries.sort(key=lambda x: (x['date'], x['pair_index']))
+        entries.sort(key=lambda x: (x['date'], x['pair_index']), reverse=True)
         
         return entries
 
