@@ -39,6 +39,9 @@ class BankAccountListView(ListView):
         search = self.request.GET.get('search')
         if search:
             queryset = queryset.filter(account_number__icontains=search)
+
+        for account in queryset:
+            account.current_balance = account.get_current_balance()
             
         return queryset
 

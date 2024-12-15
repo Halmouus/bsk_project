@@ -623,6 +623,11 @@ class BankAccount(BaseModel):
         )['total'] or Decimal('0.00')
         
         return self.lcn_discount_line_amount - discounted_amount
+    
+    def get_current_balance(self):
+        """Get current balance for the account"""
+        from .models import BankStatement  # Import here to avoid circular import
+        return BankStatement.calculate_balance_until(self, timezone.now().date())
 
     def clean(self):
         super().clean()
@@ -1046,45 +1051,82 @@ class Client(BaseModel):
             current_date = datetime.date(int(year), int(month), 1)
             previous_balance = 0
             
+            print("\n=== Calculating Previous Balance ===")
+            
             # Previous Sales (by actual date)
             prev_sales = self.clientsale_set.filter(date__lt=current_date)
             previous_balance = sum(sale.amount for sale in prev_sales)
+            print(f"Previous sales balance: {previous_balance}")
 
-            # Previous Checks and LCNs - based on presentations
-            for receipt_class in [CheckReceipt, LCN]:
-                prev_receipts = receipt_class.objects.filter(
+            # Previous Checks and LCNs - using the SAME logic as current month
+            for receipt_class, type_name in [(CheckReceipt, 'CHECK'), (LCN, 'LCN')]:
+                receipts = receipt_class.objects.filter(
                     client=self
                 ).filter(
                     Q(client_year__lt=year) | 
                     Q(client_year=year, client_month__lt=month)
-                ).select_related('client', 'entity')
+                ).select_related('entity')
 
-                for receipt in prev_receipts:
+                print(f"\nProcessing previous {type_name} receipts:")
+                for receipt in receipts:
+                    print(f"\nReceipt: {type_name} #{receipt.get_receipt_number()}")
+                    print(f"Current Status: {receipt.status}")
+
                     # Get all presentations for this receipt
                     if isinstance(receipt, CheckReceipt):
                         presentations = receipt.check_presentations.select_related('presentation').all()
                     else:
                         presentations = receipt.lcn_presentations.select_related('presentation').all()
-                    
-                    # Process each presentation's effect on balance
+
+                    print(f"Found {presentations.count()} presentations")
+
+                    # Process presentations before current date
                     for pres in presentations:
-                        if pres.presentation.date < current_date:
-                            # Credit for presentation
+                            print(f"\nPresentation date: {pres.presentation.date}")
+                            number = receipt.check_number if type_name == 'CHECK' else receipt.lcn_number
+
+                            # Add presentation transaction
+                            presentation_entry = {
+                                'date': pres.presentation.date,
+                                'type': type_name,
+                                'description': f'{type_name} {number} {receipt.entity.name} presented for '
+                                            f'{"collection" if pres.presentation.presentation_type == "COLLECTION" else "discount"} '
+                                            f'on {pres.presentation.date.strftime("%Y-%m-%d")}',
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'actual_date': pres.presentation.date
+                            }
                             previous_balance -= receipt.amount
-                            
-                            # Debit if unpaid after this presentation
-                            if receipt.status == 'UNPAID' and receipt.updated_at < current_date:
-                                previous_balance += receipt.amount
+                            print(f"Added presentation credit: -{receipt.amount}")
+
+                    # Handle ALL unpaid statuses (history)
+                    unpaid_history = ReceiptHistory.objects.filter(
+                        content_type=ContentType.objects.get_for_model(receipt_class),
+                        object_id=receipt.id,
+                        action='status_changed',
+                        new_value__status='UNPAID',
+                    ).order_by('timestamp')
+
+                    print(f"Found {unpaid_history.count()} unpaid history records")
+                    for history in unpaid_history:
+                        unpaid_amount = history.new_value.get("amount", receipt.amount)
+                        previous_balance += unpaid_amount
+                        print(f"Added unpaid debit: +{unpaid_amount}")
+                        print(f"From history record: {history.timestamp}")
 
             # Previous Cash/Transfers (these can't be unpaid)
-            for receipt_class in [CashReceipt, TransferReceipt]:
+            for receipt_class, type_name in [(CashReceipt, 'CASH'), (TransferReceipt, 'TRANSFER')]:
                 prev_receipts = receipt_class.objects.filter(
                     client=self
                 ).filter(
                     Q(client_year__lt=year) | 
                     Q(client_year=year, client_month__lt=month)
                 ).select_related('entity')
-                previous_balance -= sum(receipt.amount for receipt in prev_receipts)
+                total_amount = sum(receipt.amount for receipt in prev_receipts)
+                previous_balance -= total_amount
+                print(f"\nTotal {type_name} amount: -{total_amount}")
+
+            print(f"\nFinal previous balance: {previous_balance}")
 
             # Add balance entry even if no transactions in current month
             transactions.insert(0, {
@@ -1386,7 +1428,7 @@ class NegotiableReceipt(Receipt):
         on_delete=models.SET_NULL,
         related_name='compensated_by'
     )
-
+    unpaid_date = models.DateTimeField(null=True, blank=True)
     rejection_cause = models.CharField(
         max_length=50,
         choices=REJECTION_CAUSES,
@@ -1496,13 +1538,14 @@ class NegotiableReceipt(Receipt):
                 f"#{self.compensating_receipt.get_receipt_number()} "
                 f"({self.compensating_receipt.entity.name})")
 
-    def mark_as_unpaid(self, cause):
+    def mark_as_unpaid(self, cause, unpaid_date=None):
         """Mark receipt as unpaid with a cause"""
         if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT', 'DISCOUNTED']:
             raise ValidationError("Only rejected or presented receipts can be marked as unpaid")
         
         self.status = self.STATUS_UNPAID
         self.rejection_cause = cause
+        self.unpaid_date = unpaid_date if unpaid_date else timezone.now()
         self.save()
 
     def compensate_with(self, compensating_receipt):
@@ -1990,6 +2033,7 @@ class ReceiptHistory(BaseModel):
     
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
     timestamp = models.DateTimeField(auto_now_add=True)
+    business_date = models.DateTimeField(null=True, blank=True)
     old_value = models.JSONField(null=True, blank=True)
     new_value = models.JSONField(null=True, blank=True)
     notes = models.TextField(blank=True)
@@ -2001,9 +2045,24 @@ class ReceiptHistory(BaseModel):
     )
     
     class Meta:
-        ordering = ['-timestamp']
+        ordering = ['-business_date', '-timestamp']
         verbose_name = "Receipt History"
         verbose_name_plural = "Receipt Histories"
+
+    def record_history(self, action, old_value=None, new_value=None, notes=None, user=None, business_date=None):
+        """Record a history event"""
+        content_type = ContentType.objects.get_for_model(self)
+        
+        ReceiptHistory.objects.create(
+            content_type=content_type,
+            object_id=self.id,
+            action=action,
+            old_value=old_value,
+            new_value=new_value,
+            notes=notes,
+            user=user,
+            business_date=business_date or timezone.now()
+        )
 
     def __str__(self):
         return f"{self.receipt} - {self.action} at {self.timestamp}"
@@ -2041,6 +2100,22 @@ class BankStatement(models.Model):
     class Meta:
         managed = False
 
+    def calculate_previous_balance(bank_account, start_date):
+        # Start with Jan 1st of current year if start_date is in current year
+        # Or Jan 1st of previous year if start_date is in previous year
+        year_start = datetime.date(start_date.year, 1, 1)
+        
+        # Get all entries from year start until start_date
+        # (using same logic we use for normal entries but with date range)
+        entries = []  # get all entries between year_start and start_date
+        
+        # Calculate running balance
+        balance = Decimal('0.00')  # Assume previous year ended at 0
+        for entry in entries:
+            balance += (entry.get('credit') or 0) - (entry.get('debit') or 0)
+            
+        return balance
+    
     @classmethod
     def get_statement(cls, bank_account, start_date=None, end_date=None):
         """
@@ -2118,7 +2193,7 @@ class BankStatement(models.Model):
                 # For discount presentations
                 elif pres.presentation_type == 'DISCOUNT':
                     # Record initial discount
-                    entries.append({
+                    discount_entry = {
                         'date': pres.date,
                         'label': f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
                         'type': f'{receipt_type.upper()}_DISCOUNT',
@@ -2129,12 +2204,33 @@ class BankStatement(models.Model):
                         'source_id': pr.id,
                         'can_transfer': True,
                         'is_transferred': False
-                    })
+                    }
+                    entries.append(discount_entry)
 
-                    # Add reversal if marked as UNPAID in this presentation
+                    # If marked as UNPAID in this presentation
                     if pr.recorded_status == 'UNPAID':
-                        entries.append({
-                            'date': pres.date,
+                        # Get unpaid date from history
+                        unpaid_history = ReceiptHistory.objects.filter(
+                            content_type=ContentType.objects.get_for_model(receipt.__class__),
+                            object_id=receipt.id,
+                            action='status_changed',
+                            new_value__status='UNPAID'
+                        ).order_by('timestamp').first()
+                        print("Unpaid history:", unpaid_history)
+                        print("pres date:", pres.date)
+                        unpaid_date = None
+                        if unpaid_history:
+                            # Convert both to date, ensuring they are always pure dates
+                            unpaid_date = (unpaid_history.business_date.date() if unpaid_history.business_date 
+                                        else unpaid_history.timestamp.date())
+                        else:
+                            unpaid_date = pres.date
+                        print("Unpaid date:", unpaid_date)
+                        print("Type of pres.date:", type(pres.date))
+                        print("Type of unpaid_date:", type(unpaid_date))
+                    
+                        reversal_entry = {
+                            'date': unpaid_date,  # Use unpaid date if available
                             'label': (f"Reversal of {receipt_type} "
                                     f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
                             'type': f'{receipt_type.upper()}_REVERSAL',
@@ -2142,10 +2238,13 @@ class BankStatement(models.Model):
                             'credit': None,
                             'reference': pres.bank_reference or f"Pres. #{pres.id}",
                             'source_type': 'presentation_receipt',
-                            'source_id': pr.id,
+                            'source_id': pr.id,  # Keep original ID
+                            'display_id': f"{pr.id}-reversal",  # Add new field for frontend 
                             'can_transfer': False,
-                            'is_transferred': False
-                        })
+                            'is_transferred': False,
+                            'discount_reference': discount_entry['reference']  # Link to original discount
+                        }
+                        entries.append(reversal_entry)
 
         # Add outgoing transfers
         outgoing_transfers = InterBankTransfer.objects.filter(
@@ -2234,8 +2333,33 @@ class BankStatement(models.Model):
                     'related_presentation': fee.related_presentation.bank_reference if fee.related_presentation else None
                 }
         })
+            
+        initial_balance = Decimal('0.00')
+        if start_date:
+            # First sort all entries by date
+            entries.sort(key=lambda x: x['date'])
+            
+            # Calculate sum of all operations before start_date
+            for entry in entries:
+                if entry['date'] < start_date:
+                    initial_balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
 
-        # Apply date filters if provided
+            # Add opening balance entry
+            entries.append({
+                'date': start_date,
+                'label': 'Opening Balance',
+                'type': 'BALANCE',
+                'debit': initial_balance if initial_balance < 0 else None,
+                'credit': initial_balance if initial_balance > 0 else None,
+                'reference': 'Opening balance',
+                'source_type': 'balance',
+                'source_id': None,
+                'can_transfer': False,
+                'is_transferred': False,
+                'balance': initial_balance
+            })
+
+        # Then your existing date filtering code:
         if start_date or end_date:
             filtered_entries = []
             for entry in entries:
@@ -2247,16 +2371,26 @@ class BankStatement(models.Model):
                 filtered_entries.append(entry)
             entries = filtered_entries
 
-        # Sort entries by date
+        # Your existing sorting:
         entries.sort(key=lambda x: x['date'], reverse=True)
         
-        # Calculate running balance
-        balance = Decimal('0.00')
-        for entry in reversed(entries):  # Iterate from the last entry to the first
-            balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
+        # Replace your existing balance calculation with:
+        balance = initial_balance if start_date else Decimal('0.00')
+        for entry in reversed(entries):
+            if entry['type'] != 'BALANCE':  # Skip balance entry when calculating
+                balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
             entry['balance'] = balance
 
         return entries
+    
+    @classmethod
+    def calculate_balance_until(cls, bank_account, date):
+        """Calculate total balance up to a specific date"""
+        entries = cls.get_statement(bank_account, end_date=date)
+        if entries:
+            return entries[0]['balance']  # First entry has final balance since they're sorted in reverse
+        return Decimal('0.00')
+        
 
 class AccountingEntry(models.Model):
     """

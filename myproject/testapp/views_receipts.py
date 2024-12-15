@@ -709,6 +709,21 @@ class ReceiptFilterView(View):
                 if credited_account:
                     filters &= Q(credited_account=credited_account)
 
+            # Add issuing bank filter
+            issuing_bank = request.GET.get('issuing_bank')
+            if issuing_bank:
+                filters &= Q(issuing_bank=issuing_bank)
+
+            print(f"Applied filters: {filters}")
+
+            queryset = model_map[receipt_type].objects.filter(filters)
+            
+            # Debug the query
+            print(f"Query SQL: {queryset.query}")
+            print(f"Found {queryset.count()} records")
+            if issuing_bank:
+                print(f"Filtered by bank {issuing_bank}: {list(queryset.values_list('issuing_bank', flat=True))}")
+
             # Historical status filter
             historical_status = request.GET.get('historical_status')
             if historical_status:

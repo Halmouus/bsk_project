@@ -198,14 +198,18 @@ Available filters:
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="form-group">
+                    <div class="form-group mb-3">
                         <label for="rejectionCause">Select Cause</label>
                         <select class="form-control" id="rejectionCause" required>
                             <option value="">Select a cause...</option>
                             {% for cause, label in rejection_causes %}
-                                <option value="{{ cause }}">{{ label }}</option>
+                            <option value="{{ cause }}">{{ label }}</option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="unpaidDate">Unpaid Date</label>
+                        <input type="date" class="form-control" id="unpaidDate" required>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -374,22 +378,30 @@ function submitStatusUpdates(presentationId, receiptStatuses) {
 
 // Handle unpaid cause confirmation
 $('#confirmCause').click(function() {
-    console.log('Confirming unpaid cause');
+    console.log('Confirm cause button clicked');
+    
     const cause = $('#rejectionCause').val();
+    const unpaidDate = $('#unpaidDate').val();
     
     console.log('Selected cause:', cause);
+    console.log('Selected date:', unpaidDate);
     
     if (!cause) {
-        console.log('No cause selected');
+        console.log('Error: No cause selected');
         showError('Please select a rejection cause');
+        return;
+    }
+    if (!unpaidDate) {
+        console.log('Error: No date selected');
+        showError('Please select an unpaid date');
         return;
     }
 
     const pendingStatus = $('#unpaidCauseModal').data('pendingStatus');
-    console.log('Pending status data:', pendingStatus);
+    console.log('Retrieved pending status:', pendingStatus);
 
     if (!pendingStatus || !pendingStatus.receiptId) {
-        console.error('Missing pending status data');
+        console.log('Error: Missing pending status data', { pendingStatus });
         showError('Missing receipt information');
         return;
     }
@@ -397,11 +409,13 @@ $('#confirmCause').click(function() {
     const receiptStatuses = {
         [pendingStatus.receiptId]: {
             status: 'unpaid',
-            cause: cause
+            cause: cause,
+            unpaid_date: unpaidDate
         }
     };
+    
+    console.log('Submitting status update:', receiptStatuses);
 
-    console.log('Submitting unpaid status update:', receiptStatuses);
     submitStatusUpdates(presentationId, receiptStatuses);
     $('#unpaidCauseModal').modal('hide');
 });

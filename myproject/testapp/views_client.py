@@ -9,6 +9,7 @@ from django.views.generic import ListView, DetailView
 from django.utils import timezone
 import calendar
 from django.db.models import Q
+from decimal import Decimal
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -210,7 +211,21 @@ class ClientCardView(DetailView):
 
         # Get transactions for period
         transactions = self.object.get_transactions(year, month)
-        
+
+        # Calculate period totals (excluding previous balance)
+        period_debit = Decimal('0.00')
+        period_credit = Decimal('0.00')
+        previous_balance = Decimal('0.00')
+
+        for t in transactions:
+            if t['type'] == 'BALANCE':
+                previous_balance = t['balance']
+            else:
+                if t['debit']:
+                    period_debit += t['debit']
+                if t['credit']:
+                    period_credit += t['credit']
+
         context.update({
             'transactions': transactions,
             'selected_year': year,
@@ -220,9 +235,10 @@ class ClientCardView(DetailView):
                 (i, calendar.month_name[i]) 
                 for i in range(1, 13)
             ],
-            'total_debit': sum(t['debit'] or 0 for t in transactions),
-            'total_credit': sum(t['credit'] or 0 for t in transactions),
-            'final_balance': transactions[-1]['balance'] if transactions else 0,
+            'previous_balance': previous_balance,
+            'period_debit': period_debit,
+            'period_credit': period_credit,
+            'final_balance': period_debit - period_credit + previous_balance
         })
         
         return context

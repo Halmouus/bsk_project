@@ -238,13 +238,14 @@ class PresentationUpdateView(View):
                                     
                                     if status_value == 'unpaid':
                                         cause = new_status.get('cause') if isinstance(new_status, dict) else None
+                                        unpaid_date = new_status.get('unpaid_date')
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
                                         # Add this line after successful unpaid update
                                         presentation_receipt.recorded_status = 'UNPAID'
                                         presentation_receipt.save()
-                                        receipt.mark_as_unpaid(cause)
+                                        receipt.mark_as_unpaid(cause, unpaid_date)
                                     else:
                                         print(f"Updating status to: {status_value.upper()}")
                                         # Add this line after successful paid update

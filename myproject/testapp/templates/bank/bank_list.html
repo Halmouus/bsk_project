@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load accounting_filters %}
 {% block content %}
 <div class="container-fluid px-4">
     <!-- Header Section -->
@@ -24,6 +25,7 @@
                             <th>Current Account</th>
                             <th>Check Discount</th>
                             <th>LCN Discount</th>
+                            <th class="text-right">Balance</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -47,8 +49,17 @@
                                 </td>
                                 <td>
                                     {% if account.has_check_discount_line %}
-                                        <span class="badge badge-info">
-                                            {{ account.check_discount_line_amount|default:0|floatformat:2 }} MAD
+                                        <span class="badge badge-info discount-info" 
+                                              data-toggle="popover" 
+                                              data-trigger="hover"
+                                              data-html="true"
+                                              data-title="Check Discount Details"
+                                              data-content="
+                                                <strong>Total Line:</strong> {{ account.check_discount_line_amount|format_balance }}<br>
+                                                <strong>Used Amount:</strong> {{ account.check_discount_line_amount|sub:account.get_available_check_discount_line|format_balance }}<br>
+                                                <strong>Available:</strong> {{ account.get_available_check_discount_line|format_balance }}
+                                              ">
+                                            {{ account.check_discount_line_amount|format_balance }} MAD
                                         </span>
                                     {% else %}
                                         <span class="badge badge-secondary">No</span>
@@ -56,12 +67,26 @@
                                 </td>
                                 <td>
                                     {% if account.has_lcn_discount_line %}
-                                        <span class="badge badge-info">
-                                            {{ account.lcn_discount_line_amount|default:0|floatformat:2 }} MAD
+                                        <span class="badge badge-info discount-info"
+                                              data-toggle="popover"
+                                              data-trigger="hover"
+                                              data-html="true"
+                                              data-title="LCN Discount Details"
+                                              data-content="
+                                                <strong>Total Line:</strong> {{ account.lcn_discount_line_amount|format_balance }}<br>
+                                                <strong>Used Amount:</strong> {{ account.lcn_discount_line_amount|sub:account.get_available_lcn_discount_line|format_balance }}<br>
+                                                <strong>Available:</strong> {{ account.get_available_lcn_discount_line|format_balance }}
+                                              ">
+                                            {{ account.lcn_discount_line_amount|format_balance }} MAD
                                         </span>
                                     {% else %}
                                         <span class="badge badge-secondary">No</span>
                                     {% endif %}
+                                </td>
+                                <td class="text-right">
+                                    <span class="{% if account.current_balance < 0 %}text-danger{% else %}text-success{% endif %}">
+                                        {{ account.current_balance|format_balance }}
+                                    </span>
                                 </td>
                                 <td>
                                     <div class="btn-group">
@@ -243,8 +268,24 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
+
+<style>
+    .popover {
+        max-width: 300px;
+    }
+    .popover-body {
+        padding: 1rem;
+        line-height: 1.5;
+    }
+    .discount-info {
+        cursor: pointer;
+    }
+    /* Ensure popovers appear above other elements */
+    .popover {
+        z-index: 1060;
+    }
+</style>
 
 {% block extra_js %}
 <script>
@@ -370,6 +411,16 @@ const BankAccountManager = {
 // Initialize when document is ready
 $(document).ready(function() {
     BankAccountManager.init();
+     // Initialize popovers
+     $('[data-toggle="popover"]').popover({
+        container: 'body',
+        boundary: 'window'
+    });
+
+    // Destroy popover when mouse leaves
+    $('.discount-info').on('mouseleave', function() {
+        $(this).popover('hide');
+    });
 });
 
 // Global functions for edit and delete

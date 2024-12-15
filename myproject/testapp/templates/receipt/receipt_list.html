@@ -478,6 +478,7 @@ $(document).ready(function() {
     const activeTab = $('.tab-pane.active').attr('id');
     debug.log('Init', 'Active tab:', activeTab);
     activeFilters = new ReceiptFilters(activeTab, '/testapp/receipts/filter/?type=' + activeTab);
+    
 
 
     $('#receiptModal').on('show.bs.modal', function(e) {
@@ -679,34 +680,6 @@ $(document).ready(function() {
     }
 
 
-    function initializeBankAutocomplete() {
-    const banksList = [
-        {% for code, name in bank_choices %}
-        { label: '{{ name }}', value: '{{ code }}' },
-        {% endfor %}
-    ];
-
-    $("#issuingBank").autocomplete({
-        source: banksList,
-        minLength: 0,
-        select: function(event, ui) {
-        $("#issuingBank").val(ui.item.label);
-        $("#issuingBankCode").val(ui.item.value);
-        return false;
-        }
-    }).focus(function() {
-        $(this).autocomplete("search", "");
-    });
-
-    // Add dropdown indicator
-    if (!$("#issuingBank").next('.bank-dropdown-toggle').length) {
-        $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>');
-        $(".bank-dropdown-toggle").click(function() {
-        $("#issuingBank").focus();
-        });
-    }
-    }
-
     // Modify the modal show event handler
     $('#receiptModal').on('show.bs.modal', function(e) {
     const button = $(e.relatedTarget);
@@ -759,11 +732,19 @@ $(document).ready(function() {
         
         this.createFilterUI();
         this.initializeFilters();
+        
     }
 
     getFilterConfig() {
         debug.log('ReceiptFilters', 'Getting filter config for type:', this.type);
-        
+
+        const banksList = [
+            {value: '', label: 'All banks'},
+            {% for code, name in bank_choices %}
+            { label: '{{ name }}', value: '{{ code }}', display: '{{ name }}' },
+            {% endfor %}
+        ];
+
         const configs = {
             'checks': [
                 {
@@ -808,7 +789,7 @@ $(document).ready(function() {
                     label: 'Issuing Bank', 
                     col: 4,
                     isSelect: true,
-                    options: MOROCCAN_BANKS
+                    options: banksList
                 },
                 // Add bank issued to dropdown
                 { 
@@ -924,7 +905,7 @@ $(document).ready(function() {
                     label: 'Issuing Bank', 
                     col: 4,
                     isSelect: true,
-                    options: MOROCCAN_BANKS
+                    options: banksList
                 },
                 { 
                     type: 'bank_issued_to', 
@@ -1046,53 +1027,54 @@ $(document).ready(function() {
     }
 
     createFilterUI() {
-        debug.log('ReceiptFilters', 'Creating filter UI');
-        const filters = this.getFilterConfig();
-        let filterElements = [];
-        filters.forEach(filter => {
-            filterElements.push(this.createFilterElement(filter));
-        });
+    debug.log('ReceiptFilters', 'Creating filter UI');
+    const filters = this.getFilterConfig();
+    let filterElements = [];
+    filters.forEach(filter => {
+        filterElements.push(this.createFilterElement(filter));
+    });
 
-        const filterHtml = `
-            <div class="card mb-4" id="${this.type}-filters">
-                <div class="card-header d-flex justify-content-between align-items-center bg-light">
-                    <h6 class="mb-0">Filters</h6>
-                    <div class="btn-group">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" id="${this.type}-reset-filters">
-                            <i class="fas fa-undo me-1"></i>Reset
-                        </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="${this.type}-toggle-filters">
-                            <i class="fas fa-filter me-1"></i>Hide Filters
-                        </button>
-                    </div>
-                </div>
-                <div class="card-body filter-content">
-                    <div class="row g-3">
-                        ${filterElements.join('')}
-                    </div>
-                </div>
-            </div>`;
+    const filterHtml = `
+    <div class="card mb-4" id="${this.type}-filters">
+        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+            <h6 class="mb-0">Filters</h6>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="${this.type}-reset-filters">
+                    <i class="fas fa-undo me-1"></i>Reset
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm toggle-filters">
+                    <i class="fas fa-filter me-1"></i>Show Filters
+                </button>
+            </div>
+        </div>
+        <div class="card-body filter-content" style="display: none;">
+            <div class="row g-3">
+                ${filterElements.join('')}
+            </div>
+        </div>
+    </div>`;
 
-        debug.log('ReceiptFilters', 'Inserting filter HTML');
-        this.tab.find('.table-responsive').before(filterHtml);
+    this.tab.find('.table-responsive').before(filterHtml);
 
-        // Set up toggle button
-        $(`#${this.type}-toggle-filters`).click(() => {
-            const $button = $(`#${this.type}-toggle-filters`);
-            const $content = $button.closest('.card').find('.filter-content');
-            $content.slideToggle();
+    // Set up toggle button
+    $(`#${this.type}-filters .toggle-filters`).click(() => {
+        const $content = $(`#${this.type}-filters .filter-content`);
+        const $button = $(`#${this.type}-filters .toggle-filters`);
+        
+        $content.slideToggle(500, () => {
             $button.html(
-                $content.is(':visible') 
-                ? '<i class="fas fa-filter me-1"></i>Hide Filters'
-                : '<i class="fas fa-filter me-1"></i>Show Filters'
+                $content.is(':visible') ? 
+                '<i class="fas fa-filter me-1"></i>Hide Filters' : 
+                '<i class="fas fa-filter me-1"></i>Show Filters'
             );
         });
+    });
 
-        // Set up reset button
-        $(`#${this.type}-reset-filters`).click(() => {
-            this.resetFilters();
-        });
-    }
+    // Set up reset button
+    $(`#${this.type}-reset-filters`).click(() => {
+        this.resetFilters();
+    });
+}
 
     // Add resetFilters method to your class
     resetFilters() {

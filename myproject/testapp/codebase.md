@@ -1,3 +1,4 @@
+
 # base.py
 
 ```py
@@ -18,6 +19,91 @@ class BaseModel(models.Model):
 
 # forms.py
 
+```py
+from django import forms
+from django.core.exceptions import ValidationError
+from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, TransferReceipt, 
+    Presentation, PresentationReceipt, MOROCCAN_BANKS)
+from django.forms.models import inlineformset_factory
+from decimal import Decimal
+
+
+
+class CheckReceiptForm(forms.ModelForm):
+    class Meta:
+        model = CheckReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month',
+            'due_date', 'check_number', 'issuing_bank', 'branch',
+            'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'issuing_bank': forms.Select(choices=MOROCCAN_BANKS)
+        }
+
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit compensates to rejected, uncompensated checks
+        self.fields['compensates'].queryset = CheckReceipt.objects.filter(
+            status=CheckReceipt.STATUS_REJECTED
+        ).exclude(
+            status=CheckReceipt.STATUS_COMPENSATED
+        )
+
+class LCNForm(forms.ModelForm):
+    class Meta:
+        model = LCN
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month',
+            'due_date', 'lcn_number', 'issuing_bank',
+            'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'due_date': forms.DateInput(attrs={'type': 'date'}),
+            'issuing_bank': forms.Select(choices=MOROCCAN_BANKS)
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Limit compensates to rejected, uncompensated LCNs
+        self.fields['compensates'].queryset = LCN.objects.filter(
+            status=LCN.STATUS_REJECTED
+        ).exclude(
+            status=LCN.STATUS_COMPENSATED
+        )
+
+class CashReceiptForm(forms.ModelForm):
+    class Meta:
+        model = CashReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'reference_number', 'credited_account', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+
+class TransferReceiptForm(forms.ModelForm):
+    class Meta:
+        model = TransferReceipt
+        fields = [
+            'client', 'entity', 'operation_date', 'amount',
+            'client_year', 'client_month', 'bank_account',
+            'transfer_reference', 'credited_account', 
+            'transfer_date', 'notes'
+        ]
+        widgets = {
+            'operation_date': forms.DateInput(attrs={'type': 'date'}),
+            'transfer_date': forms.DateInput(attrs={'type': 'date'}),
+        }
+```
 
 # models.py
 
@@ -256,7 +342,7 @@ class Client(BaseModel):
                 logger.error(f"Validation error for client_code: {e}")
                 raise
     
-    def get_transactions(self, year=None, month=None):
+        def get_transactions(self, year=None, month=None):
         """
         Get all transactions for the client with optional year/month filter.
         For sales: Uses the actual date
@@ -286,45 +372,82 @@ class Client(BaseModel):
             current_date = datetime.date(int(year), int(month), 1)
             previous_balance = 0
             
+            print("\n=== Calculating Previous Balance ===")
+            
             # Previous Sales (by actual date)
             prev_sales = self.clientsale_set.filter(date__lt=current_date)
             previous_balance = sum(sale.amount for sale in prev_sales)
+            print(f"Previous sales balance: {previous_balance}")
 
-            # Previous Checks and LCNs - based on presentations
-            for receipt_class in [CheckReceipt, LCN]:
-                prev_receipts = receipt_class.objects.filter(
+            # Previous Checks and LCNs - using the SAME logic as current month
+            for receipt_class, type_name in [(CheckReceipt, 'CHECK'), (LCN, 'LCN')]:
+                receipts = receipt_class.objects.filter(
                     client=self
                 ).filter(
                     Q(client_year__lt=year) | 
                     Q(client_year=year, client_month__lt=month)
-                ).select_related('client', 'entity')
+                ).select_related('entity')
 
-                for receipt in prev_receipts:
+                print(f"\nProcessing previous {type_name} receipts:")
+                for receipt in receipts:
+                    print(f"\nReceipt: {type_name} #{receipt.get_receipt_number()}")
+                    print(f"Current Status: {receipt.status}")
+
                     # Get all presentations for this receipt
                     if isinstance(receipt, CheckReceipt):
                         presentations = receipt.check_presentations.select_related('presentation').all()
                     else:
                         presentations = receipt.lcn_presentations.select_related('presentation').all()
-                    
-                    # Process each presentation's effect on balance
+
+                    print(f"Found {presentations.count()} presentations")
+
+                    # Process presentations before current date
                     for pres in presentations:
-                        if pres.presentation.date < current_date:
-                            # Credit for presentation
+                            print(f"\nPresentation date: {pres.presentation.date}")
+                            number = receipt.check_number if type_name == 'CHECK' else receipt.lcn_number
+
+                            # Add presentation transaction
+                            presentation_entry = {
+                                'date': pres.presentation.date,
+                                'type': type_name,
+                                'description': f'{type_name} {number} {receipt.entity.name} presented for '
+                                            f'{"collection" if pres.presentation.presentation_type == "COLLECTION" else "discount"} '
+                                            f'on {pres.presentation.date.strftime("%Y-%m-%d")}',
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'actual_date': pres.presentation.date
+                            }
                             previous_balance -= receipt.amount
-                            
-                            # Debit if unpaid after this presentation
-                            if receipt.status == 'UNPAID' and receipt.updated_at < current_date:
-                                previous_balance += receipt.amount
+                            print(f"Added presentation credit: -{receipt.amount}")
+
+                    # Handle ALL unpaid statuses (history)
+                    unpaid_history = ReceiptHistory.objects.filter(
+                        content_type=ContentType.objects.get_for_model(receipt_class),
+                        object_id=receipt.id,
+                        action='status_changed',
+                        new_value__status='UNPAID',
+                    ).order_by('timestamp')
+
+                    print(f"Found {unpaid_history.count()} unpaid history records")
+                    for history in unpaid_history:
+                        unpaid_amount = history.new_value.get("amount", receipt.amount)
+                        previous_balance += unpaid_amount
+                        print(f"Added unpaid debit: +{unpaid_amount}")
+                        print(f"From history record: {history.timestamp}")
 
             # Previous Cash/Transfers (these can't be unpaid)
-            for receipt_class in [CashReceipt, TransferReceipt]:
+            for receipt_class, type_name in [(CashReceipt, 'CASH'), (TransferReceipt, 'TRANSFER')]:
                 prev_receipts = receipt_class.objects.filter(
                     client=self
                 ).filter(
                     Q(client_year__lt=year) | 
                     Q(client_year=year, client_month__lt=month)
                 ).select_related('entity')
-                previous_balance -= sum(receipt.amount for receipt in prev_receipts)
+                total_amount = sum(receipt.amount for receipt in prev_receipts)
+                previous_balance -= total_amount
+                print(f"\nTotal {type_name} amount: -{total_amount}")
+
+            print(f"\nFinal previous balance: {previous_balance}")
 
             # Add balance entry even if no transactions in current month
             transactions.insert(0, {
@@ -443,6 +566,7 @@ class Client(BaseModel):
             t['balance'] = balance
 
         return transactions
+
 
     def save(self, *args, **kwargs):
         """Override save to ensure validation runs"""
@@ -1271,18 +1395,800 @@ class ClientSale(BaseModel):
         if not self.month:
             self.month = self.date.month
         super().save(*args, **kwargs)
+
+
+class BankStatement(models.Model):
+    """
+    Virtual model that dynamically generates bank statement entries.
+    Does not store records directly - serves as a view model.
+    """
+    class Meta:
+        managed = False
+
+    @classmethod
+    def get_statement(cls, bank_account, start_date=None, end_date=None):
+        """
+        Dynamically generates statement entries for a bank account.
+        """
+        entries = []
+        
+        # Get cash receipts
+        cash_receipts = CashReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        for receipt in cash_receipts:
+            entries.append({
+                'date': receipt.operation_date,
+                'label': f"Cash payment from {receipt.entity.name}",
+                'type': 'CASH',
+                'debit': None,
+                'credit': receipt.amount,
+                'reference': receipt.reference_number or 'N/A',
+                'source_type': 'cash_receipt',
+                'source_id': receipt.id,
+                'can_transfer': True,
+                'is_transferred': False
+            })
+            
+        # Get transfer receipts
+        transfer_receipts = TransferReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        for receipt in transfer_receipts:
+            entries.append({
+                'date': receipt.operation_date,
+                'label': f"Bank transfer from {receipt.entity.name}",
+                'type': 'TRANSFER',
+                'debit': None,
+                'credit': receipt.amount,
+                'reference': receipt.transfer_reference,
+                'source_type': 'transfer_receipt',
+                'source_id': receipt.id,
+                'can_transfer': True,
+                'is_transferred': False
+            })
+
+        # Get presentations
+        presentations = Presentation.objects.filter(
+            bank_account=bank_account
+        ).prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+
+        for pres in presentations:
+            for pr in pres.presentation_receipts.all():
+                receipt = pr.checkreceipt or pr.lcn
+                receipt_type = 'check' if pr.checkreceipt else 'lcn'
+                
+                # For collection presentations - only record if marked as PAID
+                if pres.presentation_type == 'COLLECTION':
+                    if pr.recorded_status == 'PAID':
+                        entries.append({
+                            'date': pres.date,
+                            'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                            'type': f'{receipt_type.upper()}_COLLECTION',
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'can_transfer': True,
+                            'is_transferred': False
+                        })
+                
+                # For discount presentations
+                elif pres.presentation_type == 'DISCOUNT':
+                    # Record initial discount
+                    entries.append({
+                        'date': pres.date,
+                        'label': f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                        'type': f'{receipt_type.upper()}_DISCOUNT',
+                        'debit': None,
+                        'credit': receipt.amount,
+                        'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                        'source_type': 'presentation_receipt',
+                        'source_id': pr.id,
+                        'can_transfer': True,
+                        'is_transferred': False
+                    })
+
+                    # Add reversal if marked as UNPAID in this presentation
+                    if pr.recorded_status == 'UNPAID':
+                        entries.append({
+                            'date': pres.date,
+                            'label': (f"Reversal of {receipt_type} "
+                                    f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
+                            'type': f'{receipt_type.upper()}_REVERSAL',
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'reference': pres.bank_reference or f"Pres. #{pres.id}",
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'can_transfer': False,
+                            'is_transferred': False
+                        })
+
+        # Add outgoing transfers
+        outgoing_transfers = InterBankTransfer.objects.filter(
+            from_bank=bank_account,
+            is_deleted=False
+        )
+        
+        for transfer in outgoing_transfers:
+            entries.append({
+                'date': transfer.date,
+                'label': transfer.label,
+                'type': 'INTERBANK_TRANSFER_OUT',
+                'debit': transfer.total_amount,
+                'credit': None,
+                'reference': f'Transfer #{transfer.id}',
+                'source_type': 'interbank_transfer',
+                'source_id': transfer.id,
+                'can_delete': True,
+                'can_transfer': False,
+                'is_transferred': False
+            })
+            
+        # Add incoming transfer records
+        incoming_transfers = InterBankTransfer.objects.filter(
+            to_bank=bank_account,
+            is_deleted=False
+        ).prefetch_related('transferred_records')
+        
+        for transfer in incoming_transfers:
+            for record in transfer.transferred_records.all():
+                entries.append({
+                    'date': transfer.date,
+                    'label': f"{transfer.label} - {record.original_label}",
+                    'type': 'INTERBANK_TRANSFER_IN',
+                    'debit': None,
+                    'credit': record.amount,
+                    'reference': record.original_reference,
+                    'source_type': 'transferred_record',
+                    'source_id': record.id,
+                    'can_delete': False,
+                    'can_transfer': True,
+                    'is_transferred': False
+                })
+
+        # Check for transferred status
+        transferred_records = TransferredRecord.objects.filter(
+            source_type__in=[entry['source_type'] for entry in entries],
+            source_id__in=[entry['source_id'] for entry in entries]
+        ).values_list('source_type', 'source_id')
+        
+        transferred_set = {(t, i) for t, i in transferred_records}
+        
+        # Mark transferred entries
+        for entry in entries:
+            if (entry['source_type'], entry['source_id']) in transferred_set:
+                entry['is_transferred'] = True
+                entry['can_transfer'] = False
+
+         # Add bank fee transactions
+        fee_transactions = BankFeeTransaction.objects.filter(
+            bank_account=bank_account
+        ).select_related('fee_type', 'related_presentation')
+
+        for fee in fee_transactions:
+            entries.append({
+                'date': fee.date,
+                'label': (f"{fee.fee_type.name}"
+                        f"{' - Pres. ' + fee.related_presentation.bank_reference if fee.related_presentation else ''}"),
+                'type': 'BANK_FEE',
+                'debit': fee.total_amount,
+                'credit': None,
+                'reference': fee.fee_type.code,
+                'source_type': 'bank_fee',
+                'source_id': fee.id,
+                'can_delete': True,
+                'can_transfer': False,
+                'is_transferred': False,
+                'is_expandable': True,
+                'details': {
+                    'fee_type': fee.fee_type.name,
+                    'raw_amount': fee.raw_amount,
+                    'vat_rate': fee.vat_rate,
+                    'vat_included': fee.vat_included,
+                    'vat_amount': fee.vat_amount,
+                    'total_amount': fee.total_amount,
+                    'related_presentation': fee.related_presentation.bank_reference if fee.related_presentation else None
+                }
+        })
+
+        # Apply date filters if provided
+        if start_date or end_date:
+            filtered_entries = []
+            for entry in entries:
+                entry_date = entry['date']
+                if start_date and entry_date < start_date:
+                    continue
+                if end_date and entry_date > end_date:
+                    continue
+                filtered_entries.append(entry)
+            entries = filtered_entries
+
+        # Sort entries by date
+        entries.sort(key=lambda x: x['date'], reverse=True)
+        
+        # Calculate running balance
+        balance = Decimal('0.00')
+        for entry in reversed(entries):  # Iterate from the last entry to the first
+            balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
+            entry['balance'] = balance
+
+        return entries
+
+class AccountingEntry(models.Model):
+    """
+    Virtual model that dynamically generates accounting entries.
+    Does not store records directly - serves as a view model.
+    """
+    class Meta:
+        managed = False
+
+    @classmethod
+    def get_entries(cls, bank_account, start_date=None, end_date=None):
+        """
+        Dynamically generates double-entry accounting records.
+        Returns chronologically ordered list of debit/credit pairs.
+        """
+        entries = []
+        
+        # Get all relevant receipts and presentations
+        cash_receipts = CashReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        transfer_receipts = TransferReceipt.objects.filter(
+            credited_account=bank_account
+        ).select_related('entity', 'client')
+        
+        presentations = Presentation.objects.filter(
+            bank_account=bank_account
+        ).prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+        
+        # Process cash receipts
+        for receipt in cash_receipts:
+            label = f"Cash payment from {receipt.entity.name}"
+            reference = receipt.reference_number or 'N/A'
+            
+            # Add debit and credit pair
+            entries.extend([
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': receipt.amount,
+                    'credit': None,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': None,
+                    'credit': receipt.amount,
+                    'account_code': receipt.entity.accounting_code,  # Entity account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+            
+        # Process transfer receipts
+        for receipt in transfer_receipts:
+            label = f"Bank transfer from {receipt.entity.name}"
+            reference = receipt.transfer_reference
+            
+            # Add debit and credit pair
+            entries.extend([
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': receipt.amount,
+                    'credit': None,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'transfer_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': receipt.operation_date,
+                    'label': label,
+                    'debit': None,
+                    'credit': receipt.amount,
+                    'account_code': receipt.entity.accounting_code,  # Entity account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'transfer_receipt',
+                    'source_id': receipt.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+
+        # Process presentations
+        for pres in presentations:
+            for pr in pres.presentation_receipts.all():
+                receipt = pr.checkreceipt or pr.lcn
+                receipt_type = 'check' if pr.checkreceipt else 'lcn'
+                reference = pres.bank_reference or f"Pres. #{pres.id}"
+                
+                # For collection presentations - only record if marked as PAID
+                if pres.presentation_type == 'COLLECTION' and pr.recorded_status == 'PAID':
+                    label = f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                    
+                    # Add debit and credit pair
+                    entries.extend([
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'account_code': bank_account.accounting_number,  # Bank account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        },
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'account_code': receipt.entity.accounting_code,  # Entity account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        }
+                    ])
+                
+                # For discount presentations
+                elif pres.presentation_type == 'DISCOUNT':
+                    # Initial discount entry
+                    label = f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                    
+                    # Add debit and credit pair
+                    entries.extend([
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': receipt.amount,
+                            'credit': None,
+                            'account_code': bank_account.accounting_number,  # Bank account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        },
+                        {
+                            'date': pres.date,
+                            'label': label,
+                            'debit': None,
+                            'credit': receipt.amount,
+                            'account_code': '5000',  # On-hold account
+                            'reference': reference,
+                            'journal_code': bank_account.journal_number,
+                            'source_type': 'presentation_receipt',
+                            'source_id': pr.id,
+                            'pair_index': len(entries) // 2
+                        }
+                    ])
+
+                    # If marked as unpaid in this presentation, add reversal
+                    if pr.recorded_status == 'UNPAID':
+                        label = f"Reversal of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                        
+                        # Add debit and credit pair for reversal
+                        entries.extend([
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'account_code': bank_account.accounting_number,  # Bank account
+                                'reference': reference,
+                                'journal_code': bank_account.journal_number,
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            },
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': receipt.amount,
+                                'credit': None,
+                                'account_code': '5000',  # On-hold account
+                                'reference': reference,
+                                'journal_code': bank_account.journal_number,
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            }
+                        ])
+                        
+                    # If paid, record other operations entry
+                    elif pr.recorded_status == 'PAID':
+                        label = f"Payment of discounted {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+                        
+                        # Add debit and credit pair for other operations
+                        entries.extend([
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': receipt.amount,
+                                'credit': None,
+                                'account_code': '5000',  # On-hold account
+                                'reference': reference,
+                                'journal_code': '06',  # Other operations
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            },
+                            {
+                                'date': pres.date,
+                                'label': label,
+                                'debit': None,
+                                'credit': receipt.amount,
+                                'account_code': receipt.entity.accounting_code,  # Entity account
+                                'reference': reference,
+                                'journal_code': '06',  # Other operations
+                                'source_type': 'presentation_receipt',
+                                'source_id': pr.id,
+                                'pair_index': len(entries) // 2
+                            }
+                        ])
+
+        incoming_transfers = InterBankTransfer.objects.filter(
+            to_bank=bank_account,
+            is_deleted=False
+        ).prefetch_related('transferred_records')
+        
+        for transfer in incoming_transfers:
+            for transferred_record in transfer.transferred_records.all():
+                # Need to get the original record's entity
+                if transferred_record.source_type == 'cash_receipt':
+                    original_record = CashReceipt.objects.get(id=transferred_record.source_id)
+                elif transferred_record.source_type == 'transfer_receipt':
+                    original_record = TransferReceipt.objects.get(id=transferred_record.source_id)
+                else:  # presentation_receipt
+                    pres_receipt = PresentationReceipt.objects.get(id=transferred_record.source_id)
+                    original_record = pres_receipt.checkreceipt or pres_receipt.lcn
+
+                # Now we can access the entity
+                entries.extend([
+                    {
+                        'date': transfer.date,
+                        'label': f"{transfer.label} - {transferred_record.original_label}",
+                        'debit': transferred_record.amount,
+                        'credit': None,
+                        'account_code': bank_account.accounting_number,  # Bank account
+                        'reference': transferred_record.original_reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'transferred_record',
+                        'source_id': transferred_record.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': transfer.date,
+                        'label': f"{transfer.label} - {transferred_record.original_label}",
+                        'debit': None,
+                        'credit': transferred_record.amount,
+                        'account_code': original_record.entity.accounting_code,  # Entity account
+                        'reference': transferred_record.original_reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'transferred_record',
+                        'source_id': transferred_record.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+        
+        # Bank fee entries
+        fee_transactions = BankFeeTransaction.objects.filter(
+            bank_account=bank_account
+        ).select_related('fee_type')
+
+        for fee in fee_transactions:
+            # Raw amount entry
+            entries.extend([
+                {
+                    'date': fee.date,
+                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'debit': fee.raw_amount,
+                    'credit': None,
+                    'account_code': fee.fee_type.accounting_code,  # Fee account
+                    'reference': fee.fee_type.code,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'bank_fee',
+                    'source_id': fee.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': fee.date,
+                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'debit': None,
+                    'credit': fee.raw_amount,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': fee.fee_type.code,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'bank_fee',
+                    'source_id': fee.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+
+            # VAT entry if applicable
+            if fee.vat_amount > 0:
+                entries.extend([
+                    {
+                        'date': fee.date,
+                        'label': f"{fee.fee_type.name} - VAT",
+                        'debit': fee.vat_amount,
+                        'credit': None,
+                        'account_code': fee.fee_type.vat_code,  # VAT account
+                        'reference': fee.fee_type.code,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'bank_fee',
+                        'source_id': fee.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': fee.date,
+                        'label': f"{fee.fee_type.name} - VAT",
+                        'debit': None,
+                        'credit': fee.vat_amount,
+                        'account_code': bank_account.accounting_number,  # Bank account
+                        'reference': fee.fee_type.code,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'bank_fee',
+                        'source_id': fee.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+
+        # Filter entries
+        if start_date or end_date:
+            filtered_entries = []
+            for entry in entries:
+                entry_date = entry['date']
+                if start_date and entry_date < start_date:
+                    continue
+                if end_date and entry_date > end_date:
+                    continue
+                filtered_entries.append(entry)
+            entries = filtered_entries
+
+        # Sort entries keeping pairs together
+        entries.sort(key=lambda x: (x['date'], x['pair_index']), reverse=True)
+        
+        return entries
+
+class InterBankTransfer(BaseModel):
+    """
+    Tracks transfers between bank accounts and their related records.
+    """
+    from_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        related_name='outgoing_transfers'
+    )
+    to_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        related_name='incoming_transfers'
+    )
+    date = models.DateField()
+    label = models.CharField(max_length=255, default="Interbank Transfer")
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    is_deleted = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"Transfer from {self.from_bank} to {self.to_bank} on {self.date}"
+
+class TransferredRecord(BaseModel):
+    """
+    Links original statement records to their transfer.
+    """
+    transfer = models.ForeignKey(
+        InterBankTransfer, 
+        on_delete=models.CASCADE,
+        related_name='transferred_records'
+    )
+    # Source type and id for the original record
+    source_type = models.CharField(max_length=50)  # 'cash_receipt', 'transfer_receipt', 'presentation_receipt'
+    source_id = models.UUIDField()
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    original_date = models.DateField()
+    original_label = models.CharField(max_length=255)
+    original_reference = models.CharField(max_length=100)
+
+    class Meta:
+        unique_together = ['source_type', 'source_id']  # Prevent double transfers
+
+    def __str__(self):
+        return f"Transferred record {self.source_type}:{self.source_id}"
+    
+class BankFeeType(BaseModel):
+    """Defines bank fee types and their accounting codes"""
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=10)  # For reference/initials
+    accounting_code = models.CharField(max_length=5)  # Fee account code
+    vat_code = models.CharField(max_length=5)  # VAT account code
+    description = models.TextField(blank=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.code})"
+
+    class Meta:
+        ordering = ['name']
+
+class BankFeeTransaction(BaseModel):
+    """Records bank fee transactions"""
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    fee_type = models.ForeignKey(BankFeeType, on_delete=models.PROTECT)
+    date = models.DateField()
+    related_presentation = models.ForeignKey(
+        'Presentation', 
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    raw_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    vat_rate = models.DecimalField(
+        max_digits=4, 
+        decimal_places=2,
+        default=10.00,
+        null=True,
+        blank=True
+    )
+    vat_included = models.BooleanField(default=False)
+    vat_amount = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+
+    def calculate_amounts(self):
+        """Calculate VAT and total amounts based on settings"""
+        if not self.vat_rate or self.vat_rate == 0:
+            self.vat_amount = Decimal('0.00')
+            self.total_amount = self.raw_amount
+        elif self.vat_included:
+            # If VAT included, calculate backwards
+            vat_multiplier = (self.vat_rate / 100) + 1
+            self.raw_amount = self.total_amount / vat_multiplier
+            self.vat_amount = self.total_amount - self.raw_amount
+        else:
+            # Calculate VAT and total from raw amount
+            self.vat_amount = self.raw_amount * (self.vat_rate / 100)
+            self.total_amount = self.raw_amount + self.vat_amount
+
+    def save(self, *args, **kwargs):
+        if not self.total_amount:
+            self.calculate_amounts()
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.fee_type.name} - {self.date}"
+
+# Add initial fee types
+INITIAL_FEE_TYPES = [
+    {
+        'name': 'Account Management Fee',
+        'code': 'AMF',
+        'accounting_code': '61411',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Statement Fee',
+        'code': 'STF',
+        'accounting_code': '61412',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Processing Fee',
+        'code': 'CPF',
+        'accounting_code': '61413',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Transfer Commission',
+        'code': 'TRC',
+        'accounting_code': '61414',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Book Fee',
+        'code': 'CBF',
+        'accounting_code': '61415',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Payment Rejection Fee',
+        'code': 'PRF',
+        'accounting_code': '61416',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'Check Discount Commission',
+        'code': 'CDC',
+        'accounting_code': '61417',
+        'vat_code': '34551'
+    },
+    {
+        'name': 'LCN Discount Commission',
+        'code': 'LDC',
+        'accounting_code': '61418',
+        'vat_code': '34551'
+    }
+]
+
+```
+
+# templates/bank/accounting.html
+
+```html
+{% extends 'base.html' %} {% load accounting_filters %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Accounting</h2> <div class="d-flex gap-2"> <!-- Filter Form --> <form class="form-inline" id="accountingFilterForm"> <div class="input-group"> <input type="date" class="form-control" name="start_date" id="startDate"> <input type="date" class="form-control" name="end_date" id="endDate"> <button type="submit" class="btn btn-primary">Apply</button> </div> </form> </div> </div> <!-- Summary Cards --> <div class="row mb-4"> <div class="col-md-6"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Debit</h5> <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p> </div> </div> </div> <div class="col-md-6"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Credit</h5> <p class="card-text text-success h4">{{ total_credit|format_balance }}</p> </div> </div> </div> </div> <!-- Accounting Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Label</th> <th class="text-right">Debit</th> <th class="text-right">Credit</th> <th>Account Code</th> <th>Reference</th> <th>Journal Code</th> <th>Actions</th> </tr> </thead> <tbody id="accountingTableBody"> {% include 'bank/partials/accounting_table.html' %} </tbody> </table> </div> </div> <script> $(document).ready(function() { // Existing filter form handler with validation $('#accountingFilterForm').on('submit', function(e) { e.preventDefault(); const startDate = this.querySelector('[name="start_date"]').value; const endDate = this.querySelector('[name="end_date"]').value; if (!validateDateRange(startDate, endDate)) { showToast('Start date must be before or equal to end date', 'error'); return; } $.get(window.location.pathname, $(this).serialize()) .done(function(response) { $('#accountingTableBody').html(response.html); }) .fail(function(xhr) { showToast('Error loading accounting data', 'error'); }); }); // Add helper functions function validateDateRange(startDate, endDate) { if (!startDate || !endDate) return true; return new Date(startDate) <= new Date(endDate); } function showToast(message, type = 'error') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } }); // View functions function viewReceipt(type, id) { $.get(`/testapp/receipts/details/${type}/${id}/`) .done(function(response) { $('#receiptDetailModal .modal-content').html(response.html); $('#receiptDetailModal').modal('show'); }) .fail(function(xhr) { showToast('Error loading receipt details', 'error'); }); } function viewPresentation(id) { $.get(`/testapp/presentations/${id}/`) .done(function(response) { $('#presentationDetailModal .modal-content').html(response); $('#presentationDetailModal').modal('show'); }) .fail(function(xhr) { showToast('Error loading presentation details', 'error'); }); } </script> {% endblock %}
 ```
 
 # templates/bank/bank_list.html
 
 ```html
-{% extends 'base.html' %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Bank Accounts</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#bankAccountModal"> <i class="fas fa-plus"></i> New Bank Account </button> </div> <!-- Accounts Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Bank</th> <th>Account Number</th> <th>Type</th> <th>City</th> <th>Status</th> <th>Current Account</th> <th>Check Discount</th> <th>LCN Discount</th> <th>Actions</th> </tr> </thead> <tbody> <tbody> {% for account in accounts %} <tr> <td>{{ account.get_bank_display }}</td> <td>{{ account.account_number }}</td> <td>{{ account.get_account_type_display }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td> <span class="badge {% if account.is_current %}badge-primary{% else %}badge-secondary{% endif %}"> {{ account.is_current|yesno:"Yes,No" }} </span> </td> <td> {% if account.has_check_discount_line %} <span class="badge badge-info"> {{ account.check_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> {% if account.has_lcn_discount_line %} <span class="badge badge-info"> {{ account.lcn_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-primary" onclick="editBankAccount('{{ account.id }}')"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deleteBankAccount('{{ account.id }}')"> <i class="fas fa-trash"></i> </button> </div> </td> <td style="display:none"> Check line: {{ account.get_available_check_discount_line }} LCN line: {{ account.get_available_lcn_discount_line }} Raw check amount: {{ account.check_discount_line_amount }} Raw lcn amount: {{ account.lcn_discount_line_amount }} </td> </tr> {% empty %} <tr> <td colspan="9" class="text-center">No bank accounts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> <!-- Bank Account Modal --> <div class="modal fade" id="bankAccountModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title" id="modalTitle">New Bank Account</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="bankAccountForm"> {% csrf_token %} <input type="hidden" id="accountId"> <!-- Basic Information --> <div class="card mb-3"> <div class="card-header"> Basic Information </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank</label> <select class="form-control" id="bank" required> {% for code, name in bank_choices %} <option value="{{ code }}">{{ name }}</option> {% endfor %} </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Account Number</label> <input type="text" class="form-control" id="accountNumber" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label>Accounting Number</label> <input type="text" class="form-control" id="accountingNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>Journal Number</label> <input type="text" class="form-control" id="journalNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>City</label> <input type="text" class="form-control" id="city" required> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Account Type</label> <select class="form-control" id="accountType" required> <option value="national">National</option> <option value="international">International</option> </select> </div> </div> <div class="col-md-6"> <div class="form-check mt-4"> <input type="checkbox" class="form-check-input" id="isActive" checked> <label class="form-check-label">Active Account</label> </div> <div class="form-check"> <input type="checkbox" class="form-check-input" id="isCurrent"> <label class="form-check-label">Current Account</label> </div> </div> </div> </div> </div> <!-- Financial Parameters --> <div class="card mb-3"> <div class="card-header"> Financial Parameters </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank Overdraft</label> <input type="number" class="form-control" id="bankOverdraft" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Overdraft Fee (%)</label> <input type="number" class="form-control" id="overdraftFee" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasCheckDiscountLine"> <label class="form-check-label">Has Check Discount Line</label> </div> <div class="form-group check-discount-amount d-none"> <label>Check Discount Line Amount</label> <input type="number" class="form-control" id="checkDiscountLineAmount" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasLcnDiscountLine"> <label class="form-check-label">Has LCN Discount Line</label> </div> <div class="form-group lcn-discount-amount d-none"> <label>LCN Discount Line Amount</label> <input type="number" class="form-control" id="lcnDiscountLineAmount" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Stamp Fee per Receipt</label> <input type="number" class="form-control" id="stampFeePerReceipt" step="0.01" min="0"> </div> </div> </div> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveBankAccount">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> const BankAccountManager = { init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#saveBankAccount').on('click', () => this.saveBankAccount()); // Toggle discount line amount inputs $('#hasCheckDiscountLine').change(function() { $('.check-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#checkDiscountLineAmount').prop('required', true); } else { $('#checkDiscountLineAmount').prop('required', false).val(''); } }); $('#hasLcnDiscountLine').change(function() { $('.lcn-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#lcnDiscountLineAmount').prop('required', true); } else { $('#lcnDiscountLineAmount').prop('required', false).val(''); } }); // Reset form on modal close $('#bankAccountModal').on('hidden.bs.modal', () => { this.resetForm(); }); }, setupValidation() { const form = document.getElementById('bankAccountForm'); // Add validation for numeric fields ['bankOverdraft', 'overdraftFee', 'checkDiscountLineAmount', 'lcnDiscountLineAmount', 'stampFeePerReceipt'].forEach(id => { const input = document.getElementById(id); input.addEventListener('input', () => { const value = parseFloat(input.value); if (value < 0) { input.setCustomValidity('Value must be positive'); } else { input.setCustomValidity(''); } }); }); }, async saveBankAccount() { const form = document.getElementById('bankAccountForm'); if (!form.checkValidity()) { form.reportValidity(); return; } const data = { bank: $('#bank').val(), account_number: $('#accountNumber').val(), accounting_number: $('#accountingNumber').val(), journal_number: $('#journalNumber').val(), city: $('#city').val(), account_type: $('#accountType').val(), is_active: $('#isActive').prop('checked'), is_current: $('#isCurrent').prop('checked'), bank_overdraft: $('#bankOverdraft').val() || null, overdraft_fee: $('#overdraftFee').val() || null, has_check_discount_line: $('#hasCheckDiscountLine').prop('checked'), check_discount_line_amount: $('#hasCheckDiscountLine').prop('checked') ? $('#checkDiscountLineAmount').val() : null, has_lcn_discount_line: $('#hasLcnDiscountLine').prop('checked'), lcn_discount_line_amount: $('#hasLcnDiscountLine').prop('checked') ? $('#lcnDiscountLineAmount').val() : null, stamp_fee_per_receipt: $('#stampFeePerReceipt').val() || null }; const id = $('#accountId').val(); const url = id ? `/testapp/bank-accounts/${id}/edit/` : '/testapp/bank-accounts/create/'; const method = id ? 'POST' : 'POST'; try { const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const result = await response.json(); if (response.ok) { $('#bankAccountModal').modal('hide'); showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } } catch (error) { showToast('Error', 'Failed to save bank account'); console.error('Error:', error); } }, resetForm() { const form = document.getElementById('bankAccountForm'); form.reset(); $('#accountId').val(''); $('#modalTitle').text('New Bank Account'); $('.check-discount-amount, .lcn-discount-amount').addClass('d-none'); $('#checkDiscountLineAmount, #lcnDiscountLineAmount').prop('required', false); } }; // Initialize when document is ready $(document).ready(function() { BankAccountManager.init(); }); // Global functions for edit and delete function editBankAccount(id) { fetch(`/testapp/bank-accounts/${id}/edit/`) .then(response => response.json()) .then(data => { $('#accountId').val(id); $('#modalTitle').text('Edit Bank Account'); // Fill in the form $('#bank').val(data.bank); $('#accountNumber').val(data.account_number); $('#accountingNumber').val(data.accounting_number); $('#journalNumber').val(data.journal_number); $('#city').val(data.city); $('#accountType').val(data.account_type); $('#isActive').prop('checked', data.is_active); $('#isCurrent').prop('checked', data.is_current); $('#bankOverdraft').val(data.bank_overdraft); $('#overdraftFee').val(data.overdraft_fee); $('#hasCheckDiscountLine').prop('checked', data.has_check_discount_line).trigger('change'); $('#checkDiscountLineAmount').val(data.check_discount_line_amount); $('#hasLcnDiscountLine').prop('checked', data.has_lcn_discount_line).trigger('change'); $('#lcnDiscountLineAmount').val(data.lcn_discount_line_amount); $('#stampFeePerReceipt').val(data.stamp_fee_per_receipt); $('#bankAccountModal').modal('show'); }) .catch(error => { showToast('Error', 'Failed to load bank account details'); console.error('Error:', error); }); } function deleteBankAccount(id) { if (!confirm('Are you sure you want to delete this bank account?')) { return; } fetch(`/testapp/bank-accounts/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }) .then(response => response.json()) .then(result => { if (result.status === 'success') { showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } }) .catch(error => { showToast('Error', 'Failed to delete bank account'); console.error('Error:', error); }); } function showToast(title, message) { // Implementation remains the same as before } </script> {% endblock %}
+{% extends 'base.html' %} {% block content %} <div class="container-fluid px-4"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Bank Accounts</h2> <button class="btn btn-primary" data-toggle="modal" data-target="#bankAccountModal"> <i class="fas fa-plus"></i> New Bank Account </button> </div> <!-- Accounts Table --> <div class="card shadow-sm"> <div class="card-body"> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Bank</th> <th>Account Number</th> <th>Type</th> <th>City</th> <th>Status</th> <th>Current Account</th> <th>Check Discount</th> <th>LCN Discount</th> <th>Actions</th> </tr> </thead> <tbody> <tbody> {% for account in accounts %} <tr> <td>{{ account.get_bank_display }}</td> <td>{{ account.account_number }}</td> <td>{{ account.get_account_type_display }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td> <span class="badge {% if account.is_current %}badge-primary{% else %}badge-secondary{% endif %}"> {{ account.is_current|yesno:"Yes,No" }} </span> </td> <td> {% if account.has_check_discount_line %} <span class="badge badge-info"> {{ account.check_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> {% if account.has_lcn_discount_line %} <span class="badge badge-info"> {{ account.lcn_discount_line_amount|default:0|floatformat:2 }} MAD </span> {% else %} <span class="badge badge-secondary">No</span> {% endif %} </td> <td> <div class="btn-group"> <a href="{% url 'bank-statement' account.id %}" class="btn btn-sm btn-info" title="View Statement"> <i class="fas fa-file-alt"></i> </a> <a href="{% url 'bank-accounting' account.id %}" class="btn btn-sm btn-secondary" title="View Accounting"> <i class="fas fa-book"></i> </a> <a href="{% url 'other-operations' account.id %}" class="btn btn-sm btn-warning" title="Other Operations"> <i class="fas fa-exchange-alt"></i> </a> <button class="btn btn-sm btn-primary" onclick="editBankAccount('{{ account.id }}')" title="Edit"> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deleteBankAccount('{{ account.id }}')" title="Delete"> <i class="fas fa-trash"></i> </button> </div> </td> <td style="display:none"> Check line: {{ account.get_available_check_discount_line }} LCN line: {{ account.get_available_lcn_discount_line }} Raw check amount: {{ account.check_discount_line_amount }} Raw lcn amount: {{ account.lcn_discount_line_amount }} </td> </tr> {% empty %} <tr> <td colspan="9" class="text-center">No bank accounts found</td> </tr> {% endfor %} </tbody> </table> </div> </div> </div> </div> <!-- Bank Account Modal --> <div class="modal fade" id="bankAccountModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title" id="modalTitle">New Bank Account</h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="bankAccountForm"> {% csrf_token %} <input type="hidden" id="accountId"> <!-- Basic Information --> <div class="card mb-3"> <div class="card-header"> Basic Information </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank</label> <select class="form-control" id="bank" required> {% for code, name in bank_choices %} <option value="{{ code }}">{{ name }}</option> {% endfor %} </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Account Number</label> <input type="text" class="form-control" id="accountNumber" required> </div> </div> </div> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label>Accounting Number</label> <input type="text" class="form-control" id="accountingNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>Journal Number</label> <input type="text" class="form-control" id="journalNumber" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>City</label> <input type="text" class="form-control" id="city" required> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Account Type</label> <select class="form-control" id="accountType" required> <option value="national">National</option> <option value="international">International</option> </select> </div> </div> <div class="col-md-6"> <div class="form-check mt-4"> <input type="checkbox" class="form-check-input" id="isActive" checked> <label class="form-check-label">Active Account</label> </div> <div class="form-check"> <input type="checkbox" class="form-check-input" id="isCurrent"> <label class="form-check-label">Current Account</label> </div> </div> </div> </div> </div> <!-- Financial Parameters --> <div class="card mb-3"> <div class="card-header"> Financial Parameters </div> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Bank Overdraft</label> <input type="number" class="form-control" id="bankOverdraft" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Overdraft Fee (%)</label> <input type="number" class="form-control" id="overdraftFee" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasCheckDiscountLine"> <label class="form-check-label">Has Check Discount Line</label> </div> <div class="form-group check-discount-amount d-none"> <label>Check Discount Line Amount</label> <input type="number" class="form-control" id="checkDiscountLineAmount" step="0.01" min="0"> </div> </div> <div class="col-md-6"> <div class="form-check mb-2"> <input type="checkbox" class="form-check-input" id="hasLcnDiscountLine"> <label class="form-check-label">Has LCN Discount Line</label> </div> <div class="form-group lcn-discount-amount d-none"> <label>LCN Discount Line Amount</label> <input type="number" class="form-control" id="lcnDiscountLineAmount" step="0.01" min="0"> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Stamp Fee per Receipt</label> <input type="number" class="form-control" id="stampFeePerReceipt" step="0.01" min="0"> </div> </div> </div> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveBankAccount">Save</button> </div> </div> </div> </div> {% endblock %} {% block extra_js %} <script> const BankAccountManager = { init() { this.bindEvents(); this.setupValidation(); }, bindEvents() { $('#saveBankAccount').on('click', () => this.saveBankAccount()); // Toggle discount line amount inputs $('#hasCheckDiscountLine').change(function() { $('.check-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#checkDiscountLineAmount').prop('required', true); } else { $('#checkDiscountLineAmount').prop('required', false).val(''); } }); $('#hasLcnDiscountLine').change(function() { $('.lcn-discount-amount').toggleClass('d-none', !this.checked); if (this.checked) { $('#lcnDiscountLineAmount').prop('required', true); } else { $('#lcnDiscountLineAmount').prop('required', false).val(''); } }); // Reset form on modal close $('#bankAccountModal').on('hidden.bs.modal', () => { this.resetForm(); }); }, setupValidation() { const form = document.getElementById('bankAccountForm'); // Add validation for numeric fields ['bankOverdraft', 'overdraftFee', 'checkDiscountLineAmount', 'lcnDiscountLineAmount', 'stampFeePerReceipt'].forEach(id => { const input = document.getElementById(id); input.addEventListener('input', () => { const value = parseFloat(input.value); if (value < 0) { input.setCustomValidity('Value must be positive'); } else { input.setCustomValidity(''); } }); }); }, async saveBankAccount() { const form = document.getElementById('bankAccountForm'); if (!form.checkValidity()) { form.reportValidity(); return; } const data = { bank: $('#bank').val(), account_number: $('#accountNumber').val(), accounting_number: $('#accountingNumber').val(), journal_number: $('#journalNumber').val(), city: $('#city').val(), account_type: $('#accountType').val(), is_active: $('#isActive').prop('checked'), is_current: $('#isCurrent').prop('checked'), bank_overdraft: $('#bankOverdraft').val() || null, overdraft_fee: $('#overdraftFee').val() || null, has_check_discount_line: $('#hasCheckDiscountLine').prop('checked'), check_discount_line_amount: $('#hasCheckDiscountLine').prop('checked') ? $('#checkDiscountLineAmount').val() : null, has_lcn_discount_line: $('#hasLcnDiscountLine').prop('checked'), lcn_discount_line_amount: $('#hasLcnDiscountLine').prop('checked') ? $('#lcnDiscountLineAmount').val() : null, stamp_fee_per_receipt: $('#stampFeePerReceipt').val() || null }; const id = $('#accountId').val(); const url = id ? `/testapp/bank-accounts/${id}/edit/` : '/testapp/bank-accounts/create/'; const method = id ? 'POST' : 'POST'; try { const response = await fetch(url, { method: method, headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const result = await response.json(); if (response.ok) { $('#bankAccountModal').modal('hide'); showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } } catch (error) { showToast('Error', 'Failed to save bank account'); console.error('Error:', error); } }, resetForm() { const form = document.getElementById('bankAccountForm'); form.reset(); $('#accountId').val(''); $('#modalTitle').text('New Bank Account'); $('.check-discount-amount, .lcn-discount-amount').addClass('d-none'); $('#checkDiscountLineAmount, #lcnDiscountLineAmount').prop('required', false); } }; // Initialize when document is ready $(document).ready(function() { BankAccountManager.init(); }); // Global functions for edit and delete function editBankAccount(id) { fetch(`/testapp/bank-accounts/${id}/edit/`) .then(response => response.json()) .then(data => { $('#accountId').val(id); $('#modalTitle').text('Edit Bank Account'); // Fill in the form $('#bank').val(data.bank); $('#accountNumber').val(data.account_number); $('#accountingNumber').val(data.accounting_number); $('#journalNumber').val(data.journal_number); $('#city').val(data.city); $('#accountType').val(data.account_type); $('#isActive').prop('checked', data.is_active); $('#isCurrent').prop('checked', data.is_current); $('#bankOverdraft').val(data.bank_overdraft); $('#overdraftFee').val(data.overdraft_fee); $('#hasCheckDiscountLine').prop('checked', data.has_check_discount_line).trigger('change'); $('#checkDiscountLineAmount').val(data.check_discount_line_amount); $('#hasLcnDiscountLine').prop('checked', data.has_lcn_discount_line).trigger('change'); $('#lcnDiscountLineAmount').val(data.lcn_discount_line_amount); $('#stampFeePerReceipt').val(data.stamp_fee_per_receipt); $('#bankAccountModal').modal('show'); }) .catch(error => { showToast('Error', 'Failed to load bank account details'); console.error('Error:', error); }); } function deleteBankAccount(id) { if (!confirm('Are you sure you want to delete this bank account?')) { return; } fetch(`/testapp/bank-accounts/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }) .then(response => response.json()) .then(result => { if (result.status === 'success') { showToast('Success', result.message); location.reload(); } else { showToast('Error', result.message); } }) .catch(error => { showToast('Error', 'Failed to delete bank account'); console.error('Error:', error); }); } function showToast(title, message) { // Implementation remains the same as before } </script> {% endblock %}
+```
+
+# templates/bank/bank_statement.html
+
+```html
+{% extends 'base.html' %} {% load accounting_filters %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Statement</h2> <div class="d-flex gap-2"> <!-- Transfer Button --> <button id="transferBtn" class="btn btn-primary" disabled> <i class="fas fa-exchange-alt me-2"></i> Transfer Selected </button> <!-- Add button to header section --> <button class="btn btn-info ms-2" id="addBankFee"> <i class="fas fa-coins me-2"></i> Add Bank Fee </button> <!-- Filter Form --> <form class="form-inline" id="statementFilterForm"> <div class="input-group"> <input type="date" class="form-control" name="start_date" id="startDate"> <input type="date" class="form-control" name="end_date" id="endDate"> <button type="submit" class="btn btn-primary">Apply</button> </div> </form> </div> </div> <!-- Summary Cards --> <div class="row mb-4"> <div class="col-md-4"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Debit</h5> <p class="card-text text-danger h4" id="total-debit">{{ total_debit|format_balance }}</p> </div> </div> </div> <div class="col-md-4"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Credit</h5> <p class="card-text text-success h4" id="total-credit">{{ total_credit|format_balance }}</p> </div> </div> </div> <div class="col-md-4"> <div class="card"> <div class="card-body"> <h5 class="card-title">Balance</h5> <p class="card-text h4 {% if final_balance > 0 %}text-success{% else %}text-danger{% endif %}" id="final-balance"> {{ final_balance|format_balance }} </p> </div> </div> </div> </div> <!-- Statement Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th style="width: 40px;"> <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input" id="selectAll"> <label class="custom-control-label" for="selectAll"></label> </div> </th> <th>Date</th> <th>Label</th> <th>Type</th> <th class="text-right">Debit</th> <th class="text-right">Credit</th> <th>Reference</th> <th class="text-right">Balance</th> <th>Actions</th> </tr> </thead> <tbody id="statementTableBody"> {% for entry in entries %} <tr class="record-row" data-record-id="{{ entry.source_id }}" data-type="{{ entry.type|lower }}"> <td> {% if entry.can_transfer %} <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input record-checkbox" id="record{{ entry.source_id }}" data-amount="{{ entry.credit }}" data-source-type="{{ entry.source_type }}" data-source-id="{{ entry.source_id }}" data-date="{{ entry.date|date:'Y-m-d' }}" data-label="{{ entry.label }}" data-reference="{{ entry.reference }}"> <label class="custom-control-label" for="record{{ entry.source_id }}"></label> </div> {% endif %} {% if entry.is_transferred %} <span class="badge badge-info" title="Transferred"> <i class="fas fa-exchange-alt"></i> </span> {% endif %} </td> <td>{{ entry.date|date:"Y-m-d" }}</td> <td>{{ entry.label }}</td> <td> <span class="badge badge-{{ entry.type|lower }}">{{ entry.type }}</span> </td> <td class="text-right text-danger"> {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %} </td> <td class="text-right text-success"> {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %} </td> <td>{{ entry.reference }}</td> <td class="text-right {% if entry.balance > 0 %}text-success{% else %}text-danger{% endif %}"> {{ entry.balance|format_balance }} </td> <td> <!-- Add the toggle button for details --> <button class="btn btn-sm btn-link toggle-details" title="Show Details"> <i class="fas fa-chevron-down"></i> </button> <!-- Existing action buttons --> <div class="btn-group"> {% if entry.can_delete %} {% if entry.type == 'BANK_FEE' %} <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')"> <i class="fas fa-trash"></i> </button> {% else %} <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')"> <i class="fas fa-trash"></i> </button> {% endif %} {% endif %} </div> </td> </tr> <!-- The details row --> <tr class="details-row d-none" data-record-id="{{ entry.source_id }}"> <td colspan="9"> <div class="card"> <div class="card-body"> {% if entry.type == 'BANK_FEE' %} <!-- Existing bank fee details here --> <div class="row"> <div class="col-md-3"> <strong>Fee Type:</strong><br> {{ entry.details.fee_type }} </div> <div class="col-md-3"> <strong>Raw Amount:</strong><br> {{ entry.details.raw_amount|format_balance }} </div> <div class="col-md-3"> <strong>VAT Rate:</strong><br> {{ entry.details.vat_rate }}% </div> <div class="col-md-3"> <strong>VAT Included:</strong><br> {{ entry.details.vat_included|yesno:"Yes,No" }} </div> </div> <div class="row mt-3"> <div class="col-md-4"> <strong>VAT Amount:</strong><br> {{ entry.details.vat_amount|format_balance }} </div> <div class="col-md-4"> <strong>Total Amount:</strong><br> {{ entry.details.total_amount|format_balance }} </div> <div class="col-md-4"> <strong>Related Presentation:</strong><br> {{ entry.details.related_presentation|default:"None" }} </div> </div> {% elif entry.type == 'CASH' %} <div class="row"> <div class="col-md-3"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-3"> <strong>Client:</strong><br> {{ entry.client_name }} </div> <div class="col-md-3"> <strong>Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-3"> <strong>Operation Date:</strong><br> {{ entry.operation_date|date:"Y-m-d" }} </div> </div> {% elif entry.type == 'TRANSFER' %} <div class="row"> <div class="col-md-4"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-4"> <strong>Transfer Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-4"> <strong>Transfer Date:</strong><br> {{ entry.transfer_date|date:"Y-m-d" }} </div> </div> {% elif 'CHECK' in entry.type or 'LCN' in entry.type %} <div class="row"> <div class="col-md-3"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-3"> <strong>Due Date:</strong><br> {{ entry.due_date|date:"Y-m-d" }} </div> <div class="col-md-3"> <strong>Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-3"> <strong>Status:</strong><br> <span class="badge badge-{{ entry.status|lower }}"> {{ entry.status }} </span> </div> </div> {% endif %} </div> </div> </td> </tr> {% empty %} <tr> <td colspan="9" class="text-center">No entries found for this period</td> </tr> {% endfor %} </tbody> <!-- Transfer Modal --> <div class="modal fade" id="transferModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <i class="fas fa-exchange-alt me-2"></i> Create Interbank Transfer </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="transferForm"> {% csrf_token %} <!-- Transfer Details --> <div class="card mb-3"> <div class="card-body"> <div class="row"> <div class="col-md-4"> <div class="form-group"> <label>Transfer To</label> <select class="form-control" id="toBankAccount" required> <option value="">Select Bank Account</option> {% for account in bank_accounts %} {% if account.id != bank_account.id %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endif %} {% endfor %} </select> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>Transfer Date</label> <input type="date" class="form-control" id="transferDate" required> </div> </div> <div class="col-md-4"> <div class="form-group"> <label>Label</label> <input type="text" class="form-control" id="transferLabel" value="Interbank Transfer"> </div> </div> </div> </div> </div> <!-- Selected Records --> <div class="card"> <div class="card-header d-flex justify-content-between align-items-center"> <h6 class="mb-0">Selected Records</h6> <span class="text-primary"> Total: <strong id="selectedTotal">0.00</strong> MAD </span> </div> <div class="card-body"> <div id="selectedRecordsList" class="list-group list-group-flush"> <!-- Will be populated by JavaScript --> </div> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveTransfer"> <i class="fas fa-save me-2"></i> Create Transfer </button> </div> </div> </div> </div> <!-- Bank Fee Modal --> <div class="modal fade" id="bankFeeModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <i class="fas fa-coins me-2"></i> Record Bank Fee </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="bankFeeForm"> {% csrf_token %} <!-- Fee Details --> <div class="card mb-3"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Fee Type</label> <select class="form-control" id="feeType" required> <option value="">Select Fee Type</option> {% for fee_type in fee_types %} <option value="{{ fee_type.id }}"> {{ fee_type.name }} </option> {% endfor %} </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="feeDate" required> </div> </div> </div> <div class="form-group mt-3"> <label>Related Presentation</label> <input type="text" class="form-control" id="relatedPresentation" placeholder="Search by reference..."> </div> </div> </div> <!-- Amount Details --> <div class="card"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Fee Amount</label> <input type="number" class="form-control" id="rawAmount" step="0.01" min="0.01" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>VAT Rate (%)</label> <select class="form-control" id="vatRate"> <option value="">No VAT</option> <option value="20">20%</option> <option value="16">16%</option> <option value="11">11%</option> <option value="10" selected>10%</option> <option value="7">7%</option> <option value="0">0%</option> </select> </div> </div> </div> <div class="form-check mt-3"> <input type="checkbox" class="form-check-input" id="vatIncluded"> <label class="form-check-label" for="vatIncluded"> VAT Included in Amount </label> </div> <div class="row mt-3"> <div class="col-md-6"> <div class="form-group"> <label>VAT Amount</label> <input type="number" class="form-control" id="vatAmount" step="0.01" min="0" readonly> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Total Amount</label> <input type="number" class="form-control" id="totalAmount" step="0.01" min="0.01" readonly> </div> </div> </div> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-primary" id="saveBankFee"> <i class="fas fa-save me-2"></i> Record Fee </button> </div> </div> </div> </div> {% endblock %} <style> .record-row { cursor: pointer; } .record-row:hover { background-color: rgba(0,0,0,.02); } .toggle-details { padding: 0; transition: transform 0.2s; } .toggle-details:focus { outline: none; box-shadow: none; } .details-row { background-color: #f8f9fa; } .details-row .card { border: none; margin: 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); } .details-row strong { color: #6c757d; font-size: 0.875rem; } /* Fee Row Styling */ .fee-row { cursor: pointer; transition: background-color 0.2s; } .fee-row:hover { background-color: rgba(0, 0, 0, 0.02); } .fee-row .toggle-fee-details { padding: 0; margin-left: 8px; color: #6c757d; transition: transform 0.3s; } /* Details Row Styling */ .fee-details-row { background-color: #f8f9fa; transition: all 0.3s ease; overflow: hidden; } .fee-details-row .card { border: none; margin: 0; box-shadow: inset 0 2px 4px rgba(0,0,0,0.05); } .fee-details-row .card-body { padding: 1.5rem; } .fee-details-row strong { color: #6c757d; font-size: 0.875rem; } /* Button Spacing & Styling */ .btn-group { gap: 0.5rem; } .btn-group > .btn { border-radius: 0.375rem !important; margin: 0; } /* Modal Enhancements */ .modal-content { border: none; border-radius: 0.5rem; box-shadow: 0 10px 25px rgba(0,0,0,0.1); } .modal-header { background: linear-gradient(45deg, #4e73df, #224abe); color: white; border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; padding: 1.5rem; } .modal-body { padding: 1.5rem; } .modal-footer { padding: 1rem 1.5rem; background-color: #f8f9fa; border-bottom-left-radius: 0.5rem; border-bottom-right-radius: 0.5rem; } /* Form Styling */ .form-group { margin-bottom: 1.25rem; } .form-control { border-radius: 0.375rem; padding: 0.625rem 0.875rem; border-color: #e2e8f0; transition: border-color 0.2s, box-shadow 0.2s; } .form-control:focus { border-color: #4e73df; box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.15); } /* Table Enhancements */ .table { margin-bottom: 0; } .table th { font-weight: 600; color: #4a5568; border-top: none; padding: 1rem; } .table td { padding: 1rem; vertical-align: middle; } /* Badge Enhancements */ .badge { padding: 0.5em 0.75em; font-weight: 500; text-transform: uppercase; font-size: 0.75rem; letter-spacing: 0.025em; } </style> {% block extra_js %} <script> $(document).ready(function() { function formatBalance(value) { if (value == null || isNaN(value)) { return ''; } // Convert the value to a number with two decimal places const formattedValue = parseFloat(value).toFixed(2); // Split the value into the integer and decimal parts const [intPart, decPart] = formattedValue.split('.'); // Format the integer part with spaces as thousand separators const intWithSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // Return the formatted balance with dot as decimal separator return `${intWithSpaces}.${decPart}`; } // Set default dates const today = new Date(); const firstDay = new Date(today.getFullYear(), today.getMonth(), 1); const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0); $('#startDate').val(firstDay.toISOString().split('T')[0]); $('#endDate').val(lastDay.toISOString().split('T')[0]); // Trigger initial filter $('#startDate').trigger('change'); // ===== Bank Fee Management ===== $('#addBankFee').click(function() { $('#feeDate').val(new Date().toISOString().split('T')[0]); $('#bankFeeModal').modal('show'); }); // Initialize presentation autocomplete $("#relatedPresentation").autocomplete({ minLength: 2, source: function(request, response) { $.ajax({ url: '{% url "presentation-autocomplete" %}', dataType: 'json', data: { term: request.term }, success: function(data) { response($.map(data.results, function(item) { return { label: item.text, value: item.id }; })); } }); }, select: function(event, ui) { $(this).val(ui.item.label); $(this).data('selected-id', ui.item.value); return false; } }); // ===== VAT Calculations ===== function calculateAmounts() { const rawAmount = parseFloat($('#rawAmount').val()) || 0; const vatRate = parseFloat($('#vatRate').val()) || 0; const vatIncluded = $('#vatIncluded').prop('checked'); let vatAmount = 0; let totalAmount = 0; if (vatRate === 0) { totalAmount = rawAmount; } else if (vatIncluded) { const vatMultiplier = (vatRate / 100) + 1; const rawAmountCalculated = rawAmount / vatMultiplier; vatAmount = rawAmount - rawAmountCalculated; totalAmount = rawAmount; $('#rawAmount').val(rawAmountCalculated.toFixed(2)); } else { vatAmount = rawAmount * (vatRate / 100); totalAmount = rawAmount + vatAmount; } $('#vatAmount').val(vatAmount.toFixed(2)); $('#totalAmount').val(totalAmount.toFixed(2)); } $('#rawAmount, #vatRate').on('input change', calculateAmounts); $('#vatIncluded').on('change', calculateAmounts); $(document).on('click', '.toggle-details', function(e) { e.preventDefault(); e.stopPropagation(); const $row = $(this).closest('tr'); const $icon = $(this).find('i'); const $detailsRow = $(`.details-row[data-record-id="${$row.data('record-id')}"]`); // Toggle details with animation if ($detailsRow.hasClass('d-none')) { $detailsRow.removeClass('d-none'); $icon.removeClass('fa-chevron-down').addClass('fa-chevron-up'); } else { $detailsRow.addClass('d-none'); $icon.removeClass('fa-chevron-up').addClass('fa-chevron-down'); } }); // ===== Fee Row Collapsing ===== $(document).on('click', '.fee-row', function(e) { // Don't trigger if clicking button if ($(e.target).closest('.btn-group').length || $(e.target).is('input')) { return; } const feeId = $(this).data('fee-id'); const detailsRow = $(`.fee-details-row[data-fee-id="${feeId}"]`); const icon = $(this).find('.toggle-fee-details i'); detailsRow.toggleClass('d-none'); icon.toggleClass('fa-chevron-down fa-chevron-up'); }); // ===== Bank Fee Creation ===== $('#saveBankFee').click(async function() { if (!$('#bankFeeForm')[0].checkValidity()) { $('#bankFeeForm')[0].reportValidity(); return; } const data = { bank_account: '{{ bank_account.id }}', fee_type: $('#feeType').val(), date: $('#feeDate').val(), related_presentation: $('#relatedPresentation').data('selected-id'), raw_amount: $('#rawAmount').val(), vat_rate: $('#vatRate').val(), vat_included: $('#vatIncluded').prop('checked'), vat_amount: $('#vatAmount').val(), total_amount: $('#totalAmount').val() }; try { const response = await fetch('{% url "create-bank-fee" %}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const result = await response.json(); if (response.ok) { $('#bankFeeModal').modal('hide'); showToast('Bank fee recorded successfully', 'success'); location.reload(); } else { showToast(result.message || 'Failed to record bank fee', 'error'); } } catch (error) { console.error('Fee creation error:', error); showToast('Failed to record bank fee', 'error'); } }); // ===== Date Range Filtering ===== $('#startDate, #endDate').on('change', function() { const startDate = $('#startDate').val(); const endDate = $('#endDate').val(); // Don't filter if one date is set and the other isn't if ((startDate && !endDate) || (!startDate && endDate)) { return; } // Don't filter if end date is before start date if (startDate && endDate && startDate > endDate) { showToast('Start date must be before end date', 'error'); return; } console.log('Applying filters:', { startDate, endDate }); // Show loading state $('#statementTableBody').html('<tr><td colspan="9" class="text-center"><div class="spinner-border text-primary" role="status"></div></td></tr>'); $.ajax({ url: window.location.pathname, method: 'GET', data: startDate || endDate ? { start_date: startDate, end_date: endDate } : {}, success: function(response) { if (response && response.html) { $('#statementTableBody').html(response.html); } if (response && response.totals) { // Update summary cards using format_balance filter $('#total-debit').text(formatBalance(response.totals.debit)); $('#total-credit').text(formatBalance(response.totals.credit)); const balance = response.totals.balance; const balanceElement = $('#final-balance'); balanceElement.text(formatBalance(Math.abs(balance))); balanceElement .removeClass('text-success text-danger') .addClass(parseFloat(balance) >= 0 ? 'text-success' : 'text-danger'); } }, error: function(xhr, status, error) { console.error('Filter error details:', { status: xhr.status, statusText: xhr.statusText, responseText: xhr.responseText, error: error }); let message = 'Failed to filter statement'; try { const response = JSON.parse(xhr.responseText); message = response.error || message; } catch(e) { console.error('Error parsing response:', e); } showToast(message, 'error'); } }); }); // Remove the form submit handler since we're using change events $('#statementFilterForm').on('submit', function(e) { e.preventDefault(); }); // ===== Transfer Management ===== let selectedRecords = new Map(); $('.record-checkbox').change(function() { const $checkbox = $(this); const recordData = { source_type: $checkbox.data('source-type'), source_id: $checkbox.data('source-id'), amount: $checkbox.data('amount'), date: $checkbox.data('date'), label: $checkbox.data('label'), reference: $checkbox.data('reference') }; if (this.checked) { selectedRecords.set(recordData.source_id, recordData); } else { selectedRecords.delete(recordData.source_id); } updateSelectionUI(); }); $('#selectAll').change(function() { $('.record-checkbox:not(:disabled)').prop('checked', this.checked).trigger('change'); }); function updateSelectionUI() { const totalAmount = Array.from(selectedRecords.values()) .reduce((sum, record) => sum + parseFloat(record.amount), 0); $('#transferBtn').prop('disabled', selectedRecords.size === 0); $('#selectedTotal').text(totalAmount.toFixed(2)); const $list = $('#selectedRecordsList'); $list.empty(); selectedRecords.forEach(record => { $list.append(` <div class="list-group-item d-flex justify-content-between align-items-center"> <div> <div class="font-weight-bold">${record.label}</div> <small class="text-muted"> ${record.date} | Ref: ${record.reference} </small> </div> <span class="text-success">${parseFloat(record.amount).toFixed(2)} MAD</span> </div> `); }); } $('#transferBtn').click(function() { $('#transferDate').val(new Date().toISOString().split('T')[0]); $('#transferModal').modal('show'); }); $('#saveTransfer').click(async function() { if (!$('#transferForm')[0].checkValidity()) { $('#transferForm')[0].reportValidity(); return; } const data = { from_bank: '{{ bank_account.id }}', to_bank: $('#toBankAccount').val(), date: $('#transferDate').val(), label: $('#transferLabel').val(), records: Array.from(selectedRecords.values()) }; try { const response = await fetch('{% url "create-transfer" %}', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const result = await response.json(); if (response.ok) { $('#transferModal').modal('hide'); showToast('Transfer created successfully', 'success'); location.reload(); } else { showToast(result.message || 'Failed to create transfer', 'error'); } } catch (error) { console.error('Transfer creation error:', error); showToast('Failed to create transfer', 'error'); } }); // Reset modals on hide $('#bankFeeModal').on('hidden.bs.modal', function() { $('#bankFeeForm')[0].reset(); $('#relatedPresentation').val('').data('selected-id', ''); $('#vatAmount').prop('readonly', true); $('#vatIncluded').prop('disabled', false); $('.is-invalid').removeClass('is-invalid'); }); // Initialize tooltips $('[data-toggle="tooltip"]').tooltip(); }); // ===== Global Functions ===== function showToast(message, type = 'success') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } function deleteBankFee(feeId) { if (!confirm('Are you sure you want to delete this bank fee?')) { return; } fetch(`/testapp/bank-accounts/fees/${feeId}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }) .then(response => response.json()) .then(result => { if (result.status === 'success') { showToast('Bank fee deleted successfully', 'success'); location.reload(); } else { throw new Error(result.message || 'Failed to delete bank fee'); } }) .catch(error => { console.error('Fee deletion error:', error); showToast(error.message || 'Failed to delete bank fee', 'error'); }); } function deleteTransfer(transferId) { if (!confirm('Are you sure you want to delete this transfer? This will make the transferred records available for transfer again.')) { return; } fetch(`/testapp/bank-accounts/transfers/${transferId}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value } }) .then(response => response.json()) .then(result => { if (result.status === 'success') { showToast('Transfer deleted successfully', 'success'); location.reload(); } else { throw new Error(result.message || 'Failed to delete transfer'); } }) .catch(error => { console.error('Transfer deletion error:', error); showToast(error.message || 'Failed to delete transfer', 'error'); }); } </script> {% endblock %}
+```
+
+# templates/bank/other_operations.html
+
+```html
+{% extends 'base.html' %} {% load accounting_filters %} {% block content %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Other Operations</h2> <div class="d-flex gap-2"> <!-- Filter Form --> <form class="form-inline" id="otherOpsFilterForm"> <div class="input-group"> <input type="date" class="form-control" name="start_date" id="startDate"> <input type="date" class="form-control" name="end_date" id="endDate"> <button type="submit" class="btn btn-primary">Apply</button> </div> </form> </div> </div> <!-- Summary Cards --> <div class="row mb-4"> <div class="col-md-6"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Debit (From On-Hold)</h5> <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p> </div> </div> </div> <div class="col-md-6"> <div class="card"> <div class="card-body"> <h5 class="card-title">Total Credit (To Entity)</h5> <p class="card-text text-success h4">{{ total_credit|format_balance }}</p> </div> </div> </div> </div> <!-- Other Operations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Label</th> <th>Description</th> <th class="text-right">Debit (From 5000)</th> <th class="text-right">Credit (To Entity)</th> <th>Reference</th> <th>Actions</th> </tr> </thead> <tbody id="otherOpsTableBody"> {% include 'bank/partials/other_operations_table.html' %} </tbody> </table> </div> </div> <script> $(document).ready(function() { $('#otherOpsFilterForm').on('submit', function(e) { e.preventDefault(); const startDate = this.querySelector('[name="start_date"]').value; const endDate = this.querySelector('[name="end_date"]').value; if (!validateDateRange(startDate, endDate)) { showToast('Start date must be before or equal to end date', 'error'); return; } $.get(window.location.pathname, $(this).serialize()) .done(function(response) { $('#otherOpsTableBody').html(response.html); }) .fail(function(xhr) { showToast('Error loading other operations data', 'error'); }); }); // Helper functions (same as above) function validateDateRange(startDate, endDate) { if (!startDate || !endDate) return true; return new Date(startDate) <= new Date(endDate); } function showToast(message, type = 'error') { const toast = ` <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000"> <div class="toast-header bg-${type} text-white"> <strong class="mr-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong> <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button> </div> <div class="toast-body">${message}</div> </div> `; const container = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>') .append(toast) .appendTo('body'); $('.toast').toast('show').on('hidden.bs.toast', () => container.remove()); } }); // View functions (same as above) function viewReceipt(type, id) { $.get(`/testapp/receipts/details/${type}/${id}/`) .done(function(response) { $('#receiptDetailModal .modal-content').html(response.html); $('#receiptDetailModal').modal('show'); }) .fail(function(xhr) { showToast('Error loading receipt details', 'error'); }); } function viewPresentation(id) { $.get(`/testapp/presentations/${id}/`) .done(function(response) { $('#presentationDetailModal .modal-content').html(response); $('#presentationDetailModal').modal('show'); }) .fail(function(xhr) { showToast('Error loading presentation details', 'error'); }); } </script> {% endblock %}
+```
+
+# templates/bank/partials/accounting_table.html
+
+```html
+{% load accounting_filters %} {% for entry in entries %} <tr class="{% if entry.entry_type == 'credit' %}table-light{% endif %}"> <td>{{ entry.date|date:"Y-m-d" }}</td> <td>{{ entry.label }}</td> <td class="text-right text-danger"> {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %} </td> <td class="text-right text-success"> {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %} </td> <td>{{ entry.account_code }}</td> <td>{{ entry.reference }}</td> <td>{{ entry.journal_code }}</td> <td> {% if entry.source_type == 'presentation_receipt' %} <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')"> <i class="fas fa-eye"></i> </button> {% else %} <button class="btn btn-sm btn-info" onclick="viewReceipt('{{ entry.source_type }}', '{{ entry.source_id }}')"> <i class="fas fa-eye"></i> </button> {% endif %} </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No entries found for this period</td> </tr> {% endfor %}
 ```
 
 # templates/bank/partials/accounts_table.html
 
 ```html
-{% for account in accounts %} <tr> <td> <div class="d-flex align-items-center"> <span class="bank-logo {{ account.bank|lower }}"></span> <span class="ml-2">{{ account.get_bank_display }}</span> </div> </td> <td>{{ account.account_number }}</td> <td>{{ account.journal_number }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.account_type == 'national' %}badge-primary{% else %}badge-info{% endif %}"> {{ account.get_account_type_display }} </span> </td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td>{{ account.created_at|date:"d/m/Y" }}</td> <td> {% if account.is_active %} <button class="btn btn-sm btn-danger deactivate-account" data-account-id="{{ account.id }}" {% if account.has_active_checkers %}disabled{% endif %} title="{% if account.has_active_checkers %}Cannot deactivate: Has active checkers{% endif %}"> <i class="fas fa-times"></i> </button> {% endif %} </td> </tr> {% endfor %}
+{% load accounting_filters %} {% for account in accounts %} <tr> <td> <div class="d-flex align-items-center"> <span class="bank-logo {{ account.bank|lower }}"></span> <span class="ml-2">{{ account.get_bank_display }}</span> </div> </td> <td>{{ account.account_number }}</td> <td>{{ account.journal_number }}</td> <td>{{ account.city }}</td> <td> <span class="badge {% if account.account_type == 'national' %}badge-primary{% else %}badge-info{% endif %}"> {{ account.get_account_type_display }} </span> </td> <td> <span class="badge {% if account.is_active %}badge-success{% else %}badge-danger{% endif %}"> {{ account.is_active|yesno:"Active,Inactive" }} </span> </td> <td>{{ account.created_at|date:"d/m/Y" }}</td> <td> {% if account.is_active %} <button class="btn btn-sm btn-danger deactivate-account" data-account-id="{{ account.id }}" {% if account.has_active_checkers %}disabled{% endif %} title="{% if account.has_active_checkers %}Cannot deactivate: Has active checkers{% endif %}"> <i class="fas fa-times"></i> </button> {% endif %} </td> </tr> {% endfor %}
+```
+
+# templates/bank/partials/other_operations_table.html
+
+```html
+{% load accounting_filters %} {% for entry in entries %} {% if entry.entry_type == 'debit' %} {# Show only debit entries to avoid duplicates #} <tr> <td>{{ entry.date|date:"Y-m-d" }}</td> <td>{{ entry.label }}</td> <td> {% if "Payment" in entry.label %} <span class="badge badge-success">Paid</span> {% else %} <span class="badge badge-danger">Unpaid</span> {% endif %} </td> <td class="text-right text-danger"> {{ entry.debit|format_balance }} </td> <td class="text-right text-success"> {{ entry.credit|format_balance }} </td> <td>{{ entry.reference }}</td> <td> {% if entry.source_type == 'presentation_receipt' %} <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')"> <i class="fas fa-eye"></i> </button> {% else %} <button class="btn btn-sm btn-info" onclick="viewReceipt('{{ entry.source_type }}', '{{ entry.source_id }}')"> <i class="fas fa-eye"></i> </button> {% endif %} </td> </tr> {% endif %} {% empty %} <tr> <td colspan="7" class="text-center">No entries found for this period</td> </tr> {% endfor %}
+```
+
+# templates/bank/partials/statement_table.html
+
+```html
+{% load accounting_filters %} {% for entry in entries %} <tr class="record-row" data-record-id="{{ entry.source_id }}" data-type="{{ entry.type|lower }}"> <td> {% if entry.can_transfer %} <div class="custom-control custom-checkbox"> <input type="checkbox" class="custom-control-input record-checkbox" id="record{{ entry.source_id }}" data-amount="{{ entry.credit }}" data-source-type="{{ entry.source_type }}" data-source-id="{{ entry.source_id }}" data-date="{{ entry.date|date:'Y-m-d' }}" data-label="{{ entry.label }}" data-reference="{{ entry.reference }}"> <label class="custom-control-label" for="record{{ entry.source_id }}"></label> </div> {% endif %} {% if entry.is_transferred %} <span class="badge badge-info" title="Transferred"> <i class="fas fa-exchange-alt"></i> </span> {% endif %} </td> <td>{{ entry.date|date:"Y-m-d" }}</td> <td> {{ entry.label }} </td> <td> <span class="badge badge-{{ entry.type|lower }}"> {{ entry.type }} </span> </td> <td class="text-right text-danger"> {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %} </td> <td class="text-right text-success"> {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %} </td> <td>{{ entry.reference }}</td> <td class="text-right {% if entry.balance > 0 %}text-success{% else %}text-danger{% endif %}"> {{ entry.balance|format_balance }} </td> <td> <!-- Add a toggle button to show the details --> <button class="btn btn-sm btn-link toggle-details"> <i class="fas fa-chevron-down"></i> </button> <!-- Add your existing action buttons if needed --> {% if entry.can_delete %} {% if entry.type == 'BANK_FEE' %} <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')"> <i class="fas fa-trash"></i> </button> {% else %} <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')"> <i class="fas fa-trash"></i> </button> {% endif %} {% endif %} </td> </tr> <!-- The details row: hidden by default --> <tr class="details-row d-none" data-record-id="{{ entry.source_id }}"> <td colspan="9"> <div class="card"> <div class="card-body"> {% if entry.type == 'BANK_FEE' %} <!-- Bank fee details --> <div class="row"> <div class="col-md-3"> <strong>Fee Type:</strong><br> {{ entry.details.fee_type }} </div> <div class="col-md-3"> <strong>Raw Amount:</strong><br> {{ entry.details.raw_amount|format_balance }} </div> <div class="col-md-3"> <strong>VAT Rate:</strong><br> {{ entry.details.vat_rate }}% </div> <div class="col-md-3"> <strong>VAT Included:</strong><br> {{ entry.details.vat_included|yesno:"Yes,No" }} </div> </div> <div class="row mt-3"> <div class="col-md-4"> <strong>VAT Amount:</strong><br> {{ entry.details.vat_amount|format_balance }} </div> <div class="col-md-4"> <strong>Total Amount:</strong><br> {{ entry.details.total_amount|format_balance }} </div> <div class="col-md-4"> <strong>Related Presentation:</strong><br> {{ entry.details.related_presentation|default:"None" }} </div> </div> {% elif entry.type == 'CASH' %} <div class="row"> <div class="col-md-3"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-3"> <strong>Client:</strong><br> {{ entry.client_name }} </div> <div class="col-md-3"> <strong>Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-3"> <strong>Operation Date:</strong><br> {{ entry.operation_date|date:"Y-m-d" }} </div> </div> {% elif entry.type == 'TRANSFER' %} <div class="row"> <div class="col-md-4"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-4"> <strong>Transfer Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-4"> <strong>Transfer Date:</strong><br> {{ entry.transfer_date|date:"Y-m-d" }} </div> </div> {% elif 'CHECK' in entry.type or 'LCN' in entry.type %} <div class="row"> <div class="col-md-3"> <strong>Entity:</strong><br> {{ entry.entity_name }} </div> <div class="col-md-3"> <strong>Due Date:</strong><br> {{ entry.due_date|date:"Y-m-d" }} </div> <div class="col-md-3"> <strong>Reference:</strong><br> {{ entry.reference }} </div> <div class="col-md-3"> <strong>Status:</strong><br> <span class="badge badge-{{ entry.status|lower }}"> {{ entry.status }} </span> </div> </div> {% endif %} </div> </div> </td> </tr> {% empty %} <tr> <td colspan="9" class="text-center">No entries found</td> </tr> {% endfor %}
 ```
 
 # templates/base.html
@@ -1351,10 +2257,6 @@ class ClientSale(BaseModel):
 {% extends 'base.html' %} {% load presentation_filters %} {% load accounting_filters %} {% block content %} {% csrf_token %} <div class="container-fluid"> <!-- Header Section --> <div class="d-flex justify-content-between align-items-center mb-4"> <h2>Presentations</h2> <div class="btn-group"> <button class="btn btn-primary dropdown-toggle" data-toggle="dropdown"> <i class="fas fa-plus"></i> New Presentation </button> <div class="dropdown-menu dropdown-menu-right"> <a class="dropdown-item" href="#" onclick="startPresentation('check')"> <i class="fas fa-money-check"></i> Present Checks </a> <a class="dropdown-item" href="#" onclick="startPresentation('lcn')"> <i class="fas fa-file-invoice-dollar"></i> Present LCNs </a> </div> </div> </div> <!-- Presentations Table --> <div class="table-responsive"> <table class="table table-hover"> <thead> <tr> <th>Date</th> <th>Type</th> <th>Bank Account</th> <th>Bank Reference</th> <th class="text-right" style="min-width: 120px;">Total Amount</th> <th>Receipt Count</th> <th>Status</th> <th>Actions</th> </tr> </thead> <tbody> {% for presentation in presentations %} <tr> <td>{{ presentation.date|date:"Y-m-d" }}</td> <td>{{ presentation.get_presentation_type_display }}</td> <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td> <td>{{ presentation.bank_reference|default:"-" }}</td> <td class="text-right" style="min-width: 120px;">{{ presentation.total_amount|format_balance }}</td> <td class="text-center">{{ presentation.receipt_count }}</td> <td> <span class="badge badge-{{ presentation.status|status_badge }}"> {{ presentation.get_status_display }} </span> </td> <td> <div class="btn-group"> <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')"> <i class="fas fa-eye"></i> </button> <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')" {% if presentation.status == 'paid' %}disabled{% endif %}> <i class="fas fa-edit"></i> </button> <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')" {% if presentation.status != 'pending' %}disabled{% endif %}> <i class="fas fa-trash"></i> </button> </div> </td> </tr> {% empty %} <tr> <td colspan="8" class="text-center">No presentations found</td> </tr> {% endfor %} </tbody> </table> </div> </div> <!-- Create/Edit Presentation Modal --> <div class="modal fade" id="presentationModal" tabindex="-1"> <div class="modal-dialog modal-xl"> <div class="modal-content"> <div class="modal-header"> <h5 class="modal-title"> <span id="modalTitleText">Create Presentation</span> </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <form id="presentationForm"> <!-- Step indicator --> <div class="mb-4"> <div class="progress"> <div class="progress-bar" role="progressbar" style="width: 0%"></div> </div> <div class="d-flex justify-content-between mt-2"> <span class="step-indicator active">1. Basic Info</span> <span class="step-indicator">2. Select Receipts</span> <span class="step-indicator">3. Review</span> </div> </div> <!-- Step 1: Basic Info --> <div id="step1" class="step-content"> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Presentation Type</label> <select class="form-control" id="presentationType" required> <option value="COLLECTION">Collection</option> <option value="DISCOUNT">Discount</option> </select> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Bank Account</label> <select class="form-control" id="bankAccount" required> {% for account in bank_accounts %} <option value="{{ account.id }}"> {{ account.bank }} - {{ account.account_number }} </option> {% endfor %} </select> </div> </div> </div> <div class="row"> <div class="col-md-6"> <div class="form-group"> <label>Date</label> <input type="date" class="form-control" id="presentationDate" value="{% now 'Y-m-d' %}" required> </div> </div> <div class="col-md-6"> <div class="form-group"> <label>Notes</label> <textarea class="form-control" id="presentationNotes" rows="1"></textarea> </div> </div> </div> </div> <!-- Discount Line Information (Only shown if type is DISCOUNT) --> <div class="discount-info d-none mb-3"> <h6 class="card-subtitle mb-3">Discount Line Information</h6> <div class="row"> <div class="col-md-3"> <div class="card text-white bg-info mb-3"> <div class="card-body"> <h5 class="card-title">Total Discount Line</h5> <p class="card-text"> <span id="totalDiscountLine">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-success mb-3"> <div class="card-body"> <h5 class="card-title">Used Amount</h5> <p class="card-text"> <span id="usedDiscountAmount">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-warning mb-3"> <div class="card-body"> <h5 class="card-title">Available Amount</h5> <p class="card-text"> <span id="availableDiscountAmount">0.00</span> MAD </p> </div> </div> </div> <div class="col-md-3"> <div class="card text-white bg-primary mb-3"> <div class="card-body"> <h5 class="card-title">Selected Amount</h5> <p class="card-text"> <span id="selectedDiscountAmount">0.00</span> MAD </p> </div> </div> </div> </div> <div class="alert alert-danger d-none" id="discountLineExceededAlert"> The selected amount exceeds the available discount line. </div> </div> <!-- Step 2: Receipt Selection --> <div id="step2" class="step-content d-none"> <div class="receipt-selection-container"> <!-- Receipts will be loaded here --> </div> </div> <!-- Step 3: Review --> <div id="step3" class="step-content d-none"> <div class="review-summary"> <!-- Summary will be populated dynamically --> </div> </div> </form> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button> <button type="button" class="btn btn-info" id="prevStep" style="display: none"> <i class="fas fa-arrow-left"></i> Previous </button> <button type="button" class="btn btn-primary" id="nextStep"> Next <i class="fas fa-arrow-right"></i> </button> <button type="button" class="btn btn-success" id="savePresentation" style="display: none"> <i class="fas fa-save"></i> Create Presentation </button> </div> </div> </div> </div> <!-- View Presentation Modal --> <div class="modal fade" id="viewPresentationModal" tabindex="-1"> <div class="modal-dialog modal-lg"> <div class="modal-content"> <!-- Content will be loaded dynamically --> </div> </div> </div> {% endblock %} {% block extra_js %} <script> var bankAccountsList = [ {value: '', label: 'Select Bank Account'}, {% for account in bank_accounts %} { value: "{{ account.id }}", label: "{{ account.get_bank_display }} - {{ account.account_number }}" }{% if not forloop.last %},{% endif %} {% endfor %} ]; function showError(error) { console.error(error); alert('An error occurred: ' + error); } function showSuccess(message) { console.log(message); alert('Succes!: ' + message); } const PresentationManager = { currentStep: 1, totalSteps: 3, receiptType: null, selectedReceipts: [], init() { this.bindEvents(); this.setupValidation(); }, discountInfo: { available: 0, total: 0, used: 0, selected: 0 }, async loadDiscountInfo(bankAccountId) { if (!bankAccountId) return; try { const response = await fetch(`/testapp/presentations/discount-info/${bankAccountId}/?type=${this.receiptType}`); const data = await response.json(); this.discountInfo = { available: parseFloat(data.available_amount), total: parseFloat(data.total_amount), used: parseFloat(data.used_amount), selected: 0 }; this.updateDiscountDisplay(); NumberFormatter.updateDiscountDisplay(); } catch (error) { console.error('Failed to load discount information:', error); } }, updateDiscountDisplay() { const discountCard = $('.discount-info'); const presentationType = $('#presentationType').val(); if (presentationType === 'DISCOUNT') { discountCard.removeClass('d-none'); $('#totalDiscountLine').text(this.discountInfo.total.toFixed(2)); $('#usedDiscountAmount').text(this.discountInfo.used.toFixed(2)); $('#availableDiscountAmount').text(this.discountInfo.available.toFixed(2)); $('#selectedDiscountAmount').text(this.discountInfo.selected.toFixed(2)); const exceededAlert = $('#discountLineExceededAlert'); if (this.discountInfo.selected > this.discountInfo.available) { exceededAlert.removeClass('d-none'); $('#nextStep, #savePresentation').prop('disabled', true); } else { exceededAlert.addClass('d-none'); this.validateCurrentStep(); } } else { discountCard.addClass('d-none'); } }, bindEvents() { $('#nextStep').on('click', () => this.nextStep()); $('#prevStep').on('click', () => this.previousStep()); $('#savePresentation').on('click', () => this.savePresentation()); }, setupValidation() { $('#presentationForm input[required], #presentationForm select[required]') .on('input change', () => this.validateCurrentStep()); $('#presentationType, #bankAccount').on('change', () => { if ($('#presentationType').val() === 'DISCOUNT') { this.loadDiscountInfo($('#bankAccount').val()); } else { $('.discount-info').addClass('d-none'); } }); }, startPresentation(type) { this.receiptType = type; this.currentStep = 1; this.selectedReceipts = []; // Update modal title $('#modalTitleText').text(`Create ${type.toUpperCase()} Presentation`); // Reset form $('#presentationForm')[0].reset(); // Show first step this.showStep(1); // Show modal $('#presentationModal').modal('show'); }, async loadAvailableReceipts() { try { const response = await $.get('/testapp/presentations/available-receipts/', { type: this.receiptType, presentation_type: $('#presentationType').val() }); $('.receipt-selection-container').html(response.html); this.initializeReceiptSelection(); } catch (error) { showError('Failed to load available receipts'); } }, initializeReceiptSelection() { $('.receipt-checkbox').on('change', () => { this.updateSelectionSummary(); if ($('#presentationType').val() === 'DISCOUNT') { this.discountInfo.selected = Array.from($('.receipt-checkbox:checked')) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); this.updateDiscountDisplay(); NumberFormatter.updateDiscountDisplay(); } }); $('#selectAll').on('change', (e) => { $('.receipt-checkbox').prop('checked', e.target.checked); this.updateSelectionSummary(); if ($('#presentationType').val() === 'DISCOUNT') { this.discountInfo.selected = e.target.checked ? Array.from($('.receipt-checkbox')) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0) : 0; this.updateDiscountDisplay(); NumberFormatter.updateDiscountDisplay(); } }); }, updateSelectionSummary() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); $('#selectedCount').text(count); $('#selectedAmount').text(total.toFixed(2)); // Enable/disable next button based on selection $('#nextStep').prop('disabled', count === 0); }, validateCurrentStep() { let isValid = true; if (this.currentStep === 1) { // Check required fields in step 1 $('#step1 [required]').each(function() { if (!$(this).val()) { isValid = false; return false; // break } }); } else if (this.currentStep === 2) { // Check if at least one receipt is selected isValid = $('.receipt-checkbox:checked').length > 0; } $('#nextStep').prop('disabled', !isValid); return isValid; }, updateProgressBar() { const progress = ((this.currentStep - 1) / (this.totalSteps - 1)) * 100; $('.progress-bar').css('width', `${progress}%`); // Update step indicators $('.step-indicator').removeClass('active'); $(`.step-indicator:nth-child(${this.currentStep})`).addClass('active'); }, showStep(step) { $('.step-content').addClass('d-none'); $(`#step${step}`).removeClass('d-none'); // Update buttons $('#prevStep').toggle(step > 1); $('#nextStep').toggle(step < this.totalSteps); $('#savePresentation').toggle(step === this.totalSteps); // Load receipts if moving to step 2 if (step === 2) { this.loadAvailableReceipts(); } else if (step === 3) { this.showReviewStep(); } this.currentStep = step; this.updateProgressBar(); this.validateCurrentStep(); }, showReviewStep() { const selected = $('.receipt-checkbox:checked'); const count = selected.length; const total = Array.from(selected) .reduce((sum, cb) => sum + parseFloat($(cb).data('amount')), 0); const summary = ` <div class="card"> <div class="card-body"> <h6 class="card-subtitle mb-2 text-muted">Presentation Summary</h6> <dl class="row mb-0"> <dt class="col-sm-4">Type</dt> <dd class="col-sm-8">${$('#presentationType option:selected').text()}</dd> <dt class="col-sm-4">Bank Account</dt> <dd class="col-sm-8">${$('#bankAccount option:selected').text()}</dd> <dt class="col-sm-4">Date</dt> <dd class="col-sm-8">${$('#presentationDate').val()}</dd> <dt class="col-sm-4">Receipts</dt> <dd class="col-sm-8">${count} ${this.receiptType}(s)</dd> <dt class="col-sm-4">Total Amount</dt> <dd class="col-sm-8">${total.toFixed(2)} MAD</dd> </dl> </div> </div> `; $('.review-summary').html(summary); }, nextStep() { if (this.validateCurrentStep()) { this.showStep(this.currentStep + 1); } }, previousStep() { if (this.currentStep > 1) { this.showStep(this.currentStep - 1); } }, async savePresentation() { try { const data = { presentation_type: $('#presentationType').val(), date: $('#presentationDate').val(), bank_account: $('#bankAccount').val(), notes: $('#presentationNotes').val(), receipt_type: this.receiptType, receipt_ids: $('.receipt-checkbox:checked').map(function() { return $(this).val(); }).get() }; console.log('Sending data:', data); const response = await $.ajax({ url: '/testapp/presentations/create/', method: 'POST', contentType: 'application/json', data: JSON.stringify(data) }); if (response.status === 'success') { $('#presentationModal').modal('hide'); showSuccess('Presentation created successfully'); location.reload(); } else { showError(response.message); } } catch (error) { console.error('Creation error:', error); const errorMessage = error.responseJSON?.message || 'Failed to create presentation'; showError(errorMessage); } }, }; class PresentationFilters { constructor() { console.log('PresentationFilters', 'Initializing filters'); this.currentFilters = {}; this.createFilterUI(); this.initializeFilters(); } getFilterConfig() { return [ { type: 'presentation_type', icon: 'tag', label: 'Type', col: 3, isSelect: true, options: [ {value: '', label: 'All Types'}, {value: 'COLLECTION', label: 'Collection'}, {value: 'DISCOUNT', label: 'Discount'} ] }, { type: 'bank_account', icon: 'university', label: 'Bank Account', col: 3, isSelect: true, options: [ {value: '', label: 'All Banks'}, ...bankAccountsList ] }, { type: 'bank_reference', icon: 'hashtag', label: 'Bank Reference', col: 3 }, { type: 'date_from', icon: 'calendar', label: 'Date From', col: 3, isDate: true }, { type: 'date_to', icon: 'calendar', label: 'Date To', col: 3, isDate: true }, { type: 'receipt_number', icon: 'receipt', label: 'Receipt Number', col: 3 } ]; } createFilterUI() { console.log('PresentationFilters', 'Creating filter UI'); const filters = this.getFilterConfig(); let filterElements = []; filters.forEach(filter => { filterElements.push(this.createFilterElement(filter)); }); const filterHtml = ` <div class="card mb-4" id="presentation-filters"> <div class="card-header d-flex justify-content-between align-items-center bg-light"> <h6 class="mb-0">Filters</h6> <div class="btn-group"> <button type="button" class="btn btn-outline-secondary btn-sm" id="presentation-reset-filters"> <i class="fas fa-undo me-1"></i>Reset </button> <button type="button" class="btn btn-outline-primary btn-sm" id="presentation-toggle-filters"> <i class="fas fa-filter me-1"></i>Hide Filters </button> </div> </div> <div class="card-body filter-content"> <div class="row g-3"> ${filterElements.join('')} </div> </div> </div>`; $('.table-responsive').before(filterHtml); // Set up toggle button $('#presentation-toggle-filters').click(() => { const $button = $('#presentation-toggle-filters'); const $content = $button.closest('.card').find('.filter-content'); $content.slideToggle(); $button.html( $content.is(':visible') ? '<i class="fas fa-filter me-1"></i>Hide Filters' : '<i class="fas fa-filter me-1"></i>Show Filters' ); }); // Set up reset button $('#presentation-reset-filters').click(() => { this.resetFilters(); }); } createFilterElement(filter) { console.log('Creating filter element:', filter); if (filter.isSelect) { return ` <div class="col-md-${filter.col}"> <div class="form-floating"> <select class="form-control" id="presentation-${filter.type}-filter"> ${filter.options.map(opt => ` <option value="${opt.value}">${opt.label}</option> `).join('')} </select> <label> <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label} </label> </div> </div>`; } else if (filter.isDate) { return ` <div class="col-md-${filter.col}"> <div class="form-floating"> <input type="date" class="form-control" id="presentation-${filter.type}-filter"> <label> <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label} </label> </div> </div>`; } return ` <div class="col-md-${filter.col}"> <div class="form-floating"> <input type="text" class="form-control" id="presentation-${filter.type}-filter"> <label> <i class="fas fa-${filter.icon} text-primary me-2"></i>${filter.label} </label> </div> </div>`; } initializeFilters() { console.log('PresentationFilters', 'Initializing filter handlers'); const filters = this.getFilterConfig(); filters.forEach(filter => { const elementId = `#presentation-${filter.type}-filter`; if (filter.isSelect || filter.isDate) { $(elementId).on('change', () => { const value = $(elementId).val(); console.log('Filter', `${filter.type} changed:`, value); this.updateFilter(filter.type, value); }); if (filter.isDate) { $(elementId).on('blur', () => { if (!$(elementId).val()) { console.log('Filter', `${filter.type} input emptied on blur`); this.updateFilter(filter.type, ''); } }); } } else { let timeout; $(elementId).on('input', (e) => { clearTimeout(timeout); timeout = setTimeout(() => { console.log('Filter', `${filter.type} input:`, e.target.value); this.updateFilter(filter.type, e.target.value); }, 300); }); $(elementId).on('blur', (e) => { if (!e.target.value) { console.log('Filter', `${filter.type} input emptied on blur`); this.updateFilter(filter.type, ''); } }); } }); } updateFilter(type, value) { console.log('Filter', `Updating ${type} filter with value:`, value); if (value === '' || value === null || value === undefined) { console.log('Filter', `Removing ${type} filter due to empty value`); delete this.currentFilters[type]; } else { console.log('Filter', `Setting ${type} filter to:`, value); this.currentFilters[type] = value; } console.log('Filter', 'Current filters state:', this.currentFilters); this.applyFilters(); } applyFilters() { console.log('PresentationFilters', 'Applying filters:', this.currentFilters); $.get('/testapp/presentations/filter/', this.currentFilters) .done(response => { console.log('PresentationFilters', 'Filter response received'); $('.table-responsive tbody').html(response.html); }) .fail(error => { console.error('Filter error:', error); }); } resetFilters() { console.log('PresentationFilters', 'Resetting all filters'); const filters = this.getFilterConfig(); filters.forEach(filter => { const $element = $(`#presentation-${filter.type}-filter`); if ($element.is('select')) { $element.val('').trigger('change'); } else { $element.val('').trigger('blur'); } }); this.currentFilters = {}; this.applyFilters(); } } const NumberFormatter = { formatCurrency: (amount) => { return new Intl.NumberFormat('fr-MA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount); }, updateDiscountDisplay: function() { ['totalDiscountLine', 'usedDiscountAmount', 'availableDiscountAmount', 'selectedDiscountAmount'].forEach(id => { const element = document.getElementById(id); if (element) { const value = parseFloat(element.textContent); if (!isNaN(value)) { element.textContent = this.formatCurrency(value); } } }); } } async function viewPresentation(id) { try { const response = await $.get(`/testapp/presentations/${id}/`); $('#viewPresentationModal .modal-content').html(response); $('#viewPresentationModal').modal('show'); } catch (error) { showError('Failed to load presentation details'); } } async function editPresentation(id) { try { const data = { bank_reference: $('#bankReference').val(), status: $('#presentationStatus').val(), notes: $('#presentationNotes').val() // If you have this field }; console.log('Sending edit request:', { id: id, data: data, url: `/testapp/presentations/${id}/edit/` }); const response = await fetch(`/testapp/presentations/${id}/edit/`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, body: JSON.stringify(data) }); const responseData = await response.json(); console.log('Edit response:', responseData); if (!response.ok) { throw new Error(responseData.message || 'Failed to edit presentation'); } showSuccess('Presentation updated successfully'); $('#viewPresentationModal').modal('hide'); location.reload(); } catch (error) { console.error('Edit error:', error); showError(error.message || 'Failed to edit presentation'); } } async function deletePresentation(id) { console.log('Delete initiated for presentation:', id); try { if (!confirm('Are you sure you want to delete this presentation?')) { console.log('Delete cancelled by user'); return; } const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; console.log('CSRF token obtained:', csrfToken ? 'Yes' : 'No'); const response = await fetch(`/testapp/presentations/${id}/delete/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken, 'Content-Type': 'application/json' } }); console.log('Delete response status:', response.status); const data = await response.json(); console.log('Delete response data:', data); if (response.ok) { showSuccess('Presentation deleted successfully'); location.reload(); } else { throw new Error(data.message || 'Failed to delete presentation'); } } catch (error) { console.error('Delete error:', error); showError(error.message || 'Failed to delete presentation'); } } // Initialize on document ready $(document).ready(function() { PresentationManager.init(); window.presentationFilters = new PresentationFilters(); }); // Global function to start presentation creation function startPresentation(type) { PresentationManager.startPresentation(type); } // Handle receipt status updates $(document).on('click', '.update-receipt-status', function() { const $button = $(this); const receiptId = $button.data('receipt-id'); if (!confirm('This action cannot be undone. Continue?')) { return; } console.log('Updating receipt status:', receiptId); $.ajax({ url: `/testapp/presentations/${presentationId}/edit/`, method: 'POST', headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }, contentType: 'application/json', data: JSON.stringify({ receipt_id: receiptId, receipt_status: 'paid' }), success: function(response) { console.log('Status updated:', response); $button.prop('disabled', true).text('Paid'); }, error: function(xhr) { console.error('Update failed:', xhr.responseText); showToast('Failed to update status', 'error'); } }); }); </script> {% endblock %}
 ```
 
-```html
-{% extends 'base.html' %} {% block title %}Profile{% endblock %} {% block content %} <h1>Profile Page</h1> <p>First Name: {{ user.first_name }}</p> <p>Last Name: {{ user.last_name }}</p> <p>Email: {{ user.email }}</p> {% endblock %}
-```
-
 # templates/receipt/partials/cash_list.html
 
 ```html
@@ -1396,6 +2298,7 @@ class ClientSale(BaseModel):
 ```html
 {% load accounting_filters %} <!-- templates/receipt/receipt_timeline_modal.html --> <div class="modal-header"> <h5 class="modal-title"> {% if receipt.check_number %} <i class="fas fa-money-check me-2"></i>Check #{{ receipt.check_number }} {% else %} <i class="fas fa-file-invoice-dollar me-2"></i>LCN #{{ receipt.lcn_number }} {% endif %} History </h5> <button type="button" class="close" data-dismiss="modal">&times;</button> </div> <div class="modal-body"> <!-- Receipt Summary --> <div class="card mb-4"> <div class="card-body"> <div class="row"> <div class="col-md-6"> <p><strong>Entity:</strong> {{ receipt.entity.name }}</p> <p><strong>Client:</strong> {{ receipt.client.name }}</p> <p><strong>Amount:</strong> {{ receipt.amount|format_balance }}</p> </div> <div class="col-md-6"> <p><strong>Status:</strong> <span class="badge badge-{{ receipt.status|lower }}"> {{ receipt.get_status_display }} </span> </p> <p><strong>Created:</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p> <p><strong>Due Date:</strong> {{ receipt.due_date|date:"d/m/Y" }}</p> </div> </div> </div> </div> <!-- Timeline --> <div class="timeline"> {% for event in history %} <div class="timeline-item"> <div class="timeline-marker {% if event.action == 'status_changed' %}bg-primary {% elif event.action == 'presented' %}bg-info {% elif event.action == 'compensated' %}bg-warning {% elif event.action == 'compensation_paid' %}bg-success {% else %}bg-secondary{% endif %}"> </div> <div class="timeline-content"> <div class="d-flex justify-content-between"> <h6 class="mb-0">{{ event.get_action_display }}</h6> <small class="text-muted">{{ event.timestamp|date:"d/m/Y H:i" }}</small> </div> <p class="mb-0">{{ event.notes }}</p> {% if event.action == 'status_changed' %} <small class="text-muted"> Changed from <span class="badge badge-{{ event.old_value.status|lower }}"> {{ event.old_value.status|default_if_none:""|get_status_display }} </span> to <span class="badge badge-{{ event.new_value.status|lower }}"> {{ event.new_value.status|default_if_none:""|get_status_display }} </span> </small> {% endif %} {% if event.user %} <small class="text-muted d-block">by {{ event.user.get_full_name|default:event.user.username }}</small> {% endif %} </div> </div> {% empty %} <p class="text-center text-muted">No history available</p> {% endfor %} </div> </div> <div class="modal-footer"> <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button> </div> <style> .timeline { position: relative; padding-left: 3rem; margin-bottom: 3rem; } .timeline::before { content: ''; position: absolute; left: 11px; top: 0; height: 100%; width: 2px; background-color: #e9ecef; } .timeline-item { position: relative; margin-bottom: 2rem; } .timeline-marker { position: absolute; left: -3rem; width: 24px; height: 24px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 2px #e9ecef; } .timeline-content { background: #f8f9fa; border-radius: 0.3rem; padding: 1rem; position: relative; } .timeline-content::before { content: ''; position: absolute; left: -0.5rem; top: 0.75rem; width: 0.5rem; height: 0.5rem; background: inherit; transform: rotate(45deg); } /* Status Badge Colors */ .badge-portfolio { background-color: #6c757d; color: white; } .badge-presented { background-color: #17a2b8; color: white; } .badge-presented_discount { background-color: #e437d3; color: white; } .badge-paid { background-color: #28a745; color: white; } .badge-discounted { background-color: #1032dc; color: white; } .badge-unpaid { background-color: #dc3545; color: white; } .badge-compensated { background-color: #fd7e14; color: white; } </style>
 ```
+
 
 # templatetags/accounting_filters.py
 
@@ -1623,7 +2526,7 @@ from . import views
 from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
     BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView,
-    bank_account_autocomplete
+    bank_account_autocomplete, BankFeeCreateView, BankFeeDeleteView, PresentationAutocompleteView
 )
 
 from .views_receipts import (
@@ -1650,6 +2553,14 @@ from .views_presentation import (
     PresentationDetailView, AvailableReceiptsView, DiscountInfoView, PresentationFilterView
 )
 
+from .views_statement import (
+    BankStatementView, AccountingView, OtherOperationsView
+)
+
+from .views_transfer import (
+    CreateTransferView, DeleteTransferView
+)
+
 
 urlpatterns = [
 
@@ -1662,6 +2573,30 @@ urlpatterns = [
     path('bank-accounts/filter/', 
          BankAccountFilterView.as_view(), name='bank-account-filter'),
     path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
+
+    # Bank Statement URLs
+    path('bank-accounts/<uuid:pk>/statement/', 
+         BankStatementView.as_view(), name='bank-statement'),
+    path('bank-accounts/<uuid:pk>/accounting/', 
+         AccountingView.as_view(), name='bank-accounting'),
+    path('bank-accounts/<uuid:pk>/other-operations/', 
+         OtherOperationsView.as_view(), name='other-operations'),
+
+    # Transfer URLs
+    path('bank-accounts/transfers/create/', 
+         CreateTransferView.as_view(), name='create-transfer'),
+    path('bank-accounts/transfers/<uuid:pk>/delete/', 
+         DeleteTransferView.as_view(), name='delete-transfer'),
+
+    # Bank Fees
+    path('bank-accounts/fees/create/', 
+         BankFeeCreateView.as_view(), name='create-bank-fee'),
+    path('bank-accounts/fees/<uuid:pk>/delete/', 
+         BankFeeDeleteView.as_view(), name='delete-bank-fee'),
+    path('presentations/autocomplete/', 
+         PresentationAutocompleteView.as_view(), name='presentation-autocomplete'),
+
+
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -1715,6 +2650,8 @@ urlpatterns = [
     path('presentations/discount-info/<uuid:bank_account_id>/', 
         DiscountInfoView.as_view(), name='presentation-discount-info'),
     path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
+
+
     
 
 ]
@@ -1729,11 +2666,13 @@ from django.views.generic import ListView, View
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.template.loader import render_to_string
-from .models import BankAccount
+from .models import BankAccount, BankFeeTransaction, Presentation
 from django.contrib import messages
 import json
 from django.core.exceptions import ValidationError
 from decimal import Decimal
+from django.db import transaction
+from django.db.models import Q
 
 class BankAccountListView(ListView):
     model = BankAccount
@@ -1979,6 +2918,80 @@ def bank_account_autocomplete(request):
         for account in accounts
     ]
     return JsonResponse(results, safe=False)
+
+class BankFeeCreateView(View):
+    """Handle creation of bank fee transactions"""
+    
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            with transaction.atomic():
+                # Create fee transaction
+                fee = BankFeeTransaction.objects.create(
+                    bank_account_id=data['bank_account'],
+                    fee_type_id=data['fee_type'],
+                    date=data['date'],
+                    related_presentation_id=data.get('related_presentation'),
+                    raw_amount=Decimal(str(data['raw_amount'])),
+                    vat_rate=Decimal(str(data['vat_rate'])) if data['vat_rate'] else None,
+                    vat_included=data['vat_included'],
+                    vat_amount=Decimal(str(data.get('vat_amount', '0.00'))),
+                    total_amount=Decimal(str(data.get('total_amount', '0.00')))
+                )
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Bank fee recorded successfully',
+                    'id': str(fee.id)
+                })
+                
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class BankFeeDeleteView(View):
+    """Handle deletion of bank fee transactions"""
+    
+    def post(self, request, pk):
+        try:
+            with transaction.atomic():
+                fee = get_object_or_404(BankFeeTransaction, pk=pk)
+                fee.delete()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Bank fee deleted successfully'
+                })
+                
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class PresentationAutocompleteView(View):
+    """Autocomplete for presentation references"""
+    
+    def get(self, request):
+        try:
+            term = request.GET.get('term', '')
+            presentations = Presentation.objects.filter(
+                Q(bank_reference__icontains=term) |
+                Q(id__icontains=term)
+            ).order_by('-date')[:10]
+            
+            results = [{
+                'id': str(pres.id),
+                'text': f"{pres.bank_reference or f'Pres. #{pres.id}'} ({pres.date})"
+            } for pres in presentations]
+            
+            return JsonResponse({'results': results})
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
 ```
 
 # views_client.py
@@ -2229,97 +3242,6 @@ def client_autocomplete(request):
     return JsonResponse(results, safe=False)
 ```
 
-# views_credit_notes.py
-
-```py
-from django.views import View
-from django.http import JsonResponse
-from .models import Invoice, InvoiceProduct, Product
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
-import json
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import csrf_exempt
-
-
-class CreditNoteDetailsView(View):
-    def get(self, request, invoice_id):
-        print("Credit note details requested for invoice:", invoice_id) 
-        invoice = get_object_or_404(Invoice, id=invoice_id)
-        credited_quantities = invoice.get_credited_quantities()
-        available_quantities = invoice.get_available_quantities()
-        
-        products = []
-        for item in invoice.products.all():
-            products.append({
-                'id': str(item.product.id),
-                'name': item.product.name,
-                'original_quantity': item.quantity,
-                'credited_quantity': credited_quantities.get(item.product.id, 0),
-                'available_quantity': available_quantities.get(item.product.id, 0),
-                'unit_price': float(item.unit_price)
-            })
-
-        return JsonResponse({
-            'invoice': {
-                'ref': invoice.ref,
-                'date': invoice.date.strftime('%Y-%m-d'),
-                'total_amount': float(invoice.total_amount),
-                'credited_amount': float(invoice.total_amount - invoice.net_amount)
-            },
-            'products': products
-        })
-    
-@method_decorator(csrf_exempt, name='dispatch')
-class CreateCreditNoteView(View):
-    def post(self, request):
-        try:
-            print("Received POST request for creating credit note")
-            data = json.loads(request.body)
-            print("Received data:", data)
-            original_invoice = get_object_or_404(Invoice, id=data['original_invoice_id'])
-            print("Original Invoice:", original_invoice)
-
-            # Check for duplicate reference
-            if Invoice.objects.filter(ref=data['ref']).exists():
-                return JsonResponse(
-                    {'error': 'Credit note reference already exists'}, 
-                    status=400
-                )
-            
-            # Create credit note
-            credit_note = Invoice.objects.create(
-                type='credit_note',
-                original_invoice=original_invoice,
-                supplier=original_invoice.supplier,
-                ref=data['ref'],
-                date=data['date'],
-                status='draft'
-            )
-
-            # Add products
-            for product_data in data['products']:
-                product = get_object_or_404(Product, id=product_data['product_id'])
-                original_item = original_invoice.products.get(product=product)
-                
-                InvoiceProduct.objects.create(
-                    invoice=credit_note,
-                    product=product,
-                    quantity=product_data['quantity'],
-                    unit_price=original_item.unit_price,
-                    reduction_rate=original_item.reduction_rate,
-                    vat_rate=original_item.vat_rate
-                )
-
-            return JsonResponse({
-                'message': 'Credit note created successfully',
-                'credit_note_id': str(credit_note.id)
-            })
-
-        except Exception as e:
-            return JsonResponse({'error': str(e)}, status=400)
-```
-
 # views_entity.py
 
 ```py
@@ -2514,13 +3436,13 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 from decimal import Decimal
 from django.utils import timezone
-from django.db.models import Q
 
 class PresentationListView(ListView):
     """
@@ -3776,6 +4698,282 @@ class ReceiptFilterView(View):
         context['bank_accounts'] = bank_accounts
         return context
 
+```
+
+# views_statement.py
+
+```py
+from django.views import View
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from django.template.loader import render_to_string
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from .models import BankAccount, BankStatement, AccountingEntry, BankFeeType
+import json
+from decimal import Decimal
+from django.db.models import Q
+from datetime import datetime, date
+import calendar
+
+class BankStatementView(View):
+    """View for displaying bank statements"""
+    def get(self, request, pk):
+        try:
+            bank_account = get_object_or_404(BankAccount, pk=pk)
+            
+            # Get filter parameters or set defaults
+            today = date.today()
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+
+            if not start_date and not end_date:
+                # Set to first and last day of current month
+                start_date = date(today.year, today.month, 1)
+                end_date = date(today.year, today.month, 
+                              calendar.monthrange(today.year, today.month)[1])
+            else:
+                # Convert string dates to date objects if provided
+                if start_date:
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                if end_date:
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            # Get statement entries
+            entries = BankStatement.get_statement(
+                bank_account=bank_account,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            # Calculate totals just once
+            total_debit = sum(entry['debit'] or 0 for entry in entries)
+            total_credit = sum(entry['credit'] or 0 for entry in entries)
+            final_balance = total_credit - total_debit  # Changed to use the calculation instead of last entry
+
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                return JsonResponse({
+                    'html': render_to_string(
+                        'bank/partials/statement_table.html',
+                        {
+                            'entries': entries,
+                            'total_debit': total_debit,
+                            'total_credit': total_credit,
+                            'final_balance': final_balance
+                        },
+                        request=request
+                    ),
+                    'totals': {
+                        'debit': str(total_debit),
+                        'credit': str(total_credit),
+                        'balance': str(final_balance)
+                    }
+                })
+            
+            # Get additional data for full page render
+            context = {
+                'bank_account': bank_account,
+                'entries': entries,
+                'bank_accounts': BankAccount.objects.filter(is_active=True).exclude(id=bank_account.id),
+                'fee_types': BankFeeType.objects.all(),
+                'total_debit': total_debit,
+                'total_credit': total_credit,
+                'final_balance': final_balance
+            }
+            
+            return render(request, 'bank/bank_statement.html', context)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+class AccountingView(View):
+    """View for displaying accounting entries"""
+    def get(self, request, pk):
+        try:
+            bank_account = get_object_or_404(BankAccount, pk=pk)
+            
+            # Get filter parameters
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            
+            # Get accounting entries
+            entries = AccountingEntry.get_entries(
+                bank_account=bank_account,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            context = {
+                'bank_account': bank_account,
+                'entries': entries,
+                'total_debit': sum(entry['debit'] or 0 for entry in entries),
+                'total_credit': sum(entry['credit'] or 0 for entry in entries)
+            }
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                html = render_to_string(
+                    'bank/partials/accounting_table.html',
+                    context,
+                    request=request
+                )
+                return JsonResponse({'html': html})
+            
+            return render(request, 'bank/accounting.html', context)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+class OtherOperationsView(View):
+    """View for displaying other operations (discounted receipts)"""
+    def get(self, request, pk):
+        try:
+            bank_account = get_object_or_404(BankAccount, pk=pk)
+            
+            # Get filter parameters
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            
+            # Get accounting entries filtered for journal code '06'
+            entries = AccountingEntry.get_entries(
+                bank_account=bank_account,
+                start_date=start_date,
+                end_date=end_date
+            )
+            
+            # Filter for other operations (journal code '06')
+            entries = [e for e in entries if e['journal_code'] == '06']
+            
+            context = {
+                'bank_account': bank_account,
+                'entries': entries,
+                'total_debit': sum(entry['debit'] or 0 for entry in entries),
+                'total_credit': sum(entry['credit'] or 0 for entry in entries)
+            }
+            
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                html = render_to_string(
+                    'bank/partials/other_operations_table.html',
+                    context,
+                    request=request
+                )
+                return JsonResponse({'html': html})
+            
+            return render(request, 'bank/other_operations.html', context)
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+```
+
+# views_transfer.py
+
+```py
+# views_transfer.py
+
+from django.views import View
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from .models import InterBankTransfer, TransferredRecord, BankAccount
+import json
+from decimal import Decimal
+from django.db import transaction
+from django.template.loader import render_to_string
+from django.core.exceptions import ValidationError
+
+class CreateTransferView(View):
+    """Handle creation of interbank transfers"""
+    
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            
+            with transaction.atomic():
+                # Validate basic data
+                from_bank = get_object_or_404(BankAccount, id=data['from_bank'])
+                to_bank = get_object_or_404(BankAccount, id=data['to_bank'])
+                
+                if from_bank == to_bank:
+                    raise ValidationError("Cannot transfer to the same bank account")
+                    
+                # Create the transfer
+                total_amount = Decimal('0.00')
+                records_to_transfer = data['records']
+                
+                # Validate records are available for transfer
+                for record in records_to_transfer:
+                    if TransferredRecord.objects.filter(
+                        source_type=record['source_type'],
+                        source_id=record['source_id']
+                    ).exists():
+                        raise ValidationError(f"Record {record['source_id']} has already been transferred")
+                    
+                    total_amount += Decimal(str(record['amount']))
+                
+                # Create transfer
+                transfer = InterBankTransfer.objects.create(
+                    from_bank=from_bank,
+                    to_bank=to_bank,
+                    date=data['date'],
+                    label=data.get('label', 'Interbank Transfer'),
+                    total_amount=total_amount
+                )
+                
+                # Create transferred records
+                for record in records_to_transfer:
+                    TransferredRecord.objects.create(
+                        transfer=transfer,
+                        source_type=record['source_type'],
+                        source_id=record['source_id'],
+                        amount=Decimal(str(record['amount'])),
+                        original_date=record['date'],
+                        original_label=record['label'],
+                        original_reference=record['reference']
+                    )
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Transfer created successfully',
+                    'transfer_id': str(transfer.id)
+                })
+                
+        except ValidationError as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Failed to create transfer: {str(e)}'
+            }, status=500)
+
+class DeleteTransferView(View):
+    """Handle deletion of interbank transfers"""
+    
+    def post(self, request, pk):
+        try:
+            with transaction.atomic():
+                transfer = get_object_or_404(InterBankTransfer, pk=pk)
+                
+                # Get all transferred records before deletion
+                transferred_records = transfer.transferred_records.all()
+                
+                # Delete the transferred records to remove the "transferred" status
+                transferred_records.delete()
+                
+                # Soft delete the transfer
+                transfer.is_deleted = True
+                transfer.save()
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Transfer deleted successfully'
+                })
+                
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': f'Failed to delete transfer: {str(e)}'
+            }, status=500)
 ```
 
 # views.py

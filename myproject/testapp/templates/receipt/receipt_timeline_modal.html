@@ -48,7 +48,12 @@
             <div class="timeline-content">
                 <div class="d-flex justify-content-between">
                     <h6 class="mb-0">{{ event.get_action_display }}</h6>
-                    <small class="text-muted">{{ event.timestamp|date:"d/m/Y H:i" }}</small>
+                    <small class="text-muted">
+                        {{ event.business_date|default:event.timestamp|date:"d/m/Y H:i" }}
+                        {% if event.business_date %}
+                            <br><span class="text-secondary">(Recorded: {{ event.timestamp|date:"d/m/Y H:i" }})</span>
+                        {% endif %}
+                    </small>
                 </div>
                 <p class="mb-0">{{ event.notes }}</p>
                 {% if event.action == 'status_changed' %}

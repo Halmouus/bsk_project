@@ -8,6 +8,8 @@ from .models import BankAccount, BankStatement, AccountingEntry, BankFeeType
 import json
 from decimal import Decimal
 from django.db.models import Q
+from datetime import datetime, date
+import calendar
 
 class BankStatementView(View):
     """View for displaying bank statements"""
@@ -15,16 +17,22 @@ class BankStatementView(View):
         try:
             bank_account = get_object_or_404(BankAccount, pk=pk)
             
-            # Get filter parameters
+            # Get filter parameters or set defaults
+            today = date.today()
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
 
-            # Convert string dates to datetime.date objects if they exist
-            from datetime import datetime
-            if start_date:
-                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-            if end_date:
-                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            if not start_date and not end_date:
+                # Set to first and last day of current month
+                start_date = date(today.year, today.month, 1)
+                end_date = date(today.year, today.month, 
+                              calendar.monthrange(today.year, today.month)[1])
+            else:
+                # Convert string dates to date objects if provided
+                if start_date:
+                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                if end_date:
+                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
             
             # Get statement entries
             entries = BankStatement.get_statement(
@@ -33,27 +41,23 @@ class BankStatementView(View):
                 end_date=end_date
             )
             
-            # Calculate totals just once
-            total_debit = sum(entry['debit'] or 0 for entry in entries)
-            total_credit = sum(entry['credit'] or 0 for entry in entries)
-            final_balance = total_credit - total_debit  # Changed to use the calculation instead of last entry
+             # Calculate totals excluding opening balance
+            total_debit = sum(entry['debit'] or 0 for entry in entries if entry['type'] != 'BALANCE')
+            total_credit = sum(entry['credit'] or 0 for entry in entries if entry['type'] != 'BALANCE')
+            # Final balance comes from the first entry (they're sorted in reverse)
+            final_balance = entries[0]['balance'] if entries else Decimal('0.00')
 
             if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
                 return JsonResponse({
                     'html': render_to_string(
                         'bank/partials/statement_table.html',
-                        {
-                            'entries': entries,
-                            'total_debit': total_debit,
-                            'total_credit': total_credit,
-                            'final_balance': final_balance
-                        },
+                        {'entries': entries},
                         request=request
                     ),
                     'totals': {
-                        'debit': str(total_debit),
-                        'credit': str(total_credit),
-                        'balance': str(final_balance)
+                        'debit': total_debit,
+                        'credit': total_credit,
+                        'balance': final_balance
                     }
                 })
             

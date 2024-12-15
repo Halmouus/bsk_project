@@ -80,100 +80,7 @@
             </thead>
             <tbody id="statementTableBody">
                 {% for entry in entries %}
-                {% if entry.type == 'BANK_FEE' %}
-                <tr class="fee-row" data-fee-id="{{ entry.source_id }}">
-                    <td>
-                        {% if entry.can_transfer %}
-                        <div class="custom-control custom-checkbox">
-                            <input type="checkbox" class="custom-control-input record-checkbox" 
-                                id="record{{ entry.source_id }}"
-                                data-amount="{{ entry.credit }}"
-                                data-source-type="{{ entry.source_type }}"
-                                data-source-id="{{ entry.source_id }}"
-                                data-date="{{ entry.date|date:'Y-m-d' }}"
-                                data-label="{{ entry.label }}"
-                                data-reference="{{ entry.reference }}">
-                            <label class="custom-control-label" for="record{{ entry.source_id }}"></label>
-                        </div>
-                        {% endif %}
-                        {% if entry.is_transferred %}
-                        <span class="badge badge-info" title="Transferred">
-                            <i class="fas fa-exchange-alt"></i>
-                        </span>
-                        {% endif %}
-                    </td>
-                    <td>{{ entry.date|date:"Y-m-d" }}</td>
-                    <td>
-                        {{ entry.label }}
-                        {% if entry.is_expandable %}
-                        <button class="btn btn-sm btn-link toggle-fee-details">
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="badge badge-warning">
-                            {{ entry.type }}
-                        </span>
-                    </td>
-                    <td class="text-right text-danger">{{ entry.debit|format_balance }}</td>
-                    <td class="text-right text-success">{{ entry.credit|format_balance }}</td>
-                    <td>{{ entry.reference }}</td>
-                    <td class="text-right">{{ entry.balance|format_balance }}</td>
-                    <td>
-                        <div class="btn-group">
-                            {% if entry.can_delete %}
-                            <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                            {% endif %}
-                        </div>
-                    </td>
-                </tr>
-                {% if entry.is_expandable %}
-                <tr class="fee-details-row d-none" data-fee-id="{{ entry.source_id }}">
-                    <td colspan="8">
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <strong>Fee Type:</strong><br>
-                                        {{ entry.details.fee_type }}
-                                    </div>
-                                    <div class="col-md-3">
-                                        <strong>Raw Amount:</strong><br>
-                                        {{ entry.details.raw_amount|format_balance }}
-                                    </div>
-                                    <div class="col-md-3">
-                                        <strong>VAT Rate:</strong><br>
-                                        {{ entry.details.vat_rate }}%
-                                    </div>
-                                    <div class="col-md-3">
-                                        <strong>VAT Included:</strong><br>
-                                        {{ entry.details.vat_included|yesno:"Yes,No" }}
-                                    </div>
-                                </div>
-                                <div class="row mt-3">
-                                    <div class="col-md-4">
-                                        <strong>VAT Amount:</strong><br>
-                                        {{ entry.details.vat_amount|format_balance }}
-                                    </div>
-                                    <div class="col-md-4">
-                                        <strong>Total Amount:</strong><br>
-                                        {{ entry.details.total_amount|format_balance }}
-                                    </div>
-                                    <div class="col-md-4">
-                                        <strong>Related Presentation:</strong><br>
-                                        {{ entry.details.related_presentation|default:"None" }}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-                {% endif %}
-                {% else %}
-                <tr>
+                <tr class="record-row" data-record-id="{{ entry.display_id|default:entry.source_id }}" data-type="{{ entry.type|lower }}">
                     <td>
                         {% if entry.can_transfer %}
                         <div class="custom-control custom-checkbox">
@@ -197,9 +104,7 @@
                     <td>{{ entry.date|date:"Y-m-d" }}</td>
                     <td>{{ entry.label }}</td>
                     <td>
-                        <span class="badge badge-{{ entry.type|lower }}">
-                            {{ entry.type }}
-                        </span>
+                        <span class="badge badge-{{ entry.type|lower }}">{{ entry.type }}</span>
                     </td>
                     <td class="text-right text-danger">
                         {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}
@@ -212,6 +117,12 @@
                         {{ entry.balance|format_balance }}
                     </td>
                     <td>
+                        <!-- Add the toggle button for details -->
+                        <button class="btn btn-sm btn-link toggle-details" title="Show Details">
+                            <i class="fas fa-chevron-down"></i>
+                        </button>
+            
+                        <!-- Existing action buttons -->
                         <div class="btn-group">
                             {% if entry.can_delete %}
                                 {% if entry.type == 'BANK_FEE' %}
@@ -224,26 +135,119 @@
                                     </button>
                                 {% endif %}
                             {% endif %}
-                            {% if entry.source_type == 'presentation_receipt' %}
-                            <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                            {% else %}
-                            <button class="btn btn-sm btn-info" 
-                                    onclick="viewReceipt('{{ entry.source_type }}', '{{ entry.source_id }}')">
-                                <i class="fas fa-eye"></i>
-                            </button>
-                            {% endif %}
                         </div>
                     </td>
                 </tr>
-                {% endif %}
+            
+                <!-- The details row -->
+                <tr class="details-row d-none" data-record-id="{{ entry.display_id|default:entry.source_id }}">
+                    <td colspan="9">
+                        <div class="card">
+                            <div class="card-body">
+                                {% if entry.type == 'BANK_FEE' %}
+                                    <!-- Existing bank fee details here -->
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <strong>Fee Type:</strong><br>
+                                            {{ entry.details.fee_type }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Raw Amount:</strong><br>
+                                            {{ entry.details.raw_amount|format_balance }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>VAT Rate:</strong><br>
+                                            {{ entry.details.vat_rate }}%
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>VAT Included:</strong><br>
+                                            {{ entry.details.vat_included|yesno:"Yes,No" }}
+                                        </div>
+                                    </div>
+                                    <div class="row mt-3">
+                                        <div class="col-md-4">
+                                            <strong>VAT Amount:</strong><br>
+                                            {{ entry.details.vat_amount|format_balance }}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Total Amount:</strong><br>
+                                            {{ entry.details.total_amount|format_balance }}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Related Presentation:</strong><br>
+                                            {{ entry.details.related_presentation|default:"None" }}
+                                        </div>
+                                    </div>
+            
+                                {% elif entry.type == 'CASH' %}
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <strong>Entity:</strong><br>
+                                            {{ entry.entity_name }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Client:</strong><br>
+                                            {{ entry.client_name }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Reference:</strong><br>
+                                            {{ entry.reference }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Operation Date:</strong><br>
+                                            {{ entry.operation_date|date:"Y-m-d" }}
+                                        </div>
+                                    </div>
+            
+                                {% elif entry.type == 'TRANSFER' %}
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <strong>Entity:</strong><br>
+                                            {{ entry.entity_name }}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Transfer Reference:</strong><br>
+                                            {{ entry.reference }}
+                                        </div>
+                                        <div class="col-md-4">
+                                            <strong>Transfer Date:</strong><br>
+                                            {{ entry.transfer_date|date:"Y-m-d" }}
+                                        </div>
+                                    </div>
+            
+                                {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
+                                    <div class="row">
+                                        <div class="col-md-3">
+                                            <strong>Entity:</strong><br>
+                                            {{ entry.entity_name }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Due Date:</strong><br>
+                                            {{ entry.due_date|date:"Y-m-d" }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Reference:</strong><br>
+                                            {{ entry.reference }}
+                                        </div>
+                                        <div class="col-md-3">
+                                            <strong>Status:</strong><br>
+                                            <span class="badge badge-{{ entry.status|lower }}">
+                                                {{ entry.status }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
                 {% empty %}
                 <tr>
                     <td colspan="9" class="text-center">No entries found for this period</td>
                 </tr>
                 {% endfor %}
             </tbody>
+            
             
 
 <!-- Transfer Modal -->
@@ -433,6 +437,38 @@
 {% endblock %}
 
 <style>
+    .record-row {
+        cursor: pointer;
+    }
+
+    .record-row:hover {
+        background-color: rgba(0,0,0,.02);
+    }
+
+    .toggle-details {
+        padding: 0;
+        transition: transform 0.2s;
+    }
+
+    .toggle-details:focus {
+        outline: none;
+        box-shadow: none;
+    }
+
+    .details-row {
+        background-color: #f8f9fa;
+    }
+
+    .details-row .card {
+        border: none;
+        margin: 0;
+        box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .details-row strong {
+        color: #6c757d;
+        font-size: 0.875rem;
+    }
     /* Fee Row Styling */
     .fee-row {
         cursor: pointer;
@@ -555,6 +591,38 @@
 {% block extra_js %}
 <script>
 $(document).ready(function() {
+
+    function formatBalance(value) {
+        if (value == null || isNaN(value)) {
+            return '';
+        }
+
+        // Convert the value to a number with two decimal places
+        const formattedValue = parseFloat(value).toFixed(2);
+
+        // Split the value into the integer and decimal parts
+        const [intPart, decPart] = formattedValue.split('.');
+
+        // Format the integer part with spaces as thousand separators
+        const intWithSpaces = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+        // Return the formatted balance with dot as decimal separator
+        return `${intWithSpaces}.${decPart}`;
+    }
+
+
+    // Set default dates
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    $('#startDate').val(firstDay.toISOString().split('T')[0]);
+    $('#endDate').val(lastDay.toISOString().split('T')[0]);
+
+    // Trigger initial filter
+    $('#startDate').trigger('change');
+
+
     // ===== Bank Fee Management =====
     $('#addBankFee').click(function() {
         $('#feeDate').val(new Date().toISOString().split('T')[0]);
@@ -614,6 +682,38 @@ $(document).ready(function() {
 
     $('#rawAmount, #vatRate').on('input change', calculateAmounts);
     $('#vatIncluded').on('change', calculateAmounts);
+
+    $(document).on('click', '.toggle-details', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        const $row = $(this).closest('tr');
+        const $icon = $(this).find('i');
+        const recordId = $row.data('record-id');
+        const recordType = $row.data('type');
+        
+        // Create a unique identifier for unpaid entries
+        const detailsSelector = recordType.includes('REVERSAL') ? 
+            `[data-record-id="${recordId}-reversal"]` : 
+            `[data-record-id="${recordId}"]`;
+        
+        const $detailsRow = $(`.details-row${detailsSelector}`);
+        
+        console.log('Toggle details:', {
+            recordId,
+            recordType,
+            detailsSelector,
+            detailsRowFound: $detailsRow.length
+        });
+
+        // Toggle details with animation
+        if ($detailsRow.hasClass('d-none')) {
+            $detailsRow.removeClass('d-none');
+            $icon.removeClass('fa-chevron-down').addClass('fa-chevron-up');
+        } else {
+            $detailsRow.addClass('d-none');
+            $icon.removeClass('fa-chevron-up').addClass('fa-chevron-down');
+        }
+    });
 
     // ===== Fee Row Collapsing =====
     $(document).on('click', '.fee-row', function(e) {
@@ -708,7 +808,7 @@ $('#startDate, #endDate').on('change', function() {
             }
             
             if (response && response.totals) {
-                // Update summary cards using your format_balance filter
+                // Update summary cards using format_balance filter
                 $('#total-debit').text(formatBalance(response.totals.debit));
                 $('#total-credit').text(formatBalance(response.totals.credit));
                 
@@ -927,11 +1027,6 @@ function deleteTransfer(transferId) {
     });
 }
 
-function formatBalance(value) {
-    return new Intl.NumberFormat('fr-MA', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2
-    }).format(value);
-}
+
 </script>
 {% endblock %}

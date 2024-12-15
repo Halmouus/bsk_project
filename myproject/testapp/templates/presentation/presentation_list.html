@@ -617,30 +617,33 @@ class PresentationFilters {
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="presentation-reset-filters">
                             <i class="fas fa-undo me-1"></i>Reset
                         </button>
-                        <button type="button" class="btn btn-outline-primary btn-sm" id="presentation-toggle-filters">
-                            <i class="fas fa-filter me-1"></i>Hide Filters
+                        <button type="button" class="btn btn-outline-primary btn-sm toggle-filters">
+                            <i class="fas fa-filter me-1"></i>Show Filters
                         </button>
                     </div>
                 </div>
-                <div class="card-body filter-content">
+                <div class="card-body filter-content" style="display: none;">
                     <div class="row g-3">
                         ${filterElements.join('')}
                     </div>
                 </div>
             </div>`;
 
+        // Insert before the table-responsive div instead of using tab
         $('.table-responsive').before(filterHtml);
 
         // Set up toggle button
-        $('#presentation-toggle-filters').click(() => {
-            const $button = $('#presentation-toggle-filters');
-            const $content = $button.closest('.card').find('.filter-content');
-            $content.slideToggle();
-            $button.html(
-                $content.is(':visible') 
-                ? '<i class="fas fa-filter me-1"></i>Hide Filters'
-                : '<i class="fas fa-filter me-1"></i>Show Filters'
-            );
+        $('#presentation-filters .toggle-filters').click(() => {
+            const $content = $('#presentation-filters .filter-content');
+            const $button = $('#presentation-filters .toggle-filters');
+            
+            $content.slideToggle(300, () => {
+                $button.html(
+                    $content.is(':visible') ? 
+                    '<i class="fas fa-filter me-1"></i>Hide Filters' : 
+                    '<i class="fas fa-filter me-1"></i>Show Filters'
+                );
+            });
         });
 
         // Set up reset button
@@ -648,6 +651,7 @@ class PresentationFilters {
             this.resetFilters();
         });
     }
+    
 
     createFilterElement(filter) {
         console.log('Creating filter element:', filter);
