@@ -3,12 +3,13 @@
 from django.views import View
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from .models import InterBankTransfer, TransferredRecord, BankAccount
+from .models import InterBankTransfer, TransferredRecord, BankAccount, BankStatement
 import json
 from decimal import Decimal
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 
 class CreateTransferView(View):
     """Handle creation of interbank transfers"""
@@ -38,6 +39,11 @@ class CreateTransferView(View):
                         raise ValidationError(f"Record {record['source_id']} has already been transferred")
                     
                     total_amount += Decimal(str(record['amount']))
+
+                # Check available balance
+                current_balance = BankStatement.calculate_balance_until(from_bank, timezone.now().date())
+                if current_balance < total_amount:
+                    raise ValidationError(f"Insufficient balance. Available: {current_balance}, Required: {total_amount}")
                 
                 # Create transfer
                 transfer = InterBankTransfer.objects.create(

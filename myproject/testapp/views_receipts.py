@@ -724,6 +724,14 @@ class ReceiptFilterView(View):
             if issuing_bank:
                 print(f"Filtered by bank {issuing_bank}: {list(queryset.values_list('issuing_bank', flat=True))}")
 
+            bank_issued_to = request.GET.get('bank_issued_to')
+            if bank_issued_to:
+                if receipt_type == 'checks':
+                    filters &= Q(check_presentations__presentation__bank_account_id=bank_issued_to)
+                elif receipt_type == 'lcns':
+                    filters &= Q(lcn_presentations__presentation__bank_account_id=bank_issued_to)
+                print(f"Applied bank_issued_to filter: {bank_issued_to}")
+
             # Historical status filter
             historical_status = request.GET.get('historical_status')
             if historical_status:

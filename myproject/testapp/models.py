@@ -2139,7 +2139,16 @@ class BankStatement(models.Model):
                 'source_type': 'cash_receipt',
                 'source_id': receipt.id,
                 'can_transfer': True,
-                'is_transferred': False
+                'is_transferred': False,
+                'entity': {
+                    'name': receipt.entity.name,
+                    'ice_code': receipt.entity.ice_code
+                },
+                'client': {
+                    'name': receipt.client.name,
+                    'client_code': receipt.client.client_code
+                },
+                'operation_date': receipt.operation_date
             })
             
         # Get transfer receipts
@@ -2158,7 +2167,17 @@ class BankStatement(models.Model):
                 'source_type': 'transfer_receipt',
                 'source_id': receipt.id,
                 'can_transfer': True,
-                'is_transferred': False
+                'is_transferred': False,
+                'entity': {
+                    'name': receipt.entity.name,
+                    'ice_code': receipt.entity.ice_code
+                },
+                'client': {
+                    'name': receipt.client.name,
+                    'client_code': receipt.client.client_code
+                },
+                'operation_date': receipt.operation_date,
+                'transfer_date': receipt.transfer_date
             })
 
         # Get presentations
@@ -2187,7 +2206,21 @@ class BankStatement(models.Model):
                             'source_type': 'presentation_receipt',
                             'source_id': pr.id,
                             'can_transfer': True,
-                            'is_transferred': False
+                            'is_transferred': False,
+                            'entity': {
+                                'name': receipt.entity.name,
+                                'ice_code': receipt.entity.ice_code
+                            },
+                            'client': {
+                                'name': receipt.client.name,
+                                'client_code': receipt.client.client_code
+                            },
+                            'due_date': receipt.due_date,
+                            'issuing_bank_display': receipt.get_issuing_bank_display(),
+                            'presentation_reference': pres.bank_reference,
+                            'status': receipt.status if hasattr(receipt, 'status') else None,
+                            'rejection_cause': getattr(receipt, 'rejection_cause', None),
+                            'rejection_cause_display': receipt.get_rejection_cause_display() if hasattr(receipt, 'get_rejection_cause_display') else None
                         })
                 
                 # For discount presentations
@@ -2203,7 +2236,21 @@ class BankStatement(models.Model):
                         'source_type': 'presentation_receipt',
                         'source_id': pr.id,
                         'can_transfer': True,
-                        'is_transferred': False
+                        'is_transferred': False,
+                        'entity': {
+                            'name': receipt.entity.name,
+                            'ice_code': receipt.entity.ice_code
+                        },
+                        'client': {
+                            'name': receipt.client.name,
+                            'client_code': receipt.client.client_code
+                        },
+                        'due_date': receipt.due_date,
+                        'issuing_bank_display': receipt.get_issuing_bank_display(),
+                        'presentation_reference': pres.bank_reference,
+                        'status': receipt.status if hasattr(receipt, 'status') else None,
+                        'rejection_cause': getattr(receipt, 'rejection_cause', None),
+                        'rejection_cause_display': receipt.get_rejection_cause_display() if hasattr(receipt, 'get_rejection_cause_display') else None
                     }
                     entries.append(discount_entry)
 
@@ -2242,7 +2289,20 @@ class BankStatement(models.Model):
                             'display_id': f"{pr.id}-reversal",  # Add new field for frontend 
                             'can_transfer': False,
                             'is_transferred': False,
-                            'discount_reference': discount_entry['reference']  # Link to original discount
+                            'discount_reference': discount_entry['reference'],  # Link to original discount
+                            'entity': {
+                                'name': receipt.entity.name,
+                                'ice_code': receipt.entity.ice_code
+                            },
+                            'client': {
+                                'name': receipt.client.name,
+                                'client_code': receipt.client.client_code
+                            },
+                            'issuing_bank_display': receipt.get_issuing_bank_display(),
+                            'due_date': receipt.due_date,
+                            'status': receipt.status,
+                            'rejection_cause': receipt.rejection_cause,
+                            'rejection_cause_display': receipt.get_rejection_cause_display() if hasattr(receipt, 'get_rejection_cause_display') else None
                         }
                         entries.append(reversal_entry)
 
@@ -2264,7 +2324,9 @@ class BankStatement(models.Model):
                 'source_id': transfer.id,
                 'can_delete': True,
                 'can_transfer': False,
-                'is_transferred': False
+                'is_transferred': False,
+                'from_bank': transfer.from_bank,
+                'to_bank': transfer.to_bank
             })
             
         # Add incoming transfer records
@@ -2286,7 +2348,9 @@ class BankStatement(models.Model):
                     'source_id': record.id,
                     'can_delete': False,
                     'can_transfer': True,
-                    'is_transferred': False
+                    'is_transferred': False,
+                    'from_bank': transfer.from_bank,
+                    'to_bank': transfer.to_bank
                 })
 
         # Check for transferred status

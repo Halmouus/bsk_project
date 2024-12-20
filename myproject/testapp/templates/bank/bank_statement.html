@@ -80,7 +80,9 @@
             </thead>
             <tbody id="statementTableBody">
                 {% for entry in entries %}
-                <tr class="record-row" data-record-id="{{ entry.display_id|default:entry.source_id }}" data-type="{{ entry.type|lower }}">
+                <tr class="record-row {% if entry.type != 'BALANCE' %}hoverable{% endif %}" 
+                    data-record-id="{{ entry.display_id|default:entry.source_id }}" 
+                    data-type="{{ entry.type|lower }}">
                     <td>
                         {% if entry.can_transfer %}
                         <div class="custom-control custom-checkbox">
@@ -118,9 +120,11 @@
                     </td>
                     <td>
                         <!-- Add the toggle button for details -->
-                        <button class="btn btn-sm btn-link toggle-details" title="Show Details">
-                            <i class="fas fa-chevron-down"></i>
-                        </button>
+                        {% if entry.type != 'BALANCE' %}
+                            <button class="btn btn-sm btn-link toggle-details" title="Show Details">
+                                <i class="fas fa-chevron-down"></i>
+                            </button>
+                        {% endif %}
             
                         <!-- Existing action buttons -->
                         <div class="btn-group">
@@ -181,59 +185,173 @@
             
                                 {% elif entry.type == 'CASH' %}
                                     <div class="row">
-                                        <div class="col-md-3">
-                                            <strong>Entity:</strong><br>
-                                            {{ entry.entity_name }}
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                                            </div>
                                         </div>
-                                        <div class="col-md-3">
-                                            <strong>Client:</strong><br>
-                                            {{ entry.client_name }}
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                                <div class="detail-value">{{ entry.client.name }}</div>
+                                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                                            </div>
                                         </div>
-                                        <div class="col-md-3">
-                                            <strong>Reference:</strong><br>
-                                            {{ entry.reference }}
-                                        </div>
-                                        <div class="col-md-3">
-                                            <strong>Operation Date:</strong><br>
-                                            {{ entry.operation_date|date:"Y-m-d" }}
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                                <div class="detail-value">{{ entry.operation_date|date:"Y-m-d" }}</div>
+                                            </div>
                                         </div>
                                     </div>
-            
                                 {% elif entry.type == 'TRANSFER' %}
                                     <div class="row">
-                                        <div class="col-md-4">
-                                            <strong>Entity:</strong><br>
-                                            {{ entry.entity_name }}
+                                        <div class="col-md-3">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                                            </div>
                                         </div>
-                                        <div class="col-md-4">
-                                            <strong>Transfer Reference:</strong><br>
-                                            {{ entry.reference }}
+                                        <div class="col-md-3">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                                <div class="detail-value">{{ entry.client.name }}</div>
+                                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                                            </div>
                                         </div>
-                                        <div class="col-md-4">
-                                            <strong>Transfer Date:</strong><br>
-                                            {{ entry.transfer_date|date:"Y-m-d" }}
+                                        <div class="col-md-3">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                                <div class="detail-value">{{ entry.operation_date|date:"Y-m-d" }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-3">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-calendar-check me-2"></i>Transfer Date</div>
+                                                <div class="detail-value">{{ entry.transfer_date|date:"Y-m-d" }}</div>
+                                            </div>
                                         </div>
                                     </div>
-            
+                                {% elif entry.type == 'INTERBANK_TRANSFER_OUT' or entry.type == 'INTERBANK_TRANSFER_IN' %}
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-university me-2"></i>From Bank</div>
+                                                <div class="detail-value">{{ entry.from_bank.bank }} - {{ entry.from_bank.account_number }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-university me-2"></i>To Bank</div>
+                                                <div class="detail-value">{{ entry.to_bank.bank }} - {{ entry.to_bank.account_number }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                                <div class="detail-value">{{ entry.date|date:"Y-m-d" }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                {% elif 'REVERSAL' in entry.type %}
+                                    <div class="row">
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                                <div class="detail-value">{{ entry.client.name }}</div>
+                                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-university me-2"></i>Issuing Bank</div>
+                                                <div class="detail-value">{{ entry.issuing_bank_display }}</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-3">
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-hashtag me-2"></i>Reference</div>
+                                                <div class="detail-value">{{ entry.reference }}</div>
+                                                <small class="text-muted">Original Discount: {{ entry.discount_reference }}</small>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Due Date</div>
+                                                <div class="detail-value">{{ entry.due_date|date:"Y-m-d" }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="detail-item">
+                                                <div class="detail-label"><i class="fas fa-info-circle me-2"></i>Status</div>
+                                                <div class="detail-value">
+                                                    <span class="badge badge-{{ entry.status|lower }}">{{ entry.status }}</span>
+                                                    {% if entry.rejection_cause %}
+                                                        <br><small class="text-danger mt-1">{{ entry.rejection_cause_display }}</small>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                                     <div class="row">
-                                        <div class="col-md-3">
-                                            <strong>Entity:</strong><br>
-                                            {{ entry.entity_name }}
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <strong>Entity:</strong><br>
+                                                {{ entry.entity.name }} ({{ entry.entity.ice_code }})
+                                            </div>
+                                            <div class="mb-3">
+                                                <strong>Client:</strong><br>
+                                                {{ entry.client.name }} ({{ entry.client.client_code }})
+                                            </div>
+                                            <div class="mb-3">
+                                                <strong>Due Date:</strong><br>
+                                                {{ entry.due_date|date:"Y-m-d" }}
+                                            </div>
                                         </div>
-                                        <div class="col-md-3">
-                                            <strong>Due Date:</strong><br>
-                                            {{ entry.due_date|date:"Y-m-d" }}
-                                        </div>
-                                        <div class="col-md-3">
-                                            <strong>Reference:</strong><br>
-                                            {{ entry.reference }}
-                                        </div>
-                                        <div class="col-md-3">
-                                            <strong>Status:</strong><br>
-                                            <span class="badge badge-{{ entry.status|lower }}">
-                                                {{ entry.status }}
-                                            </span>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <strong>Issuing Bank:</strong><br>
+                                                {{ entry.issuing_bank_display }}
+                                            </div>
+                                            <div class="mb-3">
+                                                <strong>Operation Details:</strong><br>
+                                                {% if entry.type == 'CHECK_DISCOUNT' or entry.type == 'LCN_DISCOUNT' %}
+                                                    Discount Date: {{ entry.date|date:"Y-m-d" }}<br>
+                                                    {% if entry.presentation_reference %}
+                                                        Presentation: {{ entry.presentation_reference }}
+                                                    {% endif %}
+                                                {% elif entry.type == 'CHECK_COLLECTION' or entry.type == 'LCN_COLLECTION' %}
+                                                    Collection Date: {{ entry.date|date:"Y-m-d" }}<br>
+                                                    {% if entry.presentation_reference %}
+                                                        Presentation: {{ entry.presentation_reference }}
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+                                            {% if entry.status %}
+                                            <div class="mb-3">
+                                                <strong>Status:</strong><br>
+                                                <span class="badge badge-{{ entry.status|lower }}">
+                                                    {{ entry.status }}
+                                                </span>
+                                                {% if entry.rejection_cause %}
+                                                    <br><small class="text-danger">{{ entry.rejection_cause_display }}</small>
+                                                {% endif %}
+                                            </div>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 {% endif %}
@@ -256,8 +374,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-exchange-alt me-2"></i>
-                    Create Interbank Transfer
+                    <i class="fas fa-exchange-alt me-2"></i> Create Interbank Transfer
                 </h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
@@ -292,12 +409,22 @@
                                 <div class="col-md-4">
                                     <div class="form-group">
                                         <label>Label</label>
-                                        <input type="text" class="form-control" id="transferLabel" 
-                                               value="Interbank Transfer">
+                                        <input type="text" class="form-control" id="transferLabel" value="Interbank Transfer">
                                     </div>
                                 </div>
                             </div>
                         </div>
+                    </div>
+
+                    <!-- Balance Information -->
+                    <div class="card mb-3">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">Balance Information</h6>
+                            <div id="balanceAmount" class="text-primary">
+                                Available: {{ bank_account.get_current_balance|format_balance }} MAD
+                            </div>
+                        </div>
+                        <div class="card-body" id="balanceInfo"></div>
                     </div>
 
                     <!-- Selected Records -->
@@ -312,6 +439,10 @@
                             <div id="selectedRecordsList" class="list-group list-group-flush">
                                 <!-- Will be populated by JavaScript -->
                             </div>
+                            <div id="balanceWarning" class="alert alert-danger mt-3" style="display: none;">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                Selected amount exceeds available balance
+                            </div>
                         </div>
                     </div>
                 </form>
@@ -319,8 +450,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="saveTransfer">
-                    <i class="fas fa-save me-2"></i>
-                    Create Transfer
+                    <i class="fas fa-save me-2"></i> Create Transfer
                 </button>
             </div>
         </div>
@@ -586,6 +716,86 @@
         font-size: 0.75rem;
         letter-spacing: 0.025em;
     }
+
+    #balanceWarning {
+        transition: all 0.3s ease-in-out;
+    }
+
+    .badge {
+        font-size: 0.875rem;
+        padding: 0.5em 0.75em;
+    }
+
+    .list-group-item {
+        transition: background-color 0.2s ease;
+    }
+
+    .list-group-item:hover {
+        background-color: #f8f9fa;
+    }
+
+    #balanceInfo {
+        font-size: 0.95rem;
+        padding: 1rem;
+    }
+
+    #balanceAmount {
+        font-weight: 600;
+
+    
+    }
+
+    .details-card {
+        border: none;
+        box-shadow: inset 0 2px 8px rgba(0,0,0,0.05);
+        background-color: #f8f9fa;
+        margin: 0;
+    }
+
+    .detail-item {
+        padding: 0.75rem;
+        border-radius: 0.5rem;
+        background-color: white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        height: 100%;
+        transition: transform 0.2s ease;
+    }
+
+    .detail-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+    }
+
+    .detail-label {
+        color: #6c757d;
+        font-size: 0.875rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .detail-value {
+        font-size: 1rem;
+        font-weight: 500;
+    }
+
+    .hoverable {
+        cursor: pointer;
+    }
+
+    .hoverable:hover {
+        background-color: rgba(0,0,0,0.02);
+    }
+
+    /* Badge styling */
+    .badge {
+        padding: 0.5em 0.75em;
+        font-weight: 500;
+    }
+
+    .badge-cash { background-color: #20c997; color: white; }
+    .badge-transfer { background-color: #0dcaf0; color: white; }
+    .badge-interbank_transfer_in { background-color: #0d6efd; color: white; }
+    .badge-interbank_transfer_out { background-color: #dc3545; color: white; }
 </style>
 
 {% block extra_js %}
@@ -874,12 +1084,44 @@ $('#statementFilterForm').on('submit', function(e) {
         $('.record-checkbox:not(:disabled)').prop('checked', this.checked).trigger('change');
     });
     
+    function formatCurrency(amount) {
+        return new Intl.NumberFormat('fr-MA', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(amount);
+    }
+
+    function checkBalanceAndUpdateUI(selectedAmount) {
+        const currentBalance = parseFloat($('#balanceAmount').text().replace(/[^\d.-]/g, ''));
+        const exceedsBalance = selectedAmount > currentBalance;
+        
+        $('#balanceWarning').toggle(exceedsBalance);
+        $('#saveTransfer').prop('disabled', exceedsBalance || selectedAmount === 0);
+        
+        // Update balance info
+        $('#balanceInfo').html(`
+            <div class="d-flex justify-content-between align-items-center">
+                <span class="text-muted">Selected Amount:</span>
+                <span class="${exceedsBalance ? 'text-danger' : 'text-success'} fw-bold">
+                    ${formatCurrency(selectedAmount)} MAD
+                </span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-2">
+                <span class="text-muted">Remaining Balance:</span>
+                <span class="${exceedsBalance ? 'text-danger' : 'text-success'} fw-bold">
+                    ${formatCurrency(currentBalance - selectedAmount)} MAD
+                </span>
+            </div>
+        `);
+    }
+
     function updateSelectionUI() {
         const totalAmount = Array.from(selectedRecords.values())
             .reduce((sum, record) => sum + parseFloat(record.amount), 0);
-            
+        
+        $('#selectedTotal').text(formatCurrency(totalAmount));
         $('#transferBtn').prop('disabled', selectedRecords.size === 0);
-        $('#selectedTotal').text(totalAmount.toFixed(2));
+        checkBalanceAndUpdateUI(totalAmount);
         
         const $list = $('#selectedRecordsList');
         $list.empty();
@@ -888,16 +1130,49 @@ $('#statementFilterForm').on('submit', function(e) {
             $list.append(`
                 <div class="list-group-item d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="font-weight-bold">${record.label}</div>
+                        <div class="fw-bold">${record.label}</div>
                         <small class="text-muted">
                             ${record.date} | Ref: ${record.reference}
                         </small>
                     </div>
-                    <span class="text-success">${parseFloat(record.amount).toFixed(2)} MAD</span>
+                    <span class="badge bg-success">${formatCurrency(record.amount)} MAD</span>
                 </div>
             `);
         });
     }
+
+    // Initialize transfer date to today when modal opens
+    $('#transferModal').on('show.bs.modal', function() {
+        const today = new Date().toISOString().split('T')[0];
+        $('#transferDate').val(today);
+    });
+
+    $('#selectedRecordsList').after(`
+    <div id="balanceWarning" class="alert alert-danger mt-3" style="display: none;">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        Selected amount exceeds available balance
+    </div>
+`);
+
+function checkBalanceAndUpdateUI(selectedAmount) {
+    const currentBalance = parseFloat('{{ bank_account.get_current_balance }}');
+    const exceedsBalance = selectedAmount > currentBalance;
+    
+    $('#balanceWarning').toggle(exceedsBalance);
+    $('#saveTransfer').prop('disabled', exceedsBalance);
+    
+    // Update UI to show current balance vs selected amount
+    $('#balanceInfo').html(`
+        <div class="d-flex justify-content-between text-muted mb-2">
+            <span>Current Balance:</span>
+            <span>${formatCurrency(currentBalance)}</span>
+        </div>
+        <div class="d-flex justify-content-between">
+            <span>Selected Amount:</span>
+            <span class="${exceedsBalance ? 'text-danger' : 'text-success'}">${formatCurrency(selectedAmount)}</span>
+        </div>
+    `);
+}
     
     $('#transferBtn').click(function() {
         $('#transferDate').val(new Date().toISOString().split('T')[0]);

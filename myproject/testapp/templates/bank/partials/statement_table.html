@@ -1,7 +1,9 @@
 {% load accounting_filters %} 
 
 {% for entry in entries %}
-<tr class="record-row" data-record-id="{{ entry.display_id|default:entry.source_id }}" data-type="{{ entry.type|lower }}">
+<tr class="record-row {% if entry.type != 'BALANCE' %}hoverable{% endif %}" 
+    data-record-id="{{ entry.display_id|default:entry.source_id }}" 
+    data-type="{{ entry.type|lower }}">
     <td>
         {% if entry.can_transfer %}
         <div class="custom-control custom-checkbox">
@@ -43,9 +45,11 @@
     </td>
     <td>
         <!-- Add a toggle button to show the details -->
-        <button class="btn btn-sm btn-link toggle-details">
-            <i class="fas fa-chevron-down"></i>
-        </button>
+        {% if entry.type != 'BALANCE' %}
+            <button class="btn btn-sm btn-link toggle-details" title="Show Details">
+                <i class="fas fa-chevron-down"></i>
+            </button>
+        {% endif %}
 
         <!-- Add your existing action buttons if needed -->
         {% if entry.can_delete %}
@@ -103,82 +107,172 @@
                     </div>
                 {% elif entry.type == 'CASH' %}
                     <div class="row">
-                        <div class="col-md-3">
-                            <strong>Entity:</strong><br>
-                            {{ entry.entity_name }}
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Client:</strong><br>
-                            {{ entry.client_name }}
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                <div class="detail-value">{{ entry.client.name }}</div>
+                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Reference:</strong><br>
-                            {{ entry.reference }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Operation Date:</strong><br>
-                            {{ entry.operation_date|date:"Y-m-d" }}
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                <div class="detail-value">{{ entry.operation_date|date:"Y-m-d" }}</div>
+                            </div>
                         </div>
                     </div>
                 {% elif entry.type == 'TRANSFER' %}
                     <div class="row">
+                        <div class="col-md-3">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                <div class="detail-value">{{ entry.client.name }}</div>
+                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                <div class="detail-value">{{ entry.operation_date|date:"Y-m-d" }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-calendar-check me-2"></i>Transfer Date</div>
+                                <div class="detail-value">{{ entry.transfer_date|date:"Y-m-d" }}</div>
+                            </div>
+                        </div>
+                    </div>
+                {% elif entry.type == 'INTERBANK_TRANSFER_OUT' or entry.type == 'INTERBANK_TRANSFER_IN' %}
+                    <div class="row">
                         <div class="col-md-4">
-                            <strong>Entity:</strong><br>
-                            {{ entry.entity_name }}
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-university me-2"></i>From Bank</div>
+                                <div class="detail-value">{{ entry.from_bank.bank }} - {{ entry.from_bank.account_number }}</div>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <strong>Transfer Reference:</strong><br>
-                            {{ entry.reference }}
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-university me-2"></i>To Bank</div>
+                                <div class="detail-value">{{ entry.to_bank.bank }} - {{ entry.to_bank.account_number }}</div>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <strong>Transfer Date:</strong><br>
-                            {{ entry.transfer_date|date:"Y-m-d" }}
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Operation Date</div>
+                                <div class="detail-value">{{ entry.date|date:"Y-m-d" }}</div>
+                            </div>
                         </div>
                     </div>
                 {% elif 'REVERSAL' in entry.type %}
                     <div class="row">
-                        <div class="col-md-3">
-                            <strong>Original Discount:</strong><br>
-                            {{ entry.discount_reference }}
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-building me-2"></i>Entity</div>
+                                <div class="detail-value">{{ entry.entity.name }}</div>
+                                <small class="text-muted">{{ entry.entity.ice_code }}</small>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Entity:</strong><br>
-                            {{ entry.entity_name }}
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-user me-2"></i>Client</div>
+                                <div class="detail-value">{{ entry.client.name }}</div>
+                                <small class="text-muted">{{ entry.client.client_code }}</small>
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Due Date:</strong><br>
-                            {{ entry.due_date|date:"Y-m-d" }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Reference:</strong><br>
-                            {{ entry.reference }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Status:</strong><br>
-                            <span class="badge badge-{{ entry.status|lower }}">
-                                {{ entry.status }}
-                            </span>
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-university me-2"></i>Issuing Bank</div>
+                                <div class="detail-value">{{ entry.issuing_bank_display }}</div>
+                            </div>
                         </div>
                     </div>
-                {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-hashtag me-2"></i>Reference</div>
+                                <div class="detail-value">{{ entry.reference }}</div>
+                                <small class="text-muted">Original Discount: {{ entry.discount_reference }}</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-calendar me-2"></i>Due Date</div>
+                                <div class="detail-value">{{ entry.due_date|date:"Y-m-d" }}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-info-circle me-2"></i>Status</div>
+                                <div class="detail-value">
+                                    <span class="badge badge-{{ entry.status|lower }}">{{ entry.status }}</span>
+                                    {% if entry.rejection_cause %}
+                                        <br><small class="text-danger mt-1">{{ entry.rejection_cause_display }}</small>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                     <div class="row">
-                        <div class="col-md-3">
-                            <strong>Entity:</strong><br>
-                            {{ entry.entity_name }}
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <strong>Entity:</strong><br>
+                                {{ entry.entity.name }} ({{ entry.entity.ice_code }})
+                            </div>
+                            <div class="mb-3">
+                                <strong>Client:</strong><br>
+                                {{ entry.client.name }} ({{ entry.client.client_code }})
+                            </div>
+                            <div class="mb-3">
+                                <strong>Due Date:</strong><br>
+                                {{ entry.due_date|date:"Y-m-d" }}
+                            </div>
                         </div>
-                        <div class="col-md-3">
-                            <strong>Due Date:</strong><br>
-                            {{ entry.due_date|date:"Y-m-d" }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Reference:</strong><br>
-                            {{ entry.reference }}
-                        </div>
-                        <div class="col-md-3">
-                            <strong>Status:</strong><br>
-                            <span class="badge badge-{{ entry.status|lower }}">
-                                {{ entry.status }}
-                            </span>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <strong>Issuing Bank:</strong><br>
+                                {{ entry.issuing_bank_display }}
+                            </div>
+                            <div class="mb-3">
+                                <strong>Operation Details:</strong><br>
+                                {% if entry.type == 'CHECK_DISCOUNT' or entry.type == 'LCN_DISCOUNT' %}
+                                    Discount Date: {{ entry.date|date:"Y-m-d" }}<br>
+                                    {% if entry.presentation_reference %}
+                                        Presentation: {{ entry.presentation_reference }}
+                                    {% endif %}
+                                {% elif entry.type == 'CHECK_COLLECTION' or entry.type == 'LCN_COLLECTION' %}
+                                    Collection Date: {{ entry.date|date:"Y-m-d" }}<br>
+                                    {% if entry.presentation_reference %}
+                                        Presentation: {{ entry.presentation_reference }}
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+                            {% if entry.status %}
+                            <div class="mb-3">
+                                <strong>Status:</strong><br>
+                                <span class="badge badge-{{ entry.status|lower }}">
+                                    {{ entry.status }}
+                                </span>
+                                {% if entry.rejection_cause %}
+                                    <br><small class="text-danger">{{ entry.rejection_cause_display }}</small>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </div>
                     </div>
                 {% endif %}
