@@ -7,6 +7,9 @@ from django.views.decorators.cache import never_cache, cache_control
 from django.http import HttpResponseRedirect
 from django.contrib.auth import logout
 from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
+from django.views.decorators.http import require_http_methods
+from .models import Entity, Client, CheckReceipt, LCN
+import json
 
 
 # Create your views here.
@@ -50,3 +53,45 @@ def logout_view(request):
     response['Pragma'] = 'no-cache'
     response['Expires'] = '0'
     return response
+
+@require_http_methods(["POST"])
+def check_receipt_duplicate(request):
+    data = json.loads(request.body)
+    number = data.get('number')
+    entity = data.get('entity')
+    bank = data.get('bank')
+    receipt_type = data.get('receipt_type')
+    
+    if receipt_type == 'check':
+        exists = CheckReceipt.objects.filter(
+            check_number=number,
+            entity_id=entity,
+            issuing_bank=bank
+        ).exists()
+    else:
+        exists = LCN.objects.filter(
+            lcn_number=number,
+            entity_id=entity,
+            issuing_bank=bank
+        ).exists()
+    
+    return JsonResponse({'exists': exists})
+
+@require_http_methods(["GET"])
+def validate_entity(request, entity_id):
+    valid = Entity.objects.filter(id=entity_id).exists()
+    return JsonResponse({'valid': valid})
+
+@require_http_methods(["GET"])
+def validate_client(request, client_id):
+    valid = Client.objects.filter(id=client_id).exists()
+    return JsonResponse({'valid': valid})
+
+@require_http_methods(["GET"])
+def validate_receipt(request, receipt_id):
+    # Check both CheckReceipt and LCN models
+    valid = (
+        CheckReceipt.objects.filter(id=receipt_id).exists() or
+        LCN.objects.filter(id=receipt_id).exists()
+    )
+    return JsonResponse({'valid': valid})

@@ -1707,7 +1707,15 @@ class NegotiableReceipt(Receipt):
 
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
-    check_number = models.CharField(max_length=50)
+    check_number = models.CharField(
+        max_length=50,
+        validators=[
+            RegexValidator(
+                r'^\d+$',
+                'Check number must contain only digits.'
+            )
+        ]
+    )
     branch = models.CharField(max_length=100, blank=True)
     
     def __str__(self):
@@ -1716,10 +1724,49 @@ class CheckReceipt(NegotiableReceipt):
     class Meta:
         verbose_name = "Check"
         verbose_name_plural = "Checks"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['check_number', 'issuing_bank', 'entity'],
+                name='unique_check_number_per_bank_entity'
+            )
+        ]
+
+    def clean(self):
+        super().clean()
+        
+        # Validate amount
+        if self.amount and self.amount <= 0:
+            raise ValidationError({'amount': 'Amount must be positive'})
+
+        # Validate entity exists
+        if self.entity_id and not Entity.objects.filter(id=self.entity_id).exists():
+            raise ValidationError({'entity': 'Invalid entity selected'})
+
+        # Validate client exists
+        if self.client_id and not Client.objects.filter(id=self.client_id).exists():
+            raise ValidationError({'client': 'Invalid client selected'})
+
+        # Validate issuing bank
+        if self.issuing_bank and self.issuing_bank not in dict(self.MOROCCAN_BANKS):
+            raise ValidationError({'issuing_bank': 'Invalid issuing bank selected'})
+
+        # Validate compensating receipt if specified
+        if self.compensating_object_id:
+            model = self.compensating_content_type.model_class()
+            if not model.objects.filter(id=self.compensating_object_id).exists():
+                raise ValidationError({'compensating_receipt': 'Invalid compensating receipt reference'})
 
 class LCN(NegotiableReceipt):
     """LCN-specific implementation."""
-    lcn_number = models.CharField(max_length=50)
+    lcn_number = models.CharField(
+        max_length=50,
+        validators=[
+            RegexValidator(
+                r'^\d+$',
+                'LCN number must contain only digits.'
+            )
+        ]
+    )
     branch = models.CharField(max_length=100, blank=True)
 
     def can_be_discounted(self):
@@ -1736,12 +1783,42 @@ class LCN(NegotiableReceipt):
 
     def clean(self):
         super().clean()
+        
+        # Validate amount
+        if self.amount and self.amount <= 0:
+            raise ValidationError({'amount': 'Amount must be positive'})
+
+        # Validate entity exists
+        if self.entity_id and not Entity.objects.filter(id=self.entity_id).exists():
+            raise ValidationError({'entity': 'Invalid entity selected'})
+
+        # Validate client exists
+        if self.client_id and not Client.objects.filter(id=self.client_id).exists():
+            raise ValidationError({'client': 'Invalid client selected'})
+
+        # Validate issuing bank
+        if self.issuing_bank and self.issuing_bank not in dict(self.MOROCCAN_BANKS):
+            raise ValidationError({'issuing_bank': 'Invalid issuing bank selected'})
+
+        # Validate compensating receipt if specified
+        if self.compensating_object_id:
+            model = self.compensating_content_type.model_class()
+            if not model.objects.filter(id=self.compensating_object_id).exists():
+                raise ValidationError({'compensating_receipt': 'Invalid compensating receipt reference'})
+
+        # LCN specific validation for due date
         if not self.due_date:
-            raise ValidationError("Due date is required for LCN")
+            raise ValidationError({'due_date': 'Due date is required for LCN'})
 
     class Meta:
         verbose_name = "LCN"
         verbose_name_plural = "LCNs"
+        constraints = [
+            models.UniqueConstraint(
+                fields=['lcn_number', 'issuing_bank', 'entity'],
+                name='unique_lcn_number_per_bank_entity'
+            )
+        ]
 
 class CashReceipt(Receipt):
     """Cash receipt implementation."""

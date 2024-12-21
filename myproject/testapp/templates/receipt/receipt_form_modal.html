@@ -1,5 +1,5 @@
- <!-- Debug Info -->
- <div style="display:none">
+<!-- Debug Info -->
+<div style="display:none">
     Receipt type from context: {{ receipt_type }}
     Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %}
 </div>
@@ -337,8 +337,43 @@
 .text-primary {
     color: #4e73df !important;
 }
+.bank-dropdown-toggle {
+        position: absolute;
+        right: 10px;
+        top: 50%;
+        transform: translateY(-50%);
+        cursor: pointer;
+    }
+    
+    .ui-autocomplete {
+        max-height: 200px;
+        overflow-y: auto;
+        overflow-x: hidden;
+        z-index: 9999;
 
-/* Autocomplete dropdown styling */
+        /* Scrollbar styles */
+        scrollbar-width: thin;
+        scrollbar-color: #0b4d71 #f1f1f1;
+        -webkit-overflow-scrolling: touch;
+        -ms-overflow-style: -ms-autohiding-scrollbar;
+        
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar {
+        width: 6px;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-track {
+        background: #f1f1f1;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-thumb {
+        background: #888;
+    }
+    
+    .ui-autocomplete::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
 .ui-autocomplete {
     max-height: 200px;
     overflow-y: auto;
@@ -361,106 +396,190 @@
     background-color: #f8f9fa;
     cursor: pointer;
 }
+.form-control.is-invalid {
+    border-color: #dc3545;
+    padding-right: calc(1.5em + 0.75rem);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' width='12' height='12' fill='none' stroke='%23dc3545'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23dc3545' stroke='none'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+.form-control.is-valid {
+    border-color: #198754;
+    padding-right: calc(1.5em + 0.75rem);
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3e%3cpath fill='%23198754' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right calc(0.375em + 0.1875rem) center;
+    background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
+}
 </style>
 
-<!-- Initialize autocomplete -->
 <script>
 console.log('Form loaded for receipt type:', '{{ receipt_type }}');
 
 $(document).ready(function() {
-// Initialize client autocomplete
-$("#client").autocomplete({
-                minLength: 0,
-            source: function(request, response) {
-                console.log('Client search term:', request.term);
-                $.ajax({
-                    url: "{% url 'client-autocomplete' %}",
-                    dataType: "json",
-                    data: { term: request.term },
-                    success: function(data) {
-                        console.log('Client data received:', data);
-                        response($.map(data.results, function(item) {
-                            return {
-                                label: item.text,
-                                value: item.id
-                            };
-                        }));
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Client autocomplete error:', error);
-                    }
-                });
-            },
-            select: function(event, ui) {
-                console.log('Client selected:', ui.item);
-                $("#client").val(ui.item.label);
-                $("#client_id").val(ui.item.value);
-                return false;
+    // Define banksList from the template context
+    const banksList = [
+        {% for code, name in bank_choices %}
+            { label: '{{ name }}', value: '{{ code }}' },
+        {% endfor %}
+    ];
+
+    // Utility functions
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
             }
-        }).on('focus', function() {
-            console.log('Client input focused');
-        });
+        }
+        return cookieValue;
+    }
 
-        // Initialize entity autocomplete
-        $("#entity").autocomplete({
-            minLength: 0,
-            source: function(request, response) {
-                console.log('Entity search term:', request.term);
-                $.ajax({
-                    url: "{% url 'entity-autocomplete' %}",
-                    dataType: "json",
-                    data: { term: request.term },
-                    success: function(data) {
-                        console.log('Entity data received:', data);
-                        response($.map(data.results, function(item) {
-                            return {
-                                label: item.text,
-                                value: item.id
-                            };
-                        }));
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Entity autocomplete error:', error);
-                    }
-                });
-            },
-            select: function(event, ui) {
-                console.log('Entity selected:', ui.item);
-                $("#entity").val(ui.item.label);
-                $("#entity_id").val(ui.item.value);
-                return false;
+    // Form validation state manager
+    const validator = {
+        errors: new Set(),
+        updateSaveButton: function() {
+            const saveBtn = $('button[type="submit"]');
+            saveBtn.prop('disabled', this.errors.size > 0);
+        },
+        showError: function(field, message) {
+            const $field = $(field);
+            $field.addClass('is-invalid');
+            let $feedback = $field.siblings('.invalid-feedback');
+            if (!$feedback.length) {
+                $feedback = $('<div class="invalid-feedback"></div>').insertAfter($field);
             }
-        }).on('focus', function() {
-            console.log('Entity input focused');
-        });
+            $feedback.text(message);
+            this.errors.add($field.attr('id'));
+            this.updateSaveButton();
+        },
+        clearError: function(field) {
+            const $field = $(field);
+            $field.removeClass('is-invalid');
+            $field.siblings('.invalid-feedback').remove();
+            this.errors.delete($field.attr('id'));
+            this.updateSaveButton();
+        }
+    };
 
-        // Bank selection using jQuery UI autocomplete
-        const banksList = [
-            {% for code, name in bank_choices %}
-                { label: '{{ name }}', value: '{{ code }}' },
-            {% endfor %}
-        ];
-
-        $("#issuingBank").autocomplete({
-            source: banksList,
-            minLength: 0, // Show all options even without typing
-            select: function(event, ui) {
-                $("#issuingBank").val(ui.item.label);
-                $("#issuingBankCode").val(ui.item.value);
-                return false;
+    // Client validation with strict autocomplete
+    $("#client").autocomplete({
+        source: function(request, response) {
+            $.ajax({
+                url: "{% url 'client-autocomplete' %}",
+                dataType: "json",
+                data: { term: request.term },
+                success: function(data) {
+                    response($.map(data.results, function(item) {
+                        return {
+                            label: item.text,
+                            value: item.id
+                        };
+                    }));
+                }
+            });
+        },
+        minLength: 0,
+        select: function(event, ui) {
+            $("#client").val(ui.item.label);
+            $("#client_id").val(ui.item.value);
+            validator.clearError('#client');
+            return false;
+        },
+        change: function(event, ui) {
+            // If no item was selected
+            if (!ui.item) {
+                $("#client_id").val('');
+                $("#client").val('');
+                validator.showError('#client', 'Please select a valid client from the list');
             }
-        }).focus(function() {
-            // Show all options when field is focused
-            $(this).autocomplete("search", "");
-        });
+        }
+    }).on('input', function() {
+        // Clear hidden input when user starts typing
+        $("#client_id").val('');
+        validator.showError('#client', 'Please select a valid client from the list');
+    });
 
-        // Add dropdown indicator and click handler
-        $("#issuingBank").after('<span class="bank-dropdown-toggle"><i class="fas fa-chevron-down"></i></span>');
-        $(".bank-dropdown-toggle").click(function() {
-            $("#issuingBank").focus();
-        });
+    // Entity validation with strict autocomplete
+    $("#entity").autocomplete({
+        source: function(request, response) {
+            $.ajax({
+                url: "{% url 'entity-autocomplete' %}",
+                dataType: "json",
+                data: { term: request.term },
+                success: function(data) {
+                    response($.map(data.results, function(item) {
+                        return {
+                            label: item.text,
+                            value: item.id
+                        };
+                    }));
+                }
+            });
+        },
+        minLength: 0,
+        select: function(event, ui) {
+            $("#entity").val(ui.item.label);
+            $("#entity_id").val(ui.item.value);
+            validator.clearError('#entity');
+            return false;
+        },
+        change: function(event, ui) {
+            // If no item was selected
+            if (!ui.item) {
+                $("#entity_id").val('');
+                $("#entity").val('');
+                validator.showError('#entity', 'Please select a valid entity from the list');
+            }
+        }
+    }).on('input', function() {
+        // Clear hidden input when user starts typing
+        $("#entity_id").val('');
+        validator.showError('#entity', 'Please select a valid entity from the list');
+    });
 
-        $("#compensate-receipt-autocomplete").autocomplete({
+    // Bank validation with strict autocomplete
+    $("#issuingBank").autocomplete({
+        source: banksList,
+        minLength: 0,
+        select: function(event, ui) {
+            $("#issuingBank").val(ui.item.label);
+            $("#issuingBankCode").val(ui.item.value);
+            validator.clearError('#issuingBank');
+            return false;
+        },
+        change: function(event, ui) {
+            // If no item was selected
+            if (!ui.item) {
+                $("#issuingBankCode").val('');
+                $("#issuingBank").val('');
+                validator.showError('#issuingBank', 'Please select a valid bank from the list');
+            }
+        }
+    }).on('input', function() {
+        // Clear hidden input when user starts typing
+        $("#issuingBankCode").val('');
+        validator.showError('#issuingBank', 'Please select a valid bank from the list');
+    }).focus(function() {
+        $(this).autocomplete("search", "");
+    });
+
+    $("#compensate-receipt-autocomplete").autocomplete({
             source: function(request, response) {
                 console.log('Unpaid Receipt search term:', request.term);
                 $.ajax({
@@ -502,230 +621,108 @@ $("#client").autocomplete({
             }
         });
 
-// Initialize tooltips
-$('[data-toggle="tooltip"]').tooltip();
-    
-    // Enhanced status badges with tooltips
-    function updateStatusBadge($element, status, details) {
-        const badge = $('<span>')
-            .addClass(`badge badge-${status.toLowerCase()}`)
-            .text(status);
-            
-        if (details) {
-            badge.attr('data-toggle', 'tooltip')
-                 .attr('data-html', 'true')
-                 .attr('title', details);
-        }
-        
-        $element.html(badge);
-        badge.tooltip();
-    }
-    
-    // Add bulk action support
-    let selectedReceipts = new Set();
-    
-    // Add checkboxes for bulk actions
-    $('.receipt-table').find('tbody tr').each(function() {
-        const $tr = $(this);
-        const receiptId = $tr.data('receipt-id');
-        const $checkbox = $('<input>', {
-            type: 'checkbox',
-            class: 'receipt-checkbox',
-            'data-receipt-id': receiptId
+    // Receipt number validation
+    function setupReceiptNumberValidation() {
+        const receiptInput = '{{ receipt_type }}' === 'check' ? '#check_number' : '#lcn_number';
+        $(receiptInput)
+            .on('input', function() {
+                const value = $(this).val();
+                if (!/^\d*$/.test(value)) {
+                    // Remove non-numeric characters
+                    $(this).val(value.replace(/\D/g, ''));
+                }
+            })
+            .on('blur', async function() {
+                const number = $(this).val();
+                const entityId = $('#entity_id').val();
+                const bank = $('#issuingBankCode').val();
+
+                if (!number) {
+                    validator.showError(this, 'Receipt number is required');
+                    return;
+                }
+
+                if (!entityId) {
+                    validator.showError(this, 'Please select an entity first');
+                    return;
+                }
+
+                if (!bank) {
+                    validator.showError(this, 'Please select a bank first');
+                    return;
+                }
+
+                try {
+                    const response = await fetch('{% url "validate-receipt-number" %}', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': getCookie('csrftoken'),
+                        },
+                        body: JSON.stringify({
+                            number: number,
+                            entity_id: entityId,
+                            bank: bank,
+                            receipt_type: '{{ receipt_type }}',
+                            current_id: '{{ receipt.id|default:"" }}'
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+
+                    const data = await response.json();
+                    if (data.exists) {
+                        validator.showError(this, `This ${('{{ receipt_type }}' === 'check' ? 'check' : 'LCN')} number already exists for this entity and bank`);
+                    } else {
+                        validator.clearError(this);
+                    }
+                } catch (error) {
+                    console.error('Validation error:', error);
+                    validator.showError(this, 'Error checking for duplicate receipt number');
+                }
+            });
+
+        // Also validate when entity or bank changes
+        $('#entity, #issuingBank').on('change', function() {
+            $(receiptInput).trigger('blur');
         });
-        
-        $tr.prepend($('<td>').append($checkbox));
-    });
-    
-    // Bulk action handlers
-    $('.receipt-checkbox').on('change', function() {
-        const receiptId = $(this).data('receipt-id');
-        if (this.checked) {
-            selectedReceipts.add(receiptId);
+    }
+
+    // Amount validation
+    $('#amount').on('input', function() {
+        const value = $(this).val();
+        if (!/^\d*\.?\d*$/.test(value)) {
+            // Remove invalid characters
+            $(this).val(value.replace(/[^\d.]/g, ''));
+        }
+    }).on('blur', function() {
+        const amount = parseFloat($(this).val());
+        if (isNaN(amount) || amount <= 0) {
+            validator.showError(this, 'Amount must be positive');
         } else {
-            selectedReceipts.delete(receiptId);
+            validator.clearError(this);
         }
-        updateBulkActionButtons();
     });
-    
-    function updateBulkActionButtons() {
-        const hasSelected = selectedReceipts.size > 0;
-        $('.bulk-action-btn').prop('disabled', !hasSelected);
-    }
-    
-    // Add number formatting
-    function formatCurrency(amount) {
-        return new Intl.NumberFormat('fr-MA', {
-            style: 'currency',
-            currency: 'MAD'
-        }).format(amount);
-    }
-    
-    // Update all amount displays
-    $('.amount-display').each(function() {
-        const amount = $(this).data('amount');
-        $(this).text(formatCurrency(amount));
-    });
-    class ReceiptValidator {
-    constructor(formId) {
-        this.form = document.getElementById(formId);
-        this.submitBtn = this.form.querySelector('button[type="submit"]');
-        this.fields = {
-            client: {
-                element: this.form.querySelector('#client'),
-                required: true,
-                validate: value => value.trim().length > 0
-            },
-            entity: {
-                element: this.form.querySelector('#entity'),
-                required: true,
-                validate: value => value.trim().length > 0
-            },
-            amount: {
-                element: this.form.querySelector('#amount'),
-                required: true,
-                validate: value => {
-                    const num = parseFloat(value);
-                    return !isNaN(num) && num > 0;
-                }
-            },
-            operation_date: {
-                element: this.form.querySelector('#operation_date'),
-                required: true,
-                validate: value => value.trim().length > 0
-            }
-        };
 
-        // Add type-specific validations
-        if (this.form.querySelector('#check_number')) {
-            this.fields.check_number = {
-                element: this.form.querySelector('#check_number'),
-                required: true,
-                validate: value => value.trim().length > 0
-            };
-            this.fields.due_date = {
-                element: this.form.querySelector('#due_date'),
-                required: true,
-                validate: value => {
-                    if (!value) return false;
-                    const dueDate = new Date(value);
-                    const today = new Date();
-                    return dueDate >= today;
-                }
-            };
-        }
+    // Initialize validations
+    setupReceiptNumberValidation();
 
-        if (this.form.querySelector('#lcn_number')) {
-            this.fields.lcn_number = {
-                element: this.form.querySelector('#lcn_number'),
-                required: true,
-                validate: value => value.trim().length > 0
-            };
-        }
-
-        if (this.form.querySelector('#transfer_reference')) {
-            this.fields.transfer_reference = {
-                element: this.form.querySelector('#transfer_reference'),
-                required: true,
-                validate: value => value.trim().length > 0
-            };
-        }
-
-        this.setupValidation();
-    }
-
-    setupValidation() {
-        Object.entries(this.fields).forEach(([name, field]) => {
-            const element = field.element;
-            if (!element) return;
-
-            element.addEventListener('input', () => this.validateField(name));
-            element.addEventListener('blur', () => this.validateField(name));
-        });
-
-        // Validate all fields on form submit
-        this.form.addEventListener('submit', (e) => {
-            const isValid = this.validateAll();
-            if (!isValid) {
+    // Form submission validation
+    $('#receiptForm').on('submit', function(e) {
+        // Check all required fields
+        $('input[required], select[required]').each(function() {
+            if (!$(this).val()) {
                 e.preventDefault();
+                validator.showError(this, 'This field is required');
             }
         });
-    }
 
-    validateField(fieldName) {
-        const field = this.fields[fieldName];
-        if (!field || !field.element) return true;
-
-        const value = field.element.value;
-        const isValid = field.validate(value);
-
-        field.element.classList.remove('is-valid', 'is-invalid');
-        field.element.classList.add(isValid ? 'is-valid' : 'is-invalid');
-
-        this.updateSubmitButton();
-        return isValid;
-    }
-
-    validateAll() {
-        let isValid = true;
-        Object.keys(this.fields).forEach(fieldName => {
-            if (!this.validateField(fieldName)) {
-                isValid = false;
-            }
-        });
-        return isValid;
-    }
-
-    updateSubmitButton() {
-        this.submitBtn.disabled = !this.validateAll();
-    }
-}
-
-$('#receiptModal').on('shown.bs.modal', function() {
-    new ReceiptValidator('receiptForm');
+        if (validator.errors.size > 0) {
+            e.preventDefault();
+            alert('Please correct all errors before submitting.');
+        }
+    });
 });
-
-});
-
-
 </script>
-
-<style>
-    .bank-dropdown-toggle {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        cursor: pointer;
-    }
-    
-    .ui-autocomplete {
-        max-height: 200px;
-        overflow-y: auto;
-        overflow-x: hidden;
-        z-index: 9999;
-
-        /* Scrollbar styles */
-        scrollbar-width: thin;
-        scrollbar-color: #0b4d71 #f1f1f1;
-        -webkit-overflow-scrolling: touch;
-        -ms-overflow-style: -ms-autohiding-scrollbar;
-        
-    }
-    
-    .ui-autocomplete::-webkit-scrollbar {
-        width: 6px;
-    }
-    
-    .ui-autocomplete::-webkit-scrollbar-track {
-        background: #f1f1f1;
-    }
-    
-    .ui-autocomplete::-webkit-scrollbar-thumb {
-        background: #888;
-    }
-    
-    .ui-autocomplete::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
-    </style>

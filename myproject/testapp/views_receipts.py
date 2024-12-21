@@ -14,6 +14,11 @@ from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
 import traceback
+import json
+from django.views.decorators.http import require_http_methods
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ReceiptListView(ListView):
@@ -642,6 +647,78 @@ def unpaid_receipt_autocomplete(request):
     
     print(f"Unpaid Receipt results({len(results)}): {results}")
     return JsonResponse({'results': results})
+
+@require_http_methods(["POST"])
+def validate_receipt_number(request):
+    try:
+        data = json.loads(request.body)
+        number = data.get('number')
+        entity_id = data.get('entity_id')
+        bank = data.get('bank')
+        receipt_type = data.get('receipt_type')
+        current_id = data.get('current_id')
+
+        if not all([number, entity_id, bank]):
+            return JsonResponse({
+                'exists': False,
+                'message': 'Missing required fields'
+            })
+
+        if receipt_type == 'check':
+            query = CheckReceipt.objects.filter(
+                check_number=number,
+                entity_id=entity_id,
+                issuing_bank=bank
+            )
+        else:  # lcn
+            query = LCN.objects.filter(
+                lcn_number=number,
+                entity_id=entity_id,
+                issuing_bank=bank
+            )
+
+        # Exclude current receipt if editing
+        if current_id:
+            query = query.exclude(id=current_id)
+
+        exists = query.exists()
+        
+        return JsonResponse({
+            'exists': exists,
+            'message': f"This {'check' if receipt_type == 'check' else 'LCN'} number already exists for this entity and bank" if exists else ''
+        })
+
+    except json.JSONDecodeError:
+        return JsonResponse({
+            'exists': False,
+            'message': 'Invalid request data'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Error validating receipt number: {str(e)}")
+        return JsonResponse({
+            'exists': False,
+            'message': 'Server error while validating receipt number'
+        }, status=500)
+
+def validate_compensating_receipt(request):
+    receipt_id = request.GET.get('receipt_id')
+    try:
+        # Try to find the receipt in both CheckReceipt and LCN models
+        receipt = (CheckReceipt.objects.filter(id=receipt_id).first() or 
+                  LCN.objects.filter(id=receipt_id).first())
+        
+        if receipt:
+            return JsonResponse({
+                'valid': True,
+                'details': {
+                    'amount': str(receipt.amount),
+                    'type': receipt.__class__.__name__.lower(),
+                    'entity': receipt.entity.name
+                }
+            })
+        return JsonResponse({'valid': False, 'message': 'Receipt not found'})
+    except Exception as e:
+        return JsonResponse({'valid': False, 'message': str(e)})
 
 class ReceiptFilterView(View):
     def get(self, request):

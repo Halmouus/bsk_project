@@ -24,7 +24,8 @@ from .views_bank import (
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
     entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,
-    ReceiptFilterView)
+    ReceiptFilterView, validate_receipt_number, validate_compensating_receipt
+)
 
 from .views_client import (
     client_management,
@@ -189,6 +190,8 @@ urlpatterns = [
 
     # Filter receipts
     path('receipts/filter/', ReceiptFilterView.as_view(), name='receipt-filter'),
+    path('receipts/validate-number/', validate_receipt_number, name='validate-receipt-number'),
+    path('receipts/validate-compensating-receipt/', validate_compensating_receipt, name='validate-compensating-receipt'),
 
     # Presentation URLs
     path('presentations/', PresentationListView.as_view(), name='presentation-list'),
