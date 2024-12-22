@@ -186,7 +186,7 @@ urlpatterns = [
     # Autocomplete endpoints for form fields
     path('receipts/client/autocomplete', client_autocomplete, name='client-autocomplete'),
     path('receipts/entity/autocomplete', entity_autocomplete, name='entity-autocomplete'),
-    path('receipts/unpaid/autocomplete', unpaid_receipt_autocomplete, name='unpaid-receipt-autocomplete'),
+    path('receipts/unpaid-autocomplete/', unpaid_receipt_autocomplete, name='unpaid-receipt-autocomplete'),
 
     # Filter receipts
     path('receipts/filter/', ReceiptFilterView.as_view(), name='receipt-filter'),

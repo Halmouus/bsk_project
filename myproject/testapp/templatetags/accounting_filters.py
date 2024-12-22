@@ -91,3 +91,11 @@ def sub(value, arg):
         return value - arg
     except (TypeError, ValueError):
         return value
+
+@register.filter
+def percentage(value, total):
+    """Calculate percentage for progress bars"""
+    try:
+        return (float(value) / float(total)) * 100 if float(total) else 0
+    except (ValueError, TypeError):
+        return 0

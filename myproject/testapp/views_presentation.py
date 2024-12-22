@@ -256,7 +256,7 @@ class PresentationUpdateView(View):
                                         
                                         if status_value.upper() == 'PAID':
                                             print("Receipt marked as paid, updating compensated receipts")
-                                            receipt.update_compensated_receipts()
+                                            receipt.handle_payment()
                                     
                                     print("Status update completed successfully")
                                 else:

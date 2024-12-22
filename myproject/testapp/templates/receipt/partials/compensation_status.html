@@ -1,0 +1,54 @@
+{% load accounting_filters %}
+
+{% with comp_status=receipt.get_compensation_status %}
+{% if comp_status %}
+    <div class="compensation-status">
+        {% if receipt.status == 'PARTIALLY_COMPENSATED' %}
+            <div class="d-flex align-items-center gap-2 mb-1">
+                <span class="badge badge-warning">Partially Compensated</span>
+                <span class="badge badge-light">{{ comp_status.percentage|floatformat:1 }}%</span>
+            </div>
+            <div class="progress mb-1" style="height: 4px;">
+                <div class="progress-bar bg-warning" 
+                     role="progressbar"
+                     style="width: {{ comp_status.percentage }}%"
+                     aria-valuenow="{{ comp_status.percentage }}"
+                     aria-valuemin="0"
+                     aria-valuemax="100">
+                </div>
+            </div>
+            <small class="text-muted d-block">
+                Compensated: {{ comp_status.total_compensated|format_balance }}<br>
+                Remaining: {{ comp_status.remaining|format_balance }}
+            </small>
+            <!-- Show compensation records in a collapse -->
+            <div class="mt-2">
+                <a class="text-muted" data-toggle="collapse" href="#compRecords{{ receipt.id }}" role="button">
+                    <i class="fas fa-chevron-down me-1"></i>
+                    Show details
+                </a>
+                <div class="collapse" id="compRecords{{ receipt.id }}">
+                    <div class="border rounded p-2 mt-2 bg-light">
+                        {% for record in comp_status.records %}
+                        <div class="d-flex justify-content-between align-items-center {% if not forloop.last %}border-bottom mb-1{% endif %} py-1">
+                            <div>
+                                <small class="text-muted">
+                                    {% if record.compensating_receipt %}
+                                        {{ record.compensating_receipt|get_receipt_type }}
+                                        #{{ record.compensating_receipt.get_receipt_number }}
+                                    {% endif %}
+                                </small>
+                            </div>
+                            <div class="text-right">
+                                <small class="text-muted">{{ record.amount|format_balance }}</small><br>
+                                <small class="text-muted">{{ record.compensation_date|date:"d/m/Y" }}</small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+{% endif %}
+{% endwith %}

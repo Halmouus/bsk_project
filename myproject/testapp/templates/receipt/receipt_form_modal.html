@@ -251,15 +251,12 @@
                 </h6>
             </div>
             <div class="card-body">
-                <div class="form-floating">
-                    <input type="text" class="form-control" id="compensate-receipt-autocomplete" name="compensates"
-                           placeholder="Search for unpaid receipt...">
-                    <label for="compensate-receipt-autocomplete">
-                        <i class="fas fa-search text-primary me-2"></i> Compensate Unpaid Receipt
-                    </label>
-                    <input type="hidden" id="compensate-receipt-id" name="compensates">
+                <div id="compensations-container">
+                    <!-- Compensation entries will be added here -->
                 </div>
-                <div id="compensation-details" class="mt-2 small text-muted"></div>
+                <button type="button" class="btn btn-sm btn-outline-primary mt-2" id="add-compensation">
+                    <i class="fas fa-plus me-1"></i> Add Compensation
+                </button>
             </div>
         </div>
 
@@ -421,6 +418,7 @@
     font-size: 0.875em;
     color: #dc3545;
 }
+
 </style>
 
 <script>
@@ -723,6 +721,223 @@ $(document).ready(function() {
             e.preventDefault();
             alert('Please correct all errors before submitting.');
         }
+
+        // Gather compensation data
+        const compensations = [];
+        $('.compensation-entry').each(function() {
+            const receipt_id = $(this).find('.unpaid-receipt-select').val();
+            const amount = $(this).find('.compensation-amount').val();
+            
+            if (receipt_id && amount) {
+                compensations.push({
+                    receipt_id: receipt_id,
+                    amount: parseFloat(amount)
+                });
+            }
+        });
+
+        // Add to hidden input
+        $('<input>').attr({
+            type: 'hidden',
+            name: 'compensations',
+            value: JSON.stringify(compensations)
+        }).appendTo(this);
+    });
+
+    // Template for compensation entry
+    function createCompensationEntry() {
+    // Create the DOM structure
+    const entry = $('<div>', {
+        class: 'compensation-entry mb-2'
+    }).append(
+        $('<div>', {
+            class: 'row g-2'
+        }).append(
+            // Search input column
+            $('<div>', { class: 'col-8' }).append(
+                $('<div>', { class: 'form-floating' }).append(
+                    $('<input>', {
+                        type: 'text',
+                        class: 'form-control unpaid-receipt-display',
+                        placeholder: 'Search unpaid receipts'
+                    }),
+                    $('<select>', {
+                        class: 'unpaid-receipt-select',
+                        style: 'display: none'
+                    }),
+                    $('<label>').html('<i class="fas fa-search me-2"></i>Search unpaid receipts')
+                )
+            ),
+            // Amount input column
+            $('<div>', { class: 'col-3' }).append(
+                $('<div>', { class: 'form-floating position-relative' }).append(
+                    $('<input>', {
+                        type: 'number',
+                        class: 'form-control compensation-amount',
+                        step: '0.01',
+                        min: '0',
+                        placeholder: 'Amount'
+                    }),
+                    $('<label>').html('<i class="fas fa-coins me-2"></i>Amount'),
+                    $('<div>', {
+                        class: 'invalid-feedback',
+                        style: 'display: none'
+                    })
+                )
+            ),
+            // Remove button column
+            $('<div>', { class: 'col-1 d-flex align-items-center justify-content-center' }).append(
+                $('<button>', {
+                    type: 'button',
+                    class: 'btn btn-sm btn-danger remove-compensation'
+                }).append(
+                    $('<i>', { class: 'fas fa-times' })
+                )
+            )
+        )
+    );
+
+    // Store reference values
+    const currentReceiptAmount = parseFloat($('#amount').val()) || 0;
+    let selectedUnpaidAmount = 0;
+    let maxAmount = 0;
+
+    // Helper function to show validation feedback
+    function showValidationFeedback(input, message, isError = true) {
+        const feedback = input.siblings('.invalid-feedback');
+        feedback.text(message).css('display', 'block');
+        
+        if (isError) {
+            input.addClass('is-invalid').removeClass('is-valid');
+        } else {
+            input.addClass('is-valid').removeClass('is-invalid');
+        }
+
+        // Automatically hide after 3 seconds
+        setTimeout(() => {
+            feedback.fadeOut(() => {
+                input.removeClass('is-invalid is-valid');
+            });
+        }, 3000);
+    }
+
+    // Initialize autocomplete
+    entry.find('.unpaid-receipt-display').autocomplete({
+        source: function(request, response) {
+            $.ajax({
+                url: '/testapp/receipts/unpaid-autocomplete/',
+                dataType: 'json',
+                data: { term: request.term },
+                success: function(data) {
+                    response($.map(data.results, function(item) {
+                        return {
+                            label: `${item.type} #${item.number} - ${item.entity}`,
+                            value: item.id,
+                            description: item.description,
+                            amount: item.amount,
+                            remaining: item.remaining,
+                            type: item.type
+                        };
+                    }));
+                }
+            });
+        },
+        minLength: 0,
+        select: function(event, ui) {
+            const hiddenSelect = $(this).siblings('.unpaid-receipt-select');
+            hiddenSelect.empty().append(
+                $('<option>', {
+                    value: ui.item.value,
+                    text: ui.item.description,
+                    selected: true
+                })
+            );
+            $(this).val(ui.item.label);
+            
+            // Update amounts
+            selectedUnpaidAmount = ui.item.remaining;
+            maxAmount = Math.min(selectedUnpaidAmount, currentReceiptAmount);
+            
+            // Update amount input
+            const amountInput = entry.find('.compensation-amount');
+            amountInput
+                .attr('max', maxAmount)
+                .attr('placeholder', `Max: ${maxAmount.toFixed(2)}`)
+                .prop('disabled', false);
+
+            // Show success feedback
+            showValidationFeedback($(this), 'Receipt selected successfully', false);
+            
+            return false;
+        },
+        change: function(event, ui) {
+            if (!ui.item) {
+                $(this).val('');
+                $(this).siblings('.unpaid-receipt-select').empty();
+                selectedUnpaidAmount = 0;
+                maxAmount = 0;
+                
+                const amountInput = entry.find('.compensation-amount');
+                amountInput
+                    .val('')
+                    .attr('max', '')
+                    .attr('placeholder', 'Amount')
+                    .prop('disabled', true);
+
+                showValidationFeedback($(this), 'Please select a valid receipt');
+            }
+        }
+    }).on('focus', function() {
+        $(this).autocomplete('search', '');
+    });
+
+    // Amount input handling
+    const amountInput = entry.find('.compensation-amount');
+    amountInput
+        .prop('disabled', true)
+        .on('input blur', function() {
+            const value = parseFloat($(this).val()) || 0;
+            let totalCompensation = 0;
+
+            // Calculate total from all compensation entries
+            $('.compensation-amount').each(function() {
+                if (this !== amountInput[0]) {  // Exclude current input from total
+                    totalCompensation += parseFloat($(this).val()) || 0;
+                }
+            });
+
+            const remainingTotal = currentReceiptAmount - totalCompensation;
+            const effectiveMax = Math.min(maxAmount, remainingTotal);
+
+            if (value > effectiveMax) {
+                // Visual feedback
+                $(this).addClass('compensation-exceeded');
+                
+                // Revert to max value with animation
+                setTimeout(() => {
+                    $(this)
+                        .val(effectiveMax.toFixed(2))
+                        .removeClass('compensation-exceeded');
+                    
+                    showValidationFeedback($(this), 
+                        `Amount adjusted to maximum: ${effectiveMax.toFixed(2)}`);
+                }, 500);
+            } else if (value > 0) {
+                showValidationFeedback($(this), 'Amount is valid', false);
+            }
+        });
+
+    return entry;
+}
+
+    // Add compensation entry
+    $('#add-compensation').click(function() {
+        $('#compensations-container').append(createCompensationEntry());
+    });
+
+    // Remove compensation entry
+    $(document).on('click', '.remove-compensation', function() {
+        $(this).closest('.compensation-entry').remove();
     });
 });
 </script>

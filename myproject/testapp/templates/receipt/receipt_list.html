@@ -135,6 +135,19 @@ Available filters:
                                 {% if check.compensation_info %}
                                     <br><small class="text-muted">{{ check.compensation_info }}</small>
                                 {% endif %}
+                                {% if check.status == 'PARTIALLY_COMPENSATED' %}
+                                    {% with comp_status=check.get_compensation_status %}
+                                    <div class="progress mt-1" style="height: 4px;">
+                                        <div class="progress-bar bg-warning" 
+                                             role="progressbar" 
+                                             style="width: {{ comp_status.total_compensated|percentage:check.amount }}%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ comp_status.total_compensated|format_balance }}/{{ check.amount|format_balance }}
+                                    </small>
+                                    {% endwith %}
+                                {% endif %}
                             </td>
                             <td>
                                 <div class="btn-group">
@@ -230,6 +243,19 @@ Available filters:
                                 {% endif %}
                                 {% if lcn.compensation_info %}
                                     <br><small class="text-muted">{{ lcn.compensation_info }}</small>
+                                {% endif %}
+                                {% if lcn.status == 'PARTIALLY_COMPENSATED' %}
+                                    {% with comp_status=lcn.get_compensation_status %}
+                                    <div class="progress mt-1" style="height: 4px;">
+                                        <div class="progress-bar bg-warning" 
+                                             role="progressbar" 
+                                             style="width: {{ comp_status.total_compensated|percentage:lcn.amount }}%">
+                                        </div>
+                                    </div>
+                                    <small class="text-muted">
+                                        {{ comp_status.total_compensated|format_balance }}/{{ lcn.amount|format_balance }}
+                                    </small>
+                                    {% endwith %}
                                 {% endif %}
                             </td>
                             <td>
@@ -419,6 +445,22 @@ Available filters:
         border: 1px solid rgba(0,0,0,.1);
         box-shadow: 0 0.5rem 1rem rgba(0,0,0,.15);
         z-index: 1050;
+    }
+
+    /* Add new status color */
+    .badge-partially_compensated { 
+        background-color: #ffc107;  /* Warning yellow for partial */
+        color: #000;
+    }
+    
+    /* Progress bar custom styling */
+    .compensation-progress {
+        height: 4px;
+        margin-top: 0.25rem;
+        background-color: #e9ecef;
+    }
+    .compensation-progress .progress-bar {
+        background-color: #ffc107;
     }
 </style>
 

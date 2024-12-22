@@ -109,19 +109,9 @@ class ReceiptCreateView(View):
         return rendered
     
     def post(self, request, receipt_type):
-        print("POST request received:")
-        print("Receipt type:", receipt_type)
-        print("Raw POST data:", request.body)
-        data = request.POST.dict()
-        print("POST data:", request.POST)
-        print("transfer_date value:", request.POST.get('transfer_date'))
-        print("transfer_reference value:", request.POST.get('transfer_reference'))
-        
         try:
             data = request.POST.dict()
-
-            compensates_id = data.pop('compensates', None)
-
+            
             # Convert amount to Decimal
             data['amount'] = Decimal(data['amount'].replace(',', ''))
             
@@ -136,6 +126,7 @@ class ReceiptCreateView(View):
                 'notes': data.get('notes', '')
             }
 
+            # Create receipt first
             if receipt_type == 'check':
                 receipt = CheckReceipt.objects.create(
                     **common_fields,
@@ -144,7 +135,6 @@ class ReceiptCreateView(View):
                     check_number=data['check_number'],
                     branch=data.get('branch', '')
                 )
-            
             elif receipt_type == 'lcn':
                 receipt = LCN.objects.create(
                     **common_fields,
@@ -152,7 +142,6 @@ class ReceiptCreateView(View):
                     due_date=data['due_date'],
                     lcn_number=data['lcn_number'],
                 )
-            
             elif receipt_type == 'cash':
                 receipt = CashReceipt.objects.create(
                     **common_fields,
@@ -160,7 +149,6 @@ class ReceiptCreateView(View):
                     bank_account_id=data['credited_account'],
                     reference_number=data.get('reference_number', '')
                 )
-            
             elif receipt_type == 'transfer':
                 receipt = TransferReceipt.objects.create(
                     **common_fields,
@@ -169,33 +157,27 @@ class ReceiptCreateView(View):
                     transfer_reference=data.get('transfer_reference', ''),
                     transfer_date=data.get('transfer_date')
                 )
-
             else:
                 return JsonResponse({
                     'status': 'error',
                     'message': 'Invalid receipt type'
                 }, status=400)
-            
-            # Handle compensation if selected
-            if compensates_id:
-                # Find the unpaid receipt
-                unpaid_receipt = None
-                try:
-                    unpaid_receipt = CheckReceipt.objects.get(
-                        id=compensates_id, 
-                        status=CheckReceipt.STATUS_UNPAID
-                    )
-                except CheckReceipt.DoesNotExist:
+
+            # Then handle compensations
+            compensations = json.loads(request.POST.get('compensations', '[]'))
+            if compensations:
+                for comp_data in compensations:
+                    unpaid_receipt = None
                     try:
-                        unpaid_receipt = LCN.objects.get(
-                            id=compensates_id, 
-                            status=LCN.STATUS_UNPAID
-                        )
-                    except LCN.DoesNotExist:
-                        pass
-                
-                if unpaid_receipt:
-                    unpaid_receipt.compensate_with(receipt)
+                        unpaid_receipt = CheckReceipt.objects.get(id=comp_data['receipt_id'])
+                    except CheckReceipt.DoesNotExist:
+                        try:
+                            unpaid_receipt = LCN.objects.get(id=comp_data['receipt_id'])
+                        except LCN.DoesNotExist:
+                            continue
+
+                    if unpaid_receipt:
+                        unpaid_receipt.add_compensation(receipt, comp_data['amount'])
 
             return JsonResponse({
                 'status': 'success',
@@ -614,38 +596,52 @@ def entity_autocomplete(request):
 
 def unpaid_receipt_autocomplete(request):
     search = request.GET.get('term', '') or request.GET.get('q', '')
+    results = []
     
     # Search across CheckReceipt and LCN
     unpaid_checks = CheckReceipt.objects.filter(
-        status=CheckReceipt.STATUS_UNPAID
+        Q(status=CheckReceipt.STATUS_UNPAID) | 
+        Q(status=CheckReceipt.STATUS_PARTIALLY_COMPENSATED)
     ).filter(
         check_number__icontains=search
-    )[:10]
+    ).select_related('entity')[:10]
     
+    # Add LCNs too
     unpaid_lcns = LCN.objects.filter(
-        status=LCN.STATUS_UNPAID
+        Q(status=LCN.STATUS_UNPAID) | 
+        Q(status=LCN.STATUS_PARTIALLY_COMPENSATED)
     ).filter(
         lcn_number__icontains=search
-    )[:10]
+    ).select_related('entity')[:10]
     
-    # Combine results
-    results = []
-    
+    # Process checks
     for check in unpaid_checks:
+        comp_status = check.get_compensation_status()
         results.append({
             'id': str(check.id),
-            'text': f"Check #{check.check_number} ({check.entity.name}) - {check.amount} [{check.get_rejection_cause_display() or 'No cause'}]",
-            'description': f"Check #{check.check_number} ({check.entity.name}) - {check.amount} [{check.get_rejection_cause_display() or 'No cause'}]"
+            'text': f"Check #{check.check_number}",
+            'description': f"Check #{check.check_number} ({check.entity.name})",
+            'type': 'Check',
+            'number': check.check_number,
+            'amount': float(check.amount),
+            'remaining': float(comp_status['remaining']),
+            'entity': check.entity.name
         })
     
+    # Process LCNs
     for lcn in unpaid_lcns:
+        comp_status = lcn.get_compensation_status()
         results.append({
             'id': str(lcn.id),
-            'text': f"LCN #{lcn.lcn_number} ({lcn.entity.name}) - {lcn.amount} [{lcn.get_rejection_cause_display() or 'No cause'}]",
-            'description': f"LCN #{lcn.lcn_number} ({lcn.entity.name}) - {lcn.amount} [{lcn.get_rejection_cause_display() or 'No cause'}]"
+            'text': f"LCN #{lcn.lcn_number}",
+            'description': f"LCN #{lcn.lcn_number} ({lcn.entity.name})",
+            'type': 'LCN',
+            'number': lcn.lcn_number,
+            'amount': float(lcn.amount),
+            'remaining': float(comp_status['remaining']),
+            'entity': lcn.entity.name
         })
     
-    print(f"Unpaid Receipt results({len(results)}): {results}")
     return JsonResponse({'results': results})
 
 @require_http_methods(["POST"])

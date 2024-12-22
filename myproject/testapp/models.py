@@ -57,11 +57,11 @@ class Supplier(BaseModel):
     alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', 'Only alphanumeric characters are allowed.')
 
     name = models.CharField(max_length=100, unique=True, validators=[alphanumeric_validator])
-    if_code = models.CharField(max_length=20, unique=True, validators=[numeric_validator])
+    if_code = models.CharField(max_length=25, unique=True, validators=[numeric_validator])
     ice_code = models.CharField(max_length=15, unique=True, validators=[numeric_validator])  # Exactly 15 characters
-    rc_code = models.CharField(max_length=20, validators=[numeric_validator])
+    rc_code = models.CharField(max_length=25, validators=[numeric_validator])
     rc_center = models.CharField(max_length=100, validators=[alphanumeric_validator])
-    accounting_code = models.CharField(max_length=20, unique=True, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
+    accounting_code = models.CharField(max_length=25, unique=True, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
     is_energy = models.BooleanField(default=False)
     service = models.CharField(max_length=255, blank=True, validators=[alphanumeric_validator])  # Description of merch/service sold
     delay_convention = models.IntegerField(choices=[(0, '0'), (30, '30'), (60, '60'), (90, '90'), (120, '120')], default=60)
@@ -89,7 +89,7 @@ class Product(BaseModel):
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, choices=[
     (0.00, '0%'), (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
 ])
-    expense_code = models.CharField(max_length=20, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
+    expense_code = models.CharField(max_length=25, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
     is_energy = models.BooleanField(default=False)
     fiscal_label = models.CharField(max_length=255, blank=False)
 
@@ -108,7 +108,7 @@ class Invoice(BaseModel):
     date = models.DateField()
     supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT)
     status = models.CharField(
-        max_length=20, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
+        max_length=25, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
     )
     payment_due_date = models.DateField(null=True, blank=True)
     exported_at = models.DateTimeField(null=True, blank=True)
@@ -121,13 +121,13 @@ class Invoice(BaseModel):
     ]
 
     payment_status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=PAYMENT_STATUS_CHOICES,
         default='not_paid'
     )
     
     type = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=INVOICE_TYPE_CHOICES,
         default='invoice'
     )
@@ -417,6 +417,9 @@ class Invoice(BaseModel):
                 cause=self, 
                 status='paid'
             ).exclude(status='cancelled'))
+        
+        
+        
 
         if paid_amount >= self.total_amount:
             return 'paid'
@@ -806,7 +809,7 @@ class Check(BaseModel):
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(null=True, blank=True)
     status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=[
             ('draft', 'Draft'),
             ('printed', 'Printed'),
@@ -1303,7 +1306,7 @@ class Entity(BaseModel):
     )
     
     city = models.CharField(max_length=100, blank=True, null=True)
-    phone_number = models.CharField(max_length=20, blank=True, null=True)
+    phone_number = models.CharField(max_length=25, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     email = models.EmailField(blank=True, null=True)
 
@@ -1377,6 +1380,7 @@ class NegotiableReceipt(Receipt):
     STATUS_REJECTED = 'REJECTED'
     STATUS_COMPENSATED = 'COMPENSATED'
     STATUS_UNPAID = 'UNPAID'
+    STATUS_PARTIALLY_COMPENSATED = 'PARTIALLY_COMPENSATED'
 
     RECEIPT_STATUS = [
         (STATUS_PORTFOLIO, 'In Portfolio'),
@@ -1386,7 +1390,8 @@ class NegotiableReceipt(Receipt):
         (STATUS_PAID, 'Paid'),
         (STATUS_REJECTED, 'Rejected'),
         (STATUS_COMPENSATED, 'Compensated'),
-        (STATUS_UNPAID, 'Unpaid') 
+        (STATUS_UNPAID, 'Unpaid'),
+        (STATUS_PARTIALLY_COMPENSATED, 'Partially Compensated') 
     ]
     
     REJECTION_CAUSES = [
@@ -1416,17 +1421,9 @@ class NegotiableReceipt(Receipt):
 
     due_date = models.DateField()
     status = models.CharField(
-        max_length=20, 
+        max_length=25, 
         choices=RECEIPT_STATUS,
         default=STATUS_PORTFOLIO
-    )
-
-    compensates = models.ForeignKey(
-        'self',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='compensated_by'
     )
     unpaid_date = models.DateTimeField(null=True, blank=True)
     rejection_cause = models.CharField(
@@ -1434,30 +1431,7 @@ class NegotiableReceipt(Receipt):
         choices=REJECTION_CAUSES,
         null=True,
         blank=True
-    )    
-
-    compensating_content_type = models.ForeignKey(
-        'contenttypes.ContentType',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='%(app_label)s_%(class)s_compensating'
     )
-
-    compensating_object_id = models.UUIDField(null=True, blank=True)
-    compensating_receipt = GenericForeignKey(
-        'compensating_content_type', 
-        'compensating_object_id'
-    )
-    
-    compensation_date = models.DateTimeField(
-        null=True,
-        blank=True
-    )    
-
-    class Meta:
-        abstract = True
-
     def can_be_presented(self):
         return self.status == self.STATUS_PORTFOLIO
 
@@ -1503,7 +1477,13 @@ class NegotiableReceipt(Receipt):
 
     def can_edit(self):
         """Check if receipt can be edited"""
-        return not hasattr(self, 'presentation') or self.presentation is None
+        compensating_records = CompensationRecord.objects.filter(
+            compensator_content_type=ContentType.objects.get_for_model(self),
+            compensator_id=self.id,
+            is_active=True
+        ).exists()
+        
+        return not compensating_records
 
     def can_delete(self):
         """Check if receipt can be deleted"""
@@ -1526,17 +1506,37 @@ class NegotiableReceipt(Receipt):
     @property
     def compensation_info(self):
         """Returns formatted compensation information"""
-        if not self.compensating_receipt:
-            return None
-            
-        if isinstance(self.compensating_receipt, CashReceipt):
-            return f"Compensated by cash payment (Ref: {self.compensating_receipt.reference_number or 'N/A'})"
-        elif isinstance(self.compensating_receipt, TransferReceipt):
-            return f"Compensated by bank transfer (Ref: {self.compensating_receipt.transfer_reference})"
-        else:
-            return (f"Compensated by {self.compensating_receipt.__class__.__name__.replace('Receipt', '')} "
-                f"#{self.compensating_receipt.get_receipt_number()} "
-                f"({self.compensating_receipt.entity.name})")
+        print("\n=== Getting Compensation Info ===")
+        
+        # Check if this receipt is compensating others
+        compensating_records = CompensationRecord.objects.filter(
+            compensator_content_type=ContentType.objects.get_for_model(self),
+            compensator_id=self.id,
+            is_active=True
+        )
+        if compensating_records.exists():
+            total = sum(r.amount for r in compensating_records)
+            return f"Compensating {len(compensating_records)} receipt(s) for total {total}"
+        
+        # Check if this receipt is being compensated
+        compensated_records = CompensationRecord.objects.filter(
+            compensated_content_type=ContentType.objects.get_for_model(self),
+            compensated_id=self.id,
+            is_active=True
+        )
+        if compensated_records.exists():
+            compensators = []
+            for record in compensated_records:
+                compensator = record.compensator_receipt
+                if isinstance(compensator, CashReceipt):
+                    compensators.append(f"Cash payment (Ref: {compensator.reference_number})")
+                elif isinstance(compensator, TransferReceipt):
+                    compensators.append(f"Transfer (Ref: {compensator.transfer_reference})")
+                else:
+                    compensators.append(f"{compensator.__class__.__name__.replace('Receipt', '')} #{compensator.get_receipt_number()}")
+            return "Compensated by " + ", ".join(compensators)
+        
+        return None
 
     def mark_as_unpaid(self, cause, unpaid_date=None):
         """Mark receipt as unpaid with a cause"""
@@ -1547,79 +1547,6 @@ class NegotiableReceipt(Receipt):
         self.rejection_cause = cause
         self.unpaid_date = unpaid_date if unpaid_date else timezone.now()
         self.save()
-
-    def compensate_with(self, compensating_receipt):
-        """Set up compensation relationship"""
-        if self.status != self.STATUS_UNPAID:
-            raise ValidationError("Only unpaid receipts can be compensated")
-            
-        if compensating_receipt.amount < self.amount:
-            raise ValidationError("Compensating receipt amount must be greater than or equal to unpaid amount")
-
-        self.compensating_receipt = compensating_receipt
-        
-        # If cash/transfer, mark as compensated immediately
-        if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
-            self.status = self.STATUS_COMPENSATED
-            self.compensation_date = timezone.now()
-            self.record_history(
-                action='status_changed',
-                old_value={'status': self.STATUS_UNPAID},
-                new_value={'status': self.STATUS_COMPENSATED},
-                notes=f'Compensated by {compensating_receipt.__class__.__name__} {compensating_receipt.id}'
-            )
-        else:
-            # For checks/LCNs, just record that a compensating receipt was assigned
-            self.record_history(
-                action='compensation_assigned',
-                new_value={
-                    'compensating_type': compensating_receipt.__class__.__name__,
-                    'compensating_id': str(compensating_receipt.id)
-                },
-                notes=f'Assigned {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()} as compensating receipt'
-            )
-            
-        self.save()
-
-    def handle_compensation_payment(self):
-        """Called when a compensating negotiable receipt is paid"""
-        if self.status == self.STATUS_UNPAID and self.compensating_receipt:
-            old_status = self.status
-            self.status = self.STATUS_COMPENSATED
-            self.compensation_date = timezone.now()
-            
-            self.record_history(
-                action='status_changed',
-                old_value={'status': old_status},
-                new_value={'status': self.STATUS_COMPENSATED},
-                notes=f'Status changed to compensated as compensating receipt was paid'
-            )
-            self.save()
-
-    def update_compensated_receipts(self):
-            """
-            When this receipt is paid, update any receipts it compensates
-            """
-            # Find all receipts that this receipt compensates
-            compensated_checks = CheckReceipt.objects.filter(
-                compensating_content_type=ContentType.objects.get_for_model(self),
-                compensating_object_id=self.id,
-                status=self.STATUS_UNPAID
-            )
-            
-            compensated_lcns = LCN.objects.filter(
-                compensating_content_type=ContentType.objects.get_for_model(self),
-                compensating_object_id=self.id,
-                status=self.STATUS_UNPAID
-            )
-
-            # Update the status of all compensated receipts
-            current_time = timezone.now()
-            
-            for receipt in list(compensated_checks) + list(compensated_lcns):
-                receipt.status = self.STATUS_COMPENSATED
-                receipt.compensation_date = current_time
-                receipt.save()
 
     def record_history(self, action, old_value=None, new_value=None, notes=None, user=None):
         """
@@ -1704,6 +1631,119 @@ class NegotiableReceipt(Receipt):
                 pass
                 
             super().save(*args, **kwargs)
+
+    def update_compensation_status(self):
+        """Update receipt status based on CompensationRecords"""
+        comp_status = self.get_compensation_status()
+        old_status = self.status
+        
+        # Determine new status
+        if comp_status['total_compensated'] == 0:
+            new_status = self.STATUS_UNPAID
+        elif comp_status['total_compensated'] >= self.amount:
+            new_status = self.STATUS_COMPENSATED
+        else:
+            new_status = self.STATUS_PARTIALLY_COMPENSATED
+        
+        if old_status != new_status:
+            self.status = new_status
+            self.record_history(
+                action='status_changed',
+                old_value={'status': old_status},
+                new_value={'status': new_status},
+                notes=f'Status updated due to compensation changes. Total: {comp_status["total_compensated"]}'
+            )
+            self.save()
+
+    def handle_payment(self):
+        """Called when a negotiable receipt is paid"""
+        print("\n=== Handling Payment for Compensator ===")
+        print(f"Receipt: {self.__class__.__name__} #{self.get_receipt_number()}")
+        
+        # Activate any compensation records where this receipt is the compensator
+        records = CompensationRecord.objects.filter(
+            compensator_content_type=ContentType.objects.get_for_model(self),
+            compensator_id=self.id,
+            is_active=False
+        )
+        
+        print(f"Found {records.count()} pending compensation records")
+        
+        # Activate records and update compensated receipts
+        for record in records:
+            record.is_active = True
+            record.save()
+            record.compensated_receipt.update_compensation_status()
+            
+            # Record history
+            self.record_history(
+                action='compensation_activated',
+                notes=f'Activated compensation for {record.compensated_receipt.__class__.__name__} #{record.compensated_receipt.get_receipt_number()}'
+            )
+
+    def mark_as_paid(self, paid_date=None):
+        """Mark receipt as paid and handle compensations"""
+        old_status = self.status
+        self.status = self.STATUS_PAID
+        self.paid_date = paid_date or timezone.now()
+        self.save()
+        
+        # Record status change
+        self.record_history(
+            action='status_changed',
+            old_value={'status': old_status},
+            new_value={'status': self.STATUS_PAID},
+            notes='Receipt marked as paid'
+        )
+        
+        # Handle any pending compensations
+        self.handle_payment()
+
+    class Meta:
+        abstract = True
+
+    def get_compensation_status(self):
+        """Get total compensated amount and remaining"""
+        print(f"\n=== Getting Compensation Status for {self.__class__.__name__} #{self.get_receipt_number()} ===")
+        
+        records = CompensationRecord.objects.filter(
+            compensated_content_type=ContentType.objects.get_for_model(self),
+            compensated_id=self.id,
+            is_active=True
+        )
+        
+        total = sum(r.amount for r in records)
+        remaining = self.amount - total
+        
+        print(f"Total compensated: {total}")
+        print(f"Remaining: {remaining}")
+        
+        return {
+            'total_compensated': total,
+            'remaining': remaining
+        }
+
+    def add_compensation(self, compensating_receipt, amount):
+        """Add a compensation record"""
+        print(f"\n=== Adding Compensation for {self.__class__.__name__} #{self.get_receipt_number()} ===")
+        print(f"Compensator: {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}")
+        print(f"Amount: {amount}")
+        
+        compensation = CompensationRecord(
+            compensated_content_type=ContentType.objects.get_for_model(self),
+            compensated_id=self.id,
+            compensator_content_type=ContentType.objects.get_for_model(compensating_receipt),
+            compensator_id=compensating_receipt.id,
+            amount=amount,
+            is_active=isinstance(compensating_receipt, (CashReceipt, TransferReceipt))
+        )
+        compensation.clean()
+        compensation.save()
+        
+        # Update status
+        self.update_compensation_status()
+        
+        return compensation
 
 class CheckReceipt(NegotiableReceipt):
     """Check-specific implementation."""
@@ -1829,38 +1869,14 @@ class CashReceipt(Receipt):
         related_name='cash_receipts'
     )
 
-    compensating_content_type = models.ForeignKey(
-        'contenttypes.ContentType',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='%(app_label)s_%(class)s_compensating'
-    )
-    compensating_object_id = models.UUIDField(null=True, blank=True)
-    compensating_receipt = GenericForeignKey(
-        'compensating_content_type', 
-        'compensating_object_id'
-    )
-
     def get_compensated_receipt(self):
-        """Returns the receipt that this cash/transfer is compensating"""
-        # Check for checks first
-        compensated_check = CheckReceipt.objects.filter(
-            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
-            compensating_object_id=self.id
-        ).first()
-        
-        if compensated_check:
-            return compensated_check
-            
-        # Check for LCNs
-        compensated_lcn = LCN.objects.filter(
-            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
-            compensating_object_id=self.id
-        ).first()
-        
-        return compensated_lcn
-    
+        """Returns receipts this cash is compensating"""
+        return CompensationRecord.objects.filter(
+            compensator_content_type=ContentType.objects.get_for_model(self),
+            compensator_id=self.id,
+            is_active=True
+        )
+
     def get_compensation_description(self):
         """Returns description if this receipt compensates another"""
         compensated = self.get_compensated_receipt()
@@ -1885,6 +1901,10 @@ class CashReceipt(Receipt):
         verbose_name = "Cash Receipt"
         verbose_name_plural = "Cash Receipts"
 
+    def get_receipt_number(self):
+        """Returns reference number for consistency with other receipts"""
+        return self.reference_number or 'N/A'
+
 class TransferReceipt(Receipt):
     """Bank transfer implementation."""
     transfer_reference = models.CharField(max_length=100)
@@ -1894,38 +1914,15 @@ class TransferReceipt(Receipt):
         related_name='transfer_receipts'
     )
     transfer_date = models.DateField(default=timezone.now)
-    compensating_content_type = models.ForeignKey(
-        'contenttypes.ContentType',
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name='%(app_label)s_%(class)s_compensating'
-    )
-    compensating_object_id = models.UUIDField(null=True, blank=True)
-    compensating_receipt = GenericForeignKey(
-        'compensating_content_type', 
-        'compensating_object_id'
-    )
 
     def get_compensated_receipt(self):
-        """Returns the receipt that this cash/transfer is compensating"""
-        # Check for checks first
-        compensated_check = CheckReceipt.objects.filter(
-            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
-            compensating_object_id=self.id
-        ).first()
-        
-        if compensated_check:
-            return compensated_check
-            
-        # Check for LCNs
-        compensated_lcn = LCN.objects.filter(
-            compensating_content_type=ContentType.objects.get_for_model(self.__class__),
-            compensating_object_id=self.id
-        ).first()
-        
-        return compensated_lcn
-    
+        """Returns receipts this transfer is compensating"""
+        return CompensationRecord.objects.filter(
+            compensator_content_type=ContentType.objects.get_for_model(self),
+            compensator_id=self.id,
+            is_active=True
+        )
+
     def get_compensation_description(self):
         """Returns description if this receipt compensates another"""
         compensated = self.get_compensated_receipt()
@@ -1950,6 +1947,10 @@ class TransferReceipt(Receipt):
         verbose_name = "Transfer"
         verbose_name_plural = "Transfers"
 
+    def get_receipt_number(self):
+        """Returns transfer reference for consistency with other receipts"""
+        return self.transfer_reference
+
 class Presentation(BaseModel):
     """Represents a collection/discount presentation of negotiable receipts."""
     TYPE_COLLECTION = 'COLLECTION'
@@ -1967,7 +1968,7 @@ class Presentation(BaseModel):
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     notes = models.TextField(blank=True)
     status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=[
             ('pending', 'Pending'),
             ('presented', 'Presented'),
@@ -2032,7 +2033,7 @@ class PresentationReceipt(BaseModel):
     )
     
     recorded_status = models.CharField(
-        max_length=20,
+        max_length=25,
         choices=NegotiableReceipt.RECEIPT_STATUS,
         null=True,
         blank=True,
@@ -2206,6 +2207,18 @@ class BankStatement(models.Model):
         ).select_related('entity', 'client')
         
         for receipt in cash_receipts:
+            # For rejected receipts
+            if hasattr(receipt, 'rejection_cause'):
+                rejection_info = {
+                    'rejection_cause': receipt.rejection_cause,
+                    'rejection_cause_display': receipt.get_rejection_cause_display()
+                }
+            else:
+                rejection_info = {
+                    'rejection_cause': None,
+                    'rejection_cause_display': None
+                }
+            
             entries.append({
                 'date': receipt.operation_date,
                 'label': f"Cash payment from {receipt.entity.name}",
@@ -2225,7 +2238,8 @@ class BankStatement(models.Model):
                     'name': receipt.client.name,
                     'client_code': receipt.client.client_code
                 },
-                'operation_date': receipt.operation_date
+                'operation_date': receipt.operation_date,
+                **rejection_info  # Spread rejection info safely
             })
             
         # Get transfer receipts
@@ -3051,3 +3065,63 @@ INITIAL_FEE_TYPES = [
         'vat_code': '34551'
     }
 ]
+
+class CompensationRecord(BaseModel):
+    """Tracks compensation relationships and amounts"""
+    print("\n=== Creating CompensationRecord ===")
+    
+    # The unpaid receipt being compensated
+    compensated_content_type = models.ForeignKey(ContentType, related_name='compensated_records', on_delete=models.CASCADE)
+    compensated_id = models.UUIDField()
+    compensated_receipt = GenericForeignKey('compensated_content_type', 'compensated_id')
+    
+    # The receipt doing the compensation
+    compensator_content_type = models.ForeignKey(ContentType, related_name='compensator_records', on_delete=models.CASCADE)
+    compensator_id = models.UUIDField()
+    compensator_receipt = GenericForeignKey('compensator_content_type', 'compensator_id')
+    
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    is_active = models.BooleanField(default=False)  # True for cash/transfer, False for negotiables until paid
+    
+    def clean(self):
+        print(f"\n=== Validating CompensationRecord ===")
+        print(f"Compensated: {self.compensated_receipt}")
+        print(f"Compensator: {self.compensator_receipt}")
+        print(f"Amount: {self.amount}")
+        
+        if self.amount <= 0:
+            raise ValidationError("Compensation amount must be positive")
+            
+        # Check if amount exceeds remaining
+        remaining = self.compensated_receipt.amount
+        for record in CompensationRecord.objects.filter(
+            compensated_content_type=self.compensated_content_type,
+            compensated_id=self.compensated_id,
+            is_active=True
+        ):
+            remaining -= record.amount
+            
+        if self.amount > remaining:
+            raise ValidationError(f"Amount {self.amount} exceeds remaining {remaining}")
+
+    def get_compensation_status(self):
+        """Get total compensated amount and remaining"""
+        print(f"\n=== Getting Compensation Status for {self.__class__.__name__} #{self.get_receipt_number()} ===")
+        
+        records = CompensationRecord.objects.filter(
+            compensated_content_type=ContentType.objects.get_for_model(self),
+            compensated_id=self.id,
+            is_active=True
+        )
+        
+        total = sum(r.amount for r in records)
+        remaining = self.amount - total
+        
+        print(f"Total compensated: {total}")
+        print(f"Remaining: {remaining}")
+        
+        return {
+            'total_compensated': total,
+            'remaining': remaining
+        }
+
