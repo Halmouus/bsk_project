@@ -1,0 +1,270 @@
+{% load accounting_filters %}
+
+<div class="modal-header" style="background: linear-gradient(45deg, #4e73df, #224abe); color: white;">
+    <h5 class="modal-title">
+        <i class="fas fa-sync me-2"></i>
+        Compensation History
+    </h5>
+    <button type="button" class="close" data-dismiss="modal">&times;</button>
+</div>
+
+<div class="modal-body">
+    <!-- Receipt Summary -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Entity:</strong> {{ receipt.entity.name }}</p>
+                    <p><strong>Client:</strong> {{ receipt.client.name }}</p>
+                </div>
+                <div class="col-md-6 text-end">
+                    <p><strong>Total Amount:</strong> {{ receipt.amount|format_balance }}</p>
+                    {% with comp_status=receipt.get_compensation_status %}
+                        <p><strong>Compensated:</strong> {{ comp_status.total_compensated|format_balance }}</p>
+                        {% if comp_status.remaining > 0 %}
+                            <p><strong>Remaining:</strong> {{ comp_status.remaining|format_balance }}</p>
+                        {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+<!-- Timeline -->
+<div class="timeline">
+    {% for record in records %}
+        <div class="timeline-item animate__animated animate__fadeInLeft">
+            <div class="timeline-marker bg-primary"></div>
+            <div class="timeline-content">
+                <div class="d-flex justify-content-between">
+                    <h6 class="mb-0">
+                        {% if record.type == 'CashReceipt' %}
+                            Cash Payment
+                        {% elif record.type == 'TransferReceipt' %}
+                            Bank Transfer 
+                        {% elif record.type == 'CheckReceipt' %}
+                            Check #{{ record.number }}
+                        {% else %}
+                            LCN #{{ record.number }}
+                        {% endif %}
+                    </h6>
+                    <small class="text-muted">
+                        {{ record.date|date:"d/m/Y" }}
+                    </small>
+                </div>
+                <div class="mt-2">
+                    <strong class="text-primary">Amount: {{ record.amount|format_balance }}</strong>
+                    {% if record.entity %}
+                        <br><small class="text-muted">From: {{ record.entity }}</small>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+</div>
+
+<style>
+    /* Enhanced timeline styles */
+    .timeline {
+        position: relative;
+        padding-left: 3rem;
+        margin-bottom: 3rem;
+    }
+    
+    .timeline::before {
+        content: '';
+        position: absolute;
+        left: 11px;
+        top: 0;
+        height: 100%;
+        width: 2px;
+        background: linear-gradient(180deg, 
+            rgba(78,115,223,0.1) 0%, 
+            rgba(78,115,223,0.3) 50%, 
+            rgba(78,115,223,0.1) 100%
+        );
+        transition: background-color 0.3s ease;
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 2rem;
+        transition: transform 0.2s ease;
+    }
+    
+    .timeline-marker {
+        position: absolute;
+        left: -3rem;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid #fff;
+        box-shadow: 0 0 0 2px #e9ecef;
+        transition: all 0.3s ease;
+        background-color: #4f46e5;
+        cursor: pointer;
+    }
+    
+    .timeline-content {
+        background: white;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        position: relative;
+        transition: all 0.3s ease;
+        border: 1px solid transparent;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+    
+    .timeline-content::before {
+        content: '';
+        position: absolute;
+        left: -0.5rem;
+        top: 0.75rem;
+        width: 0.5rem;
+        height: 0.5rem;
+        background: inherit;
+        transform: rotate(45deg);
+        transition: all 0.3s ease;
+    }
+    
+    /* Hover Effects */
+    .timeline-item:hover {
+        transform: translateX(5px);
+    }
+    
+    .timeline-item:hover .timeline-marker {
+        transform: scale(1.2);
+        background-color: #6366f1;
+        box-shadow: 0 0 15px #6366f1;
+    }
+    
+    .timeline-item:hover .timeline-content {
+        background: #fff;
+        border-color: #6366f1;
+        box-shadow: 0 4px 12px rgba(99, 102, 241, 0.2);
+    }
+    
+    .timeline-item:hover + .timeline-item::before {
+        background-color: #6366f1;
+    }
+    
+    /* Animation classes */
+    .timeline-item {
+        opacity: 0;
+        animation: slideIn 0.5s ease forwards;
+    }
+    
+    @keyframes slideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+    
+    /* Add animation delay for each item */
+    .timeline-item:nth-child(1) { animation-delay: 0.1s; }
+    .timeline-item:nth-child(2) { animation-delay: 0.2s; }
+    .timeline-item:nth-child(3) { animation-delay: 0.3s; }
+    .timeline-item:nth-child(4) { animation-delay: 0.4s; }
+    .timeline-item:nth-child(5) { animation-delay: 0.5s; }
+    .timeline-item:nth-child(n+6) { animation-delay: 0.6s; }
+    
+    /* Sound effect trigger */
+    .timeline-marker:active {
+        transform: scale(0.9);
+    }
+    
+    /* Status Badge Colors */
+    .badge-portfolio { background-color: #6c757d; color: white; }
+    .badge-presented { background-color: #17a2b8; color: white; }
+    .badge-presented_discount { background-color: #e437d3; color: white; }
+    .badge-paid { background-color: #28a745; color: white; }
+    .badge-discounted { background-color: #1032dc; color: white; }
+    .badge-unpaid { background-color: #dc3545; color: white; }
+    .badge-compensated { background-color: #fd7e14; color: white; }
+    
+    /* Enhanced animations */
+    .modal-header .close {
+        color: white;
+        opacity: 0.8;
+        transition: all 0.2s ease;
+    }
+
+    .modal-header .close:hover {
+        opacity: 1;
+        transform: rotate(90deg);
+    }
+    
+    .badge {
+        transition: all 0.3s ease;
+        display: inline-block;
+    }
+    
+    .badge:hover {
+        transform: scale(1.1);
+        box-shadow: 0 0 10px rgba(0,0,0,0.2);
+    }
+    
+    /* Wiggle animation for badges */
+    @keyframes wiggle {
+        0% { transform: rotate(0deg); }
+        25% { transform: rotate(3deg); }
+        75% { transform: rotate(-3deg); }
+        100% { transform: rotate(0deg); }
+    }
+    
+    .badge:hover {
+        animation: wiggle 0.3s ease-in-out;
+    }
+    
+    /* Card hover effect */
+    .card {
+        transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    
+    /* Timeline content hover effect */
+    .timeline-content {
+        transition: all 0.3s ease;
+    }
+    
+    .timeline-content:hover {
+        transform: scale(1.02);
+        box-shadow: 0 5px 15px rgba(99, 102, 241, 0.15);
+    }
+</style>
+    
+<script>
+    $(document).ready(function() {
+
+   
+        $('.timeline-marker').hover(function() {
+            hoverSound.currentTime = 0;
+            hoverSound.play();
+        });
+    
+        $('.timeline-marker').click(function() {
+            clickSound.currentTime = 0;
+            clickSound.play();
+        });
+
+        // Add hover sound effect (optional)
+    $('.timeline-item').on('mouseenter', function() {
+        const audio = new Audio('/static/sounds/hover.mp3');
+        audio.volume = 0.1;
+        audio.play().catch(() => {}); // Catch and ignore autoplay restrictions
+    });
+    });
+</script>

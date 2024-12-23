@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import calendar
-from .models import CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS
+from .models import CompensationRecord, CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS
 from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
@@ -868,3 +868,38 @@ class ReceiptFilterView(View):
         print("Bank accounts being passed to context:", bank_accounts.count())  # Debug log
         context['bank_accounts'] = bank_accounts
         return context
+
+def compensation_timeline(request, receipt_type, pk):
+    # Get the receipt
+    model = CheckReceipt if receipt_type == 'check' else LCN
+    receipt = get_object_or_404(model, pk=pk)
+    
+    # Get compensation records
+    content_type = ContentType.objects.get_for_model(model)
+    compensation_records = CompensationRecord.objects.filter(
+        compensated_content_type=content_type,
+        compensated_id=receipt.id,
+        is_active=True
+    ).select_related(
+        'compensator_content_type'
+    ).order_by('created_at')
+
+    # Format records for template
+    records = []
+    for record in compensation_records:
+        compensator = record.compensator_receipt
+        records.append({
+            'amount': record.amount,
+            'date': record.created_at,
+            'type': compensator.__class__.__name__,
+            'number': compensator.get_receipt_number(),
+            'entity': compensator.entity.name if hasattr(compensator, 'entity') else None
+        })
+
+    context = {
+        'receipt': receipt,
+        'records': records,
+        'total_compensated': sum(r.amount for r in compensation_records)
+    }
+    
+    return render(request, 'receipt/partials/compensation_timeline_modal.html', context)

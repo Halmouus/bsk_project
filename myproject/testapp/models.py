@@ -1739,7 +1739,16 @@ class NegotiableReceipt(Receipt):
         )
         compensation.clean()
         compensation.save()
-        
+        self.record_history(
+            action='compensated',
+            new_value={
+                'amount': str(amount),
+                'compensator_type': compensating_receipt.__class__.__name__,
+                'compensator_number': compensating_receipt.get_receipt_number(),
+                'compensator_entity': compensating_receipt.entity.name if hasattr(compensating_receipt, 'entity') else None
+            },
+            notes=f'Compensated with {amount} by {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}'
+        )
         # Update status
         self.update_compensation_status()
         

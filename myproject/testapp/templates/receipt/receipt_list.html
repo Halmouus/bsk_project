@@ -133,7 +133,9 @@ Available filters:
                                     {% endwith %}
                                 {% endif %}
                                 {% if check.compensation_info %}
-                                    <br><small class="text-muted">{{ check.compensation_info }}</small>
+                                    <i class="fas fa-eye text-primary ml-2 cursor-pointer" 
+                                    onclick="viewCompensationTimeline('{% if check.check_number %}check{% else %}lcn{% endif %}', '{{ check.id }}')">
+                                    </i>
                                 {% endif %}
                                 {% if check.status == 'PARTIALLY_COMPENSATED' %}
                                     {% with comp_status=check.get_compensation_status %}
@@ -404,6 +406,15 @@ Available filters:
 
 <!-- Timeline Modal -->
 <div class="modal fade" id="timelineModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <!-- Content will be loaded dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- Compensation Timeline Modal -->
+<div class="modal fade" id="compensationModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <!-- Content will be loaded dynamically -->
@@ -1459,6 +1470,35 @@ $(document).on('change', '.receipt-status', function() {
         }
     });
 });
+
+function viewCompensationTimeline(receiptType, receiptId) {
+    $('#compensationModal').modal('show');
+    $('#compensationModal .modal-content').html(`
+        <div class="modal-body text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="sr-only">Loading...</span>
+            </div>
+        </div>
+    `);
+
+    $.ajax({
+        url: `/testapp/receipts/${receiptType}/${receiptId}/compensation-timeline/`,
+        success: function(response) {
+            $('#compensationModal .modal-content').html(response);
+        },
+        error: function() {
+            $('#compensationModal .modal-content').html(`
+                <div class="modal-header">
+                    <h5 class="modal-title">Error</h5>
+                    <button type="button" class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">Failed to load compensation timeline.</div>
+                </div>
+            `);
+        }
+    });
+}
 
 function viewReceiptTimeline(receiptType, receiptId) {
     console.log(`Loading timeline for ${receiptType} ${receiptId}`);
