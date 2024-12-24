@@ -7,12 +7,13 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
-from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS
+from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS, ForecastStatement, BankStatement
 from django.contrib.contenttypes.models import ContentType
 import json
 import traceback
 from decimal import Decimal
 from django.utils import timezone
+from datetime import timedelta
 
 class PresentationListView(ListView):
     """
@@ -198,13 +199,58 @@ class PresentationUpdateView(View):
                     presentation.bank_reference = data['bank_reference']
                     presentation.status = data['status']
 
-                    # If status is being set to 'discounted', update all receipts
-                    if data['status'] == 'discounted':
-                        for pr in presentation.presentation_receipts.all():
-                            receipt = pr.checkreceipt or pr.lcn
-                            if receipt:
-                                receipt.status = 'DISCOUNTED'
-                                receipt.save()
+                    # Create forecast statements
+                    for pr in presentation.presentation_receipts.all():
+                        receipt = pr.checkreceipt or pr.lcn
+                        if not receipt:
+                            continue
+
+                        print(f"\nProcessing receipt: {receipt.get_receipt_number()}")
+                        
+                        if data['status'] == 'presented':
+                            # For collection: Create forecast for future payment
+                            print("Creating collection forecast")
+                            if isinstance(receipt, LCN) and receipt.due_date > timezone.now().date():
+                                # Future due date LCN
+                                forecast_date = self._calculate_business_day(receipt.due_date, 0)
+                            else:
+                                # Check or past-due LCN
+                                days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+                                forecast_date = self._calculate_business_day(presentation.date, days)
+                            
+                            ForecastStatement.objects.create(
+                                bank_account=presentation.bank_account,
+                                date=forecast_date,
+                                label=f"Expected payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
+                                credit=receipt.amount,
+                                amount=receipt.amount,
+                                reference=f"Pres. #{presentation.bank_reference}",
+                                source_type=receipt.__class__.__name__.lower(),
+                                source_id=receipt.id
+                            )
+                            receipt.status = 'PRESENTED_COLLECTION'
+
+                        elif data['status'] == 'discounted':
+                            # For discount: Create forecast without credit impact
+                            print("Creating discount entries")
+                            # Create forecast for future payment
+                            if isinstance(receipt, LCN):
+                                forecast_date = receipt.due_date
+                            else:
+                                days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+                                forecast_date = self._calculate_business_day(presentation.date, days)
+                            
+                            ForecastStatement.objects.create(
+                                bank_account=presentation.bank_account,
+                                date=forecast_date,
+                                label=f"Awaiting payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
+                                amount=receipt.amount,
+                                source_type=receipt.__class__.__name__.lower(),
+                                source_id=receipt.id
+                            )
+                            receipt.status = 'DISCOUNTED'
+                        
+                        receipt.save()
 
                     presentation.save()
                     print("Presentation updated successfully")
@@ -236,19 +282,33 @@ class PresentationUpdateView(View):
                                     status_value = new_status['status'] if isinstance(new_status, dict) else new_status
                                     print(f"Processing status update to {status_value}")
                                     
+                                    # Delete any existing forecasts
+                                    ForecastStatement.objects.filter(
+                                        source_type=receipt.__class__.__name__.lower(),
+                                        source_id=receipt.id
+                                    ).delete()
+
                                     if status_value == 'unpaid':
                                         cause = new_status.get('cause') if isinstance(new_status, dict) else None
                                         unpaid_date = new_status.get('unpaid_date')
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
-                                        # Add this line after successful unpaid update
                                         presentation_receipt.recorded_status = 'UNPAID'
                                         presentation_receipt.save()
                                         receipt.mark_as_unpaid(cause, unpaid_date)
+                                        
+                                        # For discounted receipts, create reversal statement
+                                        if presentation.status == 'discounted':
+                                            BankStatement.objects.create(
+                                                bank_account=presentation.bank_account,
+                                                date=timezone.now().date(),
+                                                label=f"Reversal of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
+                                                debit=receipt.amount,
+                                                reference=f"Pres. #{presentation.bank_reference}"
+                                            )
                                     else:
                                         print(f"Updating status to: {status_value.upper()}")
-                                        # Add this line after successful paid update
                                         presentation_receipt.recorded_status = status_value.upper()
                                         presentation_receipt.save()
                                         receipt.status = status_value.upper()
@@ -282,8 +342,23 @@ class PresentationUpdateView(View):
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
-            }, status=400)    
-   
+            }, status=400)
+
+    def _calculate_business_day(self, start_date, skip_days):
+        """Calculate a future business day, skipping weekends"""
+        current_date = start_date
+        while skip_days > 0:
+            current_date += timedelta(days=1)
+            # Skip weekends
+            while current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+            skip_days -= 1
+        # If landed on weekend, move to next business day
+        while current_date.weekday() >= 5:
+            current_date += timedelta(days=1)
+        return current_date
+    
+
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
     """

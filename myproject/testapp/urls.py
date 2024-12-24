@@ -47,7 +47,7 @@ from .views_presentation import (
 )
 
 from .views_statement import (
-    BankStatementView, AccountingView, OtherOperationsView
+    BankStatementView, AccountingView, OtherOperationsView, CalendarView, CalendarForecastView
 )
 
 from .views_transfer import (
@@ -205,8 +205,9 @@ urlpatterns = [
         DiscountInfoView.as_view(), name='presentation-discount-info'),
     path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
 
-
-    
+    # Calendar URLs
+    path('calendar/', CalendarView.as_view(), name='calendar'),
+    path('calendar/forecasts/', CalendarForecastView.as_view(), name='calendar-forecasts'),
 
 ]
 

@@ -13,6 +13,8 @@ from django.db.models import Q
 import logging
 from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
+from itertools import groupby
+from operator import itemgetter
 
 
 logger = logging.getLogger(__name__)
@@ -2050,6 +2052,8 @@ class PresentationReceipt(BaseModel):
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     immutable = models.BooleanField(default=False)
+    forecast_payment_date = models.DateField(null=True, blank=True)
+    is_forecasted = models.BooleanField(default=False)
 
     class Meta:
         unique_together = [
@@ -2079,18 +2083,88 @@ class PresentationReceipt(BaseModel):
                 raise ValidationError('Only receipts in portfolio status can be presented')
 
     def save(self, *args, **kwargs):
+        print("\n=== PresentationReceipt save method start ===")
+        print(f"Receipt ID: {self.pk}")
+        print(f"Is new: {not self.pk}")
+        is_new = not self.pk  
+        
         self.full_clean()
         super().save(*args, **kwargs)
         self.presentation.update_total()
 
         # Update receipt status based on presentation type
         receipt = self.checkreceipt or self.lcn
-        if receipt:  # Add check to ensure receipt exists
-            if self.presentation.presentation_type == Presentation.TYPE_COLLECTION:
+        print(f"Receipt: {receipt}")
+        print(f"Presentation type: {self.presentation.presentation_type}")
+        print(f"Presentation status: {self.presentation.status}")  # Add this
+        
+        if receipt:
+            if self.presentation.presentation_type == 'COLLECTION':
+                print("Setting status to PRESENTED_COLLECTION")
                 receipt.status = 'PRESENTED_COLLECTION'
+                if is_new:
+                    print("Attempting to create forecast statement...")
+                    try:
+                        self.create_forecast_statement()
+                        print("Forecast statement created successfully")
+                    except Exception as e:
+                        print(f"Error creating forecast statement: {str(e)}")
+                        import traceback
+                        print(traceback.format_exc())
+                else:
+                    print("Existing presentation - skipping forecast creation")
             else:
+                print("Setting status to PRESENTED_DISCOUNT")
                 receipt.status = 'PRESENTED_DISCOUNT'
             receipt.save()
+            print(f"Final receipt status: {receipt.status}")  # Add this
+        print("=== PresentationReceipt save method end ===\n")
+
+    def create_forecast_statement(self):
+        """Create forecast statement for this presentation"""
+        print("\n=== Creating Forecast Statement ===")
+        receipt = self.checkreceipt or self.lcn
+        presentation = self.presentation
+        print(f"Receipt: {receipt}")
+        print(f"Presentation type: {presentation.presentation_type}")
+
+        # Calculate forecast date
+        if isinstance(receipt, LCN):
+            print("Processing LCN")
+            if receipt.due_date > timezone.now().date():
+                forecast_date = receipt.due_date
+                print(f"Future due date: {forecast_date}")
+            else:
+                days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+                forecast_date = self._calculate_business_day(presentation.date, days)
+                print(f"Past due date, calculated date: {forecast_date}")
+        else:
+            print("Processing Check")
+            days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+            forecast_date = self._calculate_business_day(presentation.date, days)
+            print(f"Calculated date: {forecast_date}")
+
+        print(f"Creating forecast statement for {forecast_date}")
+        ForecastStatement.objects.create(
+            bank_account=presentation.bank_account,
+            date=forecast_date,
+            label=f"Expected payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
+            credit=receipt.amount,
+            reference=f"Pres. #{presentation.id}",
+            source_type=receipt.__class__.__name__.lower(),
+            source_id=receipt.id
+        )
+
+    def _calculate_business_day(self, start_date, days):
+        """Calculate business day skipping weekends"""
+        current_date = start_date
+        while days > 0:
+            current_date += timedelta(days=1)
+            # Skip weekends
+            while current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+            days -= 1
+        return current_date
 
     class Meta:
         verbose_name = "Presentation Receipt"
@@ -2204,7 +2278,7 @@ class BankStatement(models.Model):
         return balance
     
     @classmethod
-    def get_statement(cls, bank_account, start_date=None, end_date=None):
+    def get_statement(cls, bank_account, start_date=None, end_date=None, include_forecasts=False):
         """
         Dynamically generates statement entries for a bank account.
         """
@@ -2535,13 +2609,37 @@ class BankStatement(models.Model):
                 filtered_entries.append(entry)
             entries = filtered_entries
 
-        # Your existing sorting:
+        # Add forecast entries
+        if include_forecasts:  # Only add forecasts if the parameter is True
+            forecast_entries = ForecastStatement.objects.filter(
+                bank_account=bank_account,
+                is_processed=False
+            )
+            if start_date:
+                forecast_entries = forecast_entries.filter(date__gte=start_date)
+            if end_date:
+                forecast_entries = forecast_entries.filter(date__lte=end_date)
+
+            for forecast in forecast_entries:
+                entries.append({
+                    'date': forecast.date,
+                    'label': forecast.label,
+                    'debit': forecast.debit,
+                    'credit': forecast.credit,
+                    'reference': forecast.reference,
+                    'source_type': forecast.source_type,
+                    'source_id': forecast.source_id,
+                    'type': 'FORECAST',
+                    'is_forecast': True
+                })
+
+        # Sort entries by date in reverse order
         entries.sort(key=lambda x: x['date'], reverse=True)
         
-        # Replace your existing balance calculation with:
+        # Calculate balance
         balance = initial_balance if start_date else Decimal('0.00')
         for entry in reversed(entries):
-            if entry['type'] != 'BALANCE':  # Skip balance entry when calculating
+            if entry.get('type') != 'BALANCE':  # Skip balance entry when calculating
                 balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
             entry['balance'] = balance
 
@@ -2550,7 +2648,7 @@ class BankStatement(models.Model):
     @classmethod
     def calculate_balance_until(cls, bank_account, date):
         """Calculate total balance up to a specific date"""
-        entries = cls.get_statement(bank_account, end_date=date)
+        entries = cls.get_statement(bank_account, end_date=date, include_forecasts=False)
         if entries:
             return entries[0]['balance']  # First entry has final balance since they're sorted in reverse
         return Decimal('0.00')
@@ -3134,3 +3232,19 @@ class CompensationRecord(BaseModel):
             'remaining': remaining
         }
 
+
+class ForecastStatement(BaseModel):
+    """Stores forecasted bank statement entries"""
+    bank_account = models.ForeignKey(BankAccount, on_delete=models.CASCADE)
+    date = models.DateField()
+    label = models.CharField(max_length=255)
+    debit = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    credit = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    reference = models.CharField(max_length=100)
+    source_type = models.CharField(max_length=50)  # 'check_receipt', 'lcn', etc.
+    source_id = models.UUIDField()  # ID of the related receipt
+    is_processed = models.BooleanField(default=False)  # Turns true when actual statement is created
+    amount = models.DecimalField(max_digits=10, decimal_places=2, null=True)
+
+    def __str__(self):
+        return f"Forecast {self.label} on {self.date}"

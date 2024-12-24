@@ -1,0 +1,701 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+
+{% block content %}
+<div class="container-fluid p-4">
+    <!-- Bank Selection Panel -->
+    <div class="bank-selection-panel mb-4">
+        <div class="panel-header">
+            <h5 class="mb-3"><i class="fas fa-university me-2"></i>Bank Accounts</h5>
+        </div>
+        <div class="bank-toggles">
+            {% for bank in bank_accounts %}
+            <div class="bank-toggle-item">
+                <label class="bank-checkbox">
+                    <input type="checkbox" 
+                           class="bank-toggle" 
+                           id="bank_{{ bank.id }}"
+                           value="{{ bank.id }}"
+                           {% if bank.id in selected_banks %}checked{% endif %}>
+                    <span class="checkmark"></span>
+                    <div class="bank-info">
+                        <span class="bank-name">{{ bank.bank }}</span>
+                        <span class="account-number">{{ bank.account_number }}</span>
+                    </div>
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Calendar -->
+    <div class="calendar-container">
+        <div class="calendar-header">
+            <div class="month-navigation">
+                <button class="btn btn-nav" id="prevMonth">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <h3 class="month-display">{{ month }}/{{ year }}</h3>
+                <button class="btn btn-nav" id="nextMonth">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+        </div>
+    
+        <table class="calendar-table">
+            <thead>
+                <tr>
+                    <th>Mon</th>
+                    <th>Tue</th>
+                    <th>Wed</th>
+                    <th>Thu</th>
+                    <th>Fri</th>
+                    <th>Sat</th>
+                    <th>Sun</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for week in calendar %}
+                <tr>
+                    {% for day in week %}
+                    <td class="calendar-day {% if day.is_weekend %}weekend{% endif %}">
+                        {% if day.day %}
+                            <div class="day-content">
+                                <div class="day-number">{{ day.day }}</div>
+                                {% if not day.is_weekend %}
+                                    {% for bank_info in day.bank_data %}
+                                        <div class="bank-balance-card">
+                                            <div class="bank-header">
+                                                {{ bank_info.bank.name }}
+                                            </div>
+                                            <div class="balance-info">
+                                                <span class="balance-amount {% if bank_info.balance < 0 %}negative{% endif %}">
+                                                    {{ bank_info.balance|format_balance }}
+                                                </span>
+                                                {% if bank_info.has_forecasts %}
+                                                    <button class="forecast-details-btn" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#forecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">
+                                                        <i class="fas fa-eye"></i>
+                                                    </button>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    {% endfor %}
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Forecast Modal -->
+    <div class="modal fade" id="forecastModal" tabindex="-1" aria-labelledby="forecastModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="forecastModalLabel">Forecast Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <!-- Forecast content will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <style>
+    /* Base Styles */
+    :root {
+        --primary-color: #4361ee;
+        --secondary-color: #3f37c9;
+        --success-color: #4caf50;
+        --danger-color: #f72585;
+        --weekend-color: #f8f9fa;
+        --hover-color: #f0f7ff;
+        --border-color: #e9ecef;
+        --shadow-sm: 0 2px 4px rgba(0,0,0,0.05);
+        --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+        --shadow-lg: 0 10px 15px rgba(0,0,0,0.1);
+        --radius-sm: 0.375rem;
+        --radius-md: 0.5rem;
+        --radius-lg: 0.75rem;
+    }
+
+    /* Bank Selection Panel */
+    .bank-selection-panel {
+        background: white;
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        box-shadow: var(--shadow-md);
+        margin-bottom: 2rem;
+    }
+
+    .bank-toggles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .bank-toggle-item {
+        flex: 1;
+        min-width: 250px;
+    }
+
+    .bank-checkbox {
+        display: flex;
+        align-items: center;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all 0.3s ease;
+    }
+
+    .bank-checkbox:hover {
+        background: var(--hover-color);
+        transform: translateY(-2px);
+    }
+
+    .bank-checkbox input {
+        display: none;
+    }
+
+    .checkmark {
+        width: 22px;
+        height: 22px;
+        border: 2px solid var(--primary-color);
+        border-radius: 6px;
+        margin-right: 1rem;
+        position: relative;
+        transition: all 0.2s ease;
+    }
+
+    .bank-checkbox input:checked + .checkmark {
+        background: var(--primary-color);
+    }
+
+    .bank-checkbox input:checked + .checkmark:after {
+        content: '';
+        position: absolute;
+        left: 6px;
+        top: 2px;
+        width: 6px;
+        height: 12px;
+        border: solid white;
+        border-width: 0 2px 2px 0;
+        transform: rotate(45deg);
+    }
+
+    .bank-info {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .bank-name {
+        font-weight: 600;
+        color: #2d3748;
+    }
+
+    .account-number {
+        font-size: 0.875rem;
+        color: #718096;
+    }
+
+    /* Calendar Container */
+    .calendar-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .calendar-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 8px;
+    }
+    
+    .calendar-table th {
+        padding: 10px;
+        text-align: center;
+        font-weight: 600;
+        color: #4a5568;
+    }
+    
+    .calendar-day {
+        height: 120px;
+        padding: 8px;
+        vertical-align: top;
+        background: white;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        transition: all 0.3s ease;
+    }
+    
+    .calendar-day:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    .weekend {
+        background: #f8f9fa;
+    }
+    
+    .day-number {
+        font-weight: 600;
+        margin-bottom: 8px;
+    }
+    
+    .bank-balance-card {
+        padding: 8px;
+        margin-bottom: 8px;
+        background: #f8f9fa;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+    
+    .bank-balance-card:hover {
+        background: #edf2f7;
+    }
+    
+    .bank-header {
+        font-size: 0.875rem;
+        color: #718096;
+    }
+    
+    .balance-info {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .balance-amount {
+        font-weight: 600;
+    }
+    
+    .balance-amount.negative {
+        color: #e53e3e;
+    }
+    
+    .forecast-details-btn {
+        background: none;
+        border: none;
+        color: #4299e1;
+        cursor: pointer;
+        padding: 4px;
+    }
+    
+    .forecast-details-btn:hover {
+        color: #2b6cb0;
+    }
+    
+    /* Month navigation styles */
+    .month-navigation {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
+    
+    .btn-nav {
+        background: #4299e1;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 6px;
+        margin: 0 10px;
+        cursor: pointer;
+        transition: background 0.2s ease;
+    }
+    
+    .btn-nav:hover {
+        background: #2b6cb0;
+    }
+    
+    .month-display {
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    .forecast-list {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .forecast-item {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .forecast-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+
+    .forecast-header {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .forecast-type {
+        font-weight: 600;
+        color: #4299e1;
+        background: #ebf8ff;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .forecast-number {
+        color: #718096;
+    }
+
+    .forecast-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .forecast-detail {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: #4a5568;
+    }
+
+    .forecast-detail i {
+        color: #718096;
+        width: 16px;
+    }
+
+    .forecast-amount {
+        font-weight: 600;
+        text-align: right;
+        color: #48bb78;
+    }
+
+    .forecast-amount.negative {
+        color: #f56565;
+    }
+
+    .no-forecasts {
+        text-align: center;
+        color: #718096;
+        padding: 2rem;
+    }
+
+    .error-message {
+        text-align: center;
+        color: #f56565;
+        padding: 2rem;
+    }
+    
+    .forecast-item.discounted {
+        border-left: 4px solid #f72585;  /* Different color for discounted receipts */
+    }
+    
+    .forecast-item.expected {
+        border-left: 4px solid #4361ee;  /* Different color for expected payments */
+    }
+    
+    .forecast-type {
+        font-weight: bold;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    
+    .discounted .forecast-type {
+        background-color: #fce7f3;
+        color: #f72585;
+    }
+    
+    .expected .forecast-type {
+        background-color: #e0e7ff;
+        color: #4361ee;
+    }
+
+    .forecast-totals {
+        margin-top: 20px;
+        padding-top: 15px;
+        border-top: 2px solid #e9ecef;
+    }
+    
+    .total-item {
+        display: flex;
+        justify-content: space-between;
+        padding: 5px 0;
+    }
+    
+    .grand-total {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #e9ecef;
+        font-weight: bold;
+    }
+    
+    .amount.positive {
+        color: #4caf50;
+    }
+    
+    .amount.negative {
+        color: #f72585;
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log("Page loaded. Initializing event listeners...");
+        initializeEventListeners();
+
+        // Add modal cleanup code
+        const forecastModal = document.getElementById('forecastModal');
+        forecastModal.addEventListener('hidden.bs.modal', function () {
+            document.body.classList.remove('modal-open');
+            const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+            while(modalBackdrops.length > 0) {
+                modalBackdrops[0].parentNode.removeChild(modalBackdrops[0]);
+            }
+        });
+    });
+    
+    function initializeEventListeners() {
+        // Attach bank toggle change handler
+        document.querySelectorAll('.bank-toggle').forEach(toggle => {
+            toggle.addEventListener('change', updateCalendar);
+        });
+    
+        // Attach modal forecast button click handlers
+        applyEventListeners();
+    }
+    
+    function applyEventListeners() {
+        console.log("Applying event listeners to calendar elements...");
+    
+        // Hover effect for calendar days
+        document.querySelectorAll('.calendar-day').forEach(day => {
+            day.addEventListener('mouseover', () => {
+                day.style.transform = 'translateY(-2px)';
+                day.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+            });
+            day.addEventListener('mouseout', () => {
+                day.style.transform = 'none';
+                day.style.boxShadow = 'none';
+            });
+        });
+    
+        // Attach click handlers to forecast buttons
+        document.querySelectorAll('.forecast-details-btn').forEach(btn => {
+            btn.addEventListener('click', function () {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                loadForecasts(date, bankId);
+            });
+        });
+    }
+    
+    function renderCalendar(data) {
+        console.log("Rendering calendar with received data...");
+    
+        const tbody = document.querySelector('.calendar-table tbody');
+        tbody.innerHTML = ''; // Clear existing content
+    
+        data.forEach(week => {
+            const tr = document.createElement('tr');
+    
+            week.forEach(day => {
+                const td = document.createElement('td');
+                td.classList.add('calendar-day');
+                if (day.is_weekend) {
+                    td.classList.add('weekend');
+                }
+    
+                if (day.day) {
+                    const dayContent = document.createElement('div');
+                    dayContent.classList.add('day-content');
+    
+                    // Add day number
+                    const dayNumber = document.createElement('div');
+                    dayNumber.classList.add('day-number');
+                    dayNumber.textContent = day.day;
+                    dayContent.appendChild(dayNumber);
+    
+                    // Add bank balance cards
+                    if (!day.is_weekend) {
+                        day.bank_data.forEach(bank => {
+                            const bankBalanceCard = document.createElement('div');
+                            bankBalanceCard.classList.add('bank-balance-card');
+    
+                            const bankHeader = document.createElement('div');
+                            bankHeader.classList.add('bank-header');
+                            bankHeader.textContent = bank.bank.name;
+                            bankBalanceCard.appendChild(bankHeader);
+    
+                            const balanceInfo = document.createElement('div');
+                            balanceInfo.classList.add('balance-info');
+    
+                            const balanceAmount = document.createElement('span');
+                            balanceAmount.classList.add('balance-amount');
+                            if (bank.balance < 0) {
+                                balanceAmount.classList.add('negative');
+                            }
+                            balanceAmount.textContent = formatBalance(bank.balance);
+                            balanceInfo.appendChild(balanceAmount);
+    
+                            if (bank.has_forecasts) {
+                                const forecastBtn = document.createElement('button');
+                                forecastBtn.classList.add('forecast-details-btn');
+                                forecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                forecastBtn.setAttribute('data-bs-target', '#forecastModal');
+                                forecastBtn.setAttribute('data-date', day.date);
+                                forecastBtn.setAttribute('data-bank', bank.bank.id);
+    
+                                const eyeIcon = document.createElement('i');
+                                eyeIcon.classList.add('fas', 'fa-eye');
+                                forecastBtn.appendChild(eyeIcon);
+    
+                                balanceInfo.appendChild(forecastBtn);
+                            }
+    
+                            bankBalanceCard.appendChild(balanceInfo);
+                            dayContent.appendChild(bankBalanceCard);
+                        });
+                    }
+    
+                    td.appendChild(dayContent);
+                }
+    
+                tr.appendChild(td);
+            });
+    
+            tbody.appendChild(tr);
+        });
+    
+        // Reapply listeners to the newly created elements
+        applyEventListeners();
+    }
+    
+    function formatBalance(value) {
+        return new Intl.NumberFormat('fr-MA', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(value);
+    }
+    
+    function updateCalendar() {
+        console.log("Updating calendar...");
+        const selectedBanks = [...document.querySelectorAll('.bank-toggle:checked')].map(cb => cb.value);
+        console.log("Selected banks:", selectedBanks);
+    
+        const urlParams = new URLSearchParams(window.location.search);
+        urlParams.delete('banks');
+        selectedBanks.forEach(bank => urlParams.append('banks', bank));
+    
+        fetch(`/testapp/calendar/?${urlParams.toString()}`, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+            .then(response => response.json())
+            .then(data => {
+                console.log("Calendar data received:", data);
+                renderCalendar(data.calendar);
+            })
+            .catch(error => {
+                console.error("Error updating calendar:", error);
+            });
+    }
+    
+    function loadForecasts(date, bankId) {
+        console.log(`Loading forecasts for date: ${date}, bank ID: ${bankId}`);
+        fetch(`/testapp/calendar/forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Forecast data received:", data);
+                const modalBody = document.querySelector('#forecastModal .modal-body');
+                
+                // Changed condition to check status only
+                if (data.status === 'success') {
+                    let content = `<div class="forecast-list">`;
+                    data.forecasts.forEach(forecast => {
+                        // Add specific styling class based on forecast type
+                        const typeClass = forecast.type === 'Discounted Receipt' ? 'discounted' : 'expected';
+                        content += `
+                            <div class="forecast-item ${typeClass}">
+                                <div class="forecast-header">
+                                    <span class="forecast-type">${forecast.type}</span>
+                                    <span class="forecast-number">#${forecast.number}</span>
+                                </div>
+                                <div class="forecast-body">
+                                    <div class="forecast-detail">
+                                        <i class="fas fa-building"></i>
+                                        ${forecast.entity}
+                                    </div>
+                                    <div class="forecast-detail">
+                                        <i class="fas fa-university"></i>
+                                        ${forecast.bank}
+                                    </div>
+                                    <div class="forecast-amount ${forecast.amount < 0 ? 'negative' : 'positive'}">
+                                        ${formatBalance(forecast.amount)}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    // Add totals section
+                    if (data.forecasts.length > 0) {
+                        content += `
+                            <div class="forecast-totals">
+                                <div class="total-item">
+                                    <span>Expected Payments:</span>
+                                    <span class="amount ${data.totals.expected_payments < 0 ? 'negative' : 'positive'}">
+                                        ${formatBalance(data.totals.expected_payments)}
+                                    </span>
+                                </div>
+                                <div class="total-item">
+                                    <span>Discounted Receipts:</span>
+                                    <span class="amount ${data.totals.discounted_receipts < 0 ? 'negative' : 'positive'}">
+                                        ${formatBalance(data.totals.discounted_receipts)}
+                                    </span>
+                                </div>
+                                <div class="total-item grand-total">
+                                    <span>Total:</span>
+                                    <span class="amount ${data.totals.total < 0 ? 'negative' : 'positive'}">
+                                        ${formatBalance(data.totals.total)}
+                                    </span>
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    content += '</div>';
+                    modalBody.innerHTML = data.forecasts.length ? content : '<div class="no-forecasts">No forecasted transactions for this date</div>';
+                } else {
+                    modalBody.innerHTML = '<div class="error-message">Failed to load forecast details</div>';
+                }
+                
+                const forecastModal = new bootstrap.Modal(document.getElementById('forecastModal'));
+                forecastModal.show();
+            })
+            .catch(error => {
+                console.error("Error loading forecasts:", error);
+                const modalBody = document.querySelector('#forecastModal .modal-body');
+                modalBody.innerHTML = '<div class="error-message">Failed to load forecast details</div>';
+            });
+    }
+    </script>
+    {% endblock %}

@@ -333,6 +333,10 @@
                         href="{% url 'bank-account-list' %}">
                             <i class="fas fa-university me-2"></i> Bank Accounts
                         </a>
+                        <a class="nav-link" href="{% url 'calendar' %}">
+                            <i class="fas fa-calendar-alt"></i>
+                            <span>Payment Calendar</span>
+                        </a>
                         <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" 
                         href="{% url 'check-list' %}">
                             <i class="fas fa-money-check me-2"></i> Checks
