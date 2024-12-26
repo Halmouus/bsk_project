@@ -3,7 +3,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator
 from .base import BaseModel
-from datetime import timedelta
+from datetime import timedelta, datetime
 import datetime
 import random
 import string
@@ -15,6 +15,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.contrib.contenttypes.fields import GenericForeignKey
 from itertools import groupby
 from operator import itemgetter
+import traceback
 
 
 logger = logging.getLogger(__name__)
@@ -1205,13 +1206,13 @@ class Client(BaseModel):
 
                     for history in unpaid_history:
                         unpaid_entry = {
-                            'date': history.timestamp.date(),
+                            'date': history.business_date or history.timestamp.date(),  # Use business_date if available
                             'type': f'{type_name}_REVERSAL',
                             'description': f'Reversal of {type_name} {receipt.get_receipt_number()} - '
                                         f'{history.notes if history.notes else "Unpaid"}',
-                            'debit': history.new_value.get("amount", receipt.amount),  # Include the unpaid amount
+                            'debit': history.new_value.get("amount", receipt.amount),
                             'credit': None,
-                            'actual_date': history.timestamp.date()
+                            'actual_date': history.business_date or history.timestamp.date()  # Also update actual_date
                         }
                         transactions.append(unpaid_entry)
                         print("Added historical unpaid entry:", unpaid_entry)
@@ -1542,21 +1543,47 @@ class NegotiableReceipt(Receipt):
 
     def mark_as_unpaid(self, cause, unpaid_date=None):
         """Mark receipt as unpaid with a cause"""
+        print(f"\n=== Marking receipt {self.get_receipt_number()} as unpaid ===")
         if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT', 'DISCOUNTED']:
-            raise ValidationError("Only rejected or presented receipts can be marked as unpaid")
+            msg = "Only rejected or presented receipts can be marked as unpaid"
+            print(f"Error: {msg}")
+            raise ValidationError(msg)
         
+        business_date = unpaid_date or timezone.now()
+        print(f"Using business date: {business_date}")
+        print(f"Rejection cause: {cause}")
+        
+        old_status = self.status
         self.status = self.STATUS_UNPAID
         self.rejection_cause = cause
-        self.unpaid_date = unpaid_date if unpaid_date else timezone.now()
-        self.save()
+        self.unpaid_date = business_date
+        
+        # Record status change with business date
+        print("Recording unpaid status in history")
+        self.record_history(
+            action='status_changed',
+            old_value={'status': old_status},
+            new_value={
+                'status': self.STATUS_UNPAID,
+                'cause': cause
+            },
+            notes=f'Marked as unpaid: {self.get_rejection_cause_display()}',
+            business_date=business_date
+        )
+        
+        # Skip duplicate history in save()
+        self._skip_status_history = True
+        try:
+            self.save()
+        finally:
+            # Re-enable status change recording
+            self._skip_status_history = False
 
-    def record_history(self, action, old_value=None, new_value=None, notes=None, user=None):
+    def record_history(self, action, old_value=None, new_value=None, notes=None, user=None, business_date=None):
         """
-        Record a history event for the negotiable receipt
+        Record a history event for the negotiable receipt, optionally with a business date
         """
         content_type = ContentType.objects.get_for_model(self)
-
-        
         
         ReceiptHistory.objects.create(
             content_type=content_type,
@@ -1565,7 +1592,8 @@ class NegotiableReceipt(Receipt):
             old_value=old_value,
             new_value=new_value,
             notes=notes,
-            user=user
+            user=user,
+            business_date=business_date
         )
 
     def delete(self, *args, **kwargs):
@@ -1593,8 +1621,14 @@ class NegotiableReceipt(Receipt):
         super().delete(*args, **kwargs)
 
     def save(self, *args, **kwargs):
+        """NegotiableReceipt save"""
+        print("\n=== NegotiableReceipt save method start ===")
+        print(f"Receipt ID: {self.pk}")
+        print(f"Is new: {not self.pk}")
+
         if not self.pk:
             super().save(*args, **kwargs)
+            print("Creating new receipt history record")
             self.record_history(
                 action='created',
                 notes=f'Receipt created with status {self.get_status_display()}'
@@ -1603,38 +1637,39 @@ class NegotiableReceipt(Receipt):
             try:
                 old_instance = type(self).objects.get(pk=self.pk)
                 if old_instance.status != self.status:
-                    # Check if this is a discount update
-                    if self.status == 'DISCOUNTED':
-                        # Get the presentation info
-                        if hasattr(self, 'check_presentations'):
-                            presentation = self.check_presentations.last().presentation
-                        else:
-                            presentation = self.lcn_presentations.last().presentation
-                            
-                        self.record_history(
-                            action='status_changed',
-                            old_value={'status': old_instance.status},
-                            new_value={
-                                'status': self.status,
-                                'presentation_id': str(presentation.id),
-                                'bank_account': presentation.bank_account.get_bank_display(),
-                                'date': presentation.date.strftime('%Y-%m-%d')
-                            },
-                            notes=f'Discounted at {presentation.bank_account.get_bank_display()}'
-                        )
-                    else:
+                    print(f"Status change detected: {old_instance.status} -> {self.status}")
+                    # Only record if we haven't explicitly asked to skip it
+                    if not getattr(self, '_skip_status_history', False):
+                        print("Recording status change in history")
+                        
+                        # Use presentation_date for presentations, unpaid_date for unpaid status
+                        business_date = None
+                        if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT']:
+                            business_date = getattr(self, '_presentation_date', None)
+                        elif self.status == 'UNPAID':
+                            business_date = self.unpaid_date
+                        elif self.status in ['COMPENSATED', 'PARTIALLY_COMPENSATED']:
+                            business_date = getattr(self, '_force_status_date', None)
+                        
                         self.record_history(
                             action='status_changed',
                             old_value={'status': old_instance.status},
                             new_value={'status': self.status},
+                            business_date=business_date,
                             notes=f'Status changed from {old_instance.status} to {self.status}'
                         )
+                    else:
+                        print("Skipping status history record due to _skip_status_history flag")
+                else:
+                    print("No status change detected")
             except type(self).DoesNotExist:
+                print("No previous instance found")
                 pass
-                
+                    
             super().save(*args, **kwargs)
+        print("=== NegotiableReceipt save method end ===\n")
 
-    def update_compensation_status(self):
+    def update_compensation_status(self, business_date=None):
         """Update receipt status based on CompensationRecords"""
         comp_status = self.get_compensation_status()
         old_status = self.status
@@ -1649,13 +1684,18 @@ class NegotiableReceipt(Receipt):
         
         if old_status != new_status:
             self.status = new_status
-            self.record_history(
-                action='status_changed',
-                old_value={'status': old_status},
-                new_value={'status': new_status},
-                notes=f'Status updated due to compensation changes. Total: {comp_status["total_compensated"]}'
-            )
-            self.save()
+            self._force_status_date = business_date  # Store the date before saving
+            try:
+                self.record_history(
+                    action='status_changed',
+                    old_value={'status': old_status},
+                    new_value={'status': new_status},
+                    business_date=business_date,
+                    notes=f'Status updated due to compensation changes. Total: {comp_status["total_compensated"]}'
+                )
+                self.save()
+            finally:
+                self._force_status_date = None  # Clean up
 
     def handle_payment(self):
         """Called when a negotiable receipt is paid"""
@@ -1685,21 +1725,48 @@ class NegotiableReceipt(Receipt):
 
     def mark_as_paid(self, paid_date=None):
         """Mark receipt as paid and handle compensations"""
+        if self.status == self.STATUS_PAID:
+            return  # Already paid, don't do anything
+            
+        print(f"\n=== Marking receipt {self.get_receipt_number()} as paid ===")
         old_status = self.status
-        self.status = self.STATUS_PAID
-        self.paid_date = paid_date or timezone.now()
-        self.save()
+        business_date = paid_date or timezone.now()
+        print(f"Using business date: {business_date}")
         
-        # Record status change
+        self.status = self.STATUS_PAID
+        self.paid_date = business_date
+        
+        # Record status change with business date
+        print("Recording paid status in history")
         self.record_history(
             action='status_changed',
             old_value={'status': old_status},
             new_value={'status': self.STATUS_PAID},
-            notes='Receipt marked as paid'
+            notes='Receipt marked as paid',
+            business_date=business_date
         )
         
-        # Handle any pending compensations
-        self.handle_payment()
+        # Skip duplicate history in save()
+        self._skip_status_history = True
+        try:
+            self.save()
+            
+            # Activate any pending compensations where this receipt is the compensator
+            records = CompensationRecord.objects.filter(
+                compensator_content_type=ContentType.objects.get_for_model(self),
+                compensator_id=self.id,
+                is_active=False
+            )
+            
+            # Activate records and update compensated receipts
+            for record in records:
+                record.is_active = True
+                record.save()
+                # Update the compensated receipt's status with the same business date
+                record.compensated_receipt.update_compensation_status(business_date=business_date)
+                
+        finally:
+            self._skip_status_history = False
 
     class Meta:
         abstract = True
@@ -1731,6 +1798,16 @@ class NegotiableReceipt(Receipt):
         print(f"Compensator: {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}")
         print(f"Amount: {amount}")
         
+        # Get the business date from the compensating receipt's creation/operation date
+        if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
+            business_date = compensating_receipt.operation_date
+        else:
+            business_date = timezone.make_aware(
+                datetime.combine(compensating_receipt.created_at.date(), datetime.min.time())
+            )
+        
+        print(f"Using business date from compensator creation: {business_date}")
+        
         compensation = CompensationRecord(
             compensated_content_type=ContentType.objects.get_for_model(self),
             compensated_id=self.id,
@@ -1741,6 +1818,7 @@ class NegotiableReceipt(Receipt):
         )
         compensation.clean()
         compensation.save()
+        
         self.record_history(
             action='compensated',
             new_value={
@@ -1749,10 +1827,18 @@ class NegotiableReceipt(Receipt):
                 'compensator_number': compensating_receipt.get_receipt_number(),
                 'compensator_entity': compensating_receipt.entity.name if hasattr(compensating_receipt, 'entity') else None
             },
-            notes=f'Compensated with {amount} by {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}'
+            notes=f'Compensated with {amount} by {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}',
+            business_date=business_date
         )
-        # Update status
-        self.update_compensation_status()
+        
+        # For cash/transfer receipts, update status immediately since they're already paid
+        if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
+            # Pass the same business_date to ensure consistency
+            self._force_status_date = business_date  # Add this flag
+            try:
+                self.update_compensation_status(business_date)
+            finally:
+                self._force_status_date = None
         
         return compensation
 
@@ -2092,32 +2178,37 @@ class PresentationReceipt(BaseModel):
         super().save(*args, **kwargs)
         self.presentation.update_total()
 
-        # Update receipt status based on presentation type
         receipt = self.checkreceipt or self.lcn
         print(f"Receipt: {receipt}")
         print(f"Presentation type: {self.presentation.presentation_type}")
-        print(f"Presentation status: {self.presentation.status}")  # Add this
+        print(f"Presentation status: {self.presentation.status}")  
         
         if receipt:
-            if self.presentation.presentation_type == 'COLLECTION':
-                print("Setting status to PRESENTED_COLLECTION")
-                receipt.status = 'PRESENTED_COLLECTION'
-                if is_new:
-                    print("Attempting to create forecast statement...")
-                    try:
-                        self.create_forecast_statement()
-                        print("Forecast statement created successfully")
-                    except Exception as e:
-                        print(f"Error creating forecast statement: {str(e)}")
-                        import traceback
-                        print(traceback.format_exc())
+            # Only update status if not in a final state
+            if receipt.status not in ['PAID', 'UNPAID', 'COMPENSATED']:
+                if self.presentation.presentation_type == 'COLLECTION':
+                    print("Setting status to PRESENTED_COLLECTION")
+                    receipt._presentation_date = self.presentation.date  # Store temporarily
+                    receipt.status = 'PRESENTED_COLLECTION'
+                    if is_new:
+                        print("Attempting to create forecast...")
+                        try:
+                            self.create_forecast_statement()
+                            print("Forecast statement created successfully")
+                        except Exception as e:
+                            print(f"Error creating forecast statement: {str(e)}")
+                            import traceback
+                            print(traceback.format_exc())
+                    else:
+                        print("Existing presentation - skipping forecast creation")
                 else:
-                    print("Existing presentation - skipping forecast creation")
+                    print("Setting status to PRESENTED_DISCOUNT")
+                    receipt._presentation_date = self.presentation.date  # Store temporarily
+                    receipt.status = 'PRESENTED_DISCOUNT'
+                receipt.save()
             else:
-                print("Setting status to PRESENTED_DISCOUNT")
-                receipt.status = 'PRESENTED_DISCOUNT'
-            receipt.save()
-            print(f"Final receipt status: {receipt.status}")  # Add this
+                print(f"Skipping status update - receipt already in final state: {receipt.status}")
+            print(f"Final receipt status: {receipt.status}")
         print("=== PresentationReceipt save method end ===\n")
 
     def create_forecast_statement(self):
@@ -2186,7 +2277,7 @@ class ReceiptHistory(BaseModel):
         ('presented_collection', 'Presented for Collection'),
         ('presented_discount', 'Presented for Discount'),
         ('compensating_assigned', 'Compensating Receipt Assigned'),
-        ('compensated', 'Compensated'),
+        ('compensated', 'Compensation Allocated'),
         ('unpaid', 'Marked as Unpaid'),
         ('paid', 'Paid'),
         ('rejected', 'Rejected by Bank')
@@ -2227,6 +2318,14 @@ class ReceiptHistory(BaseModel):
 
     def __str__(self):
         return f"{self.receipt} - {self.action} at {self.timestamp}"
+
+    def formatted_business_date(self):
+        """Return formatted business date"""
+        return self.business_date.strftime('%d/%m/%Y') if self.business_date else None
+
+    def formatted_created_at(self):
+        """Return formatted timestamp"""
+        return self.created_at.strftime('%d/%m/%Y %H:%M:%S')
 
 class ClientSale(BaseModel):
     SALE_TYPES = [
@@ -2370,8 +2469,32 @@ class BankStatement(models.Model):
                 # For collection presentations - only record if marked as PAID
                 if pres.presentation_type == 'COLLECTION':
                     if pr.recorded_status == 'PAID':
+                        print(f"\n=== Processing paid collection receipt {receipt.get_receipt_number()} ===")
+                        print(f"Presentation date: {pres.date}")
+                        
+                        # Get payment date from history
+                        payment_history = ReceiptHistory.objects.filter(
+                            content_type=ContentType.objects.get_for_model(receipt.__class__),
+                            object_id=receipt.id,
+                            action='status_changed',
+                            new_value__status='PAID'
+                        ).order_by('-business_date').first()
+                        
+                        print(f"Found history record: {payment_history is not None}")
+                        if payment_history:
+                            print(f"History timestamp: {payment_history.timestamp}")
+                            print(f"History business_date: {payment_history.business_date}")
+                        
+                        # First try to get date from history, fall back to presentation date if not found
+                        entry_date = (payment_history.business_date.date() 
+                            if payment_history and payment_history.business_date 
+                            else pres.date)
+                        
+                        print(f"Final entry_date being used: {entry_date}")
+                        print("=== End processing paid collection receipt ===\n")
+                        
                         entries.append({
-                            'date': pres.date,
+                            'date': entry_date,
                             'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
                             'type': f'{receipt_type.upper()}_COLLECTION',
                             'debit': None,

@@ -257,6 +257,17 @@ function showSuccess(message) {
     console.log(message);
     alert('Succes!: ' + message);
 }
+$(document).on('change', '.receipt-status', function() {
+    const $select = $(this);
+    const $paymentDate = $select.siblings('.payment-date');
+    
+    // Show/hide payment date input based on selected status
+    if ($select.val() === 'paid') {
+        $paymentDate.show();
+    } else {
+        $paymentDate.hide();
+    }
+});
 const PresentationManager = {
     currentStep: 1,
     totalSteps: 3,

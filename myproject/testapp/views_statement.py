@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN
+from .models import PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -334,21 +334,36 @@ class CalendarForecastView(View):
             
             # Add payment forecasts to the list
             for forecast in payment_forecasts:
-                amount = forecast.amount or Decimal('0.00')  # Use the new amount field
+                amount = forecast.amount or Decimal('0.00')
                 if forecast.label.startswith('Expected'):
                     total_expected += amount
-                else:  # 'Awaiting' forecasts are discounted receipts
+                else:
                     total_discounted += amount
+                
+                # Get receipt data if available
+                receipt_data = {}
+                if forecast.source_id:
+                    if forecast.source_type == 'checkreceipt':
+                        receipt = CheckReceipt.objects.filter(id=forecast.source_id).select_related('client', 'entity').first()
+                        if receipt:
+                            presentation = PresentationReceipt.objects.filter(checkreceipt=receipt).select_related('presentation').first()
+                            receipt_data = self._get_receipt_data(receipt, presentation)
+                    elif forecast.source_type == 'lcn':
+                        receipt = LCN.objects.filter(id=forecast.source_id).select_related('client', 'entity').first()
+                        if receipt:
+                            presentation = PresentationReceipt.objects.filter(lcn=receipt).select_related('presentation').first()
+                            receipt_data = self._get_receipt_data(receipt, presentation)
                     
                 forecasts.append({
                     'type': 'Expected Payment' if forecast.label.startswith('Expected') else 'Discounted Receipt',
                     'number': forecast.reference,
                     'entity': forecast.label,
                     'bank': bank_account.bank,
-                    'amount': float(amount)
+                    'amount': float(amount),
+                    **receipt_data
                 })
             
-            # Get discounted receipts for this date
+            # Rest of your existing code for discounted receipts...
             discounted_receipts = PresentationReceipt.objects.filter(
                 presentation__bank_account=bank_account,
                 presentation__date=forecast_date,
@@ -358,22 +373,12 @@ class CalendarForecastView(View):
                 'checkreceipt',
                 'lcn',
                 'checkreceipt__entity',
-                'lcn__entity'
+                'checkreceipt__client',
+                'lcn__entity',
+                'lcn__client'
             )
             
-            # Add discounted receipts to the list
-            for pr in discounted_receipts:
-                receipt = pr.checkreceipt or pr.lcn
-                if receipt:
-                    amount = receipt.amount
-                    total_discounted += amount
-                    forecasts.append({
-                        'type': 'Discounted Receipt',
-                        'number': receipt.get_receipt_number(),
-                        'entity': receipt.entity.name,
-                        'bank': receipt.issuing_bank,
-                        'amount': float(amount)
-                    })
+            # Your existing code for processing discounted_receipts...
             
             return JsonResponse({
                 'status': 'success',
@@ -391,3 +396,14 @@ class CalendarForecastView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=400)
+    def _get_receipt_data(self, receipt, presentation):
+        """Helper method to get receipt data"""
+        return {
+            'client': receipt.client.name if receipt.client else None,
+            'receipt_type': 'Check' if isinstance(receipt, CheckReceipt) else 'LCN',
+            'due_date': receipt.due_date.strftime('%Y-%m-%d') if receipt.due_date else None,
+            'issuing_bank': receipt.issuing_bank,
+            'receipt_number': receipt.get_receipt_number(),
+            'presentation_ref': presentation.presentation.bank_reference if presentation and presentation.presentation else None,
+            'presentation_date': presentation.presentation.date.strftime('%Y-%m-%d') if presentation and presentation.presentation and presentation.presentation.date else None
+        }

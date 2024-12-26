@@ -153,15 +153,24 @@ Available filters:
                             {% endif %}
                         </td>
                         {% if presentation.status == 'presented' or presentation.status == 'discounted' %}
-                            <td>
-                                <select class="form-control form-control-sm receipt-status" 
+                        <td>
+                            <div class="form-group mb-0">
+                                <select class="form-control form-control-sm receipt-status mb-2" 
                                         data-receipt-id="{{ receipt.id }}"
                                         {% if receipt.recorded_status %}disabled{% endif %}>
                                     <option value="">Pending</option>
-                                    <option value="paid" {% if receipt.recorded_status == 'PAID' or receipt.checkreceipt.status == 'PAID' or receipt.lcn.status == 'PAID' %}selected{% endif %}>Paid</option>
-                                    <option value="unpaid" {% if receipt.recorded_status == 'UNPAID' or receipt.checkreceipt.status == 'UNPAID' or receipt.lcn.status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
+                                    <option value="paid" {% if receipt.recorded_status == 'PAID' %}selected{% endif %}>Paid</option>
+                                    <option value="unpaid" {% if receipt.recorded_status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
                                 </select>
-                            </td>
+                                <!-- Add payment date input that shows only when status is "paid" -->
+                                <input type="date" 
+                                    class="form-control form-control-sm payment-date" 
+                                    style="display: {% if receipt.recorded_status == 'PAID' %}block{% else %}none{% endif %};"
+                                    value="{{ today|date:'Y-m-d' }}"
+                                    min="{{ presentation.date|date:'Y-m-d' }}"
+                                    {% if receipt.recorded_status %}disabled{% endif %}>
+                            </div>
+                        </td>
                         {% endif %}
                     </tr>
                     {% endfor %}
@@ -221,6 +230,26 @@ Available filters:
     </div>
 </div>
 
+<style>
+    .modal-xl {
+        max-width: 1200px; /* Increased from default 1140px */
+    }
+    
+    .table {
+        font-size: 0.9rem; /* Slightly smaller font for better readability */
+    }
+    
+    .form-control-sm {
+        font-size: 0.875rem;
+    }
+    
+    /* Improve number readability */
+    .text-right {
+        font-family: "Consolas", monospace;
+        font-size: 0.9rem;
+    }
+    </style>
+
 <script>
     const presentationId = '{{ presentation.id }}';
     console.log("Presentation ID:", presentationId);
@@ -253,7 +282,17 @@ Available filters:
         });
     }
 
-// Handle receipt status changes
+    $('.receipt-status').on('change', function() {
+        const $select = $(this);
+        const $paymentDate = $select.siblings('.payment-date');
+        
+        // Show/hide payment date input based on selected status
+        if ($select.val() === 'paid') {
+            $paymentDate.show();
+        } else {
+            $paymentDate.hide();
+        }
+    });
 
 // Handle receipt status updates
 function updateReceiptStatuses(presentationId) {
@@ -263,9 +302,9 @@ function updateReceiptStatuses(presentationId) {
     let pendingUnpaidStatus = null;
 
     // Debug info for all receipt status selects
-    $('.receipt-status').each(function() {
+    $('.receipt-status:not(:disabled)').each(function() {
         const $select = $(this);
-        console.log('Found receipt status select:', {
+        console.log('Processing receipt status select:', {
             receiptId: $select.data('receipt-id'),
             currentValue: $select.val(),
             disabled: $select.prop('disabled'),
@@ -277,43 +316,61 @@ function updateReceiptStatuses(presentationId) {
         });
     });
 
-    $('.receipt-status').each(function() {
+    $('.receipt-status:not(:disabled)').each(function() {
         const $select = $(this);
         const receiptId = $select.data('receipt-id');
         const status = $select.val();
+        const paymentDate = $select.siblings('.payment-date').val();
 
         console.log('Processing receipt:', {
             receiptId: receiptId,
-            newStatus: status,
-            previousStatus: $select.data('previous-status')
+            status: status,
+            paymentDate: paymentDate
         });
 
         if (status === 'unpaid') {
             pendingUnpaidStatus = { receiptId: receiptId, $select: $select };
-            console.log('Found pending unpaid status:', pendingUnpaidStatus);
-            return false; // Break the loop
+            return false;
         }
 
-        if (status) {
+        if (status === 'paid') {
+            if (!paymentDate) {
+                showError('Payment date is required when marking as paid');
+                hasChanges = false;
+                return false;
+            }
+            
+            // Validate payment date is not before presentation date
+            const presentationDate = new Date($select.siblings('.payment-date').attr('min'));
+            const selectedDate = new Date(paymentDate);
+            if (selectedDate < presentationDate) {
+                showError('Payment date cannot be before presentation date');
+                hasChanges = false;
+                return false;
+            }
+            
+            receiptStatuses[receiptId] = {
+                status: status,
+                payment_date: paymentDate
+            };
+            hasChanges = true;
+        } else if (status) {
             receiptStatuses[receiptId] = status;
             hasChanges = true;
-            console.log(`Adding status update for receipt ${receiptId}:`, status);
         }
     });
 
     if (pendingUnpaidStatus) {
-        console.log('Showing unpaid cause modal for:', pendingUnpaidStatus);
+        console.log('Found pending unpaid status:', pendingUnpaidStatus);
         $('#unpaidCauseModal').modal('show').data('pendingStatus', pendingUnpaidStatus);
         return;
     }
 
     if (!hasChanges) {
-        console.log('No status changes detected');
         showToast('No status changes to update', 'info');
         return;
     }
 
-    console.log('Submitting status updates:', receiptStatuses);
     submitStatusUpdates(presentationId, receiptStatuses);
 }
 

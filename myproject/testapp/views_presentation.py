@@ -13,7 +13,7 @@ import json
 import traceback
 from decimal import Decimal
 from django.utils import timezone
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 class PresentationListView(ListView):
     """
@@ -123,6 +123,27 @@ class PresentationDetailView(View):
             )
             print(f"Found {receipts.count()} receipts")
 
+            # Get payment dates for paid receipts
+            print("\nFetching payment dates for paid receipts...")
+            for receipt in receipts:
+                if receipt.recorded_status == 'PAID':
+                    base_receipt = receipt.checkreceipt or receipt.lcn
+                    print(f"Looking for payment history for receipt: {base_receipt}")
+                    
+                    payment_history = ReceiptHistory.objects.filter(
+                        content_type=ContentType.objects.get_for_model(base_receipt.__class__),
+                        object_id=base_receipt.id,
+                        action='status_changed',
+                        new_value__status='PAID'
+                    ).order_by('-business_date', '-timestamp').first()
+
+                    if payment_history and payment_history.business_date:
+                        print(f"Found payment date: {payment_history.business_date}")
+                        receipt.payment_date = payment_history.business_date.date()
+                    else:
+                        print("No payment date found in history")
+                        receipt.payment_date = None
+
             # Debug template loading
             print("\nChecking template tags:")
             from django.template import engines
@@ -136,7 +157,8 @@ class PresentationDetailView(View):
                 'presentation': presentation,
                 'receipts': receipts,
                 'rejection_causes': CheckReceipt.REJECTION_CAUSES,
-                'total_amount': sum(receipt.amount for receipt in receipts)
+                'total_amount': sum(receipt.amount for receipt in receipts),
+                'today': timezone.now().date()  # Add today's date for default value
             }
             print("\nContext prepared:", context)
             
@@ -245,6 +267,7 @@ class PresentationUpdateView(View):
                                 date=forecast_date,
                                 label=f"Awaiting payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
                                 amount=receipt.amount,
+                                reference=f"Pres. #{presentation.bank_reference}",
                                 source_type=receipt.__class__.__name__.lower(),
                                 source_id=receipt.id
                             )
@@ -294,29 +317,24 @@ class PresentationUpdateView(View):
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
                                             raise ValidationError("Rejection cause required for unpaid status")
+                                        receipt.mark_as_unpaid(cause, unpaid_date)
                                         presentation_receipt.recorded_status = 'UNPAID'
                                         presentation_receipt.save()
-                                        receipt.mark_as_unpaid(cause, unpaid_date)
                                         
-                                        # For discounted receipts, create reversal statement
-                                        if presentation.status == 'discounted':
-                                            BankStatement.objects.create(
-                                                bank_account=presentation.bank_account,
-                                                date=timezone.now().date(),
-                                                label=f"Reversal of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
-                                                debit=receipt.amount,
-                                                reference=f"Pres. #{presentation.bank_reference}"
-                                            )
-                                    else:
-                                        print(f"Updating status to: {status_value.upper()}")
-                                        presentation_receipt.recorded_status = status_value.upper()
+                                    elif status_value == 'paid':
+                                        # Get payment date
+                                        payment_date = None
+                                        if isinstance(new_status, dict) and 'payment_date' in new_status:
+                                            payment_date = datetime.strptime(new_status['payment_date'], '%Y-%m-%d')
+                                        else:
+                                            payment_date = timezone.now()
+                                        print(f"Payment date: {payment_date}")
+                                        
+                                        # Mark as paid first (this will handle the history)
+                                        receipt.mark_as_paid(paid_date=payment_date)
+                                        presentation_receipt.recorded_status = 'PAID'
                                         presentation_receipt.save()
-                                        receipt.status = status_value.upper()
-                                        receipt.save()
-                                        
-                                        if status_value.upper() == 'PAID':
-                                            print("Receipt marked as paid, updating compensated receipts")
-                                            receipt.handle_payment()
+                                        print(f"Marked as paid at date: {payment_date}")
                                     
                                     print("Status update completed successfully")
                                 else:
