@@ -2,7 +2,9 @@
 {% load accounting_filters %}
 
 {% block content %}
+{% csrf_token %}
 <div class="container-fluid p-4">
+
     <!-- Bank Selection Panel -->
     <div class="bank-selection-panel mb-4">
         <div class="panel-header">
@@ -16,7 +18,7 @@
                            class="bank-toggle" 
                            id="bank_{{ bank.id }}"
                            value="{{ bank.id }}"
-                           {% if bank.id in selected_banks %}checked{% endif %}>
+                           {% if bank.id|stringformat:"s" in request.GET.getlist|join:"," %}checked{% endif %}>
                     <span class="checkmark"></span>
                     <div class="bank-info">
                         <span class="bank-name">{{ bank.bank }}</span>
@@ -24,6 +26,55 @@
                     </div>
                 </label>
             </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Pending Forecasts Section -->
+    <div class="pending-forecasts-section mb-4">
+        <div class="panel-header d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0"><i class="fas fa-clock me-2"></i>Pending Forecasts</h5>
+            <span class="text-muted">Past due operations</span>
+        </div>
+        <div class="row g-3">
+            {% for bank in pending_forecasts %}
+                <div class="col-lg-4 col-md-6">
+                    <div class="bank-card">
+                        <div class="card-header">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <h6 class="mb-1">{{ bank.bank }}</h6>
+                                    <small class="text-muted">{{ bank.account_number }}</small>
+                                </div>
+                                <span class="pending-badge">{{ bank.pending_count }}</span>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="amount-row">
+                                <span class="label">Expected Payments</span>
+                                <span class="amount {% if bank.pending_expected > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ bank.pending_expected|format_balance }}
+                                </span>
+                            </div>
+                            <div class="amount-row">
+                                <span class="label">Discounted Receipts</span>
+                                <span class="amount {% if bank.pending_discounted > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ bank.pending_discounted|format_balance }}
+                                </span>
+                            </div>
+                            <div class="amount-row total">
+                                <span class="label">Total Impact</span>
+                                <span class="amount fw-bold {% if bank.pending_total > 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ bank.pending_total|format_balance }}
+                                </span>
+                            </div>
+                            <button onclick="viewPendingForecasts('{{ bank.id }}')" 
+                                    class="btn btn-outline-primary w-100 mt-3">
+                                <i class="fas fa-list-ul me-2"></i>View Details
+                            </button>
+                        </div>
+                    </div>
+                </div>
             {% endfor %}
         </div>
     </div>
@@ -110,6 +161,86 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="pendingForecastsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Pending Forecasts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Unpaid Marking Modal -->
+    <div class="modal fade" id="unpaidMarkingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark Receipt as Unpaid</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="unpaidMarkingForm">
+                        <div class="mb-3">
+                            <label for="rejectionCause" class="form-label">Rejection Cause</label>
+                            <select class="form-control" id="rejectionCause" required>
+                                <option value="">Select a cause...</option>
+                                <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                                <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                                <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                                <option value="INVALID_DATE">Date Invalid/Post-dated</option>
+                                <option value="AMOUNT_DISCREPANCY">Amount Discrepancy</option>
+                                <option value="TECHNICAL_ERROR">Technical Error (MICR)</option>
+                                <option value="STOP_PAYMENT">Stop Payment Order</option>
+                                <option value="ACCOUNT_ERROR">Account Number Error</option>
+                                <option value="FORMAL_DEFECT">Formal Defect</option>
+                                <option value="BANK_ERROR">Bank Processing Error</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="unpaidDate" class="form-label">Unpaid Date</label>
+                            <input type="date" class="form-control" id="unpaidDate" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmUnpaid">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Paid Marking Modal -->
+    <div class="modal fade" id="paidMarkingModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark Receipt as Paid</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="paidMarkingForm">
+                        <div class="mb-3">
+                            <label for="paymentDate" class="form-label">Payment Date</label>
+                            <input type="date" class="form-control" id="paymentDate" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmPaid">Confirm</button>
                 </div>
             </div>
         </div>
@@ -656,7 +787,258 @@
     .slide-in-from-left {
         animation: slideFromLeft 0.5s ease forwards;
     }
-</style>
+    /* Past days styling */
+    .calendar-day.past {
+        background: linear-gradient(135deg, #f3f4f6 0%, #f8f9fa 100%);
+        position: relative;
+    }
+
+    .calendar-day.past::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(229, 231, 235, 0.3);
+        pointer-events: none;
+    }
+
+    /* Past weekend styling */
+    .calendar-day.past.weekend {
+        background: linear-gradient(135deg, #e5e7eb 0%, #f3f4f6 100%);
+    }
+
+    /* Current day styling */
+    .day-number.current-day {
+        color: #fff;
+        background: #4361ee;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: -2px;  /* Adjust for the increased size */
+    }
+
+    /* Holiday styling */
+    .calendar-day.holiday {
+        background: linear-gradient(135deg, #fff5f5 0%, #ffffff 100%);
+        border: 1px solid #fed7d7;
+    }
+
+    .calendar-day.holiday::before {
+        content: '🎉';
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        font-size: 12px;
+    }
+
+    /* Combined past and holiday styling */
+    .calendar-day.past.holiday {
+        background: linear-gradient(135deg, #fff5f5 0%, #f8f9fa 100%);
+    }
+
+    .calendar-day.past.holiday::after {
+        background: rgba(254, 215, 215, 0.3);
+    }
+
+    /* Add style for representation indicator */
+    .forecast-item.representation {
+        border-left: 4px solid #fbbf24;  /* Amber color for representations */
+    }
+
+    .representation-indicator {
+        color: #d97706;  /* Amber text color */
+        font-style: italic;
+    }
+    .representation-warning {
+        color: #d97706;
+        font-style: italic;
+        padding: 4px 8px;
+        background: rgba(251, 191, 36, 0.1);
+        border-radius: 4px;
+        margin: 4px 0;
+    }
+
+    /* Pending Forecasts Section */
+    .pending-forecast-card {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+
+    .pending-forecast-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    .pending-forecast-card .card-header {
+        background: transparent;
+        border-bottom: 1px solid rgba(0,0,0,0.1);
+        padding: 1rem;
+    }
+
+    .pending-badge {
+        background: #dc3545;
+        color: white;
+        border-radius: 50%;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+    }
+
+    .amount-summary {
+        padding: 0.5rem 0;
+    }
+
+    .amount-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 0.5rem;
+    }
+
+    .amount-row.total {
+        border-top: 1px solid rgba(0,0,0,0.1);
+        padding-top: 0.5rem;
+        font-weight: bold;
+    }
+
+    /* Pulse animation for pending badge */
+    .pulse-animation {
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+            opacity: 1;
+        }
+        50% {
+            transform: scale(1.1);
+            opacity: 0.8;
+        }
+        100% {
+            transform: scale(1);
+            opacity: 1;
+        }
+    }
+
+    /* Add to your existing styles */
+    .bank-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        border: 1px solid rgba(0,0,0,0.08);
+    }
+
+    .bank-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    }
+
+    .bank-card .card-header {
+        padding: 1.25rem;
+        border-bottom: 1px solid rgba(0,0,0,0.08);
+        background: transparent;
+    }
+
+    .bank-card .card-body {
+        padding: 1.25rem;
+    }
+
+    .pending-badge {
+        background: #dc3545;
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .amount-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        font-size: 0.9375rem;
+    }
+
+    .amount-row .label {
+        color: #6c757d;
+    }
+
+    .amount-row .amount {
+        font-weight: 500;
+    }
+
+    .amount-row.total {
+        border-top: 1px solid rgba(0,0,0,0.08);
+        padding-top: 0.75rem;
+        margin-top: 0.75rem;
+        font-size: 1rem;
+    }
+
+    .amount-row.total .label {
+        color: #212529;
+        font-weight: 500;
+    }
+
+    .btn-outline-primary {
+        transition: all 0.2s ease;
+    }
+
+    .btn-outline-primary:hover {
+        transform: translateY(-1px);
+    }
+    .forecast-item {
+        transition: all 0.3s ease;
+    }
+
+    .forecast-item:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .forecast-item .card {
+        border: none;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+
+    .forecast-item.expected .card-header {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+
+    .forecast-item.discounted .card-header {
+        background-color: rgba(25, 135, 84, 0.1);
+    }
+
+    .forecast-item .amount {
+        font-size: 1.1em;
+    }
+
+    .forecast-item .badge {
+        font-weight: normal;
+    }
+
+    .forecast-item .card-body {
+        font-size: 0.95em;
+    }
+
+    .forecast-item i {
+        width: 20px;
+        text-align: center;
+        color: #6c757d;
+    } 
+    </style>
 {% endblock %}
 
 {% block extra_js %}
@@ -665,6 +1047,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         console.log("Page loaded. Initializing event listeners...");
         initializeEventListeners();
+        loadSelectedBanks();
         addTooltips();
 
         // Add modal cleanup code
@@ -677,12 +1060,21 @@
                 modalBackdrops[0].parentNode.removeChild(modalBackdrops[0]);
             }
         });
+
+         // Initialize notifications
+        window.notifications = new ForecastNotifications();
+        
+        // Check for new pending items every 5 minutes
+        setInterval(() => window.notifications.checkNewPending(), 5 * 60 * 1000);
     });
     
     function initializeEventListeners() {
         // Attach bank toggle change handler
         document.querySelectorAll('.bank-toggle').forEach(toggle => {
-            toggle.addEventListener('change', updateCalendar);
+            toggle.addEventListener('change', function() {
+                updateCalendar();
+                saveSelectedBanks();
+            });
         });
     
         // Attach modal forecast button click handlers
@@ -750,44 +1142,68 @@
     
     function renderCalendar(data) {
         console.log("Rendering calendar with received data...");
-    
+        
         const tbody = document.querySelector('.calendar-table tbody');
         tbody.innerHTML = ''; // Clear existing content
-    
+        
+        // Get current date for comparison
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);  // Reset time part for accurate comparison
+        console.log("Today's date for comparison:", today);
+
         data.forEach(week => {
             const tr = document.createElement('tr');
-    
+            
             week.forEach(day => {
                 const td = document.createElement('td');
                 td.classList.add('calendar-day');
-                if (day.is_weekend) {
-                    td.classList.add('weekend');
-                }
-    
+                
                 if (day.day) {
+                    // Parse the day's date for comparison
+                    const dayDate = new Date(day.date);
+                    dayDate.setHours(0, 0, 0, 0);  // Reset time part for accurate comparison
+                    console.log(`Processing date: ${dayDate}, is past:`, dayDate < today);
+
+                    // Add past day class
+                    if (dayDate < today) {
+                        td.classList.add('past');
+                    }
+                    
+                    // Add holiday class (January 1st)
+                    if (dayDate.getMonth() === 0 && dayDate.getDate() === 1) {
+                        td.classList.add('holiday');
+                    }
+                    
+                    if (day.is_weekend) {
+                        td.classList.add('weekend');
+                    }
+
                     const dayContent = document.createElement('div');
                     dayContent.classList.add('day-content');
-    
-                    // Add day number
+                    
+                    // Day number
                     const dayNumber = document.createElement('div');
                     dayNumber.classList.add('day-number');
+                    if (dayDate.toDateString() === today.toDateString()) {
+                        dayNumber.classList.add('current-day');
+                    }
                     dayNumber.textContent = day.day;
                     dayContent.appendChild(dayNumber);
-    
+
                     // Add bank balance cards
                     if (!day.is_weekend) {
                         day.bank_data.forEach(bank => {
                             const bankBalanceCard = document.createElement('div');
                             bankBalanceCard.classList.add('bank-balance-card');
-    
+                            
                             const bankHeader = document.createElement('div');
                             bankHeader.classList.add('bank-header');
                             bankHeader.textContent = bank.bank.name;
                             bankBalanceCard.appendChild(bankHeader);
-    
+                            
                             const balanceInfo = document.createElement('div');
                             balanceInfo.classList.add('balance-info');
-    
+                            
                             const balanceAmount = document.createElement('span');
                             balanceAmount.classList.add('balance-amount');
                             if (bank.balance < 0) {
@@ -795,7 +1211,7 @@
                             }
                             balanceAmount.textContent = formatBalance(bank.balance);
                             balanceInfo.appendChild(balanceAmount);
-    
+                            
                             if (bank.has_forecasts) {
                                 const forecastBtn = document.createElement('button');
                                 forecastBtn.classList.add('forecast-details-btn');
@@ -803,29 +1219,29 @@
                                 forecastBtn.setAttribute('data-bs-target', '#forecastModal');
                                 forecastBtn.setAttribute('data-date', day.date);
                                 forecastBtn.setAttribute('data-bank', bank.bank.id);
-    
+                                
                                 const eyeIcon = document.createElement('i');
                                 eyeIcon.classList.add('fas', 'fa-eye');
                                 forecastBtn.appendChild(eyeIcon);
-    
+                                
                                 balanceInfo.appendChild(forecastBtn);
                             }
-    
+                            
                             bankBalanceCard.appendChild(balanceInfo);
                             dayContent.appendChild(bankBalanceCard);
                         });
                     }
-    
+                    
                     td.appendChild(dayContent);
                 }
-    
+                
                 tr.appendChild(td);
             });
-    
+            
             tbody.appendChild(tr);
         });
-    
-        // Reapply listeners to the newly created elements
+        
+        // Reapply event listeners and tooltips
         applyEventListeners();
         addTooltips();
     }
@@ -859,6 +1275,8 @@
             });
     }
     
+// In calendar.html, replace your existing loadForecasts function
+
     function loadForecasts(date, bankId) {
         console.log(`Loading forecasts for date: ${date}, bank ID: ${bankId}`);
         fetch(`/testapp/calendar/forecasts/?date=${date}&bank=${bankId}`)
@@ -867,17 +1285,17 @@
                 console.log("Forecast data received:", data);
                 const modalBody = document.querySelector('#forecastModal .modal-body');
                 
-                // Changed condition to check status only
                 if (data.status === 'success') {
                     let content = `<div class="forecast-list">`;
                     data.forecasts.forEach(forecast => {
                         // Add specific styling class based on forecast type
                         const typeClass = forecast.type === 'Discounted Receipt' ? 'discounted' : 'expected';
+                        
                         content += `
                             <div class="forecast-item ${typeClass}">
                                 <div class="forecast-header">
                                     <span class="forecast-type">${forecast.type}</span>
-                                    <span class="forecast-number">#${forecast.number}</span>
+                                    <span class="forecast-number">${forecast.receipt_type} #${forecast.number}</span>
                                 </div>
                                 <div class="forecast-body">
                                     <div class="forecast-detail">
@@ -887,21 +1305,21 @@
                                     </div>
                                     <div class="forecast-detail">
                                         <i class="fas fa-university"></i>
+                                        <span class="detail-label">Bank:</span>
                                         ${forecast.bank}
+                                    </div>
+                                    <div class="forecast-detail">
                                         <i class="fas fa-user"></i>
                                         <span class="detail-label">Client:</span>
                                         ${forecast.client || 'N/A'}
                                     </div>
-                                    <div class="forecast-detail">
-                                        <i class="fas fa-file-invoice"></i>
-                                        <span class="detail-label">Type:</span>
-                                        ${forecast.receipt_type || 'N/A'}
-                                    </div>
-                                    <div class="forecast-detail">
-                                        <i class="fas fa-calendar-alt"></i>
-                                        <span class="detail-label">Due Date:</span>
-                                        ${forecast.due_date || 'N/A'}
-                                    </div>
+                                    ${forecast.due_date ? `
+                                        <div class="forecast-detail">
+                                            <i class="fas fa-calendar-alt"></i>
+                                            <span class="detail-label">Due Date:</span>
+                                            ${forecast.due_date}
+                                        </div>
+                                    ` : ''}
                                     <div class="forecast-detail">
                                         <i class="fas fa-hashtag"></i>
                                         <span class="detail-label">Presentation Ref:</span>
@@ -912,6 +1330,12 @@
                                         <span class="detail-label">Presentation Date:</span>
                                         ${forecast.presentation_date || 'N/A'}
                                     </div>
+                                    ${forecast.is_representation ? `
+                                        <div class="forecast-detail representation-warning">
+                                            <i class="fas fa-sync"></i>
+                                            <span class="detail-label">Representation</span>
+                                        </div>
+                                    ` : ''}
                                     <div class="forecast-amount ${forecast.amount < 0 ? 'negative' : 'positive'}">
                                         ${formatBalance(forecast.amount)}
                                     </div>
@@ -951,15 +1375,23 @@
                 } else {
                     modalBody.innerHTML = '<div class="error-message">Failed to load forecast details</div>';
                 }
-                
-                const forecastModal = new bootstrap.Modal(document.getElementById('forecastModal'));
-                forecastModal.show();
             })
             .catch(error => {
                 console.error("Error loading forecasts:", error);
                 const modalBody = document.querySelector('#forecastModal .modal-body');
                 modalBody.innerHTML = '<div class="error-message">Failed to load forecast details</div>';
             });
+
+            const daysOverdue = Math.floor((new Date() - new Date(forecast.date)) / (1000 * 60 * 60 * 24));
+            content += `
+                ${daysOverdue > 0 ? `
+                    <div class="forecast-detail overdue">
+                        <i class="fas fa-clock"></i>
+                        <span class="detail-label">Overdue:</span>
+                        ${daysOverdue} day${daysOverdue !== 1 ? 's' : ''}
+                    </div>
+                ` : ''}
+            `;
     }
 
     function addTooltips() {
@@ -993,10 +1425,12 @@
                     if (data.status === 'success') {
                         data.forecasts.forEach(forecast => {
                             const amount = parseFloat(forecast.amount) || 0;
-                            if (forecast.entity.startsWith('Expected')) {
+                            if (forecast.type === 'Expected Payment') {
                                 total_expected += amount;
+                                console.log(`Adding ${amount} to expected payments`);
                             } else {
                                 total_discounted += amount;
+                                console.log(`Adding ${amount} to discounted receipts`);
                             }
                         });
                     }
@@ -1035,5 +1469,361 @@
             localStorage.removeItem('slideDirection'); // Clean up
         }
     });
+
+    function saveSelectedBanks() {
+        const selectedBanks = [...document.querySelectorAll('.bank-toggle:checked')].map(cb => cb.value);
+        localStorage.setItem('calendarSelectedBanks', JSON.stringify(selectedBanks));
+        console.log('Saved selected banks:', selectedBanks);
+    }
+
+    function loadSelectedBanks() {
+        const savedBanks = localStorage.getItem('calendarSelectedBanks');
+        if (savedBanks) {
+            const selectedBanks = JSON.parse(savedBanks);
+            console.log('Loading saved banks:', selectedBanks);
+            
+            // First uncheck all
+            document.querySelectorAll('.bank-toggle').forEach(cb => cb.checked = false);
+            
+            // Check saved ones
+            selectedBanks.forEach(bankId => {
+                const checkbox = document.querySelector(`.bank-toggle[value="${bankId}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            // Update calendar with saved selections
+            updateCalendar();
+        }
+    }
+
+    // Notification System
+    class ForecastNotifications {
+        constructor() {
+            this.hasPermission = false;
+            this.init();
+        }
+
+        async init() {
+            if ('Notification' in window) {
+                const permission = await Notification.requestPermission();
+                this.hasPermission = permission === 'granted';
+            }
+        }
+
+        // Show browser notification
+        showBrowserNotification(title, body) {
+            if (this.hasPermission) {
+                new Notification(title, { body });
+            }
+        }
+
+        // Show in-app notification
+        showInAppNotification(message, type = 'info') {
+            const notif = document.createElement('div');
+            notif.className = `in-app-notification ${type}`;
+            notif.innerHTML = `
+                <i class="fas fa-info-circle"></i>
+                <span>${message}</span>
+                <button onclick="this.parentElement.remove()">×</button>
+            `;
+            document.body.appendChild(notif);
+            setTimeout(() => notif.remove(), 5000);
+        }
+
+        async checkNewPending() {
+            const response = await fetch('/testapp/calendar/check-pending/');
+            const data = await response.json();
+            
+            if (data.new_pending > 0) {
+                this.showBrowserNotification(
+                    'New Pending Forecasts',
+                    `${data.new_pending} forecast(s) have become pending`
+                );
+                this.showInAppNotification(
+                    `${data.new_pending} new pending forecast(s) require attention`,
+                    'warning'
+                );
+            }
+        }
+    }
+
+    const notifications = new ForecastNotifications();
+    
+    // Add test button
+    const testButton = document.createElement('button');
+    testButton.className = 'btn btn-sm btn-info position-fixed';
+    testButton.style.bottom = '20px';
+    testButton.style.right = '20px';
+    testButton.innerHTML = 'Test Notification';
+    testButton.onclick = () => {
+        notifications.showBrowserNotification(
+            'Test Notification', 
+            'This is a test notification'
+        );
+        notifications.showInAppNotification(
+            'This is an in-app test notification', 
+            'warning'
+        );
+    };
+    document.body.appendChild(testButton);
+
+    function viewPendingForecasts(bankId) {
+        // Store bank ID for refresh after status update
+        document.querySelector('#pendingForecastsModal').dataset.bankId = bankId;
+        const modal = new bootstrap.Modal(document.getElementById('pendingForecastsModal'));
+        const modalBody = document.querySelector('#pendingForecastsModal .modal-body');
+        
+        modalBody.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+        modal.show();
+        
+        // Fetch pending forecasts
+        fetch(`/testapp/bank/pending-forecasts/${bankId}/`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    let html = '';
+                    data.forecasts.forEach(forecast => {
+                        const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
+                        const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';
+                        
+                        html += `
+                            <div class="forecast-item ${typeClass} mb-3">
+                                <div class="card">
+                                    <div class="card-header d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="badge ${typeClass === 'expected' ? 'bg-primary' : 'bg-success'} me-2">
+                                                ${forecast.type}
+                                            </span>
+                                            <span class="fw-bold">${forecast.number}</span>
+                                        </div>
+                                        <div class="d-flex align-items-center">
+                                            <span class="amount ${amountClass} fw-bold me-3">
+                                                ${new Intl.NumberFormat('en-US', { 
+                                                    style: 'decimal',
+                                                    minimumFractionDigits: 2,
+                                                    maximumFractionDigits: 2 
+                                                }).format(Math.abs(forecast.amount))}
+                                            </span>
+                                            <div class="btn-group">
+                                                <button class="btn btn-sm btn-success mark-receipt-paid" 
+                                                        data-receipt-type="${forecast.receipt_type.toLowerCase()}" 
+                                                        data-receipt-id="${forecast.id}">
+                                                    <i class="fas fa-check"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-danger mark-receipt-unpaid"
+                                                        data-receipt-type="${forecast.receipt_type.toLowerCase()}" 
+                                                        data-receipt-id="${forecast.id}">
+                                                    <i class="fas fa-times"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="mb-2">
+                                                    <i class="fas fa-building me-2"></i>
+                                                    <strong>Entity:</strong> ${forecast.entity}
+                                                </div>
+                                                <div class="mb-2">
+                                                    <i class="fas fa-user me-2"></i>
+                                                    <strong>Client:</strong> ${forecast.client}
+                                                </div>
+                                                <div class="mb-2">
+                                                    <i class="fas fa-university me-2"></i>
+                                                    <strong>Bank:</strong> ${forecast.bank}
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="mb-2">
+                                                    <i class="fas fa-calendar me-2"></i>
+                                                    <strong>Due Date:</strong> ${forecast.due_date}
+                                                </div>
+                                                <div class="mb-2">
+                                                    <i class="fas fa-calendar-check me-2"></i>
+                                                    <strong>Presented:</strong> ${forecast.presentation_date || 'Not presented'}
+                                                </div>
+                                                ${forecast.is_representation ? `
+                                                    <div class="text-warning">
+                                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                                        Representation
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    modalBody.innerHTML = data.forecasts.length ? html : 
+                        '<div class="alert alert-info">No pending forecasts found</div>';
+                } else {
+                    modalBody.innerHTML = `
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-circle me-2"></i>
+                            Error loading forecasts: ${data.message}
+                        </div>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                modalBody.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        Error loading forecasts
+                    </div>
+                `;
+            });
+    }
+
+    // Status marking variables and handlers
+    let activeReceiptData = null;
+
+    // Event handler for marking as paid
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-receipt-paid')) {
+            const button = e.target.closest('.mark-receipt-paid');
+            activeReceiptData = {
+                type: button.dataset.receiptType,
+                id: button.dataset.receiptId
+            };
+            
+            // Set default date to today
+            document.getElementById('paymentDate').valueAsDate = new Date();
+            
+            // Show paid marking modal
+            const paidModal = new bootstrap.Modal(document.getElementById('paidMarkingModal'));
+            paidModal.show();
+        }
+    });
+
+    // Event handler for marking as unpaid
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-receipt-unpaid')) {
+            const button = e.target.closest('.mark-receipt-unpaid');
+            activeReceiptData = {
+                type: button.dataset.receiptType,
+                id: button.dataset.receiptId
+            };
+            
+            // Set default date to today
+            document.getElementById('unpaidDate').valueAsDate = new Date();
+            
+            // Show unpaid marking modal
+            const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
+            unpaidModal.show();
+        }
+    });
+
+    // Handle paid confirmation
+    document.getElementById('confirmPaid').addEventListener('click', function() {
+        const paymentDate = document.getElementById('paymentDate').value;
+        if (!paymentDate) {
+            alert('Please select a payment date');
+            return;
+        }
+
+        markReceiptStatus('paid', {
+            receipt_type: activeReceiptData.type,
+            receipt_id: activeReceiptData.id,
+            payment_date: paymentDate
+        });
+    });
+
+    // Handle unpaid confirmation
+    document.getElementById('confirmUnpaid').addEventListener('click', function() {
+        const unpaidDate = document.getElementById('unpaidDate').value;
+        const rejectionCause = document.getElementById('rejectionCause').value;
+        
+        if (!unpaidDate || !rejectionCause) {
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        markReceiptStatus('unpaid', {
+            receipt_type: activeReceiptData.type,
+            receipt_id: activeReceiptData.id,
+            unpaid_date: unpaidDate,
+            rejection_cause: rejectionCause
+        });
+    });
+
+    function markReceiptStatus(status, data) {
+        console.log(`Marking receipt as ${status}:`, data);
+        
+        fetch(`/testapp/receipts/${data.receipt_type}/${data.receipt_id}/status/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                status: status,
+                ...data
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                // Close modals
+                bootstrap.Modal.getInstance(document.getElementById('paidMarkingModal'))?.hide();
+                bootstrap.Modal.getInstance(document.getElementById('unpaidMarkingModal'))?.hide();
+                
+                // Refresh the pending forecasts view
+                const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+                viewPendingForecasts(currentBank);
+                
+                // Show success message
+                showToast('success', result.message);
+            } else {
+                throw new Error(result.message);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', error.message || 'Failed to update receipt status');
+        });
+    }
+
+    // Helper function to format dates
+    function formatDate(dateStr) {
+        const date = new Date(dateStr);
+        return date.toLocaleDateString('en-GB'); // DD/MM/YYYY format
+    }
+
+    // Helper function to format amounts
+    function formatAmount(amount) {
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(amount);
+    }
+
+    // Add this to your existing showToast function or create it if it doesn't exist
+    function showToast(type, message) {
+        // You can use your preferred toast notification library here
+        // For example, using Bootstrap's toast:
+        const toastHtml = `
+            <div class="toast" role="alert">
+                <div class="toast-header bg-${type === 'error' ? 'danger' : 'success'} text-white">
+                    <strong class="mr-auto">Notification</strong>
+                    <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        const toastContainer = document.getElementById('toastContainer') || document.body;
+        const toastElement = document.createElement('div');
+        toastElement.innerHTML = toastHtml;
+        toastContainer.appendChild(toastElement);
+        
+        $('.toast').toast({ delay: 3000 }).toast('show');
+    }
     </script>
     {% endblock %}

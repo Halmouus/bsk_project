@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import calendar
-from .models import CompensationRecord, CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS
+from .models import CompensationRecord, CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS, ForecastStatement
 from django.db.models import Q
 from django.urls import reverse
 from decimal import Decimal
@@ -17,6 +17,7 @@ import traceback
 import json
 from django.views.decorators.http import require_http_methods
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -449,12 +450,25 @@ class ReceiptStatusUpdateView(View):
     def post(self, request, receipt_type, pk):
         try:
             data = json.loads(request.body)
-            model = CheckReceipt if receipt_type == 'check' else LCN
+            model_map = {
+                'check': CheckReceipt,
+                'lcn': LCN,
+                'checkreceipt': CheckReceipt,
+                'lcnreceipt': LCN
+            }
+            model = model_map.get(receipt_type.lower())
             receipt = get_object_or_404(model, pk=pk)
             
             status = data.get('status')
             cause = data.get('cause')
             
+            # Get the presentation receipt
+            presentation_receipt = None
+            if hasattr(receipt, 'check_presentations'):
+                presentation_receipt = receipt.check_presentations.last()
+            elif hasattr(receipt, 'lcn_presentations'):
+                presentation_receipt = receipt.lcn_presentations.last()
+
             if status == 'unpaid':
                 if not cause:
                     return JsonResponse({
@@ -462,6 +476,25 @@ class ReceiptStatusUpdateView(View):
                         'message': 'Rejection cause is required'
                     }, status=400)
                 receipt.mark_as_unpaid(cause)
+            elif status == 'paid':
+                payment_date = data.get('payment_date')
+                
+                if payment_date:
+                    payment_date = datetime.strptime(payment_date, '%Y-%m-%d')
+                
+                receipt.mark_as_paid(payment_date)
+                if presentation_receipt:
+                    presentation_receipt.recorded_status = 'PAID'
+                    presentation_receipt.save()
+                   
+                # Mark any related forecasts as processed
+                ForecastStatement.objects.filter(
+                    source_type=receipt_type.lower(),
+                    source_id=receipt.id,
+                    is_processed=False
+                ).update(is_processed=True)
+                   
+                message = 'Receipt marked as paid'
             else:
                 receipt.status = status
                 receipt.save()

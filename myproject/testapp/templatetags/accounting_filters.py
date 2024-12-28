@@ -99,3 +99,7 @@ def percentage(value, total):
         return (float(value) / float(total)) * 100 if float(total) else 0
     except (ValueError, TypeError):
         return 0
+
+@register.filter
+def get_item(dictionary, key):
+    return dictionary.get(str(key), {'count': 0, 'expected': 0, 'discounted': 0, 'total': 0})

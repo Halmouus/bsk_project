@@ -2216,34 +2216,31 @@ class PresentationReceipt(BaseModel):
         print("\n=== Creating Forecast Statement ===")
         receipt = self.checkreceipt or self.lcn
         presentation = self.presentation
-        print(f"Receipt: {receipt}")
-        print(f"Presentation type: {presentation.presentation_type}")
 
-        # Calculate forecast date
-        if isinstance(receipt, LCN):
-            print("Processing LCN")
-            if receipt.due_date > timezone.now().date():
-                forecast_date = receipt.due_date
-                print(f"Future due date: {forecast_date}")
-            else:
-                days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
-                forecast_date = self._calculate_business_day(presentation.date, days)
-                print(f"Past due date, calculated date: {forecast_date}")
+        # For LCNs, use presentation date if due date is later
+        if isinstance(receipt, LCN) and receipt.due_date > presentation.date:
+            effective_date = presentation.date
         else:
-            print("Processing Check")
-            days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
-            forecast_date = self._calculate_business_day(presentation.date, days)
-            print(f"Calculated date: {forecast_date}")
+            effective_date = presentation.date
 
-        print(f"Creating forecast statement for {forecast_date}")
+        # Calculate business days to add
+        days_to_skip = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+        forecast_date = self._calculate_business_day(effective_date, days_to_skip)
+
+        # Check if this is a representation
+        if isinstance(receipt, CheckReceipt):
+            previous_presentations = receipt.check_presentations.exclude(id=self.id).exists()
+        else:
+            previous_presentations = receipt.lcn_presentations.exclude(id=self.id).exists()
+
         ForecastStatement.objects.create(
             bank_account=presentation.bank_account,
             date=forecast_date,
             label=f"Expected payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
             credit=receipt.amount,
-            reference=f"Pres. #{presentation.id}",
+            reference=f"Pres. #{presentation.bank_reference}",
             source_type=receipt.__class__.__name__.lower(),
-            source_id=receipt.id
+            source_id=receipt.id,
         )
 
     def _calculate_business_day(self, start_date, days):

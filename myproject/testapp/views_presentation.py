@@ -363,19 +363,27 @@ class PresentationUpdateView(View):
             }, status=400)
 
     def _calculate_business_day(self, start_date, skip_days):
-        """Calculate a future business day, skipping weekends"""
+        """Calculate business day skipping weekends and holidays"""
+        def is_holiday(date):
+            # Return True if date is January 1st
+            return date.month == 1 and date.day == 1
+
         current_date = start_date
-        while skip_days > 0:
+        remaining_days = skip_days
+
+        while remaining_days > 0:
             current_date += timedelta(days=1)
-            # Skip weekends
-            while current_date.weekday() >= 5:
+            # Skip weekends and holidays
+            while current_date.weekday() >= 5 or is_holiday(current_date):
                 current_date += timedelta(days=1)
-            skip_days -= 1
-        # If landed on weekend, move to next business day
-        while current_date.weekday() >= 5:
+            remaining_days -= 1
+
+        # If landed on weekend or holiday, move to next business day
+        while current_date.weekday() >= 5 or is_holiday(current_date):
             current_date += timedelta(days=1)
+
         return current_date
-    
+        
 
 @method_decorator(csrf_exempt, name='dispatch')
 class PresentationDeleteView(View):
