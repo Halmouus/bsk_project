@@ -80,7 +80,8 @@ def get_status_display(status_code):
         'PAID': 'Paid',
         'REJECTED': 'Rejected',
         'COMPENSATED': 'Compensated',
-        'UNPAID': 'Unpaid'
+        'UNPAID': 'Unpaid',
+        'PARTIALLY_COMPENSATED': 'Partially Compensated'
     }
     return STATUS_DISPLAY.get(status_code, status_code)
 

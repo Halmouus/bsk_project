@@ -26,7 +26,18 @@ SECRET_KEY = 'django-insecure-o&g&fyebijm#od*5^kky-hr-c!dp+1i4qvp5&v^w=n+1nc=5hp
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    'localhost',
+    '127.0.0.1',
+    '.ngrok-free.app',  # Changed from .ngrok.io
+    '*ngrok-free.app',  # Added for wildcard subdomains
+    '9fd4-196-112-220-171.ngrok-free.app'  # Your specific URL
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://*.ngrok-free.app',  # Changed from ngrok.io
+    'https://9fd4-196-112-220-171.ngrok-free.app'  # Your specific URL
+]
 
 LOGIN_REDIRECT_URL = '/profile/'
 LOGOUT_REDIRECT_URL = '/'

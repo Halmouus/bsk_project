@@ -1,4 +1,5 @@
 {% load status_filters %}
+{% load accounting_filters %}
 {% for lcn in receipts %}
 <tr class="status-{{ lcn.status|lower }}">
     <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
@@ -40,9 +41,29 @@
         </span>
         {% if lcn.status == 'UNPAID' and lcn.rejection_cause %}
             <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
+            {% with last_pres=lcn.lcn_presentations.last %}
+                {% if last_pres %}
+                    <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                {% endif %}
+            {% endwith %}
         {% endif %}
         {% if lcn.compensation_info %}
-            <br><small class="text-muted">{{ lcn.compensation_info }}</small>
+            <i class="fas fa-eye text-primary ml-2 cursor-pointer" 
+            onclick="viewCompensationTimeline('{% if lcn.lcn_number %}lcn{% else %}lcn{% endif %}', '{{ lcn.id }}')">
+            </i>
+        {% endif %}
+        {% if lcn.status == 'PARTIALLY_COMPENSATED' %}
+            {% with comp_status=lcn.get_compensation_status %}
+            <div class="progress mt-1" style="height: 4px;">
+                <div class="progress-bar bg-warning" 
+                     role="progressbar" 
+                     style="width: {{ comp_status.total_compensated|percentage:lcn.amount }}%">
+                </div>
+            </div>
+            <small class="text-muted">
+                {{ comp_status.total_compensated|format_balance }}/{{ lcn.amount|format_balance }}
+            </small>
+            {% endwith %}
         {% endif %}
     </td>
     <td>

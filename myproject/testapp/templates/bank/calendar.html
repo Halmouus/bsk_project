@@ -210,7 +210,12 @@
                         </div>
                         <div class="mb-3">
                             <label for="unpaidDate" class="form-label">Unpaid Date</label>
-                            <input type="date" class="form-control" id="unpaidDate" required>
+                            <input type="date" 
+                                   class="form-control" 
+                                   id="unpaidDate" 
+                                   required
+                                   min=""
+                                   value="{% now 'Y-m-d' %}">
                         </div>
                     </form>
                 </div>
@@ -231,12 +236,15 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="paidMarkingForm">
-                        <div class="mb-3">
-                            <label for="paymentDate" class="form-label">Payment Date</label>
-                            <input type="date" class="form-control" id="paymentDate" required>
-                        </div>
-                    </form>
+                    <div class="mb-3">
+                        <label for="paymentDate" class="form-label">Payment Date</label>
+                        <input type="date" 
+                               class="form-control" 
+                               id="paymentDate" 
+                               required
+                               min=""
+                               value="{% now 'Y-m-d' %}">
+                    </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
@@ -1061,6 +1069,42 @@
             }
         });
 
+        if (e.target.closest('.mark-receipt-paid')) {
+            const button = e.target.closest('.mark-receipt-paid');
+            const presentationDate = button.dataset.presentationDate;
+            
+            const paymentDateInput = document.getElementById('paymentDate');
+            paymentDateInput.min = presentationDate;
+            paymentDateInput.value = presentationDate;
+            
+            activeReceiptData = {
+                type: button.dataset.receiptType,
+                id: button.dataset.receiptId
+            };
+            
+            // Show paid marking modal
+            const paidModal = new bootstrap.Modal(document.getElementById('paidMarkingModal'));
+            paidModal.show();
+        }
+
+        if (e.target.closest('.mark-receipt-unpaid')) {
+            const button = e.target.closest('.mark-receipt-unpaid');
+            const presentationDate = button.dataset.presentationDate;
+            
+            const unpaidDateInput = document.getElementById('unpaidDate');
+            unpaidDateInput.min = presentationDate;
+            unpaidDateInput.value = presentationDate;
+            
+            activeReceiptData = {
+                type: button.dataset.receiptType,
+                id: button.dataset.receiptId
+            };
+            
+            // Show unpaid marking modal
+            const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
+            unpaidModal.show();
+        }
+
          // Initialize notifications
         window.notifications = new ForecastNotifications();
         
@@ -1609,12 +1653,14 @@
                                             <div class="btn-group">
                                                 <button class="btn btn-sm btn-success mark-receipt-paid" 
                                                         data-receipt-type="${forecast.receipt_type.toLowerCase()}" 
-                                                        data-receipt-id="${forecast.id}">
+                                                        data-receipt-id="${forecast.id}"
+                                                        data-presentation-date="${forecast.presentation_date}">
                                                     <i class="fas fa-check"></i>
                                                 </button>
                                                 <button class="btn btn-sm btn-danger mark-receipt-unpaid"
                                                         data-receipt-type="${forecast.receipt_type.toLowerCase()}" 
-                                                        data-receipt-id="${forecast.id}">
+                                                        data-receipt-id="${forecast.id}"
+                                                        data-presentation-date="${forecast.presentation_date}">
                                                     <i class="fas fa-times"></i>
                                                 </button>
                                             </div>
@@ -1688,13 +1734,16 @@
     document.addEventListener('click', function(e) {
         if (e.target.closest('.mark-receipt-paid')) {
             const button = e.target.closest('.mark-receipt-paid');
+            const presentationDate = button.dataset.presentationDate;
+            
+            const paymentDateInput = document.getElementById('paymentDate');
+            paymentDateInput.min = presentationDate;
+            paymentDateInput.value = presentationDate;
+            
             activeReceiptData = {
                 type: button.dataset.receiptType,
                 id: button.dataset.receiptId
             };
-            
-            // Set default date to today
-            document.getElementById('paymentDate').valueAsDate = new Date();
             
             // Show paid marking modal
             const paidModal = new bootstrap.Modal(document.getElementById('paidMarkingModal'));
@@ -1706,13 +1755,16 @@
     document.addEventListener('click', function(e) {
         if (e.target.closest('.mark-receipt-unpaid')) {
             const button = e.target.closest('.mark-receipt-unpaid');
+            const presentationDate = button.dataset.presentationDate;
+            
+            const unpaidDateInput = document.getElementById('unpaidDate');
+            unpaidDateInput.min = presentationDate;
+            unpaidDateInput.value = presentationDate;
+            
             activeReceiptData = {
                 type: button.dataset.receiptType,
                 id: button.dataset.receiptId
             };
-            
-            // Set default date to today
-            document.getElementById('unpaidDate').valueAsDate = new Date();
             
             // Show unpaid marking modal
             const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
@@ -1749,7 +1801,7 @@
             receipt_type: activeReceiptData.type,
             receipt_id: activeReceiptData.id,
             unpaid_date: unpaidDate,
-            rejection_cause: rejectionCause
+            cause: rejectionCause
         });
     });
 

@@ -15,5 +15,6 @@ def status_badge(status):
         'paid': 'success',
         'unpaid': 'danger',
         'rejected': 'danger',
-        'compensated': 'warning'
+        'compensated': 'warning',
+        'partially_compensated': 'warning'
     }.get(status, 'secondary')

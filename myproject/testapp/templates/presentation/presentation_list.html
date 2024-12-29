@@ -372,7 +372,8 @@ const PresentationManager = {
         try {
             const response = await $.get('/testapp/presentations/available-receipts/', {
                 type: this.receiptType,
-                presentation_type: $('#presentationType').val()
+                presentation_type: $('#presentationType').val(),
+                presentation_date: $('#presentationDate').val()
             });
             
             $('.receipt-selection-container').html(response.html);

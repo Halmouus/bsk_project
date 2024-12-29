@@ -1599,24 +1599,23 @@ class NegotiableReceipt(Receipt):
     def delete(self, *args, **kwargs):
         # If this receipt is compensating any unpaid receipts and is still in PORTFOLIO
         if self.status == self.STATUS_PORTFOLIO:
-            # Find any receipts this one was supposed to compensate
-            compensated_checks = CheckReceipt.objects.filter(
-                compensating_content_type=ContentType.objects.get_for_model(self),
-                compensating_object_id=self.id
+            # Find any receipts this is compensating through CompensationRecord
+            compensation_records = CompensationRecord.objects.filter(
+                compensator_content_type=ContentType.objects.get_for_model(self),
+                compensator_id=self.id
             )
-            compensated_lcns = LCN.objects.filter(
-                compensating_content_type=ContentType.objects.get_for_model(self),
-                compensating_object_id=self.id
-            )
-            
+
             # Clean up the compensated receipts
-            for receipt in list(compensated_checks) + list(compensated_lcns):
-                receipt.record_history(
+            for record in compensation_records:
+                compensated_receipt = record.compensated_receipt
+                compensated_receipt.record_history(
                     action='compensation_cancelled',
                     notes=f'Compensating receipt {self.__class__.__name__} #{self.get_receipt_number()} was deleted'
                 )
-                receipt.compensating_receipt = None
-                receipt.save()
+                # Update the compensated receipt's status
+                compensated_receipt.update_compensation_status()
+                # Delete the compensation record
+                record.delete()
 
         super().delete(*args, **kwargs)
 
@@ -1802,12 +1801,14 @@ class NegotiableReceipt(Receipt):
         if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
             business_date = compensating_receipt.operation_date
         else:
+            # Create a timezone-aware datetime using your existing datetime module setup
+            created_date = compensating_receipt.created_at.date()
             business_date = timezone.make_aware(
-                datetime.combine(compensating_receipt.created_at.date(), datetime.min.time())
+                datetime.datetime(created_date.year, created_date.month, created_date.day)
             )
         
         print(f"Using business date from compensator creation: {business_date}")
-        
+
         compensation = CompensationRecord(
             compensated_content_type=ContentType.objects.get_for_model(self),
             compensated_id=self.id,
@@ -2883,10 +2884,23 @@ class AccountingEntry(models.Model):
                 if pres.presentation_type == 'COLLECTION' and pr.recorded_status == 'PAID':
                     label = f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
                     
-                    # Add debit and credit pair
+                    # Get payment date from history
+                    payment_history = ReceiptHistory.objects.filter(
+                        content_type=ContentType.objects.get_for_model(receipt.__class__),
+                        object_id=receipt.id,
+                        action='status_changed',
+                        new_value__status='PAID'
+                    ).order_by('-business_date').first()
+                    
+                    # Use history date if available, otherwise use presentation date
+                    entry_date = (payment_history.business_date.date() 
+                        if payment_history and payment_history.business_date 
+                        else pres.date)
+                    
+                    # Add debit and credit pair with correct date
                     entries.extend([
                         {
-                            'date': pres.date,
+                            'date': entry_date,  # Use correct payment date
                             'label': label,
                             'debit': receipt.amount,
                             'credit': None,
@@ -2898,7 +2912,7 @@ class AccountingEntry(models.Model):
                             'pair_index': len(entries) // 2
                         },
                         {
-                            'date': pres.date,
+                            'date': entry_date,  # Use correct payment date
                             'label': label,
                             'debit': None,
                             'credit': receipt.amount,
@@ -3295,7 +3309,6 @@ INITIAL_FEE_TYPES = [
 
 class CompensationRecord(BaseModel):
     """Tracks compensation relationships and amounts"""
-    print("\n=== Creating CompensationRecord ===")
     
     # The unpaid receipt being compensated
     compensated_content_type = models.ForeignKey(ContentType, related_name='compensated_records', on_delete=models.CASCADE)

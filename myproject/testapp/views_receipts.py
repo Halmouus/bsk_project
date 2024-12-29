@@ -475,7 +475,18 @@ class ReceiptStatusUpdateView(View):
                         'status': 'error',
                         'message': 'Rejection cause is required'
                     }, status=400)
-                receipt.mark_as_unpaid(cause)
+                unpaid_date = data.get('unpaid_date')
+                if unpaid_date:
+                    unpaid_date = datetime.strptime(unpaid_date, '%Y-%m-%d')
+                
+                receipt.mark_as_unpaid(cause, unpaid_date)
+
+                ForecastStatement.objects.filter(
+                    source_type=receipt_type.lower(),
+                    source_id=receipt.id,
+                    is_processed=False
+                ).update(is_processed=True)
+
             elif status == 'paid':
                 payment_date = data.get('payment_date')
                 
@@ -485,6 +496,7 @@ class ReceiptStatusUpdateView(View):
                 receipt.mark_as_paid(payment_date)
                 if presentation_receipt:
                     presentation_receipt.recorded_status = 'PAID'
+                    presentation_receipt.payment_date = payment_date
                     presentation_receipt.save()
                    
                 # Mark any related forecasts as processed

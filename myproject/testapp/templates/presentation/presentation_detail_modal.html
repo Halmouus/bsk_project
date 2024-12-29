@@ -8,10 +8,10 @@ Available filters:
 {% endcomment %}
 
 <!-- Test filter directly -->
-{% with test_status='pending' %}
+<!-- {% with test_status='pending' %}
     Raw status: {{ test_status }}
     Filtered status: {{ test_status|status_badge }}
-{% endwith %}
+{% endwith %} -->
 
 <div id="presentation-container" data-presentation-id="{{ presentation.id }}">
     <div class="modal-header">
@@ -134,41 +134,63 @@ Available filters:
                                 <span class="badge badge-{{ receipt.checkreceipt.status|status_badge }}">
                                     {{ receipt.checkreceipt.get_status_display }}
                                 </span>
+                                {% if receipt.checkreceipt.status == 'PAID' %}
+                                    <br><small class="text-muted">
+                                        {{ receipt.payment_date|date:"Y-m-d" }}
+                                    </small>
+                                {% endif %}
                                 {% if receipt.checkreceipt.status == 'UNPAID' and receipt.checkreceipt.rejection_cause %}
                                     <br><small class="text-danger">{{ receipt.checkreceipt.get_rejection_cause_display}}</small>
-                                {% endif %}
-                                {% if receipt.checkreceipt.compensation_info %}
-                                    <br><small class="text-muted">{{ receipt.checkreceipt.compensation_info }}</small>
                                 {% endif %}
                             {% else %}
                                 <span class="badge badge-{{ receipt.lcn.status|status_badge }}">
                                     {{ receipt.lcn.get_status_display }}
                                 </span>
+                                {% if receipt.lcn.status == 'PAID' %}
+                                    <br><small class="text-muted">
+                                        Paid on: {{ receipt.payment_date|date:"Y-m-d" }}
+                                    </small>
+                                {% endif %}
                                 {% if receipt.lcn.status == 'UNPAID' and receipt.lcn.rejection_cause %}
                                     <br><small class="text-danger">{{ receipt.lcn.get_rejection_cause_display }}</small>
-                                {% endif %}
-                                {% if receipt.lcn.compensation_info %}
-                                    <br><small class="text-muted">{{ receipt.lcn.compensation_info }}</small>
                                 {% endif %}
                             {% endif %}
                         </td>
                         {% if presentation.status == 'presented' or presentation.status == 'discounted' %}
                         <td>
                             <div class="form-group mb-0">
-                                <select class="form-control form-control-sm receipt-status mb-2" 
-                                        data-receipt-id="{{ receipt.id }}"
-                                        {% if receipt.recorded_status %}disabled{% endif %}>
-                                    <option value="">Pending</option>
-                                    <option value="paid" {% if receipt.recorded_status == 'PAID' %}selected{% endif %}>Paid</option>
-                                    <option value="unpaid" {% if receipt.recorded_status == 'UNPAID' %}selected{% endif %}>Unpaid</option>
-                                </select>
-                                <!-- Add payment date input that shows only when status is "paid" -->
-                                <input type="date" 
-                                    class="form-control form-control-sm payment-date" 
-                                    style="display: {% if receipt.recorded_status == 'PAID' %}block{% else %}none{% endif %};"
-                                    value="{{ today|date:'Y-m-d' }}"
-                                    min="{{ presentation.date|date:'Y-m-d' }}"
-                                    {% if receipt.recorded_status %}disabled{% endif %}>
+                                {% if not receipt.recorded_status %}
+                                    {% with actual_receipt=receipt.checkreceipt|default:receipt.lcn %}
+                                    {% if actual_receipt %}
+                                        {% with receipt_status=actual_receipt.status %}
+                                        {% if receipt_status != 'UNPAID' and receipt_status != 'PAID' and receipt_status != 'COMPENSATED' and receipt_status != 'PARTIALLY_COMPENSATED' %}
+                                            <select class="form-control form-control-sm receipt-status mb-2" 
+                                                    data-receipt-id="{{ receipt.id }}">
+                                                <option value="">Pending</option>
+                                                <option value="paid">Paid</option>
+                                                <option value="unpaid">Unpaid</option>
+                                            </select>
+                                            <!-- Payment date input only shows when selecting "paid" -->
+                                            <input type="date" 
+                                                class="form-control form-control-sm payment-date" 
+                                                style="display: none;"
+                                                value="{{ today|date:'Y-m-d' }}"
+                                                min="{{ presentation.date|date:'Y-m-d' }}">
+                                        {% endif %}
+                                        {% endwith %}
+                                    {% endif %}
+                                    {% endwith %}
+                                {% else %}
+                                    <span class="badge badge-{{ receipt.recorded_status|lower }}-light">
+                                        {{ receipt.recorded_status }}
+                                    </span>
+                                    {% if receipt.recorded_status == 'PAID' %}
+                                        <br><small class="text-muted">{{ receipt.payment_date|date:"Y-m-d" }}</small>
+                                    {% endif %}
+                                    {% if receipt.checkreceipt.status == 'COMPENSATED' or receipt.lcn.status == 'COMPENSATED' %}
+                                        <br><small class="text-muted">Compensated on {{ receipt.checkreceipt.compensated_at|date:"Y-m-d"|default:receipt.lcn.compensated_at|date:"Y-m-d" }}</small>
+                                    {% endif %}
+                                {% endif %}
                             </div>
                         </td>
                         {% endif %}

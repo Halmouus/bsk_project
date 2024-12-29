@@ -453,8 +453,13 @@ class AvailableReceiptsView(View):
     """
     def get(self, request):
         receipt_type = request.GET.get('type')
-        presentation_type = request.GET.get('presentation_type')  # Add this line
-        
+        presentation_type = request.GET.get('presentation_type')
+        presentation_date = request.GET.get('presentation_date')
+        if presentation_date:
+            presentation_date = datetime.strptime(presentation_date, '%Y-%m-%d').date()
+        else:
+            presentation_date = timezone.now().date()
+
         if receipt_type == 'check':
             receipts = CheckReceipt.objects.filter(
                 status__in=[
@@ -474,7 +479,7 @@ class AvailableReceiptsView(View):
             if presentation_type == 'DISCOUNT':
                 valid_receipts = []
                 for receipt in receipts:
-                    days_to_due = (receipt.due_date - timezone.now().date()).days
+                    days_to_due = (receipt.due_date - presentation_date).days
                     if 20 <= days_to_due <= 120:
                         valid_receipts.append(receipt)
                 receipts = valid_receipts
@@ -492,7 +497,7 @@ class AvailableReceiptsView(View):
             
             # Add days to due calculation for all receipts
             if hasattr(receipt, 'due_date'):
-                receipt.days_to_due = (receipt.due_date - timezone.now().date()).days
+                receipt.days_to_due = (receipt.due_date - presentation_date).days
 
         html = render_to_string('presentation/available_receipts.html', {
             'receipts': receipts

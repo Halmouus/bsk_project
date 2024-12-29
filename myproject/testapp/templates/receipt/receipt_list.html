@@ -242,9 +242,16 @@ Available filters:
                                 </span>
                                 {% if lcn.status == 'UNPAID' and lcn.rejection_cause %}
                                     <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
+                                    {% with last_pres=lcn.lcn_presentations.last %}
+                                        {% if last_pres %}
+                                            <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                                        {% endif %}
+                                    {% endwith %}
                                 {% endif %}
                                 {% if lcn.compensation_info %}
-                                    <br><small class="text-muted">{{ lcn.compensation_info }}</small>
+                                    <i class="fas fa-eye text-primary ml-2 cursor-pointer" 
+                                    onclick="viewCompensationTimeline('{% if lcn.lcn_number %}lcn{% else %}lcn{% endif %}', '{{ lcn.id }}')">
+                                    </i>
                                 {% endif %}
                                 {% if lcn.status == 'PARTIALLY_COMPENSATED' %}
                                     {% with comp_status=lcn.get_compensation_status %}
@@ -825,7 +832,8 @@ $(document).ready(function() {
                         {value: 'DISCOUNTED', label: 'Discounted'},
                         {value: 'PAID', label: 'Paid'},
                         {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'COMPENSATED', label: 'Compensated'}
+                        {value: 'COMPENSATED', label: 'Compensated'},
+                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
                     ]
                 },
                 {
@@ -910,7 +918,8 @@ $(document).ready(function() {
                         {value: 'PAID', label: 'Paid'},
                         {value: 'REJECTED', label: 'Rejected'},
                         {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'UNPAID', label: 'Unpaid'}
+                        {value: 'UNPAID', label: 'Unpaid'},
+                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
                     ]
                 }
             ],
@@ -941,7 +950,8 @@ $(document).ready(function() {
                         {value: 'DISCOUNTED', label: 'Discounted'},
                         {value: 'PAID', label: 'Paid'},
                         {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'COMPENSATED', label: 'Compensated'}
+                        {value: 'COMPENSATED', label: 'Compensated'},
+                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
                     ]
                 },
                 {
@@ -1023,7 +1033,8 @@ $(document).ready(function() {
                         {value: 'PAID', label: 'Paid'},
                         {value: 'REJECTED', label: 'Rejected'},
                         {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'UNPAID', label: 'Unpaid'}
+                        {value: 'UNPAID', label: 'Unpaid'},
+                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
                     ]
                 }
             ],

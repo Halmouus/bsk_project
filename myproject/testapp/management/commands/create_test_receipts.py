@@ -31,12 +31,12 @@ class Command(BaseCommand):
             return
 
         # Create 10 checks
-        for i in range(10):
+        for i in range(30):
             check = CheckReceipt.objects.create(
                 client=client,
                 entity=entity,
                 check_number=f"TEST{i+1:06d}",
-                amount=Decimal(random.randint(1000, 10000)),
+                amount=Decimal(random.randint(1000, 20000)),
                 due_date=timezone.now().date() + timedelta(days=random.randint(1, 30)),
                 issuing_bank='ATW',
                 bank_account=bank_account,
@@ -45,12 +45,12 @@ class Command(BaseCommand):
             self.stdout.write(f"Created check: {check.check_number}")
 
         # Create 10 LCNs
-        for i in range(10):
+        for i in range(20):
             lcn = LCN.objects.create(
                 client=client,
                 entity=entity,
                 lcn_number=f"LCN{i+1:06d}",
-                amount=Decimal(random.randint(1000, 10000)),
+                amount=Decimal(random.randint(1000, 50000)),
                 due_date=timezone.now().date() + timedelta(days=random.randint(1, 30)),
                 issuing_bank='ATW',
                 bank_account=bank_account,
