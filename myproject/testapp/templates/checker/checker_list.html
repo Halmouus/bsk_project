@@ -77,63 +77,64 @@
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="row">
-                    <div class="col-md-6">
+                <div id="errorAlert" class="alert alert-danger" style="display: none;"></div>
+                <form id="checkerForm">
+                    {% csrf_token %}
+                    <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label>Bank Account</label>
-                                <input type="text" class="form-control" id="bankAccount" placeholder="Search bank account...">
-                                <input type="hidden" id="selected-bank-id">
-                                <div class="invalid-feedback">Required</div>
+                                <input type="text" id="bankAccount" class="form-control" 
+                                       placeholder="Search bank account...">
+                                <input type="hidden" id="selectedBankId">
                             </div>
                         </div>
-                        
-                    </div>
 
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label>Type</label>
-                            <select class="form-control" id="checkerType">
-                                <option value="CHQ">Cheque</option>
-                                <option value="LCN">LCN</option>
-                            </select>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Type</label>
+                                <select class="form-control" id="checkerType">
+                                    <option value="CHQ">Cheque</option>
+                                    <option value="LCN">LCN</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Number of Pages</label>
+                                <select class="form-control" id="numPages">
+                                    <option value="25">25</option>
+                                    <option value="50">50</option>
+                                    <option value="100">100</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Index</label>
+                                <input type="text" class="form-control" id="checkerIndex" 
+                                       maxlength="3" style="text-transform: uppercase;">
+                                <div class="invalid-feedback">1-3 uppercase letters only</div>
+                            </div>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label>Starting Page</label>
+                                <input type="number" class="form-control" id="startingPage" min="1">
+                                <div class="invalid-feedback">Must be greater than 0</div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label>Number of Pages</label>
-                            <select class="form-control" id="numPages">
-                                <option value="25">25</option>
-                                <option value="50">50</option>
-                                <option value="100">100</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="col-md-6">
-                        <div class="form-group">
-                            <label>Index</label>
-                            <input type="text" class="form-control" id="checkerIndex" 
-                                   maxlength="3" style="text-transform: uppercase;">
-                            <div class="invalid-feedback">1-3 uppercase letters only</div>
-                        </div>
-                    </div>
-
-                    <div class="col-12">
-                        <div class="form-group">
-                            <label>Starting Page</label>
-                            <input type="number" class="form-control" id="startingPage" min="1">
-                            <div class="invalid-feedback">Must be greater than 0</div>
-                        </div>
-                    </div>
-
-                    <div class="preview-section mt-3 d-none">
-                        <div class="alert alert-info">
+                    <div class="preview-section mt-3">
+                        <div class="alert alert-info" style="display: none;">
                             Preview: <strong id="checkerPreview"></strong>
                         </div>
                     </div>
-                </div>
+                </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
@@ -346,32 +347,84 @@
 <style>
     .ui-autocomplete {
         position: absolute;
-        z-index: 2000; /* Make sure it appears above the modal */
+        z-index: 2000;
         background-color: white;
         border: 1px solid #ccc;
         border-radius: 4px;
-        padding: 5px 0;
         max-height: 200px;
         overflow-y: auto;
         list-style: none;
+        padding: 0;
+        margin: 0;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.1);
     }
 
     .ui-menu-item {
         padding: 8px 12px;
         cursor: pointer;
+        border-bottom: 1px solid #f0f0f0;
     }
 
     .ui-menu-item:hover {
         background-color: #f8f9fa;
     }
 
-    .ui-helper-hidden-accessible {
-        display: none;
+    .bank-suggestion {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .bank-icon {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #f0f0f0;
+        border-radius: 4px;
+    }
+
+    .bank-details {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .bank-name {
+        font-weight: 500;
+    }
+
+    .account-number {
+        font-size: 0.85em;
+        color: #666;
     }
 </style>
 
 
 <script>
+const BANK_NAMES = {
+    'ATW': 'Attijariwafa Bank',
+    'BCP': 'Banque Populaire',
+    'BOA': 'Bank of Africa',
+    'CAM': 'Crédit Agricole du Maroc',
+    'CIH': 'CIH Bank',
+    'BMCI': 'BMCI',
+    'SGM': 'Société Générale Maroc',
+    'CDM': 'Crédit du Maroc',
+    'ABB': 'Al Barid Bank',
+    'CFG': 'CFG Bank',
+    'ABM': 'Arab Bank Maroc',
+    'CTB': 'Citibank Maghreb'
+};
+
+function getBankDisplayName(code) {
+    return BANK_NAMES[code] || code;
+}
+
+function showError(message) {
+    $('#errorAlert').text(message).show();
+    setTimeout(() => $('#errorAlert').fadeOut(), 5000);
+}
 const Utils = {
     formatMoney: (amount) => {
         return new Intl.NumberFormat('fr-FR', {
@@ -395,250 +448,400 @@ const Utils = {
 
 const CheckerFilters = {
     init() {
-        console.log("Initializing checker filters");
+        console.log("[CheckerFilters] Initializing...");
         this.bankFilter = $('#bankFilter');
         this.typeFilter = $('#typeFilter');
         this.statusFilter = $('#statusFilter');
         this.searchInput = $('#searchChecker');
 
-        this.setupAutocomplete();
+        if (!this.bankFilter.length) {
+            console.error("[CheckerFilters] Bank filter not found!");
+            return;
+        }
+
         this.bindEvents();
+        console.log("[CheckerFilters] Initialization complete");
     },
 
-    setupAutocomplete() {
-    console.log("Setting up Autocomplete...");
-
-    // CSRF token for secure requests
-    const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-
-    // Initialize jQuery UI autocomplete
-    this.bankInput.autocomplete({
-        source: async (request, response) => {
-            try {
-                const params = new URLSearchParams({ search: request.term });
-                const res = await fetch(`/testapp/bank-accounts/?${params}`, {
-                    headers: {
-                        'X-CSRFToken': csrftoken, // Send CSRF token
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (!res.ok) throw new Error('Failed to fetch bank accounts');
-                const data = await res.json();
-
-                // Map response to expected autocomplete format
-                response(data.map(account => ({
-                    label: `${account.bank} [${account.account_number}]`,
-                    value: account.id,
-                    bank: account.bank
-                })));
-            } catch (error) {
-                console.error('Autocomplete error:', error);
-            }
-        },
-        minLength: 2, // Minimum characters before autocomplete triggers
-        select: (event, ui) => {
-            event.preventDefault();
-            this.bankInput.val(ui.item.label); // Display selected bank account label
-            $('#selected-bank-id').val(ui.item.value); // Store selected bank ID
-            this.validateForm(); // Re-validate form
-            this.updatePreview(); // Update preview
-        }
-    });
-
-    console.log("Autocomplete initialized");
-},
-    
     bindEvents() {
-        // Instant filter on select changes
-        this.bankFilter.on('change', () => this.applyFilters());
-        this.typeFilter.on('change', () => this.applyFilters());
-        this.statusFilter.on('change', () => this.applyFilters());
+        console.log("[CheckerFilters] Binding filter events");
+        
+        // Bank filter
+        this.bankFilter.on('change', () => {
+            console.log("[CheckerFilters] Bank filter changed:", this.bankFilter.val());
+            this.applyFilters();
+        });
 
-        // Debounced search
+        // Type filter
+        this.typeFilter.on('change', () => {
+            console.log("[CheckerFilters] Type filter changed:", this.typeFilter.val());
+            this.applyFilters();
+        });
+
+        // Status filter
+        this.statusFilter.on('change', () => {
+            console.log("[CheckerFilters] Status filter changed:", this.statusFilter.val());
+            this.applyFilters();
+        });
+
+        // Search with debounce
         let timeout;
         this.searchInput.on('input', () => {
+            console.log("[CheckerFilters] Search input changed:", this.searchInput.val());
             clearTimeout(timeout);
             timeout = setTimeout(() => this.applyFilters(), 300);
         });
     },
 
     async applyFilters() {
-        console.log("Applying filters");
+        console.log("[CheckerFilters] Applying filters");
         const filters = {
             bank_account: this.bankFilter.val(),
             type: this.typeFilter.val(),
             status: this.statusFilter.val(),
             search: this.searchInput.val()
         };
-
-        console.log("Filter values:", filters);
+        console.log("[CheckerFilters] Filter values:", filters);
 
         try {
             const response = await fetch(`/testapp/checkers/filter/?${new URLSearchParams(filters)}`);
-            if (!response.ok) throw new Error('Filter request failed');
-
+            if (!response.ok) {
+                throw new Error('Filter request failed: ' + response.statusText);
+            }
             const data = await response.json();
+            console.log("[CheckerFilters] Filter response received:", data);
             $('#checkersTableBody').html(data.html);
         } catch (error) {
-            console.error('Filter error:', error);
+            console.error("[CheckerFilters] Filter error:", error);
         }
     }
 };
 
 const CheckerModal = {
     init() {
+        console.log("[CheckerModal] Initializing...");
+        
+        // Initialize core elements
         this.modal = $('#checkerModal');
         this.form = this.modal.find('form');
         this.saveBtn = $('#saveChecker');
         this.bankInput = $('#bankAccount');
-        console.log("Initializing CheckerModal...");
-        console.log("BankAccount input field found:", this.bankInput);
+        
+        // Verify elements exist
+        if (!this.modal.length) {
+            console.error("[CheckerModal] Modal not found!");
+            return;
+        }
+        
+        if (!this.bankInput.length) {
+            console.error("[CheckerModal] Bank input not found!");
+            return;
+        }
+        
+        // Verify jQuery UI is loaded
+        if (!$.fn.autocomplete) {
+            console.error("[CheckerModal] jQuery UI not loaded!");
+            return;
+        }
+
+        console.log("[CheckerModal] Core elements initialized");
+        
         this.setupAutocomplete();
         this.setupValidation();
         this.bindEvents();
+        console.log("[CheckerModal] Initialization complete");
     },
 
     setupAutocomplete() {
-        console.log("Setting up Autocomplete...");
+    console.log("[CheckerModal] Setting up bank autocomplete");
     const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-
+    
     this.bankInput.autocomplete({
-        source: async (request, response) => {
-            try {
-                const params = new URLSearchParams({ search: request.term });
-                const res = await fetch(`/testapp/bank-accounts/?${params}`, {
-                    headers: {
-                        'X-CSRFToken': csrftoken, // CSRF token for secure requests
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (!res.ok) throw new Error('Failed to fetch bank accounts');
-                const data = await res.json();
-
-                // Map response to the expected autocomplete format
-                response(data.map(account => ({
-                    label: `${account.bank} [${account.account_number}]`,
-                    value: account.id,
-                    bank: account.bank
-                })));
-            } catch (error) {
-                console.error('Autocomplete error:', error);
-            }
+        source: function(request, response) {
+            console.log("[CheckerModal] Autocomplete search:", request.term);
+            $.ajax({
+                url: '/testapp/bank-accounts/autocomplete/',
+                method: 'GET',
+                data: { search: request.term },
+                headers: { 'X-CSRFToken': csrftoken },
+                success: function(data) {
+                    console.log("[CheckerModal] Autocomplete data received:", data);
+                    response(data.map(function(account) {
+                        return {
+                            label: account.bank + ' [' + account.account_number + ']',
+                            value: account.id,
+                            bank: account.bank,
+                            accountNumber: account.account_number
+                        };
+                    }));
+                },
+                error: function(xhr, status, error) {
+                    console.error("[CheckerModal] Autocomplete error:", error);
+                    response([]);
+                }
+            });
         },
-        minLength: 2,
-        select: (event, ui) => {
+        minLength: 0,
+        select: function(event, ui) {
             event.preventDefault();
-            this.bankInput.val(ui.item.label); // Display selected bank account label
-            $('#selected-bank-id').val(ui.item.value); // Store selected bank ID
-            this.validateForm(); // Re-validate form
-            this.updatePreview(); // Update preview
+            console.log("[CheckerModal] Bank selected, data:", ui.item);
+            
+            // Important: Store both the display value and the ID
+            $('#bankAccount').val(ui.item.label);
+            $('#selectedBankId').val(ui.item.value);
+            
+            // Debug log the stored values
+            console.log("[CheckerModal] Stored values:", {
+                display: $('#bankAccount').val(),
+                id: $('#selectedBankId').val()
+            });
+            
+            // Force validation check
+            CheckerModal.validateForm();
+            CheckerModal.updatePreview();
+            
+            return false;
+        },
+        change: function(event, ui) {
+            // Handle manual change or clear
+            if (!ui.item) {
+                console.log("[CheckerModal] Bank input cleared or invalid selection");
+                $('#selectedBankId').val('');
+                CheckerModal.validateForm();
+            }
         }
     });
 
-    console.log("Autocomplete initialized");
+    // Add debug check on bank input blur
+    this.bankInput.on('blur', function() {
+        console.log("[CheckerModal] Bank input blur - current values:", {
+            input: $('#bankAccount').val(),
+            selectedId: $('#selectedBankId').val()
+        });
+    });
+},
+
+    getBankDisplayName(code) {
+        const bankNames = {
+            'ATW': 'Attijariwafa Bank',
+            'BCP': 'Banque Populaire',
+            'BOA': 'Bank of Africa',
+            'CAM': 'Crédit Agricole du Maroc',
+            'CIH': 'CIH Bank',
+            'BMCI': 'BMCI',
+            'SGM': 'Société Générale Maroc',
+            'CDM': 'Crédit du Maroc',
+            'ABB': 'Al Barid Bank',
+            'CFG': 'CFG Bank',
+            'ABM': 'Arab Bank Maroc',
+            'CTB': 'Citibank Maghreb'
+        };
+        const displayName = bankNames[code] || code;
+        console.log("[CheckerModal] Bank display name for", code, ":", displayName);
+        return displayName;
     },
 
-
     setupValidation() {
+        console.log("[CheckerModal] Setting up validation");
         const indexInput = $('#checkerIndex');
         const startInput = $('#startingPage');
 
-        // Validate when the bank account changes
-        this.bankInput.on('autocompleteselect', () => this.validateForm()); // Trigger validation on autocomplete selection
-
-        // Validate index input
-        indexInput.on('input', function () {
+        indexInput.on('input', function() {
+            console.log("[CheckerModal] Index input changed:", this.value);
             this.value = this.value.toUpperCase();
-            $(this).toggleClass('is-valid', /^[A-Z]{1,3}$/.test(this.value));
+            const isValid = /^[A-Z]{1,3}$/.test(this.value);
+            console.log("[CheckerModal] Index validation:", isValid);
+            $(this).toggleClass('is-valid', isValid);
             CheckerModal.validateForm();
             CheckerModal.updatePreview();
         });
 
-        // Validate starting page input
-        startInput.on('input', function () {
-            $(this).toggleClass('is-valid', parseInt(this.value) > 0);
+        startInput.on('input', function() {
+            console.log("[CheckerModal] Starting page changed:", this.value);
+            const isValid = parseInt(this.value) > 0;
+            console.log("[CheckerModal] Starting page validation:", isValid);
+            $(this).toggleClass('is-valid', isValid);
             CheckerModal.validateForm();
             CheckerModal.updatePreview();
+        });
+
+        this.bankInput.on('change', () => {
+            console.log("[CheckerModal] Bank input changed");
+            if (!$('#selectedBankId').val()) {
+                console.log("[CheckerModal] No bank selected, clearing input");
+                this.bankInput.val('');
+            }
+            this.validateForm();
         });
     },
 
     validateForm() {
-        const isValid =
-            $('#selected-bank-id').val() && // Ensure a bank account is selected
-            /^[A-Z]{1,3}$/.test($('#checkerIndex').val()) && // Validate index
-            parseInt($('#startingPage').val()) > 0; // Validate starting page
+        console.log("[CheckerModal] Validating form");
         
-        this.saveBtn.prop('disabled', !isValid); // Enable or disable the save button
+        const bankId = $('#selectedBankId').val();
+        const index = $('#checkerIndex').val();
+        const startingPage = parseInt($('#startingPage').val());
+
+        console.log("[CheckerModal] Form values:", {
+            bankId: bankId,
+            index: index,
+            startingPage: startingPage
+        });
+
+        const validations = {
+            bank: !!bankId,
+            index: /^[A-Z]{1,3}$/.test(index),
+            startingPage: startingPage > 0
+        };
+
+        console.log("[CheckerModal] Validation results:", validations);
+
+        const isValid = Object.values(validations).every(v => v);
+        console.log("[CheckerModal] Form is valid:", isValid);
+
+        this.saveBtn.prop('disabled', !isValid);
         return isValid;
     },
 
-
     updatePreview() {
-        const bank = this.bankInput.val(); // Get the bank label
+        console.log("[CheckerModal] Updating preview");
+        const bank = this.bankInput.val();
         const index = $('#checkerIndex').val();
         const start = $('#startingPage').val();
         const pages = $('#numPages').val();
 
+        console.log("[CheckerModal] Preview values:", {
+            bank: bank,
+            index: index,
+            start: start,
+            pages: pages
+        });
+
         if (bank && index && start) {
             const end = parseInt(start) + parseInt(pages) - 1;
-            $('#checkerPreview').text(`${bank}-${index}${start} to ${bank}-${index}${end}`);
-            $('.preview-alert').removeClass('d-none');
+            const previewText = `${bank}-${index}${start} to ${bank}-${index}${end}`;
+            console.log("[CheckerModal] Setting preview text:", previewText);
+            $('#checkerPreview').text(previewText);
+            $('.alert-info').removeClass('d-none');
+        } else {
+            console.log("[CheckerModal] Missing required fields for preview");
+            $('.alert-info').addClass('d-none');
         }
     },
 
     async saveChecker() {
-        if (!this.validateForm()) return;
+        console.log("[CheckerModal] Save attempt:", {
+            event: new Error().stack  // This will show us where the call is coming from
+        });
+
+        if (!this.validateForm()) {
+            console.warn("[CheckerModal] Form validation failed, aborting save");
+            return;
+        }
+
+        const data = {
+            bank_account_id: $('#selectedBankId').val(),
+            type: $('#checkerType').val(),
+            num_pages: $('#numPages').val(),
+            index: $('#checkerIndex').val(),
+            starting_page: $('#startingPage').val()
+        };
+
+        console.log("[CheckerModal] Save data:", data);
 
         try {
+            if (this.saving) {
+                console.warn("[CheckerModal] Save already in progress, preventing duplicate");
+                return;
+            }
+            
+            this.saving = true;
+            this.saveBtn.prop('disabled', true);
+
             const response = await fetch('/testapp/checkers/create/', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                 },
-                body: JSON.stringify({
-                    bank_account_id: this.bankSelect.val(),
-                    type: $('#checkerType').val(),
-                    num_pages: $('#numPages').val(),
-                    index: $('#checkerIndex').val(),
-                    starting_page: $('#startingPage').val()
-                })
+                body: JSON.stringify(data)
             });
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.error || 'Creation failed');
+                const errorData = await response.json();
+                throw new Error(errorData.error || 'Creation failed');
             }
 
+            console.log("[CheckerModal] Checker created successfully");
             location.reload();
         } catch (error) {
-            Utils.showError(error.message);
+            console.error("[CheckerModal] Save error:", error);
+            alert(error.message);
+        } finally {
+            this.saving = false;
+            this.saveBtn.prop('disabled', false);
         }
     },
 
     bindEvents() {
-        this.saveBtn.off("click").on('click', () => this.saveChecker());
-        this.modal.on('hidden.bs.modal', () => {
-            if (this.form.length > 0) {
-                this.form[0].reset(); // Reset only if the form exists
-            }
-            this.bankSelect.val(null).trigger('change');
-            $('.preview-alert').addClass('d-none');
-        });
-        this.modal.on('shown.bs.modal', () => {
-            console.log("Modal opened. Checking dropdown options:");
-            console.log(this.bankSelect.find('option')); // Confirm options are there
-        });
+    console.log("[CheckerModal] Binding modal events");
+    
+    // Remove any existing event handlers before adding new ones
+    this.saveBtn.off('click');
+    
+    // Save button click
+    this.saveBtn.on('click', () => {
+        console.log("[CheckerModal] Save button clicked");
+        if (this.saving) {
+            console.warn("[CheckerModal] Save already in progress, preventing duplicate");
+            return;
+        }
+        this.saveChecker();
+    });
 
-        
-    }
+    // Modal close cleanup
+    this.modal.off('hidden.bs.modal').on('hidden.bs.modal', () => {
+        console.log("[CheckerModal] Modal hidden - cleaning up");
+        this.form.trigger('reset');
+        this.bankInput.val('');
+        $('#selectedBankId').val('');
+        $('.preview-section .alert').addClass('d-none');
+        $('.is-valid, .is-invalid').removeClass('is-valid is-invalid');
+        this.saveBtn.prop('disabled', true);
+        this.saving = false;  // Reset saving flag
+    });
+
+    // Modal show initialization
+    this.modal.off('shown.bs.modal').on('shown.bs.modal', () => {
+        console.log("[CheckerModal] Modal shown");
+        this.bankInput.focus();
+        this.saving = false;  // Reset saving flag when modal opens
+    });
+
+    console.log("[CheckerModal] Events bound successfully");
+}
 };
 
-
+// Initialize when document is ready
+let initialized = false;
 
 $(document).ready(() => {
-    CheckerModal.init();
-    CheckerFilters.init();
+    console.log("[Main] Document ready");
+    
+    if (initialized) {
+        console.warn("[Main] Already initialized, skipping");
+        return;
+    }
+
+    try {
+        console.log("[Main] Starting initialization");
+        CheckerModal.init();
+        CheckerFilters.init();
+        initialized = true;
+        console.log("[Main] Initialization complete");
+    } catch (error) {
+        console.error("[Main] Initialization error:", error);
+    }
 });
 </script>
 {% endblock %}

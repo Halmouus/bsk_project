@@ -123,7 +123,7 @@ urlpatterns = [
          BankAccountDeactivateView.as_view(), name='bank-account-deactivate'),
     path('bank-accounts/filter/', 
          BankAccountFilterView.as_view(), name='bank-account-filter'),
-    path('bank-accounts/', bank_account_autocomplete, name='bank_account_autocomplete'),
+    path('bank-accounts/autocomplete/', bank_account_autocomplete, name='bank-account-autocomplete'),
 
     # Bank Statement URLs
     path('bank-accounts/<uuid:pk>/statement/', 
