@@ -57,6 +57,7 @@
                     <th>Reference</th>
                     <th>Bank</th>
                     <th>Creation Date</th>
+                    <th>Signatures</th>
                     <th>Beneficiary</th>
                     <th>Invoice Ref</th>
                     <th>Amount Due</th>
@@ -74,7 +75,33 @@
 </div>
 
 {% include 'checker/partials/check_action_modals.html' %}
+<style>
+    .btn-group {
+        display: flex;
+        flex-direction: row;
+        gap: 5px;
+    }
+    .badge-success {
+        background-color: #28a745;
+        color: white;
+    }
 
+    .badge-info {
+        background-color: #17a2b8;
+        color: white;
+    }
+
+    .badge-secondary {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .btn-outline-success:hover,
+    .btn-outline-info:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+</style>
 <script>
 function formatMoney(amount) {
     return new Intl.NumberFormat('fr-FR', {
@@ -83,6 +110,33 @@ function formatMoney(amount) {
         minimumFractionDigits: 2
     }).format(amount);
 }
+
+const CheckActions = {
+    async handleAction(action, checkId, signature = null) {
+        console.log("[CheckActions] Handling action:", { action, checkId, signature });
+        
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ action, signature })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Action failed');
+            }
+            
+            await CheckFilters.applyFilters();
+        } catch (error) {
+            console.error('[CheckActions] Error:', error);
+            alert(error.message);
+        }
+    }
+};
 
 const CheckFilters = {
     init() {
@@ -157,10 +211,18 @@ const CheckFilters = {
         // Handle check actions (deliver, pay, etc.)
         $(document).on('click', '.check-action', (e) => {
             const button = $(e.currentTarget);
-            this.handleCheckAction(
-                button.data('action'),
-                button.data('check-id')
-            );
+            const action = button.data('action');
+            const checkId = button.data('check-id');
+            const signature = button.data('signature');
+
+            // Handle print and sign actions separately
+            if (action === 'print' || action === 'sign') {
+                console.log("[CheckFilters] Handling special action:", action);
+                CheckActions.handleAction(action, checkId, signature);
+                return;
+            }
+
+            this.handleCheckAction(action, checkId);
         });
 
         // Handle status badge clicks

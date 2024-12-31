@@ -12,6 +12,17 @@
         </div>
     </td>
     <td>{{ check.creation_date|date:"Y-m-d" }}</td>
+    <td>
+        {% if check.signatures %}
+            {% for sig in check.signatures %}
+                <span class="badge badge-{% if sig == 'OUK' %}success{% else %}info{% endif %}">
+                    {{ sig }}
+                </span>
+            {% endfor %}
+        {% else %}
+            <span class="badge badge-secondary">None</span>
+        {% endif %}
+    </td>
     <td>{{ check.beneficiary.name }}</td>
     <td>{{ check.cause.ref }}</td>
     <td class="text-right">{{ check.amount_due|floatformat:2 }}</td>
@@ -36,13 +47,21 @@
                 <button class="btn btn-sm btn-info check-action" data-action="print" data-check-id="{{ check.id }}">
                     <i class="fas fa-print"></i> Print
                 </button>
-            {% elif check.status == 'ready_to_sign' %}
-                <button class="btn btn-sm btn-primary check-action" data-action="sign" data-check-id="{{ check.id }}">
-                    <i class="fas fa-signature"></i> Sign
-                </button>
-                <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
-                    <i class="fas fa-ban"></i>
-                </button>
+                {% elif check.status == 'printed' or check.status == 'ready_to_sign' %}
+                <div class="btn-group">
+                    {% if 'OUK' not in check.signatures %}
+                        <button class="btn btn-sm btn-outline-success check-action" 
+                                data-action="sign" data-signature="OUK" data-check-id="{{ check.id }}">
+                            <i class="fas fa-signature"></i> Sign OUK
+                        </button>
+                    {% endif %}
+                    {% if 'KEZ' not in check.signatures %}
+                        <button class="btn btn-sm btn-outline-info check-action" 
+                                data-action="sign" data-signature="KEZ" data-check-id="{{ check.id }}">
+                            <i class="fas fa-signature"></i> Sign KEZ
+                        </button>
+                    {% endif %}
+                </div>
             {% elif check.status == 'pending' and not check.cancelled_at %}
                 <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
                     <i class="fas fa-ban"></i>

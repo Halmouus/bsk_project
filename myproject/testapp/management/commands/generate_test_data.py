@@ -1,61 +1,67 @@
 from django.core.management.base import BaseCommand
-from testapp.models import Product, Supplier
+from django.db import transaction
+from testapp.models import Product, Supplier, Invoice
 from decimal import Decimal
 import random
+from datetime import datetime, timedelta
 
 class Command(BaseCommand):
-    help = 'Generate random products and suppliers for testing'
+    help = 'Generate test data for financial system'
 
     def add_arguments(self, parser):
-        parser.add_argument('--products', type=int, default=10, help='Number of products to create')
-        parser.add_argument('--suppliers', type=int, default=5, help='Number of suppliers to create')
+        parser.add_argument('--products', type=int, default=10)
+        parser.add_argument('--suppliers', type=int, default=5)
+        parser.add_argument('--invoices', type=int, default=10)
 
+    @transaction.atomic
     def handle(self, *args, **options):
-        # Product data
-        product_types = [
-            'Electricity', 'Gas', 'Water', 'Internet', 'Phone', 
-            'Office Supplies', 'Cleaning', 'Maintenance', 'Software', 
-            'Hardware', 'Consulting', 'Training', 'Marketing', 'Insurance'
-        ]
-        
-        vat_rates = [0, 7, 10, 14, 20]
-        expense_codes = ['61111', '61112', '61113', '61114', '61115', '61116', '61117']
-
-        # Create Products
+        self.stdout.write('Creating products...')
+        products = []
         for i in range(options['products']):
-            name = f"{random.choice(product_types)} {random.randint(1000, 9999)}"
-            try:
-                Product.objects.create(
-                    name=name,
-                    vat_rate=Decimal(str(random.choice(vat_rates))),
-                    expense_code=random.choice(expense_codes),
-                    is_energy=random.choice([True, False]),
-                    fiscal_label=f"FISC-{random.randint(1000, 9999)}"
-                )
-                self.stdout.write(self.style.SUCCESS(f'Created product: {name}'))
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f'Failed to create product {name}: {str(e)}'))
+            product = Product.objects.create(
+                name=f"Product-{i+1}",
+                vat_rate=Decimal('20.00'),
+                expense_code=f'611{i+1:02d}',
+                is_energy=i < 3,
+                fiscal_label=f"FISC-{i+1:04d}"
+            )
+            products.append(product)
+            self.stdout.write(f'Created product {i+1}')
 
-        # Supplier data
-        cities = ['Casablanca', 'Rabat', 'Marrakech', 'Fes', 'Tanger', 'Agadir']
-        services = ['Energy', 'Telecom', 'IT', 'Consulting', 'Maintenance']
-
-        # Create Suppliers
+        self.stdout.write('Creating suppliers...')
+        suppliers = []
+        cities = ['Casablanca', 'Rabat', 'Marrakech', 'Tanger', 'Agadir']
         for i in range(options['suppliers']):
-            name = f"Supplier-{random.randint(1000, 9999)}"
-            try:
-                Supplier.objects.create(
-                    name=name,
-                    if_code=f"IF{random.randint(100000, 999999)}",
-                    ice_code=f"{random.randint(1000000000000, 9999999999999)}",
-                    rc_code=f"{random.randint(10000, 999999)}",
-                    rc_center=random.choice(cities),
-                    accounting_code=f"401{random.randint(1000, 9999)}",
-                    is_energy=random.choice([True, False]),
-                    service=random.choice(services),
-                    delay_convention=random.randint(30, 90),
-                    is_regulated=random.choice([True, False])
-                )
-                self.stdout.write(self.style.SUCCESS(f'Created supplier: {name}'))
-            except Exception as e:
-                self.stdout.write(self.style.ERROR(f'Failed to create supplier {name}: {str(e)}')) 
+            supplier = Supplier.objects.create(
+                name=f"Supplier-{i+1}",
+                if_code=f"IF{random.randint(100000, 999999)}",
+                ice_code=f"{random.randint(1000000000000, 9999999999999)}",
+                rc_code=f"{i+1:05d}",
+                rc_center=random.choice(cities),
+                accounting_code=f"401{i+1:04d}",
+                is_energy=i < 2,
+                service=random.choice(['Energy', 'Telecom', 'IT', 'Maintenance']),
+                delay_convention=random.choice([30, 45, 60])
+            )
+            suppliers.append(supplier)
+            self.stdout.write(f'Created supplier {i+1}')
+
+        self.stdout.write('Creating invoices...')
+        for i in range(options['invoices']):
+            invoice_date = datetime.now() - timedelta(days=random.randint(1, 60))
+            supplier = random.choice(suppliers)
+            invoice = Invoice.objects.create(
+                supplier=supplier,
+                invoice_number=f"INV-{i+1:05d}",
+                invoice_date=invoice_date,
+                due_date=invoice_date + timedelta(days=supplier.delay_convention),
+                amount=Decimal(random.uniform(1000, 50000)).quantize(Decimal('0.01')),
+                vat_amount=Decimal(random.uniform(200, 10000)).quantize(Decimal('0.01')),
+                status='pending',
+                is_validated=False
+            )
+            # Add 1-3 random products
+            invoice.products.add(*random.sample(products, k=random.randint(1, 3)))
+            self.stdout.write(f'Created invoice {i+1}')
+
+        self.stdout.write(self.style.SUCCESS('Done!'))

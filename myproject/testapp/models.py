@@ -688,10 +688,20 @@ class Checker(BaseModel):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
 
     def update_status(self):
-        if self.current_position > self.starting_page:
+        """Update checker status based on remaining pages"""
+        print("\n=== Updating Checker Status ===")
+        print(f"Checker {self.id} - Current status: {self.status}")
+        print(f"Remaining pages: {self.remaining_pages}")
+        print(f"Total pages: {self.num_pages}")
+        
+        if self.remaining_pages == self.num_pages:
+            self.status = 'new'
+        elif self.remaining_pages > 0:
             self.status = 'in_use'
-        if self.current_position >= self.final_page:
+        else:
             self.status = 'completed'
+        
+        print(f"New status: {self.status}")
         self.save()
 
     def get_status(self):
@@ -717,6 +727,7 @@ class Checker(BaseModel):
         print(f"Available positions count: {available_count}")
         
         return available_count
+    
     def clean(self):
         if self.bank_account:
             if not self.bank_account.is_active:
@@ -793,7 +804,7 @@ class Checker(BaseModel):
 
 class Check(BaseModel):
     checker = models.ForeignKey(Checker, on_delete=models.PROTECT, related_name='checks')
-    position = models.CharField(max_length=10, unique=True)  # Will store "INDEX + position number"
+    position = models.CharField(max_length=10, unique=True)
     creation_date = models.DateField(default=timezone.now)
     beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
     cause = models.ForeignKey(Invoice, on_delete=models.PROTECT)
@@ -854,17 +865,48 @@ class Check(BaseModel):
 
     
     def save(self, *args, **kwargs):
-        print(f"New creation at:  {self.checker.current_position}")
-        if not self.position:
-            self.position = self.checker.current_position
-        if not self.amount_due:
-            self.amount_due = self.cause.total_amount
-        super().save(*args, **kwargs)
+        print("\n=== Check Save Method Started ===")
+        print(f"Check ID: {self.pk}")
+        print(f"Is new check: {not self.pk}")
+        print(f"Current position: {getattr(self, 'position', None)}")
         
-        # Update checker's current position
+        if not self.pk:  # New check
+            print("Processing new check creation")
+            print(f"Checker ID: {self.checker.id}")
+            print(f"Checker position_signatures: {self.checker.position_signatures}")
+            
+            if hasattr(self, 'position') and self.position:
+                position_str = str(self.position)
+                print(f"Looking for signatures at position: {position_str}")
+                
+                position_sigs = self.checker.position_signatures.get(position_str, {})
+                print(f"Found position signatures: {position_sigs}")
+                
+                if position_sigs and 'signatures' in position_sigs:
+                    print(f"Setting signatures from position_sigs: {position_sigs['signatures']}")
+                    self.signatures = position_sigs['signatures']
+                else:
+                    print("No signatures found for this position")
+                    self.signatures = []
+            
+            if not hasattr(self, 'position') or not self.position:
+                print(f"Setting position to current_position: {self.checker.current_position}")
+                self.position = self.checker.current_position
+                
+            if not self.amount_due:
+                print(f"Setting amount_due from cause: {self.cause.total_amount}")
+                self.amount_due = self.cause.total_amount
+        
+        print(f"Final signatures before save: {getattr(self, 'signatures', [])}")
+        super().save(*args, **kwargs)
+        print(f"Check saved with signatures: {self.signatures}")
+        
         if self.checker.current_position == self.checker.current_position:
+            print("Updating checker current_position")
             self.checker.current_position += 1
             self.checker.save()
+        
+        print("=== Check Save Method Completed ===\n")
 
     def clean(self):
                 

@@ -18,6 +18,7 @@ from dateutil.parser import parse
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from decimal import Decimal
+import traceback
 
 
 
@@ -284,21 +285,37 @@ class CheckerPositionStatusView(View):
 class CheckCreateView(View):
     def post(self, request):
         try:
-            print("Raw request body:", request.body)  # Debug raw request
+            print("\n=== Check Creation Process Started ===")
+            print("Raw request body:", request.body)
             data = json.loads(request.body)
-            print("Parsed JSON data:", data)  # Debug parsed data
+            print("Parsed JSON data:", data)
             
             position = data.get('position')
             print("Position value:", position, "Type:", type(position))
+            
+            # Get checker and its signatures
             checker = get_object_or_404(Checker, pk=data['checker_id'])
+            print(f"Found checker: {checker.id}")
+            print(f"Checker position_signatures: {checker.position_signatures}")
+
+            # Check for pre-signed signatures
+            position_sigs = checker.position_signatures.get(str(position), {})
+            print(f"Pre-signed signatures for position {position}: {position_sigs}")
+            
+            initial_signatures = position_sigs.get('signatures', [])
+            print(f"Found pre-signed signatures for position {position}: {initial_signatures}")
+            
             invoice = get_object_or_404(Invoice, pk=data['invoice_id'])
+            print(f"Found invoice: {invoice.id}")
 
             payment_due = data.get('payment_due')
             if payment_due == "" or payment_due is None:
                 payment_due = None
+            print(f"Payment due date: {payment_due}")
             
-            check = Check.objects.create(
-                position= position,
+            # Create check with initial data
+            check = Check(
+                position=position,
                 checker=checker,
                 creation_date=data.get('creation_date', timezone.now().date()),
                 beneficiary=invoice.supplier,
@@ -306,8 +323,16 @@ class CheckCreateView(View):
                 payment_due=payment_due,
                 amount_due=invoice.total_amount,
                 amount=data['amount'],
-                observation=data.get('observation', '')
+                observation=data.get('observation', ''),
+                signatures=initial_signatures
             )
+            
+            check.save()
+
+            # Verify signatures after creation
+            print(f"Check created with ID: {check.id}")
+            print(f"Final check signatures: {check.signatures}")
+            print("=== Check Creation Process Completed ===\n")
             
             return JsonResponse({
                 'message': 'Check created successfully',
@@ -315,7 +340,10 @@ class CheckCreateView(View):
             })
             
         except Exception as e:
-            print("Error creating check:", str(e))  # Debug print
+            print("=== Error in Check Creation ===")
+            print(f"Error type: {type(e).__name__}")
+            print(f"Error message: {str(e)}")
+            print(f"Error traceback: {traceback.format_exc()}")
             return JsonResponse({'error': str(e)}, status=400)
     
 class CheckListView(ListView):
@@ -324,11 +352,16 @@ class CheckListView(ListView):
     context_object_name = 'checks'
 
     def get_queryset(self):
-        return Check.objects.select_related(
+        queryset = Check.objects.select_related(
             'checker__bank_account', 
             'beneficiary', 
             'cause'
         )
+        
+        for check in queryset:
+            print(f"Check {check.id} signatures: {check.signatures}")
+            
+        return queryset
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -556,6 +589,9 @@ class CheckFilterView(View):
                 'cause'
             )
 
+            for check in queryset:
+                print(f"Check {check.id} signatures: {check.signatures}")
+
             # Apply bank filter
             if bank := request.GET.get('bank'):
                 queryset = queryset.filter(checker__bank_account__bank=bank)
@@ -586,6 +622,7 @@ class CheckFilterView(View):
             return JsonResponse({'html': html})
             
         except Exception as e:
+            print(f"[CheckFilterView] Error: {str(e)}")
             return JsonResponse({'error': str(e)}, status=500)
         
 
