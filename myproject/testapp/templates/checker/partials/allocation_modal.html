@@ -1,0 +1,97 @@
+<!-- templates/checker/partials/allocation_modal.html -->
+<div class="modal fade" id="allocationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Allocate Check Payment</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Payment Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Check Amount</h6>
+                                <h4 id="check-total" class="mb-0">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Allocated</h6>
+                                <h4 id="allocated-amount" class="mb-0">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <h6 class="text-muted">Available</h6>
+                                <h4 id="available-amount" class="mb-0 text-success">-</h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Current Allocations -->
+                <div class="mb-4">
+                    <h6>Current Allocations</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm" id="allocations-table">
+                            <thead>
+                                <tr>
+                                    <th>Invoice</th>
+                                    <th class="text-right">Amount</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr class="no-allocations">
+                                    <td colspan="3" class="text-center text-muted">
+                                        No allocations yet
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- New Allocation Form -->
+                <form id="allocation-form" class="border rounded p-3">
+                    <h6>Add New Allocation</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Invoice</label>
+                                <select class="form-control" id="invoice-select" required>
+                                    <option value="">Select invoice...</option>
+                                </select>
+                                <small class="text-muted">
+                                    Shows available amount in parentheses
+                                </small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label>Amount</label>
+                                <input type="number" class="form-control" id="allocation-amount"
+                                       step="0.01" required>
+                                <div class="invalid-feedback">
+                                    Amount cannot exceed available amount
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        Add Allocation
+                    </button>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

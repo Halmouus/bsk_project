@@ -84,63 +84,43 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">
-                    <span id="payment-checker-info"></span>
-                </h5>
+                <h5 class="modal-title">Add Payment</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
-                <!-- Payment Summary Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-3">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Invoice Total</h6>
-                                <h4 id="invoice-total" class="mb-0">-</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Already Issued</h6>
-                                <h4 id="already-issued" class="mb-0">-</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Amount Paid</h6>
-                                <h4 id="amount-paid" class="mb-0">-</h4>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Available</h6>
-                                <h4 id="amount-available" class="mb-0 text-success">-</h4>
-                            </div>
-                        </div>
+                <!-- Payment Type Selection -->
+                <div class="form-group mb-4">
+                    <label>Payment Type</label>
+                    <div class="btn-group btn-group-toggle w-100" data-toggle="buttons">
+                        <label class="btn btn-outline-primary active">
+                            <input type="radio" name="payment_type" value="invoice" checked>
+                            Pay Invoice
+                        </label>
+                        <label class="btn btn-outline-primary">
+                            <input type="radio" name="payment_type" value="supplier">
+                            Pay Supplier
+                        </label>
                     </div>
                 </div>
 
+                <!-- Payment Form -->
                 <form id="payment-form">
                     {% csrf_token %}
                     <input type="hidden" id="checker_id" name="checker_id">
+                    <input type="hidden" id="is_supplier_payment" value="false">
                     
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label for="position">Position</label>
+                                <label>Position</label>
                                 <div class="input-group">
-                                    <input type="number" class="form-control" id="position" name="position">
+                                    <input type="number" class="form-control" id="position" 
+                                           name="position">
                                     <div class="input-group-append">
-                                        <div id="signature-badges" class="input-group-text"></div>
+                                        <div id="signature-badges" class="input-group-text">
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="invalid-feedback"></div>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -153,7 +133,7 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6">
+                        <div class="col-md-12">
                             <div class="form-group">
                                 <label>Beneficiary</label>
                                 <input type="text" class="form-control" id="beneficiary" 
@@ -161,47 +141,124 @@
                                 <input type="hidden" id="supplier_id">
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Invoice</label>
-                                <input type="text" class="form-control" id="invoice" 
-                                       placeholder="Search invoice..." disabled>
-                                <input type="hidden" id="invoice_id" name="invoice_id">
+                    </div>
+
+                    <!-- Invoice Section (shown for invoice payments) -->
+                    <div id="invoice-section">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label>Invoice</label>
+                                    <input type="text" class="form-control" id="invoice" 
+                                           placeholder="Search invoice..." disabled>
+                                    <input type="hidden" id="invoice_id" name="invoice_id">
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Invoice Summary Cards -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Invoice Total</h6>
+                                        <h4 id="invoice-total">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Already Issued</h6>
+                                        <h4 id="already-issued">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Amount Paid</h6>
+                                        <h4 id="amount-paid">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Available</h6>
+                                        <h4 id="amount-available">-</h4>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
+                    <!-- Supplier Section (shown for supplier payments) -->
+                    <div id="supplier-section" style="display: none;">
+                        <div class="row mb-4">
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Total Payable</h6>
+                                        <h4 id="supplier-payable">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Already Paid</h6>
+                                        <h4 id="supplier-paid">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Balance</h6>
+                                        <h4 id="supplier-balance">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Payment allocations can be managed after creating the check.
+                        </div>
+                    </div>
+
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="form-group">
                                 <label>Amount</label>
                                 <input type="number" class="form-control" name="amount" 
                                        step="0.01" required>
-                                <div class="invalid-feedback"></div>
+                                <div class="invalid-feedback">
+                                    Amount exceeds available balance.
+                                </div>
                             </div>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-6">
                             <div class="form-group">
                                 <label>Payment Due Date</label>
                                 <input type="date" class="form-control" name="payment_due">
                             </div>
                         </div>
-                        <div class="col-md-4">
-                            <div class="form-group">
-                                <label>Observation</label>
-                                <textarea class="form-control" name="observation" rows="1"></textarea>
-                            </div>
-                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Observation</label>
+                        <textarea class="form-control" name="observation" rows="2">
+                        </textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="save-and-clone">
-                    <i class="fas fa-copy"></i> Save & Clone
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    Cancel
                 </button>
                 <button type="button" class="btn btn-primary" id="save-payment">
-                    <i class="fas fa-save"></i> Save
+                    Create Check
                 </button>
             </div>
         </div>
@@ -349,30 +406,135 @@ const PaymentValidation = {
 
 const PaymentSystem = {
     init() {
-        Object.assign(this, PaymentValidation);
+        console.log("[PaymentSystem] Initializing...");
         this.modal = $('#paymentModal');
         this.form = $('#payment-form');
         this.beneficiaryInput = $('#beneficiary');
         this.invoiceInput = $('#invoice');
         this.amountInput = $('[name="amount"]');
         this.currentCheckerData = null;
+        this.saving = false;
 
         this.setupValidation();
         this.setupPositionValidation();
         this.setupAutoComplete();
-        this.setupValidation();
+        this.setupPaymentTypeToggle();
         this.bindEvents();
+        console.log("[PaymentSystem] Initialization complete");
     },
 
+    setupPaymentTypeToggle() {
+        console.log("[PaymentSystem] Setting up payment type toggle");
+        $('input[name="payment_type"]').on('change', (e) => {
+            const isSupplierPayment = e.target.value === 'supplier';
+            $('#is_supplier_payment').val(isSupplierPayment);
+            console.log("[PaymentSystem] Payment type changed:", isSupplierPayment ? 'supplier' : 'invoice');
+            
+            // Toggle sections
+            $('#invoice-section').toggle(!isSupplierPayment);
+            $('#supplier-section').toggle(isSupplierPayment);
+            
+            // Reset form fields
+            this.invoiceInput.val('');
+            $('#invoice_id').val('');
+            
+            // Keep amount if within new limits
+            const currentAmount = this.amountInput.val();
+            if (currentAmount) {
+                this.validateAmount(currentAmount);
+            }
+        });
+    },
 
+    setupPositionValidation() {
+        console.log("[PaymentSystem] Setting up position validation");
+        const positionInput = $('[name="position"]');
+        let lastValidPosition = this.currentCheckerData?.next_available;
+        console.log("Initial lastValidPosition:", lastValidPosition);
 
+        positionInput.on('input', async (e) => {
+            const position = parseInt(e.target.value);
+            console.log("[PaymentSystem] Position changed:", {
+                value: position,
+                start: this.currentCheckerData?.start,
+                end: this.currentCheckerData?.end,
+                currentPosition: this.currentCheckerData?.position
+            });
+
+            if (!this.currentCheckerData) {
+                console.error("[PaymentSystem] No checker data available");
+                return;
+            }
+
+            const isValid = await this.validatePosition(position);
+            console.log("[PaymentSystem] Position validation result:", isValid);
+
+            if (isValid) {
+                lastValidPosition = position;
+                await this.loadSignatureInfo(this.currentCheckerData.id, position);
+            }
+        });
+
+        positionInput.on('blur', function() {
+            if ($(this).hasClass('is-invalid')) {
+                console.log("[PaymentSystem] Reverting to last valid position:", lastValidPosition);
+                $(this).val(lastValidPosition);
+                $(this).removeClass('is-invalid');
+            }
+        });
+    },
+
+    async validatePosition(position) {
+        const input = $('[name="position"]');
+        const feedback = input.siblings('.invalid-feedback');
+        console.log("[PaymentSystem] Validating position:", {
+            position,
+            start: this.currentCheckerData.start,
+            end: this.currentCheckerData.end
+        });
+
+        if (!position) {
+            this.setPositionInvalid("Position is required", input, feedback);
+            return false;
+        }
+
+        if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
+            this.setPositionInvalid(
+                `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`,
+                input, feedback
+            );
+            return false;
+        }
+
+        try {
+            const response = await fetch(
+                `/testapp/checkers/${this.currentCheckerData.id}/position-status/${position}/`
+            );
+            const data = await response.json();
+            console.log("[PaymentSystem] Position status check result:", data);
+
+            if (data.is_used) {
+                this.setPositionInvalid(
+                    `Position ${position} is already used`,
+                    input, feedback
+                );
+                return false;
+            }
+        } catch (error) {
+            console.error("[PaymentSystem] Error checking position status:", error);
+            return false;
+        }
+
+        input.removeClass('is-invalid').addClass('is-valid');
+        return true;
+    },
 
     async loadSignatureInfo(checkerId, position) {
-        console.log(`Loading signature info for position ${position}`);
+        console.log(`[PaymentSystem] Loading signature info for position ${position}`);
         try {
             const response = await fetch(`/testapp/checkers/${checkerId}/signatures/?position=${position}`);
             const data = await response.json();
-            console.log("Signature data:", data);
+            console.log("[PaymentSystem] Signature data:", data);
 
             const badges = $('#signature-badges');
             badges.empty();
@@ -387,20 +549,16 @@ const PaymentSystem = {
                 `);
             });
         } catch (error) {
-            console.error("Error loading signature info:", error);
+            console.error("[PaymentSystem] Error loading signature info:", error);
         }
     },
 
-    setPositionInvalid(message, input, feedback) {
-        input.removeClass('is-valid').addClass('is-invalid');
-        feedback.text(message);
-        $('#signature-badges').empty();
-    },
-
     setupAutoComplete() {
+        console.log("[PaymentSystem] Setting up autocomplete");
+        
         // Beneficiary Autocomplete
         this.beneficiaryInput.autocomplete({
-            minLength: 2,
+            minLength: 0,
             appendTo: this.modal,
             source: async (request, response) => {
                 try {
@@ -412,20 +570,28 @@ const PaymentSystem = {
                         value: item.value 
                     })));
                 } catch (error) {
-                    console.error('Supplier fetch failed:', error);
+                    console.error('[PaymentSystem] Supplier fetch failed:', error);
                     response([]);
                 }
             },
             select: (_, ui) => {
+                console.log("[PaymentSystem] Supplier selected:", ui.item);
                 $('#supplier_id').val(ui.item.value);
                 this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
-                this.invoiceInput.prop('disabled', false).val('');
-                $('#invoice_id').val('');
-                this.resetPaymentInfo();
+                
+                const isSupplierPayment = $('input[name="payment_type"]:checked').val() === 'supplier';
+                if (isSupplierPayment) {
+                    this.loadSupplierBalance(ui.item.value);
+                } else {
+                    this.invoiceInput.prop('disabled', false).val('');
+                    $('#invoice_id').val('');
+                    this.resetPaymentInfo();
+                }
                 return false;
             },
             change: (event, ui) => {
                 if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid supplier selection - resetting");
                     this.beneficiaryInput.val('');
                     $('#supplier_id').val('');
                     this.invoiceInput.prop('disabled', true).val('');
@@ -433,59 +599,79 @@ const PaymentSystem = {
                     this.resetPaymentInfo();
                 }
             }
-
         });
 
         // Invoice Autocomplete
         this.invoiceInput.autocomplete({
-            minLength: 2,
+            minLength: 0,
             appendTo: this.modal,
             source: async (request, response) => {
                 const supplierId = $('#supplier_id').val();
                 if (!supplierId) return response([]);
+                
+                console.log("[PaymentSystem] Fetching invoices for supplier:", supplierId);
 
                 try {
                     const data = await $.get('/testapp/invoices/autocomplete/', {
                         term: request.term,
                         supplier: supplierId
                     });
-                    response(data.map(item => ({
-                        label: `${item.ref} (${item.date}) - ${item.status}`,
-                        value: item.id,
-                        payment_info: item.payment_info,
-                        ref: item.ref
-                    })));
+                    response(data);
                 } catch (error) {
-                    console.error('Invoice fetch failed:', error);
+                    console.error('[PaymentSystem] Invoice fetch failed:', error);
                     response([]);
                 }
             },
             select: (_, ui) => {
+                console.log("[PaymentSystem] Invoice selected:", ui.item);
                 this.handleInvoiceSelect(ui.item);
                 return false;
             },
             change: (event, ui) => {
                 if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid invoice selection - resetting");
                     this.invoiceInput.val('');
                     $('#invoice_id').val('');
-                    $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
-                    this.amountInput.val('').removeClass('is-invalid');
-                    $('#save-payment, #save-and-clone').prop('disabled', true);
+                    this.resetPaymentInfo();
                 }
             }
         });
     },
 
+    async loadSupplierBalance(supplierId) {
+        console.log("[PaymentSystem] Loading balance for supplier:", supplierId);
+        try {
+            const response = await fetch(`/testapp/suppliers/${supplierId}/balance/`);
+            if (!response.ok) throw new Error('Failed to load supplier balance');
+            
+            const data = await response.json();
+            console.log("[PaymentSystem] Supplier balance data:", data);
+            
+            // Update balance cards
+            $('#supplier-payable').text(formatMoney(data.payable));
+            $('#supplier-paid').text(formatMoney(data.paid));
+            $('#supplier-balance').text(formatMoney(data.balance));
+            
+            // Update amount validation max
+            this.amountInput.attr('max', data.balance);
+            
+        } catch (error) {
+            console.error('[PaymentSystem] Error loading supplier balance:', error);
+            alert('Failed to load supplier balance');
+        }
+    },
+
     handleInvoiceSelect(item) {
+        console.log("[PaymentSystem] Handling invoice selection:", item);
         const info = item.payment_info;
-        this.invoiceInput.val(item.ref);
-        $('#invoice_id').val(item.value);
+        $('#invoice_id').val(item.id);
+        this.invoiceInput.val(item.label);
 
         // Update payment info cards
-        $('#invoice-total').text(Utils.formatMoney(info.total_amount));
-        $('#already-issued').text(Utils.formatMoney(info.issued_amount));
-        $('#amount-paid').text(Utils.formatMoney(info.paid_amount));
-        $('#amount-available').text(Utils.formatMoney(info.available_amount));
+        $('#invoice-total').text(formatMoney(info.total_amount));
+        $('#already-issued').text(formatMoney(info.issued_amount));
+        $('#amount-paid').text(formatMoney(info.paid_amount));
+        $('#amount-available').text(formatMoney(info.available_amount));
 
         // Set initial amount
         this.amountInput
@@ -493,68 +679,59 @@ const PaymentSystem = {
             .removeClass('is-invalid')
             .trigger('input');
 
-        this.updateSaveButtons(true);
-
         this.updateSaveButtons(
             $('#supplier_id').val() && 
             item.value && 
-            Utils.validateAmount(parseFloat(this.amountInput.val()), info.available_amount)
+            this.validateAmount(this.amountInput.val())
         );
-    },
-
-    resetPaymentInfo() {
-        $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
-        this.amountInput.val('').removeClass('is-invalid');
-        this.updateSaveButtons(false);
+        
     },
 
     setupValidation() {
+        console.log("[PaymentSystem] Setting up validation");
         let lastValidAmount = 0;
 
         this.amountInput.on('input blur', (e) => {
             const $input = $(e.target);
-            const rawValue = $input.val(); // Get the raw input value
-            console.log("Raw input value:", rawValue); // Debug
+            const rawValue = $input.val();
+            console.log("[PaymentSystem] Amount input raw value:", rawValue);
             
-            
-            console.log("Sanitized value:", rawValue); // Debug
+            const amount = parseFloat(rawValue) || 0;
+            console.log("[PaymentSystem] Parsed amount:", amount);
 
-            const amount = parseFloat(rawValue) || 0; // Parse sanitized input
-            console.log("Parsed amount:", amount); // Debug
-
-            const availableText = $('#amount-available').text();
-            const available = parseFloat(
-                availableText
-                    .replace(/[^0-9,-]+/g, '') // Clean non-numeric characters
-                    .replace(/\s|(?<=\d)\./g, '') // Remove thousand separators
-                    .replace(',', '.') // Normalize decimal separator
+            const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
+            const maxText = isSupplierPayment ? 
+                $('#supplier-balance').text() : 
+                $('#amount-available').text();
+                
+            const maxAmount = parseFloat(
+                maxText
+                    .replace(/[^0-9,-]+/g, '')
+                    .replace(/\s|(?<=\d)\./g, '')
+                    .replace(',', '.')
             ) || 0;
 
-            console.log("Available amount (parsed):", available); // Debug
+            console.log("[PaymentSystem] Max amount:", maxAmount);
 
             if (e.type === 'input') {
                 if (amount <= 0) {
-                    // Real-time feedback for zero or negative values
                     $input.addClass('is-invalid');
                     $('.invalid-feedback').text('Amount must be greater than 0');
                     $('#save-payment').prop('disabled', true);
-                } else if (amount > available) {
-                    // Real-time feedback for exceeding available amount
+                } else if (amount > maxAmount) {
                     $input.addClass('is-invalid');
-                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(available)}`);
+                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(maxAmount)}`);
                     $('#save-payment').prop('disabled', true);
                 } else {
-                    // Valid input
                     $input.removeClass('is-invalid');
                     $('.invalid-feedback').empty();
                     $('#save-payment').prop('disabled', false);
-                    lastValidAmount = amount; // Update last valid amount
+                    lastValidAmount = amount;
                 }
             } else if (e.type === 'blur') {
-                // On blur, revert to last valid amount if input is invalid
-                if (amount <= 0 || amount > available) {
-                    console.log("Reverting to last valid amount:", lastValidAmount); // Debug
-                    $input.val(lastValidAmount.toFixed(2)); // Reset input
+                if (amount <= 0 || amount > maxAmount) {
+                    console.log("[PaymentSystem] Reverting to last valid amount:", lastValidAmount);
+                    $input.val(lastValidAmount.toFixed(2));
                     $input.removeClass('is-invalid');
                     $('#save-payment').prop('disabled', false);
                 }
@@ -562,140 +739,216 @@ const PaymentSystem = {
         });
     },
 
-    updateSaveButtons(enabled) {
-        $('#save-payment, #save-and-clone').prop('disabled', !enabled);
-    },
-
-    async openPaymentModal(checkerData) {
-    console.log("Opening payment modal with data:", checkerData);
-    
-    try {
-        // First get checker details
-        const response = await fetch(`/testapp/checkers/${checkerData.id}/details/`);
-        const checkerDetails = await response.json();
-        console.log("Checker details:", checkerDetails);
-        console.log("Checker details next available:", checkerDetails.next_available);
-        if (!checkerDetails.next_available) {
-            alert("No available positions in this checker");
-            return;
-        }
-
-        // Set up the checker data AFTER we have details
-        this.currentCheckerData = {
-            id: checkerData.id,
-            start: checkerDetails.starting_page,
-            end: checkerDetails.final_page,
-            position: checkerDetails.next_available,
-            bank: checkerData.bank,
-            type: checkerData.type
-        };
-
-        // Reset form first
-        
-        // Now set position explicitly
-        $('#position').val(this.currentCheckerData.position);
-
-        // Show modal last
-        this.modal.modal('show');
-
-        // Trigger validation after modal is shown
-        $('#position').trigger('input');
-
-    } catch (error) {
-        console.error("Error opening payment modal:", error);
-        alert("Error loading checker details");
-    }
-},
-
     setPositionInvalid(message, input, feedback) {
-        console.log("Setting position invalid:", message);
+        console.log("[PaymentSystem] Setting position invalid:", message);
         input.removeClass('is-valid').addClass('is-invalid');
         feedback.text(message);
         $('#signature-badges').empty();
     },
 
+    resetPaymentInfo() {
+        console.log("[PaymentSystem] Resetting payment info");
+        const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
+        
+        if (isSupplierPayment) {
+            $('#supplier-payable, #supplier-paid, #supplier-balance').text('-');
+        } else {
+            $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
+        }
+        
+        this.amountInput.val('').removeClass('is-invalid');
+        this.updateSaveButtons(false);
+    },
+
+    updateSaveButtons(enabled) {
+        console.log("[PaymentSystem] Updating save buttons:", enabled);
+        $('#save-payment, #save-and-clone').prop('disabled', !enabled);
+    },
+
+    validateAmount(amount) {
+        console.log("[PaymentSystem] Validating amount:", amount);
+        if (!amount || amount <= 0) return false;
+        
+        const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
+        const maxText = isSupplierPayment ? 
+            $('#supplier-balance').text() : 
+            $('#amount-available').text();
+            
+        const maxAmount = parseFloat(
+            maxText
+                .replace(/[^0-9,-]+/g, '')
+                .replace(/\s|(?<=\d)\./g, '')
+                .replace(',', '.')
+        ) || 0;
+        
+        return amount <= maxAmount;
+    },
+
+    async createPayment() {
+        console.log("[PaymentSystem] Creating payment");
+        if (!this.validateForm()) {
+            return;
+        }
+
+        try {
+            if (this.saving) {
+                console.warn("[PaymentSystem] Save already in progress, preventing duplicate");
+                return;
+            }
+            
+            this.saving = true;
+            $('#save-payment').prop('disabled', true);
+
+            const formData = new FormData(this.form[0]);
+            const data = {
+                checker_id: formData.get('checker_id'),
+                position: formData.get('position'),
+                is_supplier_payment: $('#is_supplier_payment').val() === 'true',
+                supplier_id: $('#supplier_id').val(),
+                invoice_id: formData.get('invoice_id'),
+                amount: formData.get('amount'),
+                payment_due: formData.get('payment_due'),
+                observation: formData.get('observation'),
+                creation_date: formData.get('creation_date')
+            };
+
+            console.log("[PaymentSystem] Sending payment data:", data);
+
+            const response = await fetch('/testapp/checks/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to create check');
+            }
+
+            const result = await response.json();
+            console.log("[PaymentSystem] Check created successfully:", result);
+            
+            this.modal.modal('hide');
+            
+            // For supplier payments, open allocation modal
+            if (data.is_supplier_payment) {
+                AllocationSystem.openModal(result.check_id);
+            } else {
+                // For invoice payments, just reload the page
+                location.reload();
+            }
+            
+        } catch (error) {
+            console.error('[PaymentSystem] Error creating payment:', error);
+            alert(error.message);
+        } finally {
+            this.saving = false;
+            $('#save-payment').prop('disabled', false);
+        }
+    },
+
+    validateForm() {
+        console.log("[PaymentSystem] Validating form");
+        
+        // Basic validations
+        const supplierId = $('#supplier_id').val();
+        if (!supplierId) {
+            console.log("[PaymentSystem] No supplier selected");
+            alert('Please select a supplier');
+            return false;
+        }
+
+        const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
+        if (!isSupplierPayment && !$('#invoice_id').val()) {
+            console.log("[PaymentSystem] No invoice selected for invoice payment");
+            alert('Please select an invoice');
+            return false;
+        }
+
+        if (!this.amountInput.val() || this.amountInput.hasClass('is-invalid')) {
+            console.log("[PaymentSystem] Invalid amount");
+            alert('Please enter a valid amount');
+            return false;
+        }
+
+        // Position validation
+        const position = $('[name="position"]').val();
+        if (!position || $('[name="position"]').hasClass('is-invalid')) {
+            console.log("[PaymentSystem] Invalid position");
+            alert('Please enter a valid position');
+            return false;
+        }
+
+        return true;
+    },
+
+    async openPaymentModal(checkerData) {
+        console.log("[PaymentSystem] Opening payment modal with data:", checkerData);
+        
+        try {
+            // First get checker details
+            const response = await fetch(`/testapp/checkers/${checkerData.id}/details/`);
+            const checkerDetails = await response.json();
+            console.log("[PaymentSystem] Checker details:", checkerDetails);
+            
+            if (!checkerDetails.next_available) {
+                alert("No available positions in this checker");
+                return;
+            }
+
+            // Set up the checker data AFTER we have details
+            this.currentCheckerData = {
+                id: checkerData.id,
+                start: checkerDetails.starting_page,
+                end: checkerDetails.final_page,
+                position: checkerDetails.next_available,
+                bank: checkerData.bank,
+                type: checkerData.type
+            };
+
+            // Reset form first
+            this.resetForm();
+            
+            // Now set position explicitly
+            $('#position').val(this.currentCheckerData.position);
+            $('#checker_id').val(this.currentCheckerData.id);
+
+            // Show modal last
+            this.modal.modal('show');
+
+            // Trigger validation after modal is shown
+            $('#position').trigger('input');
+
+        } catch (error) {
+            console.error("[PaymentSystem] Error opening payment modal:", error);
+            alert("Error loading checker details");
+        }
+    },
+
     resetForm() {
+        console.log("[PaymentSystem] Resetting form");
         this.form[0].reset();
         this.beneficiaryInput.val('');
         this.invoiceInput.val('').prop('disabled', true);
         $('#supplier_id, #invoice_id').val('');
         this.resetPaymentInfo();
         this.amountInput.removeClass('is-invalid');
+        $('#is_supplier_payment').val('false');
+        $('input[name="payment_type"][value="invoice"]').prop('checked', true).trigger('change');
         $('[name="creation_date"]').val(new Date().toISOString().split('T')[0]);
 
-        // Preserve the position value
+        // Preserve the position value if it exists
         if (this.currentCheckerData?.position) {
-        $('#position').val(this.currentCheckerData.position);
-    }
-    },
-
-    resetPaymentInfo() {
-        $('#invoice-total, #already-issued, #amount-paid, #amount-available').text('-');
-        this.amountInput.val('').removeClass('is-invalid');
-        this.updateSaveButtons(false);
-    },
-
-
-    async createPayment(cloneAfter = false) {
-    console.log("Creating payment with data:", {
-        checker_id: this.currentCheckerData?.id,
-        invoice_id: $('#invoice_id').val(),
-        amount: $('[name="amount"]').val(),
-        position: $('#position').val()
-    });
-
-    const data = {
-        checker_id: this.currentCheckerData.id,
-        invoice_id: $('#invoice_id').val(),
-        amount: $('[name="amount"]').val(),
-        position: $('[name="position"]').val(),
-        payment_due: $('[name="payment_due"]').val() || null,
-        observation: $('[name="observation"]').val(),
-        creation_date: $('[name="creation_date"]').val()
-    };
-
-    try {
-        const response = await fetch('/testapp/checks/create/', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': $('[name=csrfmiddlewaretoken]').val()
-            },
-            body: JSON.stringify(data)
-        });
-
-        if (!response.ok) throw new Error(await response.text());
-
-        if (cloneAfter) {
-            const available = parseFloat($('#amount-available').text().replace(/[^\d.-]/g, ''));
-            $('[name="amount"]').val(available.toFixed(2)).trigger('input');
-        } else {
-            this.modal.modal('hide');
-            location.reload();
+            $('#position').val(this.currentCheckerData.position);
         }
-    } catch (error) {
-        console.error("Error creating check:", error);
-    }
-},
-
-    validateForm() {
-        // Basic validation
-        if (!$('#supplier_id').val()) {
-            Utils.showError('Please select a supplier');
-            return false;
-        }
-        if (!$('#invoice_id').val()) {
-            Utils.showError('Please select an invoice');
-            return false;
-        }
-        if (!this.amountInput.val() || this.amountInput.hasClass('is-invalid')) {
-            Utils.showError('Please enter a valid amount');
-            return false;
-        }
-        return true;
     },
 
     bindEvents() {
+        console.log("[PaymentSystem] Binding events");
+
         // Open modal trigger
         $(document).on('click', '.add-payment', (e) => {
             const button = $(e.currentTarget);
@@ -706,18 +959,29 @@ const PaymentSystem = {
                 position: button.data('position')
             });
         });
-
-        // Save buttons
-        $('#save-payment').on('click', () => this.createPayment(false));
-        $('#save-and-clone').on('click', () => this.createPayment(true));
-
+        
+        // Save payment
+        $('#save-payment').on('click', () => {
+            console.log("[PaymentSystem] Save button clicked");
+            this.createPayment();
+        });
+        
         // Modal cleanup
         this.modal.on('hidden.bs.modal', () => {
+            console.log("[PaymentSystem] Modal hidden - cleaning up");
             this.resetForm();
             this.currentCheckerData = null;
+            this.saving = false;
+        });
+        
+        // Position validation on manual entry
+        $('#position').on('input', () => {
+            console.log("[PaymentSystem] Position manually entered");
+            if (this.currentCheckerData) {
+                this.validatePosition(parseInt($('#position').val()));
+            }
         });
     }
-    
 };
 
 const SignatureSystem = {
@@ -851,7 +1115,212 @@ const SignatureSystem = {
     }
 };
 
+const AllocationSystem = {
+    init() {
+        this.modal = $('#allocationModal');
+        this.form = $('#allocation-form');
+        this.currentCheckId = null;
+        
+        this.setupEventHandlers();
+        this.setupValidation();
+    },
+    
+    setupEventHandlers() {
+        // Form submission
+        this.form.on('submit', (e) => {
+            e.preventDefault();
+            this.addAllocation();
+        });
+        
+        // Delete allocation buttons
+        $(document).on('click', '.delete-allocation', (e) => {
+            const allocationId = $(e.currentTarget).data('id');
+            this.deleteAllocation(allocationId);
+        });
+        
+        // Invoice select change
+        $('#invoice-select').on('change', () => {
+            this.updateAmountValidation();
+        });
+        
+        // Amount input
+        $('#allocation-amount').on('input', () => {
+            this.updateAmountValidation();
+        });
+    },
+    
+    setupValidation() {
+        this.form.find('#allocation-amount').on('input', function() {
+            const amount = parseFloat($(this).val());
+            const availableAmount = parseFloat($('#available-amount').text().replace(/[^\d.-]/g, ''));
+            
+            if (amount > availableAmount) {
+                $(this).addClass('is-invalid');
+                $(this).next('.invalid-feedback').text(
+                    `Amount cannot exceed ${formatMoney(availableAmount)}`
+                );
+            } else {
+                $(this).removeClass('is-invalid');
+            }
+        });
+    },
+    
+    async loadAllocationData(checkId) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/allocations/`);
+            if (!response.ok) throw new Error('Failed to load allocations');
+            
+            const data = await response.json();
+            
+            // Update summary cards
+            $('#check-total').text(formatMoney(data.check.amount));
+            $('#allocated-amount').text(formatMoney(data.check.allocated_amount));
+            $('#available-amount').text(formatMoney(data.check.available_amount));
+            
+            // Update allocations table
+            const tbody = $('#allocations-table tbody');
+            tbody.empty();
+            
+            if (data.allocations.length === 0) {
+                tbody.append(`
+                    <tr class="no-allocations">
+                        <td colspan="3" class="text-center text-muted">
+                            No allocations yet
+                        </td>
+                    </tr>
+                `);
+            } else {
+                data.allocations.forEach(allocation => {
+                    tbody.append(`
+                        <tr>
+                            <td>${allocation.invoice_ref}</td>
+                            <td class="text-right">${formatMoney(allocation.amount)}</td>
+                            <td class="text-right">
+                                <button class="btn btn-sm btn-danger delete-allocation"
+                                        data-id="${allocation.id}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `);
+                });
+            }
+            
+            // Update invoice select options
+            const select = $('#invoice-select');
+            select.empty().append('<option value="">Select invoice...</option>');
+            
+            data.available_invoices.forEach(invoice => {
+                select.append(`
+                    <option value="${invoice.id}" 
+                            data-available="${invoice.available_amount}">
+                        ${invoice.ref} (${formatMoney(invoice.available_amount)} available)
+                    </option>
+                `);
+            });
+            
+        } catch (error) {
+            console.error('Error loading allocations:', error);
+            alert('Failed to load allocation data');
+        }
+    },
+    
+    async addAllocation() {
+        try {
+            const invoiceId = $('#invoice-select').val();
+            const amount = $('#allocation-amount').val();
+            
+            if (!invoiceId || !amount) {
+                alert('Please select an invoice and enter an amount');
+                return;
+            }
+            
+            const response = await fetch(`/testapp/checks/${this.currentCheckId}/allocations/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    invoice_id: invoiceId,
+                    amount: parseFloat(amount)
+                })
+            });
 
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to create allocation');
+            }
+
+            // Reload allocation data
+            await this.loadAllocationData(this.currentCheckId);
+            
+            // Reset form
+            this.form[0].reset();
+            
+        } catch (error) {
+            console.error('Error creating allocation:', error);
+            alert(error.message);
+        }
+    },
+    
+    async deleteAllocation(allocationId) {
+        try {
+            if (!confirm('Are you sure you want to delete this allocation?')) {
+                return;
+            }
+            
+            const response = await fetch(
+                `/testapp/checks/${this.currentCheckId}/allocations/${allocationId}/`,
+                {
+                    method: 'DELETE',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    }
+                }
+            );
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to delete allocation');
+            }
+
+            // Reload allocation data
+            await this.loadAllocationData(this.currentCheckId);
+            
+        } catch (error) {
+            console.error('Error deleting allocation:', error);
+            alert(error.message);
+        }
+    },
+    
+    updateAmountValidation() {
+        const amountInput = $('#allocation-amount');
+        const amount = parseFloat(amountInput.val() || 0);
+        const selectedOption = $('#invoice-select option:selected');
+        
+        if (selectedOption.length === 0) return;
+        
+        const invoiceAvailable = parseFloat(selectedOption.data('available'));
+        const checkAvailable = parseFloat($('#available-amount').text().replace(/[^\d.-]/g, ''));
+        const maxAmount = Math.min(invoiceAvailable, checkAvailable);
+        
+        if (amount > maxAmount) {
+            amountInput.addClass('is-invalid');
+            amountInput.next('.invalid-feedback').text(
+                `Amount cannot exceed ${formatMoney(maxAmount)}`
+            );
+        } else {
+            amountInput.removeClass('is-invalid');
+        }
+    },
+    
+    openModal(checkId) {
+        this.currentCheckId = checkId;
+        this.loadAllocationData(checkId);
+        this.modal.modal('show');
+    }
+};
 
 // Initialize everything
 $(document).ready(() => {
@@ -859,5 +1328,6 @@ $(document).ready(() => {
     CheckerFilters.init();
     PaymentSystem.init();
     SignatureSystem.init();
+    AllocationSystem.init();
 });
 </script>

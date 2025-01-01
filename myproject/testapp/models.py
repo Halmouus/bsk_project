@@ -17,6 +17,8 @@ from itertools import groupby
 from operator import itemgetter
 import traceback
 from dateutil.relativedelta import relativedelta
+from django.db.models.functions import Coalesce
+from django.db.models import Sum
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +88,67 @@ class Supplier(BaseModel):
 
     def __str__(self):
         return self.name
+
+def get_supplier_balance(supplier, end_date=None):
+    """
+    Calculate supplier balance including invoices and payments
+    Positive balance = we owe supplier
+    Negative balance = supplier owes us
+    """
+    if not end_date:
+        end_date = timezone.now().date()
+        
+    # Get all invoices
+    invoices = Invoice.objects.filter(
+        supplier=supplier,
+        date__lte=end_date,
+        type='invoice'
+    )
+    
+    invoice_total = sum(invoice.net_amount for invoice in invoices)
+    
+    # Get all check payments (both direct and allocated)
+    check_total = Decimal('0.00')
+    
+    # Direct invoice payments
+    direct_payments = Check.objects.filter(
+        beneficiary=supplier,
+        is_supplier_payment=False,
+        creation_date__lte=end_date,
+        status__in=['pending', 'delivered', 'paid']
+    )
+    check_total += sum(check.amount for check in direct_payments)
+    
+    # Allocated payments
+    allocated_payments = CheckAllocation.objects.filter(
+        payment__beneficiary=supplier,
+        payment__is_supplier_payment=True,
+        payment__creation_date__lte=end_date,
+        payment__status__in=['pending', 'delivered', 'paid']
+    )
+    check_total += sum(alloc.amount for alloc in allocated_payments)
+    
+    return {
+        'payable': invoice_total,  # What we owe supplier
+        'paid': check_total,       # What we've paid
+        'balance': invoice_total - check_total,  # Remaining to pay
+        'invoices_count': Invoice.objects.filter(
+            supplier=supplier,
+            payment_status__in=['not_paid', 'partially_paid']
+        ).count()
+    }
+
+def get_supplier_unpaid_invoices(supplier):
+    """Get all invoices that still have amount available for payment"""
+    invoices = Invoice.objects.filter(
+        supplier=supplier,
+        type='invoice'
+    ).exclude(
+        status='cancelled'
+    )
+    
+    # Filter out invoices with no available amount
+    return [inv for inv in invoices if inv.amount_available_for_payment > 0]
 
 class Product(BaseModel):
     name = models.CharField(max_length=100)
@@ -358,60 +421,141 @@ class Invoice(BaseModel):
     
     @property
     def amount_available_for_payment(self):
-        """Calculate amount available for payment considering credit notes"""
+        """Calculate amount still available for payment"""
         net_amount = self.net_amount
-        payments_sum = sum(
+        
+        # Calculate total from direct checks - including draft
+        direct_checks_amount = sum(
             check.amount 
             for check in Check.objects.filter(
                 cause=self
             ).exclude(
-                status='cancelled'
+                status='cancelled'  # Only exclude cancelled checks
             )
-        )
-        return max(0, net_amount - payments_sum)
+        ) or Decimal('0')
+        
+        # Calculate total from allocated checks - including draft
+        allocated_amount = sum(
+            allocation.amount 
+            for allocation in CheckAllocation.objects.filter(
+                invoice=self
+            ).exclude(
+                payment__status='cancelled'  # Only exclude cancelled allocations
+            )
+        ) or Decimal('0')
+        
+        # Calculate total payments and available amount
+        total_payments = direct_checks_amount + allocated_amount
+        return max(Decimal('0'), net_amount - total_payments)
     
     def get_payment_details(self):
         """Calculate comprehensive payment details"""
+        print("\n=== Getting Payment Details ===")
+        print(f"Invoice: {self.ref}")
+        
         # Get all non-cancelled checks for this invoice
         valid_checks = Check.objects.filter(
             cause=self
         ).exclude(
             status='cancelled'
         )
+        print(f"Direct checks found: {valid_checks.count()}")
 
-        # Calculate various payment amounts
+        # Calculate direct payment amounts
         pending_amount = sum(c.amount for c in valid_checks.filter(status='pending'))
         delivered_amount = sum(c.amount for c in valid_checks.filter(status='delivered'))
         paid_amount = sum(c.amount for c in valid_checks.filter(status='paid'))
         total_issued = sum(c.amount for c in valid_checks)
 
-        # Use net_amount instead of total_amount
+        print(f"Direct payments - Pending: {pending_amount}, Delivered: {delivered_amount}, Paid: {paid_amount}")
+
+        print(f"Looking for allocations with invoice_id: {self.id}")
+        allocations = CheckAllocation.objects.filter(invoice_id=self.id)
+        print(f"Raw allocations found: {allocations.count()}")
+        print("Allocation details:")
+        for alloc in allocations:
+            print(f"Allocation ID: {alloc.id}")
+            print(f"Check ID: {alloc.payment.id if hasattr(alloc, 'payment') else 'No payment'}")
+            print(f"Check status: {alloc.payment.status if hasattr(alloc, 'payment') else 'No status'}")
+
+        # Get allocations for this invoice
+        valid_allocations = CheckAllocation.objects.filter(
+            invoice_id=self.id,
+            payment__status__in=['pending', 'delivered', 'paid', 'draft']
+        ).select_related('payment')
+        print(f"Allocations found: {valid_allocations.count()}")
+        print(f"Allocations after status filter: {valid_allocations.count()}")
+
+        # Add allocated amounts to totals
+        alloc_pending = sum(a.amount for a in valid_allocations.filter(payment__status='pending'))
+        alloc_delivered = sum(a.amount for a in valid_allocations.filter(payment__status='delivered'))
+        alloc_paid = sum(a.amount for a in valid_allocations.filter(payment__status='paid'))
+        total_allocated = sum(a.amount for a in valid_allocations)
+
+        print(f"Allocated payments - Pending: {alloc_pending}, Delivered: {alloc_delivered}, Paid: {alloc_paid}")
+
+        # Update totals with allocations
+        pending_amount += alloc_pending
+        delivered_amount += alloc_delivered
+        paid_amount += alloc_paid
+        total_issued += total_allocated
+
         net_amount = self.net_amount
         amount_to_issue = net_amount - total_issued
         remaining_to_pay = net_amount - paid_amount
         payment_percentage = (paid_amount / net_amount * 100) if net_amount else 0
 
-        # Calculate remaining and percentages
-        amount_to_issue = self.net_amount - total_issued
-        print(f"Amount to issue: {amount_to_issue}")  # Debug output
-        remaining_to_pay = self.net_amount - paid_amount
-        print(f"Remaining to pay: {remaining_to_pay}") # Debug output
-        payment_percentage = (paid_amount / self.net_amount * 100) if self.net_amount else 0
-        print(f"Payment percentage: {payment_percentage}") # Debug output
+        print(f"Final totals:")
+        print(f"Net amount: {net_amount}")
+        print(f"Total issued: {total_issued}")
+        print(f"Amount to issue: {amount_to_issue}")
+        print(f"Remaining to pay: {remaining_to_pay}")
+        print(f"Payment percentage: {payment_percentage}%")
 
-        details = {
-            'total_amount': float(self.net_amount),
+        # Prepare check details
+        checks = []
+        
+        # Add direct checks
+        for check in valid_checks:
+            checks.append({
+                'id': str(check.id),
+                'type': 'direct',
+                'reference': f"{check.checker.bank_account.bank}-{check.position}",
+                'amount': float(check.amount),
+                'status': check.status,
+                'created_at': check.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+                'paid_at': check.paid_at.strftime('%Y-%m-%d') if check.paid_at else None,
+            })
+        
+        # Add allocated checks
+        for allocation in valid_allocations:
+            checks.append({
+                'id': str(allocation.payment.id),
+                'type': 'allocation',
+                'reference': f"{allocation.payment.checker.bank_account.bank}-{allocation.payment.position}",
+                'total_amount': float(allocation.payment.amount),
+                'allocated_amount': float(allocation.amount),
+                'status': allocation.payment.status,
+                'created_at': allocation.payment.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
+                'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
+            })
+
+        print(f"Total checks to display: {len(checks)}")
+        print("=== End Payment Details ===\n")
+
+        return {
+            'total_amount': float(net_amount),
             'pending_amount': float(pending_amount),
             'delivered_amount': float(delivered_amount),
             'paid_amount': float(paid_amount),
             'amount_to_issue': float(amount_to_issue),
             'remaining_to_pay': float(remaining_to_pay),
             'payment_percentage': float(payment_percentage),
-            'payment_status': self.get_payment_status(paid_amount)
+            'payment_status': self.get_payment_status(paid_amount),
+            'checks': checks
         }
-
-        print(details)  # Debug output
-        return details
 
     def get_payment_status(self, paid_amount=None):
         """Determine payment status based on paid amount"""
@@ -444,13 +588,32 @@ class Invoice(BaseModel):
         }
 
     def update_payment_status(self):
-        summary = self.payments_summary
-        if summary['paid_amount'] >= self.total_amount:
+        """Update payment status based on all payments and allocations"""
+        total_payments = Decimal('0')
+        
+        # Direct check payments
+        direct_checks = Check.objects.filter(
+            cause=self
+        ).exclude(
+            status='cancelled'
+        )
+        total_payments += sum(check.amount for check in direct_checks)
+        
+        # Allocated payments
+        allocations = CheckAllocation.objects.filter(
+            invoice=self,
+            payment__status__in=['pending', 'delivered', 'paid']
+        )
+        total_payments += sum(allocation.amount for allocation in allocations)
+        
+        # Determine status
+        if total_payments >= self.net_amount:
             self.payment_status = 'paid'
-        elif summary['paid_amount'] > 0:
+        elif total_payments > 0:
             self.payment_status = 'partially_paid'
         else:
             self.payment_status = 'not_paid'
+            
         self.save()
 
     def __str__(self):
@@ -807,7 +970,12 @@ class Check(BaseModel):
     position = models.CharField(max_length=10, unique=True)
     creation_date = models.DateField(default=timezone.now)
     beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
-    cause = models.ForeignKey(Invoice, on_delete=models.PROTECT)
+    cause = models.ForeignKey(
+        Invoice, 
+        on_delete=models.PROTECT, 
+        null=True,
+        blank=True
+    )
     payment_due = models.DateField(null=True, blank=True)
     amount_due = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
     amount = models.DecimalField(
@@ -815,6 +983,8 @@ class Check(BaseModel):
         decimal_places=2,
         validators=[MinValueValidator(Decimal('0.01'))]
     )
+    is_supplier_payment = models.BooleanField(default=False)
+
     observation = models.TextField(blank=True)
     delivered = models.BooleanField(default=False)
     paid = models.BooleanField(default=False)
@@ -863,6 +1033,23 @@ class Check(BaseModel):
 
     signatures = models.JSONField(default=list)
 
+    def get_allocated_amount(self):
+        """Get total allocated amount"""
+        return sum(
+            allocation.amount 
+            for allocation in self.allocations.all()
+        )
+    
+    def get_available_amount(self):
+        """Get remaining amount available for allocation"""
+        return self.amount - self.get_allocated_amount()
+    
+    def can_be_paid(self):
+        """Check if payment can be marked as paid"""
+        if self.is_supplier_payment:
+            # Must be fully allocated for supplier payments
+            return self.get_available_amount() == 0
+        return True  # Direct invoice payments can always be paid
     
     def save(self, *args, **kwargs):
         print("\n=== Check Save Method Started ===")
@@ -921,6 +1108,21 @@ class Check(BaseModel):
                 f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
             )
         
+
+        if not self.is_supplier_payment and not self.cause:
+            raise ValidationError("Invoice is required for direct invoice payments")
+            
+        if self.is_supplier_payment and self.cause:
+            raise ValidationError("Supplier payments cannot specify a direct cause")
+            
+        if self.cause and self.cause.supplier != self.beneficiary:
+            raise ValidationError("Invoice supplier must match check beneficiary")
+            
+        # Validate amount for invoice payments
+        if not self.is_supplier_payment and self.cause:
+            if self.amount > self.cause.amount_available_for_payment:
+                raise ValidationError("Amount exceeds invoice's available amount")
+            
         if self.paid_at and not self.delivered_at:
             raise ValidationError("Check cannot be marked as paid before delivery")
         
@@ -930,7 +1132,11 @@ class Check(BaseModel):
         ordering = ['-creation_date']
         constraints = [
             models.CheckConstraint(
-                check=models.Q(amount__lte=models.F('amount_due')),
+                check=models.Q(
+                    is_supplier_payment=True
+                ) | models.Q(
+                    amount__lte=models.F('amount_due')
+                ),
                 name='check_amount_cannot_exceed_due'
             )
         ]
@@ -1022,6 +1228,50 @@ class Check(BaseModel):
             elif self.status == 'printed':
                 self.status = 'ready_to_sign'
             self.save()
+
+
+class CheckAllocation(BaseModel):
+    """Tracks how supplier payments are allocated to invoices"""
+    payment = models.ForeignKey(
+        Check, 
+        on_delete=models.CASCADE,
+        related_name='allocations'
+    )
+    invoice = models.ForeignKey(
+        Invoice, 
+        on_delete=models.PROTECT,
+        related_name='check_allocations'
+    )
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(amount__gt=0),
+                name='check_allocation_positive'
+            )
+        ]
+    
+    def clean(self):
+        # Ensure allocation is for a supplier payment
+        if not self.payment.is_supplier_payment:  
+            raise ValidationError("Can only allocate supplier payments")
+            
+        # Ensure invoice matches check's beneficiary
+        if self.invoice.supplier != self.payment.beneficiary:  
+            raise ValidationError("Invoice must belong to check's beneficiary")
+            
+        # Ensure we don't exceed available amount
+        available = self.payment.get_available_amount()  
+        if self.amount > available:
+            raise ValidationError(
+                f"Amount {self.amount} exceeds available amount {available}"
+            )
+            
+        # Ensure we don't exceed invoice's available amount
+        if self.amount > self.invoice.amount_available_for_payment:
+            raise ValidationError("Amount exceeds invoice's available amount")
+
 
 class Client(BaseModel):
     """

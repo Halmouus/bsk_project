@@ -1,9 +1,12 @@
+import traceback
+from django.http import JsonResponse
 from django.urls import reverse_lazy
+from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Supplier
+from .models import Supplier, get_supplier_balance
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import models
-from django.shortcuts import render, redirect
+from django.shortcuts import get_object_or_404, render, redirect
 from django.db.models import ProtectedError
 from django.views.generic.edit import DeleteView
 from django.contrib import messages
@@ -52,3 +55,23 @@ class SupplierDeleteView(DeleteView):
         except ProtectedError:
             messages.error(request, 'Cannot delete supplier. It is referenced by one or more invoices.')
             return redirect('supplier-list')
+
+
+# Get supplier balance
+class SupplierBalanceView(View):
+    def get(self, request, pk):
+        try:
+            supplier = get_object_or_404(Supplier, pk=pk)
+            balance = get_supplier_balance(supplier)
+            
+            return JsonResponse({
+                'payable': float(balance['payable']),
+                'paid': float(balance['paid']),
+                'balance': float(balance['balance']),
+                'unpaid_invoices_count': balance['invoices_count']
+            })
+            
+        except Exception as e:
+            print(f"Error in SupplierBalanceView: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return JsonResponse({'error': str(e)}, status=400)

@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.db import models
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
+from .models import CheckAllocation, Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -644,17 +644,45 @@ class InvoicePaymentDetailsView(View):
         invoice = get_object_or_404(Invoice, pk=pk)
         payment_details = invoice.get_payment_details()
         
-        # Get all related checks with their details
-        checks = Check.objects.filter(cause=invoice).select_related('checker')
-        check_details = [{
-            'id': str(check.id),
-            'reference': f"{getattr(check.checker.bank_account, 'bank', 'Unknown')}-{check.position}",
-            'amount': float(check.amount),
-            'status': check.status,
-            'created_at': check.creation_date.strftime('%Y-%m-%d'),
-            'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
-            'paid_at': check.paid_at.strftime('%Y-%m-%d') if check.paid_at else None,
-        } for check in checks]
+        # Get direct checks
+        direct_checks = Check.objects.filter(
+            cause=invoice
+        ).select_related('checker__bank_account')
+        
+        # Get allocated checks
+        allocations = CheckAllocation.objects.filter(
+            invoice_id=invoice.id
+        ).select_related('payment__checker__bank_account')
+
+        # Combine both types of checks
+        check_details = []
+        
+        # Add direct checks
+        for check in direct_checks:
+            check_details.append({
+                'id': str(check.id),
+                'type': 'direct',
+                'reference': f"{check.checker.bank_account.bank}-{check.position}",
+                'amount': float(check.amount),
+                'status': check.status,
+                'created_at': check.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+                'paid_at': check.paid_at.strftime('%Y-%m-%d') if check.paid_at else None,
+            })
+
+        # Add allocated checks
+        for allocation in allocations:
+            check_details.append({
+                'id': str(allocation.payment.id),
+                'type': 'allocation',
+                'reference': f"{allocation.payment.checker.bank_account.bank}-{allocation.payment.position}",
+                'total_amount': float(allocation.payment.amount),
+                'allocated_amount': float(allocation.amount),
+                'status': allocation.payment.status,
+                'created_at': allocation.payment.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
+                'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
+            })
 
         return JsonResponse({
             'payment_details': payment_details,

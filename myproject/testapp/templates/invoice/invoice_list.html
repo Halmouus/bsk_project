@@ -906,13 +906,18 @@
             `;
         },
 
-        // Inside your existing ModalHandlers object
         loadPaymentDetails: function(invoiceId) {
+            console.log("\n=== Loading Payment Details ===");
+            console.log("Invoice ID:", invoiceId);
+            
             $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
-                const details = data.payment_details;
+                console.log("Received payment data:", data);
+                const details = data.payment_details;  // Add this line
+                console.log("Payment details:", details);  // Debug log
                 
                 // Update summary cards with animations
                 const updateAmount = (elementId, amount) => {
+                    console.log(`Updating ${elementId} with amount:`, amount);
                     const element = $(`#${elementId}`);
                     element.fadeOut(200, function() {
                         $(this).text(Utils.formatMoney(amount)).fadeIn(200);
@@ -928,21 +933,28 @@
 
                 // Update progress bar
                 const progressBar = $('#payment-progress');
+                const percentage = details.payment_percentage;
+                console.log("Payment percentage:", percentage);
+                
                 progressBar
                     .css('width', '0%')
                     .removeClass('bg-success bg-warning bg-danger')
-                    .addClass(ModalHandlers.getProgressBarClass(details.payment_percentage))
+                    .addClass(this.getProgressBarClass(percentage))
                     .animate(
-                        { width: `${details.payment_percentage}%` }, 
+                        { width: `${percentage}%` }, 
                         800, 
                         function() {
-                            $(this).text(`${details.payment_percentage.toFixed(1)}%`);
+                            $(this).text(`${(details.payment_percentage || 0).toFixed(1)}%`);
                         }
                     );
 
-                ModalHandlers.updateChecksTable(data.checks);
+                console.log("Updating checks table with:", data.checks);
+                this.updateChecksTable(data.checks);
                 
                 $('#paymentDetailsModal').modal('show');
+            }.bind(this)).fail(function(error) {
+                console.error("Error loading payment details:", error);
+                alert('Failed to load payment details');
             });
         },
 
@@ -962,8 +974,14 @@
             }
 
             checks.forEach(check => {
-                tbody.append(`
-                    <tr>
+                const row = document.createElement('tr');
+                
+                // Common status badge
+                const statusBadge = ModalHandlers.getStatusBadge(check.status);
+                
+                // Different display for direct vs allocated payments
+                if (check.type === 'direct') {
+                    row.innerHTML = `
                         <td>
                             <i class="fas fa-money-check-alt text-muted mr-2"></i>
                             ${check.reference}
@@ -974,11 +992,30 @@
                         <td>${check.created_at}</td>
                         <td>${check.delivered_at || '-'}</td>
                         <td>${check.paid_at || '-'}</td>
+                        <td>${statusBadge}</td>
+                    `;
+                } else {  // allocation
+                    row.innerHTML = `
                         <td>
-                            ${ModalHandlers.getStatusBadge(check.status)}
+                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                            ${check.reference}
+                            <span class="badge badge-info ml-2">Allocation</span>
+                            <br>
+                            <small class="text-muted">
+                                (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
+                            </small>
                         </td>
-                    </tr>
-                `);
+                        <td class="text-right font-weight-bold">
+                            ${Utils.formatMoney(check.allocated_amount)}
+                        </td>
+                        <td>${check.created_at}</td>
+                        <td>${check.delivered_at || '-'}</td>
+                        <td>${check.paid_at || '-'}</td>
+                        <td>${statusBadge}</td>
+                    `;
+                }
+                
+                tbody.append(row);
             });
         },
 

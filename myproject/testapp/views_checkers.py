@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.template.loader import render_to_string
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Checker, Check, Invoice, Supplier, BankAccount
+from .models import CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
@@ -181,32 +181,56 @@ def invoice_autocomplete(request):
     invoice_list = []
     for invoice in invoices:
         net_amount = float(invoice.net_amount)
-        checks_amount = float(sum(
-            check.amount
-        for check in Check.objects.filter(
-                        cause=invoice
-                    ).exclude(
-                        status='cancelled'
-                    )
+        
+        # Calculate total from direct checks - including draft
+        direct_checks_amount = float(sum(
+            check.amount 
+            for check in Check.objects.filter(
+                cause=invoice
+            ).exclude(
+                status='cancelled'  # Only exclude cancelled checks
+            )
         ) or 0)
         
-        # Calculate available amount
-        available_amount = max(0, net_amount - checks_amount)
+        # Calculate total from allocated checks - including draft
+        allocated_amount = float(sum(
+            allocation.amount 
+            for allocation in CheckAllocation.objects.filter(
+                invoice=invoice
+            ).exclude(
+                payment__status='cancelled'  # Only exclude cancelled allocations
+            )
+        ) or 0)
         
-        # Skip invoices that are fully paid or have no remaining amount
+        # Calculate total payments
+        total_payments = direct_checks_amount + allocated_amount
+        
+        # Calculate available amount
+        available_amount = max(0, net_amount - total_payments)
+        
+        # Skip invoices that are fully allocated
         if available_amount <= 0:
             continue
 
-        status_icon = {
-            'paid': '🔒 Paid',
-            'partially_paid': '⏳ Partially Paid',
-            'not_paid': '📄 Not Paid'
-        }.get(invoice.payment_status, '')
+        # Only consider paid checks for payment status
+        paid_amount = float(sum(
+            check.amount for check in Check.objects.filter(
+                cause=invoice,
+                status='paid'
+            )
+        ) or 0)
+
+        # Determine status icon based only on paid amounts
+        status_icon = '📄 Not Paid'
+        if paid_amount >= net_amount:
+            status_icon = '🔒 Paid'
+        elif paid_amount > 0:
+            status_icon = '⏳ Partially Paid'
 
         credit_note_info = ""
         if invoice.has_credit_notes:
             credit_note_info = f" (Credited: {float(invoice.total_amount - invoice.net_amount):,.2f})"
-        
+
         invoice_list.append({
             'id': str(invoice.id),
             'ref': invoice.ref,
@@ -214,19 +238,14 @@ def invoice_autocomplete(request):
             'status': status_icon,
             'amount': net_amount,
             'payment_info': {
-                'total_amount': net_amount,  # Use net amount instead of total
-                'issued_amount': float(checks_amount),
-                'paid_amount': float(sum(
-                    check.amount for check in Check.objects.filter(
-                        cause=invoice,
-                        status='paid'
-                    )
-                )),
+                'total_amount': net_amount,
+                'issued_amount': float(total_payments),
+                'paid_amount': float(paid_amount),
                 'available_amount': available_amount
             },
             'label': (
                 f"{invoice.ref} ({invoice.date.strftime('%Y-%m-%d')}) - "
-                f"{status_icon} - {net_amount:,.2f} MAD{credit_note_info}"
+                f"{status_icon} - Available: {available_amount:,.2f} MAD{credit_note_info}"
             )
         })
     
@@ -290,7 +309,7 @@ class CheckCreateView(View):
             data = json.loads(request.body)
             print("Parsed JSON data:", data)
             
-            position = data.get('position')
+            position = int(data.get('position'))
             print("Position value:", position, "Type:", type(position))
             
             # Get checker and its signatures
@@ -305,8 +324,16 @@ class CheckCreateView(View):
             initial_signatures = position_sigs.get('signatures', [])
             print(f"Found pre-signed signatures for position {position}: {initial_signatures}")
             
-            invoice = get_object_or_404(Invoice, pk=data['invoice_id'])
-            print(f"Found invoice: {invoice.id}")
+            # Get supplier
+            supplier = get_object_or_404(Supplier, pk=data['supplier_id'])
+            
+            # Handle supplier payment vs invoice payment
+            is_supplier_payment = data.get('is_supplier_payment', False)
+            cause = None
+            if not is_supplier_payment:
+                cause = get_object_or_404(Invoice, pk=data['invoice_id'])
+                if cause.supplier != supplier:
+                    raise ValidationError("Invoice supplier must match selected supplier")
 
             payment_due = data.get('payment_due')
             if payment_due == "" or payment_due is None:
@@ -318,34 +345,130 @@ class CheckCreateView(View):
                 position=position,
                 checker=checker,
                 creation_date=data.get('creation_date', timezone.now().date()),
-                beneficiary=invoice.supplier,
-                cause=invoice,
-                payment_due=payment_due,
-                amount_due=invoice.total_amount,
+                beneficiary=supplier,
+                is_supplier_payment=is_supplier_payment,
+                cause=cause,
+                amount_due=cause.total_amount if cause else 0,
+                payment_due=data.get('payment_due'),
                 amount=data['amount'],
                 observation=data.get('observation', ''),
                 signatures=initial_signatures
             )
             
+             # For supplier payments, validate that amount doesn't exceed total unpaid
+            if is_supplier_payment:
+                supplier_balance = get_supplier_balance(supplier)
+                if Decimal(str(data['amount'])) > supplier_balance['balance']:
+                    raise ValidationError(
+                        f"Amount {data['amount']} exceeds supplier's unpaid balance "
+                        f"{supplier_balance['balance']}"
+                    )
+            
             check.save()
 
-            # Verify signatures after creation
-            print(f"Check created with ID: {check.id}")
-            print(f"Final check signatures: {check.signatures}")
-            print("=== Check Creation Process Completed ===\n")
-            
+            # Handle immediate allocation if provided
+            if is_supplier_payment and data.get('allocations'):
+                for allocation in data['allocations']:
+                    CheckAllocation.objects.create(
+                        check=check,
+                        invoice_id=allocation['invoice_id'],
+                        amount=Decimal(str(allocation['amount']))
+                    )
+
             return JsonResponse({
                 'message': 'Check created successfully',
-                'check_id': str(check.id)
+                'check_id': str(check.id),
+                'is_supplier_payment': is_supplier_payment,
+                'available_amount': float(check.get_available_amount())
+            })
+            
+        except ValidationError as e:
+            print("Validation error:", str(e))
+            return JsonResponse({'error': str(e)}, status=400)
+        except Exception as e:
+            print("Error in check creation:", str(e))
+            return JsonResponse({'error': str(e)}, status=400)
+
+
+class CheckAllocationView(View):
+    def get(self, request, pk):
+        """Get allocation details for a check"""
+        try:
+            check = get_object_or_404(Check, pk=pk)
+            if not check.is_supplier_payment:
+                return JsonResponse(
+                    {'error': 'Only supplier payments can be allocated'}, 
+                    status=400
+                )
+                
+            # Get all unpaid invoices for supplier
+            unpaid_invoices = get_supplier_unpaid_invoices(check.beneficiary)
+            
+            # Get existing allocations
+            allocations = check.allocations.select_related('invoice').all()
+            
+            return JsonResponse({
+                'check': {
+                    'id': str(check.id),
+                    'amount': float(check.amount),
+                    'available_amount': float(check.get_available_amount()),
+                    'allocated_amount': float(check.get_allocated_amount())
+                },
+                'allocations': [{
+                    'id': str(alloc.id),
+                    'invoice_id': str(alloc.invoice.id),
+                    'invoice_ref': alloc.invoice.ref,
+                    'amount': float(alloc.amount)
+                } for alloc in allocations],
+                'available_invoices': [{
+                    'id': str(inv.id),
+                    'ref': inv.ref,
+                    'date': inv.date.strftime('%Y-%m-%d'),
+                    'total_amount': float(inv.total_amount),
+                    'available_amount': float(inv.amount_available_for_payment)
+                } for inv in unpaid_invoices]
+            })
+        
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    def post(self, request, pk):
+        """Create a new allocation"""
+        try:
+            check = get_object_or_404(Check, pk=pk)
+            data = json.loads(request.body)
+            
+            allocation = CheckAllocation.objects.create(
+                payment=check,
+                invoice_id=data['invoice_id'],
+                amount=Decimal(str(data['amount']))
+            )
+            
+            return JsonResponse({
+                'message': 'Allocation created successfully',
+                'allocation_id': str(allocation.id),
+                'available_amount': float(check.get_available_amount())
             })
             
         except Exception as e:
-            print("=== Error in Check Creation ===")
-            print(f"Error type: {type(e).__name__}")
-            print(f"Error message: {str(e)}")
-            print(f"Error traceback: {traceback.format_exc()}")
             return JsonResponse({'error': str(e)}, status=400)
     
+    def delete(self, request, pk, allocation_id):
+        """Delete an allocation"""
+        try:
+            allocation = get_object_or_404(CheckAllocation, pk=allocation_id, check_id=pk)
+            check = allocation.check
+            allocation.delete()
+            
+            return JsonResponse({
+                'message': 'Allocation deleted successfully',
+                'available_amount': float(check.get_available_amount())
+            })
+            
+        except Exception as e:
+            return JsonResponse({'error': str(e)}, status=400)
+
+
 class CheckListView(ListView):
     model = Check
     template_name = 'checker/check_list.html'

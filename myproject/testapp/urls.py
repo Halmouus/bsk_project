@@ -1,7 +1,13 @@
 from django.urls import path, include
 from . import views
-from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
-from .views_product import ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
+from .views_supplier import (
+    SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView, SupplierBalanceView
+)
+
+from .views_product import ( 
+    ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
+)
+
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
@@ -16,7 +22,7 @@ from .views_contract import (
 )
 
 from .views_checkers import (
-    CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
+    CheckAllocationView, CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
     CheckerFilterView, CheckFilterView, CheckDetailView, AvailableCheckersView, CheckerSignatureView, CheckerPositionStatusView
 )
@@ -73,7 +79,8 @@ urlpatterns = [
     path('suppliers/<uuid:pk>/update/', SupplierUpdateView.as_view(), name='supplier-update'),  # Update a supplier
     path('suppliers/<uuid:pk>/delete/', SupplierDeleteView.as_view(), name='supplier-delete'),  # Delete a supplier
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
-
+    path('suppliers/<uuid:pk>/balance/', SupplierBalanceView.as_view(), name='supplier-balance'),  # Get supplier balance
+ 
     # Products URLs
     path('products/', ProductListView.as_view(), name='product-list'),  # List all products
     path('products/create/', ProductCreateView.as_view(), name='product-create'),  # Create a new product
@@ -119,6 +126,11 @@ urlpatterns = [
     path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
     path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
     path('checkers/available/', AvailableCheckersView.as_view(), name='available-checkers'),
+    path('checkers/<uuid:pk>/signatures/', CheckerSignatureView.as_view(), name='checker-signatures'),
+    path('checkers/<uuid:pk>/sign/', CheckerSignatureView.as_view(), name='checker-sign'),
+    path('checkers/<uuid:checker_id>/position-status/<int:position>/',
+    CheckerPositionStatusView.as_view(),
+    name='checker-position-status'),
 
     # Checks URLs
     path('checks/create/', CheckCreateView.as_view(), name='check-create'),
@@ -132,11 +144,12 @@ urlpatterns = [
     path('checks/<uuid:pk>/', CheckUpdateView.as_view(), name='check-update'),
     path('checks/<uuid:pk>/cancel/', CheckCancelView.as_view(), name='check-cancel'),
     path('checks/filter/', CheckFilterView.as_view(), name='check-filter'),
-    path('checkers/<uuid:pk>/signatures/', CheckerSignatureView.as_view(), name='checker-signatures'),
-    path('checkers/<uuid:pk>/sign/', CheckerSignatureView.as_view(), name='checker-sign'),
-    path('checkers/<uuid:checker_id>/position-status/<int:position>/',
-    CheckerPositionStatusView.as_view(),
-    name='checker-position-status'),
+    path('checks/<uuid:pk>/allocations/', 
+         CheckAllocationView.as_view(), 
+         name='check-allocations'),
+    path('checks/<uuid:pk>/allocations/<uuid:allocation_id>/', 
+         CheckAllocationView.as_view(), 
+         name='delete-allocation'),
 
     # Bank URLs
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
