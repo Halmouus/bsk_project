@@ -1,0 +1,1043 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Supplier Contracts</h2>
+        <button class="btn btn-primary" data-toggle="modal" data-target="#contractModal">
+            <i class="fas fa-plus"></i> New Contract
+        </button>
+    </div>
+
+    <!-- Filters -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <input type="text" class="form-control" id="supplierFilter"
+                           placeholder="Search supplier...">
+                    <input type="hidden" id="supplier-id">
+                </div>
+                <div class="col-md-3">
+                    <select class="form-control" id="statusFilter">
+                        <option value="">All Status</option>
+                        <option value="draft">Draft</option>
+                        <option value="active">Active</option>
+                        <option value="terminated">Terminated</option>
+                        <option value="expired">Expired</option>
+                    </select>
+                </div>
+                <div class="col-md-5">
+                    <input type="text" class="form-control" id="searchContract" 
+                           placeholder="Search contract reference...">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contracts Table -->
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Reference</th>
+                    <th>Supplier</th>
+                    <th>Start Date</th>
+                    <th>End Date</th>
+                    <th>Periodicity</th>
+                    <th>Products</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="contractsTableBody">
+                {% include 'contract/partials/contracts_table.html' %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Contract Modal -->
+<div class="modal fade" id="contractModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <span id="modal-action">Create</span> Contract
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="contract-form">
+                    {% csrf_token %}
+                    <input type="hidden" id="contract-id">
+                    
+                    <!-- Contract Details -->
+                    <div class="row mb-4">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Reference</label>
+                                <input type="text" class="form-control" id="reference" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Supplier</label>
+                                <input type="text" class="form-control" id="supplier" 
+                                       placeholder="Search supplier..." required>
+                                <input type="hidden" id="supplier_id">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Periodicity</label>
+                                <select class="form-control" id="periodicity" required>
+                                    <option value="monthly">Monthly</option>
+                                    <option value="quarterly">Quarterly</option>
+                                    <option value="biannual">Bi-annual</option>
+                                    <option value="annual">Annual</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="form-group">
+                                <label>Generation Day</label>
+                                <input type="number" class="form-control" id="generation-day"
+                                       min="1" max="28" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Date Range -->
+                    <div class="row mb-4">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Start Date</label>
+                                <input type="date" class="form-control" id="start-date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group" id="end-date-group">
+                                <label>End Date</label>
+                                <input type="date" class="form-control" id="end-date">
+                            </div>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="is-indefinite">
+                                <label class="custom-control-label" for="is-indefinite">
+                                    Indefinite Contract
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Products Section -->
+                    <h6 class="mb-3">Products</h6>
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="add-product">
+                            <i class="fas fa-plus"></i> Add Product
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table" id="products-table">
+                            <thead>
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Quantity</th>
+                                    <th>Unit Price</th>
+                                    <th>Reduction %</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-contract">Save Contract</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Product Modal -->
+<div class="modal fade" id="productModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Product</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="product-form">
+                    <div class="form-group">
+                        <label>Product</label>
+                        <input type="text" class="form-control" id="product-search" 
+                               placeholder="Search product..." required>
+                        <input type="hidden" id="product-id">
+                    </div>
+                    <div class="form-group">
+                        <label>Quantity</label>
+                        <input type="number" class="form-control" id="product-quantity" 
+                               min="0.01" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Unit Price</label>
+                        <input type="number" class="form-control" id="product-unit-price" 
+                               min="0.01" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>VAT Rate (%)</label>
+                        <input type="number" class="form-control" id="product-vat-rate" 
+                               min="0" max="100" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reduction Rate (%)</label>
+                        <input type="number" class="form-control" id="product-reduction" 
+                               min="0" max="100" step="0.01" value="0">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-product">Add Product</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Generate Invoices Modal -->
+<div class="modal fade" id="generateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Generate Contract Invoices</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <strong>Contract Info:</strong>
+                    <div id="contract-info"></div>
+                </div>
+                <form id="generate-form">
+                    <div class="form-group">
+                        <label>Generate Up To Date</label>
+                        <input type="date" class="form-control" id="up-to-date" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="generate-invoices">Generate</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Terminate Contract Modal -->
+<div class="modal fade" id="terminateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Terminate Contract</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="terminate-form">
+                    <div class="form-group">
+                        <label>Cancellation Date</label>
+                        <input type="date" class="form-control" id="cancellation-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Reason for Termination</label>
+                        <textarea class="form-control" id="cancellation-reason" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-danger" id="confirm-terminate">Terminate Contract</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Contract History Modal -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Contract Invoice History</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Content will be dynamically loaded -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+
+.ui-autocomplete {
+    position: absolute;
+    z-index: 999999;
+    background-color: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    max-height: 200px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.ui-autocomplete .ui-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    list-style: none;
+}
+
+.ui-autocomplete .ui-menu-item:hover {
+    background-color: #f8f9fa;
+}
+
+.ui-helper-hidden-accessible {
+    display: none;
+}
+
+.ui-front {
+    z-index: 999999 !important;
+}
+
+.modal-open .modal {
+    overflow-x: hidden;
+    overflow-y: auto;
+}
+
+.modal-content .ui-autocomplete {
+    position: fixed !important;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ContractSystem = {
+    init() {
+        this.setupSupplierAutocomplete();
+        this.setupProductAutocomplete();
+        this.setupFilterHandlers();
+        this.setupContractModal();
+        this.setupProductModal();
+        this.setupGenerateModal();
+        this.setupTerminateModal();
+        this.bindActionHandlers();
+    },
+
+    setupSupplierAutocomplete() {
+        $('#supplier, #supplierFilter').each(function() {
+            const $input = $(this);
+            $input.autocomplete({
+                minLength: 0,
+                appendTo: $input.closest('.modal-content, body'),
+                position: { my: "left top", at: "left bottom", collision: "none" },
+                source: async (request, response) => {
+                    try {
+                        const data = await $.get('/testapp/suppliers/autocomplete/', {
+                            term: request.term
+                        });
+                        response(data.map(item => ({
+                            label: item.label,
+                            value: item.value
+                        })));
+                    } catch (error) {
+                        console.error('Supplier fetch failed:', error);
+                        response([]);
+                    }
+                },
+                select: (_, ui) => {
+                    if ($input.attr('id') === 'supplier') {
+                        $('#supplier_id').val(ui.item.value);
+                        $('#supplier').val(ui.item.label.split(' (')[0]);
+                    } else {
+                        $('#supplier-id').val(ui.item.value);
+                        $('#supplierFilter').val(ui.item.label.split(' (')[0]);
+                        ContractSystem.applyFilters();
+                    }
+                    return false;
+                },
+                open: function() {
+                    $(this).autocomplete('widget').css('z-index', 999999);
+                }
+            });
+        });
+    },
+
+    setupProductAutocomplete() {
+        const $input = $('#product-search');
+        $input.autocomplete({
+            minLength: 0,
+            appendTo: $input.closest('.modal-content'),
+            position: { my: "left top", at: "left bottom", collision: "none" },
+            source: async (request, response) => {
+                try {
+                    const data = await $.get('/testapp/products/autocomplete/', {
+                        term: request.term
+                    });
+                    response(data.map(item => ({
+                        label: item.label,
+                        value: item.value
+                    })));
+                } catch (error) {
+                    console.error('Product fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                $('#product-id').val(ui.item.value);
+                $('#product-search').val(ui.item.label.split(' (')[0]);
+                this.loadProductDetails(ui.item.value);
+                return false;
+            },
+            open: function() {
+                $(this).autocomplete('widget').css('z-index', 999999);
+            }
+        });
+    },
+
+    async loadProductDetails(productId) {
+        try {
+            const response = await fetch(`/testapp/products/${productId}/details/`);
+            const data = await response.json();
+            $('#product-unit-price').val(data.default_price || '');
+            $('#product-vat-rate').val(data.vat_rate || '20.00'); // Default VAT rate
+        } catch (error) {
+            console.error('Error loading product details:', error);
+        }
+    },
+
+    addProductToTable() {
+        const productId = $('#product-id').val();
+        const productName = $('#product-search').val();
+        const quantity = $('#product-quantity').val();
+        const unitPrice = $('#product-unit-price').val();
+        const vatRate = $('#product-vat-rate').val();
+        const reduction = $('#product-reduction').val();
+
+        const row = `
+            <tr data-product-id="${productId}">
+                <td>${productName}</td>
+                <td>${quantity}</td>
+                <td>${this.formatMoney(unitPrice)}</td>
+                <td>${vatRate}%</td>
+                <td>${reduction}%</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-danger remove-product">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+
+        $('#products-table tbody').append(row);
+    },
+
+    getProductsData() {
+        const products = [];
+        $('#products-table tbody tr').each(function() {
+            products.push({
+                product_id: $(this).data('product-id'),
+                quantity: $(this).find('td:eq(1)').text(),
+                unit_price: $(this).find('td:eq(2)').text().replace(/[^0-9.-]+/g, ''),
+                vat_rate: $(this).find('td:eq(3)').text().replace('%', ''),
+                reduction_rate: $(this).find('td:eq(4)').text().replace('%', '')
+            });
+        });
+        return products;
+    },
+
+    // Add this method for contract history
+    async showContractHistory(contractId) {
+        try {
+            const response = await fetch(`/testapp/contracts/${contractId}/history/`);
+            if (!response.ok) throw new Error('Failed to load contract history');
+            
+            const data = await response.json();
+            
+            let historyHtml = `
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Period</th>
+                                <th>Amount</th>
+                                <th>Status</th>
+                                <th>Export</th>
+                                <th>Generated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+            
+            data.history.forEach(invoice => {
+                historyHtml += `
+                    <tr>
+                        <td>${invoice.ref}</td>
+                        <td>${invoice.period_start} to ${invoice.period_end}</td>
+                        <td>${this.formatMoney(invoice.amount)}</td>
+                        <td><span class="badge badge-${this.getStatusBadgeClass(invoice.status)}">${invoice.status}</span></td>
+                        <td><span class="badge badge-${invoice.export_status === 'Exported' ? 'success' : 'warning'}">${invoice.export_status}</span></td>
+                        <td>${invoice.generated_at}</td>
+                    </tr>
+                `;
+            });
+            
+            historyHtml += `
+                        </tbody>
+                    </table>
+                </div>
+            `;
+            
+            $('#historyModal .modal-body').html(historyHtml);
+            $('#historyModal').modal('show');
+            
+        } catch (error) {
+            this.showError('Failed to load contract history');
+        }
+    },
+    
+    getStatusBadgeClass(status) {
+        switch(status.toLowerCase()) {
+            case 'paid': return 'success';
+            case 'draft': return 'secondary';
+            case 'partially_paid': return 'warning';
+            default: return 'info';
+        }
+    },
+
+    bindActionHandlers() {
+        // ... existing handlers ...
+
+        // Handle history button clicks
+        $(document).on('click', '.view-history', async (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            await this.showContractHistory(contractId);
+        });
+    },
+
+    setupFilterHandlers() {
+        $('#statusFilter').on('change', () => this.applyFilters());
+        
+        let timeout;
+        $('#searchContract').on('input', () => {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => this.applyFilters(), 300);
+        });
+    },
+
+    async applyFilters() {
+        const filters = {
+            supplier: $('#supplier-id').val(),
+            status: $('#statusFilter').val(),
+            search: $('#searchContract').val()
+        };
+
+        try {
+            const response = await fetch(`/testapp/contracts/filter/?${new URLSearchParams(filters)}`);
+            const data = await response.json();
+            $('#contractsTableBody').html(data.html);
+        } catch (error) {
+            console.error('Filter error:', error);
+        }
+    },
+
+    setupContractModal() {
+        const modal = $('#contractModal');
+        
+        // Handle indefinite checkbox
+        $('#is-indefinite').on('change', function() {
+            const endDateGroup = $('#end-date-group');
+            if (this.checked) {
+                endDateGroup.hide();
+                $('#end-date').val('');
+            } else {
+                endDateGroup.show();
+            }
+        });
+
+        // Reset form on modal close
+        modal.on('hidden.bs.modal', () => {
+            this.resetContractForm();
+        });
+
+        // Handle product addition
+        $('#add-product').on('click', () => {
+            $('#productModal').modal('show');
+        });
+
+        // Handle contract save
+        $('#save-contract').on('click', () => this.saveContract());
+    },
+
+    resetContractForm() {
+        $('#contract-form')[0].reset();
+        $('#contract-id').val('');
+        $('#supplier_id').val('');
+        $('#products-table tbody').empty();
+        $('#modal-action').text('Create');
+        $('#end-date-group').show();
+    },
+
+    setupProductModal() {
+        const modal = $('#productModal');
+        
+        // Format numbers on input
+        $('#product-unit-price, #product-vat-rate, #product-reduction').on('input', function() {
+            const value = this.value.replace(/[^\d.]/g, '');
+            // Ensure only two decimal places
+            if (value.includes('.')) {
+                const parts = value.split('.');
+                this.value = parts[0] + '.' + (parts[1] || '').slice(0, 2);
+            } else {
+                this.value = value;
+            }
+        });
+        
+        // Reset form on modal close
+        modal.on('hidden.bs.modal', () => {
+            $('#product-form')[0].reset();
+            $('#product-id').val('');
+        });
+
+        // Handle product save
+        $('#save-product').on('click', () => {
+            if (this.validateProductForm()) {
+                this.addProductToTable();
+                modal.modal('hide');
+            }
+        });
+    },
+
+    addProductToTable() {
+        const productId = $('#product-id').val();
+        const productName = $('#product-search').val();
+        const quantity = parseFloat($('#product-quantity').val()) || 0;
+        const unitPrice = parseFloat($('#product-unit-price').val()) || 0;
+        const vatRate = parseFloat($('#product-vat-rate').val()) || 0;
+        const reduction = parseFloat($('#product-reduction').val()) || 0;
+
+        const row = `
+            <tr data-product-id="${productId}"
+                data-quantity="${quantity}"
+                data-unit-price="${unitPrice}"
+                data-vat-rate="${vatRate}"
+                data-reduction="${reduction}">
+                <td>${productName}</td>
+                <td>${quantity.toFixed(2)}</td>
+                <td>${this.formatMoney(unitPrice)}</td>
+                <td>${vatRate.toFixed(2)}%</td>
+                <td>${reduction.toFixed(2)}%</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-danger remove-product">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+
+        $('#products-table tbody').append(row);
+    },
+
+    getProductsData() {
+        const products = [];
+        $('#products-table tbody tr').each(function() {
+            const $row = $(this);
+            products.push({
+                product_id: $row.data('product-id'),
+                quantity: $row.data('quantity'),
+                unit_price: $row.data('unit-price'),
+                vat_rate: $row.data('vat-rate'),
+                reduction_rate: $row.data('reduction')
+            });
+        });
+        return products;
+    },
+
+    validateProductForm() {
+        const requiredFields = ['product-id', 'product-quantity', 'product-unit-price'];
+        let isValid = true;
+
+        requiredFields.forEach(field => {
+            const input = $(`#${field}`);
+            if (!input.val()) {
+                input.addClass('is-invalid');
+                isValid = false;
+            } else {
+                input.removeClass('is-invalid');
+            }
+        });
+
+        if (!isValid) {
+            this.showError('Please fill in all required fields');
+        }
+
+        return isValid;
+    },
+
+    addProductToTable() {
+        const productId = $('#product-id').val();
+        const productName = $('#product-search').val();
+        const quantity = $('#product-quantity').val();
+        const unitPrice = $('#product-unit-price').val();
+        const reduction = $('#product-reduction').val();
+
+        const row = `
+            <tr data-product-id="${productId}">
+                <td>${productName}</td>
+                <td>${quantity}</td>
+                <td>${this.formatMoney(unitPrice)}</td>
+                <td>${reduction}%</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-danger remove-product">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `;
+
+        $('#products-table tbody').append(row);
+    },
+
+    setupGenerateModal() {
+        const modal = $('#generateModal');
+        
+        modal.on('shown.bs.modal', function() {
+            // Set default up-to date as today
+            $('#up-to-date').val(new Date().toISOString().split('T')[0]);
+        });
+
+        $('#generate-invoices').on('click', () => this.generateInvoices());
+    },
+
+    setupTerminateModal() {
+        const modal = $('#terminateModal');
+        
+        modal.on('shown.bs.modal', function() {
+            // Set default cancellation date as today
+            $('#cancellation-date').val(new Date().toISOString().split('T')[0]);
+        });
+
+        $('#confirm-terminate').on('click', () => this.terminateContract());
+    },
+
+    async saveContract() {
+        if (!this.validateContractForm()) return;
+
+        const data = {
+            reference: $('#reference').val(),
+            supplier_id: $('#supplier_id').val(),
+            start_date: $('#start-date').val(),
+            end_date: $('#is-indefinite').prop('checked') ? null : $('#end-date').val(),
+            is_indefinite: $('#is-indefinite').prop('checked'),
+            periodicity: $('#periodicity').val(),
+            generation_day: $('#generation-day').val(),
+            products: this.getProductsData()
+        };
+
+        const contractId = $('#contract-id').val();
+        const url = contractId ? 
+            `/testapp/contracts/${contractId}/update/` : 
+            '/testapp/contracts/create/';
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Failed to save contract');
+
+            $('#contractModal').modal('hide');
+            this.applyFilters();
+
+        } catch (error) {
+            this.showError(error.message);
+        }
+    },
+
+    validateContractForm() {
+        const requiredFields = ['reference', 'supplier_id', 'start-date', 'generation-day'];
+        let isValid = true;
+
+        // Validate required fields
+        requiredFields.forEach(field => {
+            const input = $(`#${field}`);
+            if (!input.val()) {
+                input.addClass('is-invalid');
+                isValid = false;
+            } else {
+                input.removeClass('is-invalid');
+            }
+        });
+
+        // Validate end date if not indefinite
+        if (!$('#is-indefinite').prop('checked') && !$('#end-date').val()) {
+            $('#end-date').addClass('is-invalid');
+            isValid = false;
+        }
+
+        // Validate products
+        if ($('#products-table tbody tr').length === 0) {
+            this.showError('At least one product is required');
+            isValid = false;
+        }
+
+        return isValid;
+    },
+
+    getProductsData() {
+        const products = [];
+        $('#products-table tbody tr').each(function() {
+            products.push({
+                product_id: $(this).data('product-id'),
+                quantity: $(this).find('td:eq(1)').text(),
+                unit_price: $(this).find('td:eq(2)').text().replace(/[^0-9.-]+/g, ''),
+                reduction_rate: $(this).find('td:eq(3)').text().replace('%', '')
+            });
+        });
+        return products;
+    },
+
+    async generateInvoices() {
+        const contractId = $('#generateModal').data('contract-id');
+        const upToDate = $('#up-to-date').val();
+
+        try {
+            const response = await fetch(`/testapp/contracts/${contractId}/generate/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ up_to_date: upToDate })
+            });
+
+            if (!response.ok) throw new Error('Failed to generate invoices');
+
+            const data = await response.json();
+            $('#generateModal').modal('hide');
+            this.showSuccess(`Generated ${data.invoices.length} invoices`);
+            this.applyFilters();
+
+        } catch (error) {
+            this.showError(error.message);
+        }
+    },
+
+    async terminateContract() {
+        const contractId = $('#terminateModal').data('contract-id');
+        const data = {
+            cancellation_date: $('#cancellation-date').val(),
+            cancellation_reason: $('#cancellation-reason').val()
+        };
+
+        try {
+            const response = await fetch(`/testapp/contracts/${contractId}/terminate/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify(data)
+            });
+
+            if (!response.ok) throw new Error('Failed to terminate contract');
+
+            $('#terminateModal').modal('hide');
+            this.showSuccess('Contract terminated successfully');
+            this.applyFilters();
+
+        } catch (error) {
+            this.showError(error.message);
+        }
+    },
+
+    bindActionHandlers() {
+        // Handle edit button clicks
+        $(document).on('click', '.edit-contract', async (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            await this.loadContractDetails(contractId);
+        });
+
+        // Handle generate button clicks
+        $(document).on('click', '.generate-invoices', (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            $('#generateModal').data('contract-id', contractId).modal('show');
+        });
+
+        // Handle terminate button clicks
+        $(document).on('click', '.terminate-contract', (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            $('#terminateModal').data('contract-id', contractId).modal('show');
+        });
+
+        // Handle remove product clicks
+        $(document).on('click', '.remove-product', function() {
+            $(this).closest('tr').remove();
+        });
+
+        // Handle history button clicks - with debug logs
+        console.log("Binding history button clicks");
+        $(document).on('click', '.view-history', (e) => {
+            console.log("History button clicked");
+            const button = $(e.currentTarget);
+            const contractId = button.data('contract-id');
+            console.log("Contract ID:", contractId);
+            this.showContractHistory(contractId);
+            e.preventDefault();  // Prevent any default action
+            return false;
+        });
+
+        // Handle activate button clicks
+        $(document).on('click', '.activate-contract', async (e) => {
+            const button = $(e.currentTarget);
+            const contractId = button.data('contract-id');
+
+            if (confirm('Are you sure you want to activate this contract? This will generate all past due invoices if any.')) {
+                try {
+                    console.log("Starting contract activation:", contractId);
+                    button.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                    
+                    console.log("Making fetch request...");
+                    const response = await fetch(`/testapp/contracts/${contractId}/activate/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        }
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        throw new Error(error.message || 'Failed to activate contract');
+                    }
+
+                    this.showSuccess('Contract activated successfully');
+                    this.applyFilters();
+
+                } catch (error) {
+                    this.showError(error.message);
+                } finally {
+                    button.prop('disabled', false).html('<i class="fas fa-play"></i>');
+                }
+            }
+        });
+
+        // Handle generate button clicks
+        $(document).on('click', '.generate-invoices', (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            $('#generateModal').data('contract-id', contractId).modal('show');
+        });
+
+        // Handle terminate button clicks
+        $(document).on('click', '.terminate-contract', (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            $('#terminateModal').data('contract-id', contractId).modal('show');
+        });
+
+        // Handle remove product clicks
+        $(document).on('click', '.remove-product', function() {
+            $(this).closest('tr').remove();
+        });
+    },
+
+    async loadContractDetails(contractId) {
+        try {
+            const response = await fetch(`/testapp/contracts/${contractId}/`);
+            const data = await response.json();
+
+            $('#modal-action').text('Edit');
+            $('#contract-id').val(data.id);
+            $('#reference').val(data.reference);
+            $('#supplier').val(data.supplier_name);
+            $('#supplier_id').val(data.supplier_id);
+            $('#start-date').val(data.start_date);
+            $('#end-date').val(data.end_date);
+            $('#is-indefinite').prop('checked', data.is_indefinite).trigger('change');
+            $('#periodicity').val(data.periodicity);
+            $('#generation-day').val(data.generation_day);
+
+            // Load products
+            $('#products-table tbody').empty();
+            data.products.forEach(product => {
+                const row = `
+                    <tr data-product-id="${product.product_id}">
+                        <td>${product.product_name}</td>
+                        <td>${product.quantity}</td>
+                        <td>${this.formatMoney(product.unit_price)}</td>
+                        <td>${product.reduction_rate}%</td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-danger remove-product">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+                $('#products-table tbody').append(row);
+            });
+
+            $('#contractModal').modal('show');
+
+        } catch (error) {
+            this.showError('Failed to load contract details');
+        }
+    },
+
+    formatMoney(amount) {
+        return new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'MAD'
+        }).format(amount);
+    },
+
+    showError(message) {
+        const alert = $('<div>')
+            .addClass('alert alert-danger alert-dismissible fade show')
+            .html(`
+                ${message}
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+            `);
+        $('.modal-body').prepend(alert);
+        setTimeout(() => alert.alert('close'), 5000);
+    },
+
+    showSuccess(message) {
+        const alert = $('<div>')
+            .addClass('alert alert-success alert-dismissible fade show')
+            .html(`
+                ${message}
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+            `);
+        $('.container-fluid').prepend(alert);
+        setTimeout(() => alert.alert('close'), 5000);
+    }
+};
+
+// Initialize when document is ready
+$(document).ready(() => {
+    ContractSystem.init();
+});
+</script>
+{% endblock %}

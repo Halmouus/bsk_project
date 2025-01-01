@@ -287,6 +287,10 @@
                         href="{% url 'invoice-list' %}">
                             <i class="fas fa-file-invoice-dollar me-2"></i> Invoices
                         </a>
+                        <a class="nav-link {% if 'contract' in request.path %}active{% endif %}" 
+                        href="{% url 'contract-list' %}">
+                            <i class="fas fa-file-contract me-2"></i> Contracts
+                        </a>
                     </div>
                 </li>
 

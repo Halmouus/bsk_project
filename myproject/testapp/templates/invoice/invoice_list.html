@@ -13,7 +13,7 @@
         // Initialize supplier autocomplete
         $('#supplier-filter').autocomplete({
             source: "{% url 'supplier-autocomplete' %}",
-            minLength: 2,
+            minLength: 0,
             select: function(event, ui) {
                 $(this).val(ui.item.label);
                 $('#supplier-filter-id').val(ui.item.value);
@@ -1426,7 +1426,7 @@
         // Initialize supplier autocomplete
         $('#supplier-filter').autocomplete({
             source: "{% url 'supplier-autocomplete' %}",
-            minLength: 2,
+            minLength: 0,
             select: function(event, ui) {
                 $(this).val(ui.item.label);
                 $('#supplier-filter-id').val(ui.item.value);
@@ -1437,7 +1437,7 @@
         // Initialize product filter
         $('#product-filter').autocomplete({
             source: "{% url 'product-autocomplete' %}",
-            minLength: 2,
+            minLength: 0,
             select: function(event, ui) {
                 $(this).val(ui.item.label);
                 $('#product-filter-id').val(ui.item.value);

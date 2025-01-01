@@ -1,0 +1,94 @@
+{% for contract in contracts %}
+<tr class="{% if contract.status == 'terminated' %}table-danger
+           {% elif contract.status == 'expired' %}table-secondary
+           {% elif contract.status == 'active' %}table-success
+           {% endif %}">
+    <td>{{ contract.reference }}</td>
+    <td>{{ contract.supplier.name }}</td>
+    <td>{{ contract.start_date|date:"Y-m-d" }}</td>
+    <td>
+        {% if contract.is_indefinite %}
+            <span class="badge badge-info">Indefinite</span>
+        {% else %}
+            {{ contract.end_date|date:"Y-m-d" }}
+        {% endif %}
+    </td>
+    <td>
+        {{ contract.get_periodicity_display }}
+        <small class="text-muted d-block">
+            Generation day: {{ contract.generation_day }}
+        </small>
+    </td>
+    <td>
+        <div class="products-preview">
+            {% with products=contract.products.all|slice:":3" %}
+                {% for product in products %}
+                    <span class="badge badge-light">
+                        {{ product.product.name }}
+                        ({{ product.quantity }})
+                    </span>
+                {% endfor %}
+                {% if contract.products.count > 3 %}
+                    <span class="badge badge-light">...</span>
+                {% endif %}
+            {% endwith %}
+        </div>
+    </td>
+    <td>
+        <span class="badge {% if contract.status == 'draft' %}badge-secondary
+                          {% elif contract.status == 'active' %}badge-success
+                          {% elif contract.status == 'terminated' %}badge-danger
+                          {% else %}badge-info{% endif %}">
+            {{ contract.get_status_display }}
+        </span>
+        {% if contract.cancellation_date %}
+            <small class="text-muted d-block">
+                Terminated: {{ contract.cancellation_date|date:"Y-m-d" }}
+            </small>
+        {% endif %}
+    </td>
+    <td>
+        <div class="btn-group">
+            {% if contract.status == 'draft' %}
+                <button type="button" class="btn btn-sm btn-primary edit-contract" 
+                        data-contract-id="{{ contract.id }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-success activate-contract"
+                        data-contract-id="{{ contract.id }}">
+                    <i class="fas fa-play"></i>
+                </button>
+            {% endif %}
+
+            {% if contract.status == 'active' %}
+                <button type="button" class="btn btn-sm btn-info generate-invoices"
+                        data-contract-id="{{ contract.id }}">
+                    <i class="fas fa-file-invoice"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-danger terminate-contract"
+                        data-contract-id="{{ contract.id }}">
+                    <i class="fas fa-stop"></i>
+                </button>
+            {% endif %}
+
+            <button type="button" class="btn btn-sm btn-info view-history"
+                    data-contract-id="{{ contract.id }}"
+                    {% if not contract.contractinvoice_set.exists %}disabled{% endif %}>
+                <i class="fas fa-history"></i>
+            </button>
+        </div>
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="8" class="text-center py-4">
+        <div class="empty-state">
+            <i class="fas fa-file-contract fa-3x text-muted mb-3"></i>
+            <p class="text-muted mb-0">No contracts found matching your criteria</p>
+            {% if request.GET %}
+                <button type="button" class="btn btn-link" id="clear-filters">Clear all filters</button>
+            {% endif %}
+        </div>
+    </td>
+</tr>
+{% endfor %}

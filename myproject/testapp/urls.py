@@ -7,6 +7,14 @@ from .views_invoice import (
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
     InvoicePaymentDetailsView, InvoiceAccountingSummaryView
 )
+
+
+from .views_contract import (
+    ContractListView, ContractFilterView, ContractCreateView,
+    ContractUpdateView, ContractDeleteView, ContractGenerateInvoicesView,
+    ContractTerminateView, ContractActivateView, ContractHistoryView
+)
+
 from .views_checkers import (
     CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
@@ -59,12 +67,14 @@ urlpatterns = [
     path('', views.home, name='home'),  # Home view
     path('profile/', views.profile, name='profile'),  # Profile view
 
+    # Suppliers URLs
     path('suppliers/', SupplierListView.as_view(), name='supplier-list'),  # List all suppliers
     path('suppliers/create/', SupplierCreateView.as_view(), name='supplier-create'),  # Create a new supplier
     path('suppliers/<uuid:pk>/update/', SupplierUpdateView.as_view(), name='supplier-update'),  # Update a supplier
     path('suppliers/<uuid:pk>/delete/', SupplierDeleteView.as_view(), name='supplier-delete'),  # Delete a supplier
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
 
+    # Products URLs
     path('products/', ProductListView.as_view(), name='product-list'),  # List all products
     path('products/create/', ProductCreateView.as_view(), name='product-create'),  # Create a new product
     path('products/<uuid:pk>/update/', ProductUpdateView.as_view(), name='product-update'),  # Update a product
@@ -72,6 +82,7 @@ urlpatterns = [
     path('products/<uuid:pk>/details/', ProductDetailsView.as_view(), name='product-details'),  # Details for a specific product
     path('products/ajax-create/', ProductAjaxCreateView.as_view(), name='product-ajax-create'),  # AJAX view for creating a new Product
 
+    # Invoices URLs
     path('invoices/', InvoiceListView.as_view(), name='invoice-list'),  # List all invoices
     path('invoices/create/', InvoiceCreateView.as_view(), name='invoice-create'),  # Create a new invoice
     path('invoices/<uuid:pk>/update/', InvoiceUpdateView.as_view(), name='invoice-update'),  # Update an invoice
@@ -90,13 +101,26 @@ urlpatterns = [
          CreateCreditNoteView.as_view(), 
          name='create-credit-note'),
 
-    path('checkers/', CheckerListView.as_view(), name='checker-list'),  # List all checkers
+    # Contracts URLs
+    path('contracts/', ContractListView.as_view(), name='contract-list'),
+    path('contracts/filter/', ContractFilterView.as_view(), name='contract-filter'),
+    path('contracts/create/', ContractCreateView.as_view(), name='contract-create'),
+    path('contracts/<uuid:pk>/', ContractUpdateView.as_view(), name='contract-detail'),
+    path('contracts/<uuid:pk>/update/', ContractUpdateView.as_view(), name='contract-update'),
+    path('contracts/<uuid:pk>/delete/', ContractDeleteView.as_view(), name='contract-delete'),
+    path('contracts/<uuid:pk>/generate/', ContractGenerateInvoicesView.as_view(), name='contract-generate'),
+    path('contracts/<uuid:pk>/terminate/', ContractTerminateView.as_view(), name='contract-terminate'),
+    path('contracts/<uuid:pk>/activate/', ContractActivateView.as_view(), name='contract-activate'),
+    path('contracts/<uuid:pk>/history/', ContractHistoryView.as_view(), name='contract-history'),
+    # Checkers URLs
+    path('checkers/', CheckerListView.as_view(), name='checker-list'),
     path('checkers/filter/', CheckerFilterView.as_view(), name='checker-filter'),
     path('checkers/create/', CheckerCreateView.as_view(), name='checker-create'),
     path('checkers/<uuid:pk>/details/', CheckerDetailsView.as_view(), name='checker-details'),
     path('checkers/<uuid:pk>/delete/', CheckerDeleteView.as_view(), name='checker-delete'),
     path('checkers/available/', AvailableCheckersView.as_view(), name='available-checkers'),
 
+    # Checks URLs
     path('checks/create/', CheckCreateView.as_view(), name='check-create'),
     path('checks/', CheckListView.as_view(), name='check-list'),
     path('checks/<uuid:pk>/mark-delivered/', 
@@ -114,7 +138,7 @@ urlpatterns = [
     CheckerPositionStatusView.as_view(),
     name='checker-position-status'),
 
-
+    # Bank URLs
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
     path('bank-accounts/create/', BankAccountCreateView.as_view(), name='bank-account-create'),
     path('bank-accounts/<uuid:pk>/edit/', BankAccountUpdateView.as_view(), name='bank-account-edit'),

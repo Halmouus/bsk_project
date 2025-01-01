@@ -16,7 +16,7 @@ from django.contrib.contenttypes.fields import GenericForeignKey
 from itertools import groupby
 from operator import itemgetter
 import traceback
-
+from dateutil.relativedelta import relativedelta
 
 logger = logging.getLogger(__name__)
 
@@ -3423,3 +3423,281 @@ class ForecastStatement(BaseModel):
 
     def __str__(self):
         return f"Forecast {self.label} on {self.date}"
+    
+class Contract(BaseModel):
+    PERIOD_MONTHLY = 'monthly'
+    PERIOD_QUARTERLY = 'quarterly'
+    PERIOD_BIANNUAL = 'biannual'
+    PERIOD_ANNUAL = 'annual'
+    
+    PERIOD_CHOICES = [
+        (PERIOD_MONTHLY, 'Monthly'),
+        (PERIOD_QUARTERLY, 'Quarterly'),
+        (PERIOD_BIANNUAL, 'Biannual'),
+        (PERIOD_ANNUAL, 'Annual')
+    ]
+
+    STATUS_DRAFT = 'draft'
+    STATUS_ACTIVE = 'active'
+    STATUS_TERMINATED = 'terminated'
+    STATUS_EXPIRED = 'expired'
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_TERMINATED, 'Terminated'),
+        (STATUS_EXPIRED, 'Expired')
+    ]
+
+    reference = models.CharField(max_length=50, unique=True)
+    supplier = models.ForeignKey('Supplier', on_delete=models.PROTECT)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_indefinite = models.BooleanField(default=False)
+    periodicity = models.CharField(max_length=20, choices=PERIOD_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    generation_day = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month to generate invoice (1-28)"
+    )
+    cancellation_date = models.DateField(null=True, blank=True)
+    cancellation_reason = models.TextField(blank=True)
+
+    def clean(self):
+        if not self.is_indefinite and not self.end_date:
+            raise ValidationError("End date is required for fixed-term contracts")
+        
+        if self.is_indefinite and self.end_date:
+            raise ValidationError("Indefinite contracts cannot have an end date")
+        
+        if self.end_date and self.start_date and self.end_date <= self.start_date:
+            raise ValidationError("End date must be after start date")
+
+    def get_next_generation_date(self, from_date=None):
+        """Calculate the next invoice generation date based on periodicity"""
+        if not from_date:
+            from_date = timezone.now().date()
+
+        # Start with the generation day in the current month
+        next_date = from_date.replace(day=min(self.generation_day, 28))
+        
+        # If we've passed this month's generation day, move to next period
+        if from_date.day > self.generation_day:
+            if self.periodicity == self.PERIOD_MONTHLY:
+                next_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                next_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                next_date += relativedelta(months=6)
+            else:  # annual
+                next_date += relativedelta(years=1)
+                
+        return next_date
+
+    def get_period_end_date(self, start_date):
+        """Calculate period end date based on periodicity"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return start_date + relativedelta(months=1, days=-1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            return start_date + relativedelta(months=3, days=-1)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            return start_date + relativedelta(months=6, days=-1)
+        else:  # annual
+            return start_date + relativedelta(years=1, days=-1)
+
+    def can_generate_invoice(self, for_date):
+        """Check if an invoice can be generated for the given date"""
+        if self.status not in [self.STATUS_ACTIVE, self.STATUS_TERMINATED]:
+            return False
+
+        # Check if date is within contract period
+        if for_date < self.start_date:
+            return False
+            
+        if self.end_date and for_date > self.end_date:
+            return False
+            
+        if self.cancellation_date and for_date > self.cancellation_date:
+            return False
+
+        # Check if invoice already exists for this period
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+        
+        return not ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).exists()
+
+    def get_period_start_date(self, for_date):
+        """Get the start date of the period containing the given date"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return for_date.replace(day=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            month = ((for_date.month - 1) // 3) * 3 + 1
+            return for_date.replace(month=month, day=1)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            month = ((for_date.month - 1) // 6) * 6 + 1
+            return for_date.replace(month=month, day=1)
+        else:  # annual
+            return for_date.replace(month=1, day=1)
+
+    def generate_invoice(self, for_date):
+        """Generate an invoice for the given date"""
+        if not self.can_generate_invoice(for_date):
+            raise ValidationError("Cannot generate invoice for this date")
+
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+
+        # Create invoice
+        invoice = Invoice.objects.create(
+            ref=f"{self.reference}-{period_start.strftime('%Y%m')}",
+            date=for_date,
+            supplier=self.supplier,
+            type='invoice'
+        )
+
+        # Add products from contract
+        for contract_product in self.products.all():
+            InvoiceProduct.objects.create(
+                invoice=invoice,
+                product=contract_product.product,
+                quantity=contract_product.quantity,
+                unit_price=contract_product.unit_price,
+                reduction_rate=contract_product.reduction_rate,
+                vat_rate=contract_product.product.vat_rate
+            )
+
+        # Create contract invoice record
+        ContractInvoice.objects.create(
+            contract=self,
+            invoice=invoice,
+            period_start=period_start,
+            period_end=period_end
+        )
+
+        return invoice
+
+    def generate_missing_invoices(self, up_to_date=None):
+        """Generate all missing invoices up to the given date"""
+        print("\n=== Starting invoice generation ===")
+        if not up_to_date:
+            up_to_date = timezone.now().date()
+        print(f"Generating invoices up to: {up_to_date}")
+
+        current_date = self.start_date
+        generated_invoices = []
+        print(f"Starting from date: {current_date}")
+
+        while current_date <= up_to_date:
+            print(f"Checking date: {current_date}")
+            if self.can_generate_invoice(current_date):
+                print(f"Generating invoice for: {current_date}")
+                try:
+                    invoice = self.generate_invoice(current_date)
+                    generated_invoices.append(invoice)
+                    print(f"Generated invoice: {invoice.ref}")
+                except Exception as e:
+                    print(f"Error generating invoice: {str(e)}")
+                    raise
+            
+            print("Getting next generation date...")
+            current_date = self.get_next_generation_date(current_date)
+            print(f"Next date: {current_date}")
+
+        print(f"Generation complete. Created {len(generated_invoices)} invoices")
+        return generated_invoices
+
+    def can_generate_invoice(self, for_date):
+        """Check if an invoice can be generated for the given date"""
+        print(f"\nChecking if invoice can be generated for {for_date}")
+        
+        if self.status not in [self.STATUS_ACTIVE, self.STATUS_TERMINATED]:
+            print("Invalid status")
+            return False
+
+        # Check if date is within contract period
+        if for_date < self.start_date:
+            print("Date before contract start")
+            return False
+            
+        if self.end_date and for_date > self.end_date:
+            print("Date after contract end")
+            return False
+            
+        if self.cancellation_date and for_date > self.cancellation_date:
+            print("Date after cancellation")
+            return False
+
+        # Check if invoice already exists for this period
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+        
+        exists = ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).exists()
+        
+        print(f"Invoice exists for period: {exists}")
+        return not exists
+
+    def get_next_generation_date(self, from_date=None):
+        """Calculate the next invoice generation date based on periodicity"""
+        print(f"\nCalculating next generation date from {from_date}")
+        if not from_date:
+            from_date = timezone.now().date()
+
+        # Always advance to next period
+        if self.periodicity == self.PERIOD_MONTHLY:
+            next_date = from_date + relativedelta(months=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            next_date = from_date + relativedelta(months=3)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            next_date = from_date + relativedelta(months=6)
+        else:  # annual
+            next_date = from_date + relativedelta(years=1)
+
+        # Set to generation day
+        next_date = next_date.replace(day=min(self.generation_day, 
+            (next_date + relativedelta(months=1) - relativedelta(days=1)).day))
+        
+        print(f"Next generation date: {next_date}")
+        return next_date
+
+class ContractProduct(BaseModel):
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='products')
+    product = models.ForeignKey('Product', on_delete=models.PROTECT)
+    quantity = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    unit_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    reduction_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
+
+    class Meta:
+        unique_together = ['contract', 'product']
+
+class ContractInvoice(BaseModel):
+    """Links generated invoices to their contract periods"""
+    contract = models.ForeignKey(Contract, on_delete=models.PROTECT)
+    invoice = models.OneToOneField('Invoice', on_delete=models.PROTECT)
+    period_start = models.DateField()
+    period_end = models.DateField()
+
+    class Meta:
+        unique_together = [
+            ['contract', 'period_start', 'period_end']
+        ]
