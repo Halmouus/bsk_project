@@ -1,0 +1,73 @@
+<div class="modal fade" id="paymentEditModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit Payment</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="payment-edit-form">
+                    <!-- Reference Info -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label>Check Reference</label>
+                            <input type="text" class="form-control" id="edit-reference" disabled>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Amount</label>
+                            <input type="text" class="form-control" id="edit-amount" disabled>
+                        </div>
+                    </div>
+                    
+                    <!-- Creation Date and Signatures -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label>Creation Date</label>
+                            <input type="text" class="form-control" id="edit-creation-date" disabled>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Signatures</label>
+                            <div class="form-control" id="edit-signatures" style="min-height: 38px;"></div>
+                        </div>
+                    </div>
+
+                    <!-- Beneficiary and Status -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label>Beneficiary</label>
+                            <input type="text" class="form-control" id="edit-beneficiary" disabled>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Status</label>
+                            <input type="text" class="form-control" id="edit-status" disabled>
+                        </div>
+                    </div>
+
+                    <!-- Invoice Reference -->
+                    <div class="row mb-3" id="edit-invoice-row">
+                        <div class="col-md-12">
+                            <label>Invoice Reference</label>
+                            <input type="text" class="form-control" id="edit-invoice-ref" disabled>
+                        </div>
+                    </div>
+
+                    <!-- Editable Fields -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label>Payment Due Date</label>
+                            <input type="date" class="form-control" id="edit-payment-due" name="payment_due">
+                        </div>
+                        <div class="col-md-6">
+                            <label>Observation</label>
+                            <textarea class="form-control" id="edit-observation" name="observation" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-payment-edit">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div> 

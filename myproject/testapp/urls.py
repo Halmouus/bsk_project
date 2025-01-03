@@ -1,7 +1,7 @@
 from django.urls import path, include
 from . import views
 from .views_supplier import (
-    SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView, SupplierBalanceView
+    SupplierDetailView, SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView, SupplierBalanceView
 )
 
 from .views_product import ( 
@@ -80,6 +80,7 @@ urlpatterns = [
     path('suppliers/<uuid:pk>/delete/', SupplierDeleteView.as_view(), name='supplier-delete'),  # Delete a supplier
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
     path('suppliers/<uuid:pk>/balance/', SupplierBalanceView.as_view(), name='supplier-balance'),  # Get supplier balance
+    path('suppliers/<uuid:pk>/view/', SupplierDetailView.as_view(), name='supplier-detail'),
  
     # Products URLs
     path('products/', ProductListView.as_view(), name='product-list'),  # List all products

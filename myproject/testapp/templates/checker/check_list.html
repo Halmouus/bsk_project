@@ -76,6 +76,7 @@
 
 {% include 'checker/partials/allocation_modal.html' %}
 {% include 'checker/partials/check_action_modals.html' %}
+{% include 'checker/partials/payment_edit_modal.html' %}
 
 <style>
     .btn-group {
@@ -210,9 +211,50 @@ const CheckFilters = {
     },
 
     setupActionHandlers() {
+
+        $(document).on('click', '#save-payment-edit', async (e) => {
+            e.preventDefault();
+            const checkId = $(e.currentTarget).data('check-id');
+            const paymentDue = $('#edit-payment-due').val();
+            const observation = $('#edit-observation').val();
+            
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        action: 'edit',
+                        payment_due: paymentDue,
+                        observation: observation
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.error || 'Failed to update check');
+                }
+
+                $('#paymentEditModal').modal('hide');
+                await this.applyFilters();
+                
+            } catch (error) {
+                console.error('Error saving check:', error);
+                alert('Failed to save changes: ' + error.message);
+            }
+        });
+
         // Handle check actions (deliver, pay, etc.)
         $(document).on('click', '.check-action', (e) => {
             const button = $(e.currentTarget);
+            console.log("[Debug] Button clicked:", {
+                button: button,
+                action: button.data('action'),
+                checkId: button.data('check-id'),
+                hasAllocations: button.data('has-allocations')
+            });
             const action = button.data('action');
             const checkId = button.data('check-id');
             const signature = button.data('signature');
@@ -261,43 +303,127 @@ const CheckFilters = {
             this.handleReceiveAction();
         });
 
+        $(document).on('click', '#save-edit', async function(e) {
+            e.preventDefault();
+            const checkId = $(this).data('check-id');
+            
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        action: 'edit',
+                        payment_due: $('#payment-due').val(),
+                        observation: $('#observation').val()
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to update check');
+                
+                $('#editModal').modal('hide');
+                await CheckFilters.applyFilters();
+                
+            } catch (error) {
+                console.error('Error updating check:', error);
+                alert('Failed to update check: ' + error.message);
+            }
+        });
+
     },
 
     async handleCheckAction(action, checkId) {
-        switch (action) {
-            case 'cancel':
-                console.log("Opening cancel modal for check:", checkId);
-                $('#cancelModal').modal('show');
-                $('#confirm-cancel').data('check-id', checkId);
-                break;
+        console.log("[CheckActions] Starting action handling:", { action, checkId });
+        try {       
+            switch (action) {
+                case 'cancel':
+                    console.log("Opening cancel modal for check:", checkId);
+                    $('#cancelModal').modal('show');
+                    $('#confirm-cancel').data('check-id', checkId);
+                    break;
 
-            case 'reject':
-                console.log("Opening reject modal for check:", checkId);
-                $('#rejectModal').modal('show');
-                $('#confirm-reject').data('check-id', checkId);
-                break;
+                case 'reject':
+                    console.log("Opening reject modal for check:", checkId);
+                    $('#rejectModal').modal('show');
+                    $('#confirm-reject').data('check-id', checkId);
+                    break;
 
-            case 'receive':
-                console.log("Opening receive modal for check:", checkId);
-                $('#receiveModal').modal('show');
-                $('#confirm-receive').data('check-id', checkId);
-                break;
-                
-            case 'replace':
-                console.log("Opening replace modal for check:", checkId);
-                await this.handleReplaceAction(checkId);
-                break;
-            case 'deliver':
-            case 'pay':
-                await this.updateCheckStatus(checkId, action);
-                break;
-            case 'print':
-                console.log("Printing check:", checkId);
-                await this.updateCheckStatus(checkId);
-                break;
-            case 'allocate':
-                AllocationSystem.openModal(checkId);
-                break;  
+                case 'receive':
+                    console.log("Opening receive modal for check:", checkId);
+                    $('#receiveModal').modal('show');
+                    $('#confirm-receive').data('check-id', checkId);
+                    break;
+                    
+                case 'replace':
+                    console.log("Opening replace modal for check:", checkId);
+                    await this.handleReplaceAction(checkId);
+                    break;
+                case 'deliver':
+                case 'pay':
+                    await this.updateCheckStatus(checkId, action);
+                    break;
+                case 'print':
+                    console.log("Printing check:", checkId);
+                    await this.updateCheckStatus(checkId);
+                    break;
+                case 'allocate':
+                    AllocationSystem.openModal(checkId);
+                    break;
+                case 'edit':
+                    console.log("[CheckActions] Opening edit modal for check:", checkId);
+                    try {
+                        const response = await fetch(`/testapp/checks/${checkId}/action/`);
+                        console.log("[CheckActions] Response status:", response.status);
+                        if (!response.ok) {
+                            const error = await response.json();
+                            throw new Error(error.error || 'Failed to load check details');
+                        }
+                        
+                        const check = await response.json();
+                        console.log("[CheckActions] Received check data:", check);
+                        
+                        // Populate edit modal
+                        $('#edit-reference').val(check.reference);
+                        $('#edit-amount').val(formatMoney(check.amount));
+                        $('#edit-beneficiary').val(check.beneficiary);
+                        $('#edit-status').val(check.status_display);
+                        $('#edit-creation-date').val(check.creation_date);
+                        
+                        // Add signatures (with null check)
+                        const signatures = check.signatures || [];
+                        const signaturesList = signatures.length ? 
+                            signatures.map(sig => `<span class="badge badge-${sig === 'OUK' ? 'success' : 'info'}">${sig}</span>`).join(' ') :
+                            '<span class="badge badge-secondary">None</span>';
+                        $('#edit-signatures').html(signaturesList);
+                        
+                        // Show invoice reference for direct payments
+                        if (!check.is_supplier_payment) {
+                            $('#edit-invoice-row').show();
+                            $('#edit-invoice-ref').val(check.invoice_ref || '-');
+                        } else {
+                            $('#edit-invoice-row').hide();
+                        }
+                        
+                        // Editable fields
+                        $('#edit-payment-due').val(check.payment_due || '');
+                        $('#edit-observation').val(check.observation || '');
+                        
+                        // Store check ID for save handler
+                        $('#save-payment-edit').data('check-id', checkId);
+                        
+                        // Show modal
+                        $('#paymentEditModal').modal('show');
+                    } catch (error) {
+                        console.error('[CheckActions] Error loading check details:', error);
+                        alert('Failed to load check details: ' + error.message);
+                    }
+                    break;
+            }
+        } catch (error) {
+            console.error('Error handling check action:', error);
+            alert('Failed to handle check action: ' + error.message);
         }
     },
 
@@ -495,6 +621,72 @@ const CheckFilters = {
         } catch (error) {
             console.error('Error updating check status:', error);
             alert('Failed to update check status: ' + error.message);
+        }
+    },
+
+    
+
+    async handleEditAction(checkId) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/`);
+            if (!response.ok) throw new Error('Failed to load check details');
+            
+            const check = await response.json();
+            
+            // Get the payment modal
+            const modal = $('#paymentModal');
+            
+            // Update modal title and save button
+            modal.find('.modal-title').text('Edit Payment');
+            modal.find('#save-payment').text('Save Changes');
+            
+            // Populate and disable non-editable fields
+            modal.find('[name="amount"]').val(check.amount).prop('disabled', true);
+            modal.find('[name="beneficiary"]').val(check.beneficiary).prop('disabled', true);
+            
+            // Enable and populate editable fields
+            modal.find('[name="payment_due"]').val(check.payment_due).prop('disabled', false);
+            modal.find('[name="observation"]').val(check.observation).prop('disabled', false);
+            
+            // Store check ID and edit mode
+            modal.data('check-id', checkId);
+            modal.data('mode', 'edit');
+            
+            // Show modal
+            modal.modal('show');
+            
+        } catch (error) {
+            console.error('Error loading check for edit:', error);
+            alert('Failed to load check details: ' + error.message);
+        }
+    },
+
+    async saveEdit(checkId, formData) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({
+                    payment_due: formData.get('payment_due'),
+                    observation: formData.get('observation')
+                })
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to update check');
+            }
+
+            // Close modal and refresh table
+            $('#paymentModal').modal('hide');
+            await CheckFilters.applyFilters();
+            
+        } catch (error) {
+            console.error('Error saving check:', error);
+            alert('Failed to save changes: ' + error.message);
         }
     },
 
@@ -853,6 +1045,8 @@ const AllocationSystem = {
         this.modal.modal('show');
     }
 };
+
+
 
 // Initialize filters
 $(document).ready(() => {

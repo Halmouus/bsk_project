@@ -89,51 +89,42 @@ class Supplier(BaseModel):
     def __str__(self):
         return self.name
 
-def get_supplier_balance(supplier, end_date=None):
-    """
-    Calculate supplier balance including invoices and payments
-    Positive balance = we owe supplier
-    Negative balance = supplier owes us
-    """
-    if not end_date:
-        end_date = timezone.now().date()
-        
-    # Get all invoices
+# models.py
+def get_supplier_balance(supplier):
+    """Calculate supplier balance including only PAID payments"""
     invoices = Invoice.objects.filter(
         supplier=supplier,
-        date__lte=end_date,
         type='invoice'
     )
     
     invoice_total = sum(invoice.net_amount for invoice in invoices)
     
-    # Get all check payments (both direct and allocated)
+    # Get all PAID check payments (both direct and allocated)
     check_total = Decimal('0.00')
     
-    # Direct invoice payments
+    # Direct invoice payments - only PAID checks
     direct_payments = Check.objects.filter(
         beneficiary=supplier,
         is_supplier_payment=False,
-        creation_date__lte=end_date,
-        status__in=['pending', 'delivered', 'paid']
-    )
+        status='paid'  # Only count paid checks
+    ).exclude(status='cancelled')
     check_total += sum(check.amount for check in direct_payments)
     
-    # Allocated payments
+    # Allocated payments - only from PAID checks
     allocated_payments = CheckAllocation.objects.filter(
         payment__beneficiary=supplier,
         payment__is_supplier_payment=True,
-        payment__creation_date__lte=end_date,
-        payment__status__in=['pending', 'delivered', 'paid']
+        payment__status='paid'  # Only count allocations from paid checks
     )
     check_total += sum(alloc.amount for alloc in allocated_payments)
     
     return {
         'payable': invoice_total,  # What we owe supplier
-        'paid': check_total,       # What we've paid
+        'paid': check_total,       # What we've actually paid
         'balance': invoice_total - check_total,  # Remaining to pay
         'invoices_count': Invoice.objects.filter(
             supplier=supplier,
+            type='invoice',
             payment_status__in=['not_paid', 'partially_paid']
         ).count()
     }
@@ -588,21 +579,22 @@ class Invoice(BaseModel):
         }
 
     def update_payment_status(self):
-        """Update payment status based on all payments and allocations"""
+        """Update payment status based on PAID payments only"""
         total_payments = Decimal('0')
         
-        # Direct check payments
+        # Direct check payments - only count PAID checks
         direct_checks = Check.objects.filter(
-            cause=self
+            cause=self,
+            status='paid'  # Only count paid checks
         ).exclude(
             status='cancelled'
         )
         total_payments += sum(check.amount for check in direct_checks)
         
-        # Allocated payments
+        # Allocated payments - only count from PAID checks
         allocations = CheckAllocation.objects.filter(
             invoice=self,
-            payment__status__in=['pending', 'delivered', 'paid']
+            payment__status='paid'  # Only count allocations from paid checks
         )
         total_payments += sum(allocation.amount for allocation in allocations)
         
@@ -1088,9 +1080,15 @@ class Check(BaseModel):
         super().save(*args, **kwargs)
         print(f"Check saved with signatures: {self.signatures}")
         
-        if self.checker.current_position == self.checker.current_position:
+        # Update status if printed and has all signatures
+        if self.status == 'printed' and len(self.signatures) == 2:
+            self.status = 'pending'
+            super().save(update_fields=['status'])
+            
+        # Update checker current_position if new check
+        if not self.pk and int(self.position) == self.checker.current_position:
             print("Updating checker current_position")
-            self.checker.current_position += 1
+            self.checker.current_position = int(self.position) + 1
             self.checker.save()
         
         print("=== Check Save Method Completed ===\n")
@@ -1125,6 +1123,23 @@ class Check(BaseModel):
             
         if self.paid_at and not self.delivered_at:
             raise ValidationError("Check cannot be marked as paid before delivery")
+
+        # Validate supplier payment allocation before printing
+        if self.status == 'printed' and self.is_supplier_payment:
+            if self.get_available_amount() > 0:
+                raise ValidationError("Supplier payment must be fully allocated before printing")
+            
+        # Only allow edits to specific fields after draft status
+        if self.pk and self.status not in ['draft', 'pending']:
+            original = Check.objects.get(pk=self.pk)
+            changed_fields = []
+            for field in ['beneficiary', 'cause', 'amount', 'position', 'checker']:
+                if getattr(self, field) != getattr(original, field):
+                    changed_fields.append(field)
+            
+            if changed_fields:
+                raise ValidationError(f"Cannot modify {', '.join(changed_fields)} after check is printed")
+
         
         super().clean()
 

@@ -38,16 +38,16 @@
     </td>
 
 
-   <td>
-       <div class="position-info">
-           {{ checker.index }}  {{ checker.current_position }}
-           <div class="progress" style="height: 4px;">
-               <div class="progress-bar" role="progressbar" 
-                    style="width: {{ checker.get_progress_percentage }}%">
-               </div>
-           </div>
-       </div>
-   </td>
+    <td>
+        <div class="position-info" data-checker-id="{{ checker.id }}">
+            <span class="position-display">{{ checker.index }}{{ checker.current_position }}</span>
+            <div class="progress" style="height: 4px;">
+                <div class="progress-bar" role="progressbar" 
+                     style="width: {{ checker.get_progress_percentage }}%">
+                </div>
+            </div>
+        </div>
+    </td>
    <td>
        {% with status=checker.get_status %}
            <span class="badge badge-{{ status.color }}">
@@ -302,6 +302,25 @@ function formatMoney(amount) {
             minimumFractionDigits: 2
         }).format(amount);
     }
+
+// Add this function to your existing JavaScript
+function updateCheckerPositions() {
+    // Find all position cells that need updating
+    document.querySelectorAll('.position-info').forEach(async (element) => {
+        const checkerId = element.dataset.checkerId;
+        try {
+            const response = await fetch(`/testapp/checkers/${checkerId}/details/`);
+            const checkerDetails = await response.json();
+            
+            // Update the position display
+            const positionDisplay = element.querySelector('.position-display');
+            positionDisplay.textContent = checkerDetails.next_available;
+            
+        } catch (error) {
+            console.error('Error updating position:', error);
+        }
+    });
+}
 
 const PaymentValidation = {
   setupPositionValidation() {
@@ -1326,6 +1345,7 @@ const AllocationSystem = {
 $(document).ready(() => {
     CheckerModal.init();
     CheckerFilters.init();
+    updateCheckerPositions();
     PaymentSystem.init();
     SignatureSystem.init();
     AllocationSystem.init();

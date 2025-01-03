@@ -309,7 +309,7 @@ class CheckCreateView(View):
             data = json.loads(request.body)
             print("Parsed JSON data:", data)
             
-            position = int(data.get('position'))
+            position = data.get('position')
             print("Position value:", position, "Type:", type(position))
             
             # Get checker and its signatures
@@ -540,14 +540,25 @@ class CheckUpdateView(View):
     def get(self, request, pk):
         try:
             check = get_object_or_404(Check, pk=pk)
-            return JsonResponse({
+
+            # Only allow editing of undelivered checks
+            if check.status not in ['draft', 'pending']:
+                return JsonResponse({
+                    'error': 'This check cannot be edited'
+                }, status=403)
+
+            # Add editable fields to the response if check is draft
+            response_data = {
                 'id': str(check.id),
                 'status': check.status,
                 'delivered_at': check.delivered_at.strftime('%Y-%m-%dT%H:%M') if check.delivered_at else None,
                 'paid_at': check.paid_at.strftime('%Y-%m-%dT%H:%M') if check.paid_at else None,
                 'cancelled_at': check.cancelled_at.strftime('%Y-%m-%dT%H:%M') if check.cancelled_at else None,
-                'cancellation_reason': check.cancellation_reason
-            })
+                'cancellation_reason': check.cancellation_reason,
+                'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
+                'observation': check.observation
+            }
+            return JsonResponse(response_data)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -555,7 +566,14 @@ class CheckUpdateView(View):
         try:
             data = json.loads(request.body)
             check = get_object_or_404(Check, pk=pk)
+
+            # Validate check can be edited
+            if check.status not in ['draft', 'pending']:
+                return JsonResponse({
+                    'error': 'This check cannot be edited'
+                }, status=403)
             
+            # Handle status updates
             if 'delivered_at' in data:
                 check.delivered_at = parse(data['delivered_at']) if data['delivered_at'] else None
                 check.delivered = bool(check.delivered_at)
@@ -570,8 +588,23 @@ class CheckUpdateView(View):
                 if check.paid_at:
                     check.status = 'paid'
             
+            # Update editable fields
+            if 'payment_due' in data:
+                check.payment_due = parse(data['payment_due']).date() if data['payment_due'] else None
+            if 'observation' in data:
+                check.observation = data['observation']
+
             check.save()
-            return JsonResponse({'message': 'Check updated successfully'})
+            
+            return JsonResponse({
+                'message': 'Check updated successfully',
+                'check': {
+                    'id': str(check.id),
+                    'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
+                    'observation': check.observation
+                }
+            })
+
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
         
@@ -596,6 +629,55 @@ class CheckCancelView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
 class CheckActionView(View):
+    def get(self, request, pk):
+        """Get check details for editing"""
+        try:
+            check = get_object_or_404(Check.objects.select_related(
+                'checker__bank_account',
+                'beneficiary',
+                'cause'
+            ).prefetch_related('allocations'), pk=pk)
+            
+            print(f"[CheckActionView] Loading check details for ID: {pk}")
+            print(f"[CheckActionView] Has allocations: {check.allocations.exists()}")
+            
+            # Only allow editing of undelivered checks
+            if check.status not in ['draft', 'pending', 'printed']:
+                return JsonResponse({
+                    'error': 'This check cannot be edited'
+                }, status=403)
+            
+            response_data = {
+                'id': str(check.id),
+                'bank': check.checker.bank_account.bank,
+                'position': check.position,
+                'reference': f"{check.checker.bank_account.bank}-{check.position}",
+                'amount': float(check.amount),
+                'amount_due': float(check.amount_due) if check.amount_due else None,
+                'beneficiary': check.beneficiary.name,
+                'status': check.status,
+                'status_display': check.get_status_display(),
+                'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
+                'observation': check.observation or '',
+                'creation_date': check.creation_date.strftime('%Y-%m-%d'),
+                'signatures': check.signatures or [],
+                'is_supplier_payment': check.is_supplier_payment,
+                'invoice_ref': check.cause.ref if check.cause else None,
+                'has_allocations': check.allocations.exists(),
+                'allocations': [{
+                    'invoice_ref': alloc.invoice.ref,
+                    'amount': float(alloc.amount)
+                } for alloc in check.allocations.all()]
+            }
+            
+            print("[CheckActionView] Returning check data:", response_data)
+            return JsonResponse(response_data)
+            
+        except Exception as e:
+            print(f"[CheckActionView] Error loading check: {str(e)}")
+            traceback.print_exc()
+            return JsonResponse({'error': str(e)}, status=400)
+        
     def post(self, request, pk):
             try:
                 check = get_object_or_404(Check, pk=pk)
@@ -658,6 +740,35 @@ class CheckActionView(View):
                         return JsonResponse({'error': 'Check must be delivered first'}, status=400)
                     check.paid_at = timezone.now()
                     check.status = 'paid'
+                
+                elif action == 'edit':
+                    # Validate check can be edited
+                    if check.status not in ['draft', 'pending', 'printed']:
+                        return JsonResponse({
+                            'error': 'This check cannot be edited'
+                        }, status=403)
+                    
+                    # Update editable fields
+                    if 'payment_due' in data:
+                        try:
+                            check.payment_due = parse(data['payment_due']).date() if data['payment_due'] else None
+                        except ValueError as e:
+                            return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+                            
+                    if 'observation' in data:
+                        check.observation = data['observation']
+
+                    check.save()
+                    print(f"[CheckActionView] Check updated successfully: payment_due={check.payment_due}, observation={check.observation}")
+                    
+                    return JsonResponse({
+                        'message': 'Check updated successfully',
+                        'check': {
+                            'id': str(check.id),
+                            'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
+                            'observation': check.observation
+                        }
+                    })
 
                 check.save()
                 return JsonResponse({'status': 'success'})

@@ -358,7 +358,11 @@
                         </td>
                                 <td>{{ invoice.date }}</td>
                                 <td>{{ invoice.ref }}</td>
-                                <td>{{ invoice.supplier.name }}</td>
+                                <td>
+                                    <a href="{% url 'supplier-detail' invoice.supplier.pk %}" class="text-primary">
+                                        {{ invoice.supplier.name }}
+                                    </a>
+                                </td>
                                 <td>{{ invoice.fiscal_label }}</td>
                                 <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
                                 <td>

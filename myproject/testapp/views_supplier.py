@@ -1,9 +1,11 @@
+from datetime import timezone
+from decimal import Decimal
 import traceback
 from django.http import JsonResponse
 from django.urls import reverse_lazy
 from django.views import View
-from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Supplier, get_supplier_balance
+from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
+from .models import Invoice, Supplier, get_supplier_balance
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import models
 from django.shortcuts import get_object_or_404, render, redirect
@@ -75,3 +77,87 @@ class SupplierBalanceView(View):
             print(f"Error in SupplierBalanceView: {str(e)}")
             print(f"Traceback: {traceback.format_exc()}")
             return JsonResponse({'error': str(e)}, status=400)
+        
+# Get supplier details
+class SupplierDetailView(DetailView):
+    model = Supplier
+    template_name = 'supplier/supplier_detail.html'
+    
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        supplier = self.get_object()
+        
+        # Get supplier balance info
+        balance = get_supplier_balance(supplier)
+        context['balance'] = balance
+        
+        # Get supplier's invoices using same logic as invoice list
+        invoices = Invoice.objects.filter(
+            supplier=supplier,
+            type='invoice'  
+        )
+        
+        # Add all invoice list filters
+        filters = {}
+        
+        # Date Range Filter
+        date_from = self.request.GET.get('date_from')
+        date_to = self.request.GET.get('date_to')
+        if date_from:
+            invoices = invoices.filter(date__gte=date_from)
+        if date_to:
+            invoices = invoices.filter(date__lte=date_to)
+
+        # Amount Range Filter  
+        amount_min = self.request.GET.get('amount_min')
+        amount_max = self.request.GET.get('amount_max')
+        if amount_min or amount_max:
+            amount_min = Decimal(amount_min if amount_min else '0')
+            amount_max = Decimal(amount_max if amount_max else '999999999')
+            invoices = invoices.filter(total_amount__gte=amount_min, total_amount__lte=amount_max)
+
+        # Payment Status Filter
+        payment_status = self.request.GET.get('payment_status')
+        if payment_status:
+            invoices = invoices.filter(payment_status=payment_status)
+
+        # Export Status Filter
+        export_status = self.request.GET.get('export_status')
+        if export_status == 'exported':
+            invoices = invoices.filter(exported_at__isnull=False)
+        elif export_status == 'not_exported':
+            invoices = invoices.filter(exported_at__isnull=True)
+
+        # Status Filters
+        has_pending_checks = self.request.GET.get('has_pending_checks')
+        if has_pending_checks:
+            invoices = invoices.filter(check__status='pending').distinct()
+
+        has_delivered_unpaid = self.request.GET.get('has_delivered_unpaid')
+        if has_delivered_unpaid:
+            invoices = invoices.filter(check__status='delivered').exclude(check__status='paid').distinct()
+
+        # Credit Note Status
+        credit_note_status = self.request.GET.get('credit_note_status')
+        if credit_note_status == 'has_credit_notes':
+            invoices = invoices.filter(credit_notes__isnull=False).distinct()
+        elif credit_note_status == 'no_credit_notes':
+            invoices = invoices.filter(credit_notes__isnull=True)
+        elif credit_note_status == 'partially_credited':
+            invoices = invoices.filter(
+                credit_notes__isnull=False,
+                payment_status__in=['not_paid', 'partially_paid']
+            ).distinct()
+
+        # Overdue Filter
+        is_overdue = self.request.GET.get('is_overdue')
+        if is_overdue:
+            today = timezone.now().date()
+            invoices = invoices.filter(
+                payment_due_date__lt=today,
+                payment_status__in=['not_paid', 'partially_paid']
+            )
+
+        context['invoices'] = invoices.order_by('-date').select_related('supplier')
+        context['active_filters'] = filters
+        return context

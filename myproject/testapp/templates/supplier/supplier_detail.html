@@ -1,0 +1,1643 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load accounting_filters %}
+
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>{{ supplier.name }}</h2>
+        <div>
+            <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning">
+                <i class="fas fa-edit"></i> Edit
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total Invoiced</h6>
+                    <h4 class="card-title mb-0">{{ balance.payable|floatformat:2|intcomma }} MAD</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Total Paid</h6>
+                    <h4 class="card-title mb-0">{{ balance.paid|floatformat:2|intcomma }} MAD</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Balance Due</h6>
+                    <h4 class="card-title mb-0">{{ balance.balance|floatformat:2|intcomma }} MAD</h4>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">Unpaid Invoices</h6>
+                    <h4 class="card-title mb-0">{{ balance.invoices_count }}</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <!-- Payment Status Distribution -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Payment Status Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="statusChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <!-- Monthly Trend -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">Monthly Invoice Trend</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-outline-primary" id="prevMonths">
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-primary" id="nextMonths">
+                            <i class="fas fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <!-- Quick Stats -->
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card bg-gradient-primary text-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Average Invoice Amount</h6>
+                    <h4 class="card-title mb-0" id="avgInvoiceAmount">Calculating...</h4>
+                </div>
+            </div>
+        </div>
+    
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card bg-gradient-success text-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Payment Success Rate</h6>
+                    <h4 class="card-title mb-0" id="paymentSuccessRate">Calculating...</h4>
+                </div>
+            </div>
+        </div>
+    
+        <div class="col-lg-4 col-md-6 mb-4">
+            <div class="card bg-gradient-warning text-white shadow-sm">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2">Average Payment Time</h6>
+                    <h4 class="card-title mb-0" id="avgPaymentTime">Calculating...</h4>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">Top 10 Products by Invoice Count</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="topProductsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">VAT Distribution</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="vatChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filter Panel - Reusing invoice list filters -->
+    <div class="filter-section mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <button class="btn btn-outline-secondary" id="toggle-filters">
+                <i class="fas fa-filter"></i> Filters
+                <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
+            </button>
+            <div class="active-filters-tags"></div>
+        </div>
+
+        <div class="filter-panel card mt-3">
+            <div class="card-body">
+                <form id="filter-form">
+                    <div class="row">
+                        <!-- Date Range -->
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Date From</label>
+                                <input type="date" class="form-control" name="date_from">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Date To</label>
+                                <input type="date" class="form-control" name="date_to">
+                            </div>
+                        </div>
+                        
+                        <!-- Amount Range -->
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Min Amount</label>
+                                <input type="number" class="form-control" name="amount_min">
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label>Max Amount</label>
+                                <input type="number" class="form-control" name="amount_max">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <!-- Payment Status -->
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Payment Status</label>
+                                <select class="form-control" name="payment_status">
+                                    <option value="">All</option>
+                                    <option value="not_paid">Not Paid</option>
+                                    <option value="partially_paid">Partially Paid</option>
+                                    <option value="paid">Paid</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Credit Note Status -->
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Credit Note Status</label>
+                                <select class="form-control" name="credit_note_status">
+                                    <option value="">All</option>
+                                    <option value="has_credit_notes">Has Credit Notes</option>
+                                    <option value="no_credit_notes">No Credit Notes</option>
+                                    <option value="partially_credited">Partially Credited</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <button type="button" class="btn btn-primary" id="apply-filters">Apply Filters</button>
+                            <button type="button" class="btn btn-secondary" id="reset-filters">Reset</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Invoices Table -->
+    <div class="table-responsive" id="invoice-table-wrapper">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Reference</th>
+                    <th>Fiscal Label</th>
+                    <th>Raw Amount</th>
+                    <th>Tax Rate (%)</th>
+                    <th>Tax Amount</th>
+                    <th>Total Amount (Incl. Tax)</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>{{ invoice.date }}</td>
+                    <td>{{ invoice.ref }}</td>
+                    <td>{{ invoice.fiscal_label }}</td>
+                    <td class="text-right">{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                    <td>
+                        {% with invoice.products.all|length as product_count %}
+                            {% for product in invoice.products.all %}
+                                {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                            {% endfor %}
+                        {% endwith %}
+                    </td>
+                    <td class="text-right">
+                        {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                    </td>
+                    <td class="text-right">
+                        {{ invoice.total_amount|floatformat:2|intcomma }}
+                        {% if invoice.credit_notes.exists %}
+                            <br>
+                            <small class="text-muted">
+                                Net: {{ invoice.net_amount|floatformat:2|intcomma }}
+                            </small>
+                            <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
+                                    data-invoice="{{ invoice.id }}">
+                                <i class="fas fa-receipt"></i>
+                            </button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if invoice.payment_status == 'paid' %}
+                            <span class="badge badge-success">
+                                <i class="fas fa-lock"></i> Paid
+                            </span>
+                        {% else %}
+                            <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
+                                {% if invoice.payment_status == 'partially_paid' %}
+                                    Partially Paid 
+                                    <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                                {% else %}
+                                    Not Paid
+                                {% endif %}
+                            </span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="btn-group">
+                            <button class="btn btn-sm btn-info" 
+                                    data-toggle="modal" 
+                                    data-target="#invoiceDetailsModal" 
+                                    data-invoice="{{ invoice.id }}">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                            <button class="btn btn-sm btn-primary" 
+                                    data-toggle="modal" 
+                                    data-target="#paymentDetailsModal" 
+                                    data-invoice="{{ invoice.id }}">
+                                <i class="fas fa-money-bill"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% if invoice.credit_notes.exists %}
+                    <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
+                        <!-- Your existing credit notes row content -->
+                    </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Invoice Details Modal -->
+<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="invoiceDetailsModalLabel">
+                    <i class="fas fa-info-circle"></i>Invoice Details
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body modal-scrollable-content">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Product</th>
+                            <th>Unit Price</th>
+                            <th>Quantity</th>
+                            <th>VAT Rate</th>
+                            <th>Reduction Rate</th>
+                            <th>Raw Price</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoice-details-table">
+                        <!-- Filled by JavaScript -->
+                    </tbody>
+                </table>
+                <div id="vat-summary"></div>
+                <div id="total-amount-summary"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">
+                    <i class="fas fa-check"></i> Done
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payment Details Modal -->
+<div class="modal fade" id="paymentDetailsModal">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill"></i> 
+                    Payment Details
+                    <small id="invoice-ref" class="text-muted"></small>
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Summary Cards -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount Due</h6>
+                                <h4 id="amount-due" class="card-title mb-0 text-primary"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount Paid</h6>
+                                <h4 id="amount-paid" class="card-title mb-0 text-success"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Amount to Issue</h6>
+                                <h4 id="amount-to-issue" class="card-title mb-0 text-info"></h4>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card shadow-sm">
+                            <div class="card-body">
+                                <h6 class="card-subtitle mb-2 text-muted">Remaining</h6>
+                                <h4 id="remaining-amount" class="card-title mb-0 text-warning"></h4>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Progress Bar -->
+                <div class="progress mb-4" style="height: 25px;">
+                    <div id="payment-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                </div>
+
+                <!-- Detailed Breakdown -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span>Pending Payments:</span>
+                            <h5 id="pending-amount" class="mb-0"></h5>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>Delivered Payments:</span>
+                            <h5 id="delivered-amount" class="mb-0"></h5>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Checks Table -->
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Reference</th>
+                                <th>Amount</th>
+                                <th>Created</th>
+                                <th>Delivered</th>
+                                <th>Paid</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="payment-checks-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Credit Note Modal -->
+<div class="modal fade" id="creditNoteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-receipt"></i> Create Credit Note
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Credit Note Info -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="credit-note-ref">Credit Note Reference *</label>
+                        <input type="text" id="credit-note-ref" class="form-control" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="credit-note-date">Date *</label>
+                        <input type="date" id="credit-note-date" class="form-control" required>
+                    </div>
+                </div>
+
+                <!-- Original Invoice Info -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>Original Invoice</h6>
+                                <div id="original-invoice-details"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Net Balance After Credit</h6>
+                                <div id="net-balance-details"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Products Selection -->
+                <form id="credit-note-form">
+                    <input type="hidden" id="original-invoice-id">
+                    <table class="table" id="products-table">
+                        <thead>
+                            <tr>
+                                <th>Product</th>
+                                <th>Original Qty</th>
+                                <th>Already Credited</th>
+                                <th>Available</th>
+                                <th>Credit Qty</th>
+                                <th>Unit Price</th>
+                                <th>Subtotal</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                        <tfoot>
+                            <tr>
+                                <th colspan="6" class="text-right">Total Credit Amount:</th>
+                                <th class="text-right" id="total-credit-amount">0.00</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Cancel
+                </button>
+                <button type="button" class="btn btn-info btn-sm" id="save-credit-note">
+                    <i class="fas fa-save"></i> Create Credit Note
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Accounting Summary Modal -->
+<div class="modal fade" id="accountingSummaryModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-book"></i> Accounting Summary
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="accordion" id="accountingEntries">
+                    <!-- Original Invoice Section -->
+                    <div class="card">
+                        <div class="card-header bg-primary text-white">
+                            <h6 class="mb-0">Original Invoice Entries</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Account</th>
+                                        <th>Label</th>
+                                        <th class="text-right">Debit</th>
+                                        <th class="text-right">Credit</th>
+                                        <th>Reference</th>
+                                        <th>Journal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="originalEntries"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Credit Notes Section -->
+                    <div id="creditNotesSection" class="card mt-3 d-none">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0">Credit Note Entries</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <table class="table table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Account</th>
+                                        <th>Label</th>
+                                        <th class="text-right">Debit</th>
+                                        <th class="text-right">Credit</th>
+                                        <th>Reference</th>
+                                        <th>Journal</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="creditNoteEntries"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Net Effect Section -->
+                    <div class="card mt-3">
+                        <div class="card-header bg-success text-white">
+                            <h6 class="mb-0">Net Effect</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <h6>Original Amount</h6>
+                                    <p id="originalTotal" class="h4"></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Credit Notes</h6>
+                                    <p id="creditTotal" class="h4 text-danger"></p>
+                                </div>
+                                <div class="col-md-4">
+                                    <h6>Net Amount</h6>
+                                    <p id="netTotal" class="h4 font-weight-bold"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    /* Gradient backgrounds */
+    .bg-gradient-primary {
+        background: linear-gradient(45deg, #4e73df 0%, #224abe 100%);
+    }
+    
+    .bg-gradient-success {
+        background: linear-gradient(45deg, #1cc88a 0%, #13855c 100%);
+    }
+    
+    .bg-gradient-warning {
+        background: linear-gradient(45deg, #f6c23e 0%, #dda20a 100%);
+    }
+    
+    .bg-gradient-danger {
+        background: linear-gradient(45deg, #e74a3b 0%, #be2617 100%);
+    }
+    
+    /* Card hover effects */
+    .card {
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    }
+    
+    /* Chart container */
+    .chart-container {
+        position: relative;
+        margin: auto;
+    }
+    
+    /* Filter panel fix */
+    .filter-panel {
+        display: none;
+        margin-top: 1rem;
+        transition: all 0.3s ease;
+    }
+
+.ui-autocomplete {
+    position: absolute;
+    z-index: 2000;
+    background-color: white;
+    border: 1px solid #ccc;
+    max-height: 200px;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.ui-menu-item {
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.ui-menu-item:hover {
+    background-color: #f8f9fa;
+}
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<script>
+
+    const setupCharts = () => {
+        const ctx1 = document.getElementById('statusChart').getContext('2d');
+        const ctx2 = document.getElementById('trendChart').getContext('2d');
+        const ctx3 = document.getElementById('topProductsChart').getContext('2d');
+        const ctx4 = document.getElementById('vatChart').getContext('2d');
+
+        // Get all invoice rows
+        const invoices = Array.from(document.querySelectorAll('tbody tr:not(.credit-notes-row)'));
+        
+        // Original status chart code (keep this as is)
+        const statusCounts = {
+            paid: invoices.filter(tr => tr.querySelector('.badge-success')).length,
+            partially: invoices.filter(tr => tr.querySelector('.badge-warning')).length,
+            unpaid: invoices.filter(tr => tr.querySelector('.badge-danger')).length
+        };
+
+        new Chart(ctx1, {
+            type: 'doughnut',
+            data: {
+                labels: ['Paid', 'Partially Paid', 'Unpaid'],
+                datasets: [{
+                    data: [statusCounts.paid, statusCounts.partially, statusCounts.unpaid],
+                    backgroundColor: ['#1cc88a', '#f6c23e', '#e74a3b']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+
+        // Your new Monthly Trend code
+
+        // Monthly Trend with navigation
+        let monthlyTrendChart;
+        let currentMonthIndex = 0;
+        const updateMonthlyTrendChart = (startIndex = 0) => {
+    const monthlyData = {};
+    const rows = document.querySelectorAll('tbody tr:not(.credit-notes-row)');
+    
+    rows.forEach(tr => {
+        const dateStr = tr.cells[0].textContent.trim();
+        const date = new Date(dateStr);
+        const month = date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' });
+        // Use total amount (cell 6) and check for net amount display
+        const netCell = tr.cells[6];
+        const netAmountText = netCell.querySelector('small')?.textContent.replace('Net: ', '') || netCell.textContent;
+        const amount = parseFloat(netAmountText.replace(/[^0-9.-]+/g, ""));
+        const isCredit = tr.querySelector('.badge-info')?.textContent.includes('Credit Note');
+        
+        if (!monthlyData[month]) {
+            monthlyData[month] = { invoiced: 0, credited: 0 };
+        }
+        
+        if (isCredit) {
+            monthlyData[month].credited += amount;
+        } else {
+            monthlyData[month].invoiced += amount;
+        }
+    });
+
+    const sortedMonths = Object.keys(monthlyData).sort((a, b) => {
+        const dateA = new Date('20' + a.slice(-2) + ' ' + a.slice(0, 3));
+        const dateB = new Date('20' + b.slice(-2) + ' ' + b.slice(0, 3));
+        return dateA - dateB;
+    });
+
+    // Get 6 months of data starting from startIndex
+    const displayMonths = sortedMonths.slice(startIndex, startIndex + 6);
+
+    if (monthlyTrendChart) {
+        monthlyTrendChart.destroy();
+    }
+
+    monthlyTrendChart = new Chart(ctx2, {
+        type: 'bar',
+        data: {
+            labels: displayMonths,
+            datasets: [{
+                label: 'Invoiced Amount',
+                data: displayMonths.map(m => monthlyData[m].invoiced),
+                backgroundColor: '#4e73df',
+                order: 1
+            }, {
+                label: 'Net Amount',
+                data: displayMonths.map(m => monthlyData[m].invoiced - monthlyData[m].credited),
+                borderColor: '#1cc88a',
+                type: 'line',
+                order: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom'
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return new Intl.NumberFormat('fr-FR', {
+                                style: 'currency',
+                                currency: 'MAD',
+                                maximumFractionDigits: 0
+                            }).format(context.raw);
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return new Intl.NumberFormat('fr-FR', {
+                                style: 'currency',
+                                currency: 'MAD',
+                                maximumFractionDigits: 0
+                            }).format(value);
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Update navigation buttons
+    $('#prevMonths').prop('disabled', startIndex === 0);
+    $('#nextMonths').prop('disabled', startIndex + 6 >= sortedMonths.length);
+    
+    return { monthlyData, sortedMonths }; // Return data for navigation
+};
+
+// Initialize chart and get data
+const { monthlyData, sortedMonths } = updateMonthlyTrendChart(0);
+
+// Navigation button handlers
+$('#prevMonths').click(() => {
+    currentMonthIndex = Math.max(0, currentMonthIndex - 6);
+    updateMonthlyTrendChart(currentMonthIndex);
+});
+
+$('#nextMonths').click(() => {
+    const maxIndex = sortedMonths.length - 6;
+    currentMonthIndex = Math.min(maxIndex, currentMonthIndex + 6);
+    updateMonthlyTrendChart(currentMonthIndex);
+});
+
+
+        const allAmounts = invoices.map(tr => 
+            parseFloat(tr.cells[6].textContent.replace(/[^0-9.-]+/g, ""))
+        );
+        const avgAmount = allAmounts.reduce((a, b) => a + b, 0) / allAmounts.length;
+        const paymentRate = (statusCounts.paid / invoices.length) * 100;
+
+        $('#avgInvoiceAmount').text(new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'MAD',
+            maximumFractionDigits: 0
+        }).format(avgAmount));
+
+        $('#paymentSuccessRate').text(`${paymentRate.toFixed(1)}%`);
+        
+        // Rough estimation of payment time (you might want to calculate this from actual data)
+        const avgDays = Math.round((statusCounts.paid * 15 + statusCounts.partially * 30 + statusCounts.unpaid * 45) 
+            / invoices.length);
+        $('#avgPaymentTime').text(`${avgDays} days`);
+
+        // Update the VAT distribution calculation
+        const vatData = {};
+const processedVatInvoices = new Set();
+
+console.log("=== Starting VAT Calculation ===");
+const rawTotalCells = document.querySelectorAll('tbody tr:not(.credit-notes-row) td:nth-child(4)');
+console.log("Found raw total cells:", rawTotalCells.length);
+
+invoices.forEach(tr => {
+    const invoiceId = tr.querySelector('[data-target="#invoiceDetailsModal"]')?.dataset.invoice;
+    if (!invoiceId || processedVatInvoices.has(invoiceId)) return;
+    
+    processedVatInvoices.add(invoiceId);
+    const rawTotalCell = tr.querySelector('td:nth-child(4)');
+    const rawTotal = rawTotalCell ? parseFloat(rawTotalCell.textContent.replace(/[^0-9.-]+/g, "")) : 0;
+    console.log(`Processing invoice ${invoiceId} with raw total: ${rawTotal}`);
+    
+    $.ajax({
+        url: "{% url 'invoice-details' %}",
+        data: { 'invoice_id': invoiceId },
+        async: false,
+        success: function(data) {
+            const isCredit = data.type === 'credit_note';
+            
+            data.products.forEach(product => {
+                const rate = parseFloat(product.vat_rate);
+                const rawAmount = parseFloat(product.raw_price.replace(/[^0-9.-]+/g, ""));
+                console.log(`Product ${product.name}: Rate ${rate}%, Raw Amount ${rawAmount}`);
+                
+                if (!vatData[rate]) {
+                    vatData[rate] = {
+                        taxableAmount: 0,
+                        vatAmount: 0
+                    };
+                }
+                
+                if (isCredit) {
+                    vatData[rate].taxableAmount -= rawAmount;
+                } else {
+                    vatData[rate].taxableAmount += rawAmount;
+                }
+                vatData[rate].vatAmount = vatData[rate].taxableAmount * (rate / 100);
+                
+                console.log(`Updated VAT data for rate ${rate}:`, vatData[rate]);
+            });
+        }
+    });
+});
+
+console.log("Final VAT Data:", vatData);
+
+// Update the VAT chart
+new Chart(ctx4, {
+    type: 'bar',
+    data: {
+        labels: Object.keys(vatData).map(rate => `${rate}% VAT`),
+        datasets: [{
+            label: 'Taxable Amount',
+            data: Object.values(vatData).map(d => d.taxableAmount),
+            backgroundColor: '#4e73df',
+            barPercentage: 0.7,
+        }, {
+            label: 'VAT Amount',
+            data: Object.values(vatData).map(d => d.vatAmount),
+            backgroundColor: '#1cc88a',
+            barPercentage: 0.7,
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const value = new Intl.NumberFormat('fr-FR', {
+                            style: 'currency',
+                            currency: 'MAD',
+                            maximumFractionDigits: 0
+                        }).format(context.raw);
+                        return `${context.dataset.label}: ${value}`;
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return new Intl.NumberFormat('fr-FR', {
+                            style: 'currency',
+                            currency: 'MAD',
+                            maximumFractionDigits: 0
+                        }).format(value);
+                    }
+                }
+            }
+        }
+    }
+});
+
+        // Update the products data calculation
+        const productsData = {};
+const processedInvoices = new Set(); // Track processed invoices to avoid double counting
+
+invoices.forEach(tr => {
+    const invoiceId = tr.querySelector('[data-target="#invoiceDetailsModal"]')?.dataset.invoice;
+    if (!invoiceId || processedInvoices.has(invoiceId)) return;
+    
+    processedInvoices.add(invoiceId);
+    
+    $.ajax({
+        url: "{% url 'invoice-details' %}",
+        data: { 'invoice_id': invoiceId },
+        async: false,
+        success: function(data) {
+            const isCredit = data.type === 'credit_note';
+            data.products.forEach(product => {
+                const productName = product.name;
+                if (!productsData[productName]) {
+                    productsData[productName] = {
+                        count: 0,
+                        totalAmount: 0,
+                        quantity: 0,
+                        unitPrice: 0
+                    };
+                }
+
+                const amount = parseFloat(product.unit_price) * parseFloat(product.quantity);
+                if (isCredit) {
+                    productsData[productName].totalAmount -= amount;
+                    productsData[productName].quantity -= parseFloat(product.quantity);
+                } else {
+                    productsData[productName].count++;
+                    productsData[productName].totalAmount += amount;
+                    productsData[productName].quantity += parseFloat(product.quantity);
+                    productsData[productName].unitPrice += parseFloat(product.unit_price);
+                }
+            });
+        }
+    });
+});
+
+// Calculate averages correctly
+Object.values(productsData).forEach(product => {
+    if (product.count > 0) {
+        product.averageUnitPrice = product.totalAmount / product.quantity;
+    }
+});
+
+// Sort by total amount and get top 10
+const topProducts = Object.entries(productsData)
+    .sort((a, b) => b[1].totalAmount - a[1].totalAmount)
+    .slice(0, 10);
+
+// Update the chart
+new Chart(ctx3, {
+    type: 'bar',
+    data: {
+        labels: topProducts.map(p => p[0]),
+        datasets: [{
+            label: 'Average Unit Price',
+            data: topProducts.map(p => p[1].averageUnitPrice),
+            backgroundColor: '#4e73df',
+            barPercentage: 0.5,
+            yAxisID: 'y1'
+        }, {
+            label: 'Total Amount',
+            data: topProducts.map(p => p[1].totalAmount),
+            backgroundColor: '#1cc88a',
+            barPercentage: 0.5,
+            yAxisID: 'y2'
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom'
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        const value = new Intl.NumberFormat('fr-FR', {
+                            style: 'currency',
+                            currency: 'MAD',
+                            maximumFractionDigits: 2
+                        }).format(context.raw);
+                        return `${context.dataset.label}: ${value}`;
+                    }
+                }
+            }
+        },
+        scales: {
+            y1: {
+                type: 'linear',
+                position: 'left',
+                beginAtZero: true,
+                ticks: {
+                    callback: function(value) {
+                        return new Intl.NumberFormat('fr-FR', {
+                            style: 'currency',
+                            currency: 'MAD',
+                            maximumFractionDigits: 2
+                        }).format(value);
+                    }
+                }
+            },
+            y2: {
+                type: 'linear',
+                position: 'right',
+                beginAtZero: true,
+                grid: {
+                    drawOnChartArea: false
+                },
+                ticks: {
+                    callback: function(value) {
+                        return new Intl.NumberFormat('fr-FR', {
+                            style: 'currency',
+                            currency: 'MAD',
+                            maximumFractionDigits: 0
+                        }).format(value);
+                    }
+                }
+            }
+        }
+        }
+    });
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("Script block loaded");
+        
+        // Initialize filters first
+        setupCharts();
+
+        // Credit note toggle
+        $(document).on('click', '.toggle-credit-notes', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const invoiceId = $(this).data('invoice');
+            const icon = $(this).find('i');
+            const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+            
+            creditNotesRow.toggleClass('d-none');
+            icon.toggleClass('fa-receipt fa-times-circle');
+        });
+
+        // Modal triggers
+        $(document).on('click', '[data-target="#invoiceDetailsModal"]', function() {
+            const invoiceId = $(this).data('invoice');
+            ModalHandlers.loadInvoiceDetails(invoiceId);
+        });
+
+        $(document).on('click', '[data-target="#paymentDetailsModal"]', function() {
+            const invoiceId = $(this).data('invoice');
+            ModalHandlers.loadPaymentDetails(invoiceId);
+        });
+
+        // Initialize all tooltips
+        $('[data-toggle="tooltip"]').tooltip();
+        });
+
+        // 1. Utility Functions - These are used throughout the code
+    const Utils = {
+        formatMoney: function(amount) {
+            return new Intl.NumberFormat('fr-FR', {
+                style: 'currency',
+                currency: 'MAD',
+                minimumFractionDigits: 2
+            }).format(amount);
+        },
+        
+        formatStatus: function(status) {
+            return status.charAt(0).toUpperCase() + status.slice(1);
+        }
+    };
+
+    // 2. Modal Handlers - All modal-related functions
+    const ModalHandlers = {
+        // Invoice Details Modal
+        loadInvoiceDetails: function(invoiceId) {
+            $.ajax({
+                url: "{% url 'invoice-details' %}",
+                data: { 'invoice_id': invoiceId },
+                success: function(data) {
+                    $('#invoice-details-table').empty();
+                    data.products.forEach(product => {
+                        $('#invoice-details-table').append(`
+                            <tr>
+                                <td>${product.name}</td>
+                                <td>${product.unit_price}</td>
+                                <td>${product.quantity}</td>
+                                <td>${product.vat_rate}</td>
+                                <td>${product.reduction_rate}</td>
+                                <td>${product.raw_price}</td>
+                            </tr>
+                        `);
+                    });
+                    
+                    $('#vat-summary').empty();
+                    data.vat_subtotals.forEach(vatSubtotal => {
+                        $('#vat-summary').append(
+                            `<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`
+                        );
+                    });
+                    
+                    $('#total-amount-summary').html(`
+                        <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
+                        <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
+                        <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
+                    `);
+                }
+            });
+        },
+
+        getProgressBarClass: function(percentage) {
+            if (percentage >= 100) return 'bg-success';
+            if (percentage > 50) return 'bg-warning';
+            return 'bg-danger';
+        },
+        
+        getStatusBadge: function(status) {
+            const badges = {
+                'pending': ['secondary', 'clock'],
+                'delivered': ['warning', 'truck'],
+                'paid': ['success', 'check-circle'],
+                'rejected': ['danger', 'times-circle'],
+                'cancelled': ['dark', 'ban']
+            };
+
+            const [color, icon] = badges[status] || ['secondary', 'question-circle'];
+            
+            return `
+                <span class="badge badge-${color}">
+                    <i class="fas fa-${icon} mr-1"></i>
+                    ${status.charAt(0).toUpperCase() + status.slice(1)}
+                </span>
+            `;
+        },
+
+        loadPaymentDetails: function(invoiceId) {
+            console.log("\n=== Loading Payment Details ===");
+            console.log("Invoice ID:", invoiceId);
+            
+            $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
+                console.log("Received payment data:", data);
+                const details = data.payment_details;
+                console.log("Payment details:", details);
+                
+                // Update summary cards with animations
+                const updateAmount = (elementId, amount) => {
+                    console.log(`Updating ${elementId} with amount:`, amount);
+                    const element = $(`#${elementId}`);
+                    element.fadeOut(200, function() {
+                        $(this).text(Utils.formatMoney(amount)).fadeIn(200);
+                    });
+                };
+
+                updateAmount('amount-due', details.total_amount);
+                updateAmount('amount-paid', details.paid_amount);
+                updateAmount('amount-to-issue', details.amount_to_issue);
+                updateAmount('pending-amount', details.pending_amount);
+                updateAmount('delivered-amount', details.delivered_amount);
+                updateAmount('remaining-amount', details.remaining_to_pay);
+
+                // Update progress bar
+                const progressBar = $('#payment-progress');
+                const percentage = details.payment_percentage;
+                console.log("Payment percentage:", percentage);
+                
+                progressBar
+                    .css('width', '0%')
+                    .removeClass('bg-success bg-warning bg-danger')
+                    .addClass(this.getProgressBarClass(percentage))
+                    .animate(
+                        { width: `${percentage}%` }, 
+                        800, 
+                        function() {
+                            $(this).text(`${(details.payment_percentage || 0).toFixed(1)}%`);
+                        }
+                    );
+
+                console.log("Updating checks table with:", data.checks);
+                this.updateChecksTable(data.checks);
+                
+                $('#paymentDetailsModal').modal('show');
+            }.bind(this)).fail(function(error) {
+                console.error("Error loading payment details:", error);
+                alert('Failed to load payment details');
+            });
+        },
+
+        updateChecksTable: function(checks) {
+            const tbody = $('#payment-checks-tbody');
+            tbody.empty();
+
+            if (checks.length === 0) {
+                tbody.append(`
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            <i class="fas fa-info-circle"></i> No checks issued yet
+                        </td>
+                    </tr>
+                `);
+                return;
+            }
+
+            checks.forEach(check => {
+                const row = document.createElement('tr');
+                
+                // Common status badge
+                const statusBadge = ModalHandlers.getStatusBadge(check.status);
+                
+                // Different display for direct vs allocated payments
+                if (check.type === 'direct') {
+                    row.innerHTML = `
+                        <td>
+                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                            ${check.reference}
+                        </td>
+                        <td class="text-right font-weight-bold">
+                            ${Utils.formatMoney(check.amount)}
+                        </td>
+                        <td>${check.created_at}</td>
+                        <td>${check.delivered_at || '-'}</td>
+                        <td>${check.paid_at || '-'}</td>
+                        <td>${statusBadge}</td>
+                    `;
+                } else {  // allocation
+                    row.innerHTML = `
+                        <td>
+                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                            ${check.reference}
+                            <span class="badge badge-info ml-2">Allocation</span>
+                            <br>
+                            <small class="text-muted">
+                                (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
+                            </small>
+                        </td>
+                        <td class="text-right font-weight-bold">
+                            ${Utils.formatMoney(check.allocated_amount)}
+                        </td>
+                        <td>${check.created_at}</td>
+                        <td>${check.delivered_at || '-'}</td>
+                        <td>${check.paid_at || '-'}</td>
+                        <td>${statusBadge}</td>
+                    `;
+                }
+                
+                tbody.append(row);
+            });
+        },
+
+        showAccountingSummary: function(invoiceId) {
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/accounting-summary/`,
+                method: 'GET',
+                success: function(data) {
+                    // Populate the modal
+                    $('#originalEntries').empty();
+                    data.original_entries.forEach(entry => {
+                        $('#originalEntries').append(this.createAccountingRow(entry));
+                    });
+
+                    if (data.credit_note_entries.length > 0) {
+                        $('#creditNotesSection').removeClass('d-none');
+                        $('#creditNoteEntries').empty();
+                        data.credit_note_entries.forEach(entry => {
+                            $('#creditNoteEntries').append(this.createAccountingRow(entry));
+                        });
+                    } else {
+                        $('#creditNotesSection').addClass('d-none');
+                    }
+
+                    $('#originalTotal').text(Utils.formatMoney(data.totals.original));
+                    $('#creditTotal').text(Utils.formatMoney(data.totals.credit_notes));
+                    $('#netTotal').text(Utils.formatMoney(data.totals.net));
+
+                    $('#accountingSummaryModal').modal('show');
+                }.bind(this),
+                error: function(xhr) {
+                    alert('Failed to load accounting summary: ' + xhr.responseText);
+                }
+            });
+        },
+
+        createAccountingRow: function(entry) {
+            return `
+                <tr>
+                    <td>${entry.date}</td>
+                    <td>${entry.account_code}</td>
+                    <td>${entry.label}</td>
+                    <td class="text-right">${entry.debit ? Utils.formatMoney(entry.debit) : ''}</td>
+                    <td class="text-right">${entry.credit ? Utils.formatMoney(entry.credit) : ''}</td>
+                    <td>${entry.reference}</td>
+                    <td>${entry.journal}</td>
+                </tr>
+            `;
+        }
+    };
+
+    // 3. Credit Note Handlers
+    const CreditNoteHandlers = {
+        // Store the initial net amount for calculations
+        initialNetAmount: 0,
+
+        initializeQuantityHandlers: function() {
+            $('.credit-quantity').on('input', function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                const available = parseFloat($(this).data('available'));
+                
+                if (quantity > available) {
+                    $(this).val(available);
+                    return;
+                }
+                
+                CreditNoteHandlers.updateSubtotalsAndTotal();
+            });
+        },
+
+        updateNetBalance: function(creditAmount) {
+            $('#net-balance-details').html(`
+                <p><strong>Original Amount:</strong> ${Utils.formatMoney(this.initialNetAmount)}</p>
+                <p><strong>Credit Amount:</strong> ${Utils.formatMoney(creditAmount)}</p>
+                <p class="font-weight-bold">Net Balance: ${Utils.formatMoney(this.initialNetAmount - creditAmount)}</p>
+            `);
+        },
+
+        updateSubtotalsAndTotal: function() {
+            let total = 0;
+            $('.credit-quantity').each(function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                const unitPrice = parseFloat($(this).data('unit-price'));
+                const subtotal = quantity * unitPrice;
+                
+                $(this).closest('tr').find('.subtotal').text(Utils.formatMoney(subtotal));
+                total += subtotal;
+            });
+
+            $('#total-credit-amount').text(Utils.formatMoney(total));
+            this.updateNetBalance(total);
+        },
+
+        saveCreditNote: function() {
+            if (!$('#credit-note-ref').val()) {
+                alert('Please enter a credit note reference');
+                return;
+            }
+
+            const products = [];
+            $('.credit-quantity').each(function() {
+                const quantity = parseFloat($(this).val()) || 0;
+                if (quantity > 0) {
+                    products.push({
+                        product_id: $(this).data('product-id'),
+                        quantity: quantity
+                    });
+                }
+            });
+            
+            if (products.length === 0) {
+                alert('Please select at least one product to credit');
+                return;
+            }
+
+            $.ajax({
+                url: '/testapp/invoices/create-credit-note/',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                data: JSON.stringify({
+                    original_invoice_id: $('#original-invoice-id').val(),
+                    ref: $('#credit-note-ref').val(),
+                    date: $('#credit-note-date').val(),
+                    products: products
+                }),
+                success: function(response) {
+                    location.reload();
+                },
+                error: function(xhr) {
+                    alert('Error creating credit note: ' + xhr.responseText);
+                }
+            });
+        }
+    };
+
+    // 4. Filter Handlers
+    const FilterHandlers = {
+        updateActiveFilters: function() {
+            const activeFilters = [];
+            const filterLabels = {
+                date_from: 'From',
+                date_to: 'To',
+                supplier: 'Supplier',
+                payment_status: 'Payment Status',
+                amount_min: 'Min Amount',
+                amount_max: 'Max Amount',
+                export_status: 'Export Status',
+                document_type: 'Document Type',
+                credit_note_status: 'Credit Note Status',
+                is_energy: 'Energy Supplier'
+            };
+
+            // Build URL parameters
+            const urlParams = new URLSearchParams();
+            
+            $('#filter-form').serializeArray().forEach(function(item) {
+                if (item.value) {
+                    urlParams.append(item.name, item.value);
+                    activeFilters.push({
+                        name: filterLabels[item.name],
+                        value: item.value,
+                        param: item.name
+                    });
+                }
+            });
+
+            // Update filter count badge
+            const filterCount = activeFilters.length;
+            const countBadge = $('.active-filters-count');
+            if (filterCount > 0) {
+                countBadge.text(filterCount).show();
+            } else {
+                countBadge.hide();
+            }
+
+            // Update filter tags
+            const tagsHtml = activeFilters.map(filter => `
+                <span class="badge badge-info mr-2">
+                    ${filter.name}: ${filter.value}
+                    <button type="button" class="close ml-1" 
+                            data-param="${filter.param}" 
+                            aria-label="Remove filter">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </span>
+            `).join('');
+
+            $('.active-filters-tags').html(tagsHtml);
+        }
+    };
+
+    // Initialize everything when document is ready
+    $(document).ready(function() {
+        // Filter toggle
+    $('#toggle-filters').on('click', function() {
+        $('.filter-panel').slideToggle(300);
+        $(this).find('i').toggleClass('fa-filter fa-filter-slash');
+    });
+
+    // Apply filters
+    $('#apply-filters').on('click', function(e) {
+        e.preventDefault();
+        const formData = new FormData($('#filter-form')[0]);
+        const params = new URLSearchParams(formData);
+        window.location.search = params.toString();
+    });
+
+    // Reset filters
+    $('#reset-filters').on('click', function(e) {
+        e.preventDefault();
+        window.location.href = window.location.pathname;
+    });
+
+    // Initialize filters from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    for (const [key, value] of urlParams.entries()) {
+        $(`[name="${key}"]`).val(value);
+    }
+
+    // Show filter panel if there are active filters
+    if (urlParams.toString()) {
+        $('.filter-panel').show();
+        const filterCount = urlParams.toString().split('&').length;
+        $('.active-filters-count').text(filterCount).show();
+    }
+});
+        
+        // Initialize URL parameters to form fields
+        for (let [key, value] of urlParams.entries()) {
+            const input = document.querySelector(`[name="${key}"]`);
+            if (input) {
+                if (input.type === 'checkbox') {
+                    input.checked = value === '1';
+                } else {
+                    input.value = value;
+                }
+            }
+        }
+
+        // Credit note toggle handler
+        $('.toggle-credit-notes').on('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const invoiceId = $(this).data('invoice');
+            const icon = $(this).find('i');
+            const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+            
+            creditNotesRow.toggleClass('d-none');
+            icon.toggleClass('fa-receipt fa-times-circle');
+        });
+
+        // Modal event handlers
+        $('#invoiceDetailsModal').on('show.bs.modal', function(event) {
+            const invoiceId = $(event.relatedTarget).data('invoice');
+            ModalHandlers.loadInvoiceDetails(invoiceId);
+        });
+
+        $('#paymentDetailsModal').on('show.bs.modal', function(event) {
+            const invoiceId = $(event.relatedTarget).data('invoice');
+            ModalHandlers.loadPaymentDetails(invoiceId);
+        });
+
+        // Credit Note Modal handlers
+        $('#creditNoteModal').on('show.bs.modal', function(event) {
+            const invoiceId = $(event.relatedTarget).data('invoice-id');
+            if (!invoiceId) {
+                console.error('No Invoice ID found!');
+                return;
+            }
+            
+
+            $('#original-invoice-id').val(invoiceId);
+            $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
+
+            $.ajax({
+                url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
+                method: 'GET',
+                success: function(data) {
+                    // Store initial net amount
+                    CreditNoteHandlers.initialNetAmount = data.invoice.total_amount - data.invoice.credited_amount;
+                    
+                    // Update UI
+                    $('#original-invoice-details').html(`
+                        <p><strong>Reference:</strong> ${data.invoice.ref}</p>
+                        <p><strong>Date:</strong> ${data.invoice.date}</p>
+                        <p data-amount="${data.invoice.total_amount}">
+                            <strong>Total Amount:</strong> ${Utils.formatMoney(data.invoice.total_amount)}
+                        </p>
+                        <p><strong>Already Credited:</strong> ${Utils.formatMoney(data.invoice.credited_amount)}</p>
+                    `);
+
+                    CreditNoteHandlers.updateNetBalance(0);
+
+                    // Populate products table
+                    const tbody = $('#products-table tbody').empty();
+                    data.products.forEach(product => {
+                        tbody.append(`
+                            <tr>
+                                <td>${product.name}</td>
+                                <td class="text-right">${product.original_quantity}</td>
+                                <td class="text-right">${product.credited_quantity}</td>
+                                <td class="text-right">${product.available_quantity}</td>
+                                <td>
+                                    <input type="number" class="form-control form-control-sm credit-quantity"
+                                        data-product-id="${product.id}"
+                                        data-unit-price="${product.unit_price}"
+                                        data-available="${product.available_quantity}"
+                                        min="0" max="${product.available_quantity}" value="0">
+                                </td>
+                                <td class="text-right">${Utils.formatMoney(product.unit_price)}</td>
+                                <td class="text-right subtotal">0.00</td>
+                            </tr>
+                        `);
+                    });
+
+                    CreditNoteHandlers.initializeQuantityHandlers();
+                }
+            });
+        });
+
+        $('#save-credit-note').on('click', function() {
+            CreditNoteHandlers.saveCreditNote();
+        });
+
+        // Initialize active filters
+        FilterHandlers.updateActiveFilters();
+
+</script>
+
+
+{% endblock %}
