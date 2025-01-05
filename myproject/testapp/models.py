@@ -72,6 +72,16 @@ class Supplier(BaseModel):
     delay_convention = models.IntegerField(choices=[(0, '0'), (30, '30'), (60, '60'), (90, '90'), (120, '120')], default=60)
     is_regulated = models.BooleanField(default=False)
     regulation_file_path = models.FileField(upload_to='supplier_regulations/', null=True, blank=True)
+    delay_check = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Number of days to delay check payment forecasts after due date"
+    )
+    delay_lcn = models.IntegerField(
+        default=0,
+        validators=[MinValueValidator(0)],
+        help_text="Number of days to delay LCN payment forecasts after due date"
+    )
 
     def clean(self):
         super().clean()
@@ -982,6 +992,7 @@ class Check(BaseModel):
     paid = models.BooleanField(default=False)
     delivered_at = models.DateTimeField(null=True, blank=True)
     paid_at = models.DateTimeField(null=True, blank=True)
+    printed_at = models.DateTimeField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancellation_reason = models.TextField(null=True, blank=True)
     status = models.CharField(
@@ -1090,6 +1101,43 @@ class Check(BaseModel):
             print("Updating checker current_position")
             self.checker.current_position = int(self.position) + 1
             self.checker.save()
+
+        # If this is a supplier payment (we'll update it later for non suppliers)
+        if self.payment_due:
+            # Delete existing forecast if any
+            ForecastStatement.objects.filter(
+                source_type='supplier_check',
+                source_id=self.id,
+                is_processed=False
+            ).delete()
+
+            # Create new forecast if status allows
+            if self.status not in ['cancelled', 'paid', 'unpaid']:
+                # Calculate forecast date
+                forecast_date = self.payment_due
+                
+                # Add supplier delay based on checker type
+                delay = self.beneficiary.delay_lcn if self.checker.type == 'LCN' else self.beneficiary.delay_check
+                print(f"Using delay of {delay} days based on checker type {self.checker.type}")
+                
+                current_date = forecast_date
+                while delay > 0 or current_date.weekday() >= 5:
+                    current_date += timedelta(days=1)
+                    if current_date.weekday() < 5:  # Only count business days
+                        delay -= 1
+                        
+                print(f"Creating forecast for date: {current_date}")
+                
+                # Create forecast
+                ForecastStatement.objects.create(
+                    bank_account=self.checker.bank_account,
+                    date=current_date,
+                    label=f"Expected payment to {self.beneficiary.name}",
+                    debit=self.amount,
+                    reference=f"Payment #{self.position}",
+                    source_type='supplier_check',
+                    source_id=self.id
+                )
         
         print("=== Check Save Method Completed ===\n")
 
@@ -1244,7 +1292,7 @@ class Check(BaseModel):
                 self.status = 'ready_to_sign'
             self.save()
 
-
+    
 class CheckAllocation(BaseModel):
     """Tracks how supplier payments are allocated to invoices"""
     payment = models.ForeignKey(
@@ -2999,6 +3047,63 @@ class BankStatement(models.Model):
                     'related_presentation': fee.related_presentation.bank_reference if fee.related_presentation else None
                 }
         })
+
+        # Add supplier payments entries
+        print("\n=== Getting Supplier Payments ===")
+        supplier_payments = Check.objects.filter(
+            checker__bank_account=bank_account,
+            status='paid'
+        ).select_related('checker', 'beneficiary')
+        
+        print(f"Found {supplier_payments.count()} supplier payments")
+        print("Query:", supplier_payments.query)  # Print the actual SQL query
+        
+        for payment in supplier_payments:
+            print(f"\nPayment details:")
+            print(f"ID: {payment.id}")
+            print(f"Position: {payment.position}")
+            print(f"Status: {payment.status}")
+            print(f"Amount: {payment.amount}")
+            print(f"Paid at: {payment.paid_at}")
+            print(f"Is supplier payment: {payment.is_supplier_payment}")
+            print(f"Bank Account: {payment.checker.bank_account.id} (Expected: {bank_account.id})")
+            
+            entries.append({
+                'date': payment.paid_at.date(),
+                'label': f"Payment to {payment.beneficiary.name}",
+                'type': 'SUPPLIER_PAYMENT',
+                'debit': payment.amount,
+                'credit': None,
+                'reference': f"{payment.checker.type} {payment.checker.index}{payment.position}",
+                'source_type': 'supplier_payment',
+                'source_id': payment.id,
+                'can_transfer': False,
+                'is_transferred': False,
+                # Details for collapsible
+                'beneficiary': {
+                    'name': payment.beneficiary.name,
+                    'accounting_code': payment.beneficiary.accounting_code,
+                    'ice_code': payment.beneficiary.ice_code
+                },
+                'payment_due': payment.payment_due,
+                'status': payment.status,
+                'checker_type': payment.checker.type,
+                'invoice': {
+                    'ref': payment.cause.ref,
+                    'id': str(payment.cause.id),
+                    'date': payment.cause.date,
+                    'fiscal_label': payment.cause.fiscal_label,
+                    'net_amount': payment.cause.net_amount
+                } if payment.cause else None,
+                'operation_details': {
+                    'payment_date': payment.paid_at.date(),
+                    'creation_date': payment.creation_date,
+                    'bank_account': f"{payment.checker.bank_account.bank} - {payment.checker.bank_account.account_number}"
+                },
+                'is_expandable': True
+            })
+        
+        print("\nFinal entries count:", len(entries))
             
         initial_balance = Decimal('0.00')
         if start_date:
@@ -3435,6 +3540,44 @@ class AccountingEntry(models.Model):
                         'pair_index': len(entries) // 2
                     }
                 ])
+
+        # Supplier payments accounting entries
+        supplier_payments = Check.objects.filter(
+            checker__bank_account=bank_account,
+            status='paid'
+        ).select_related('checker', 'beneficiary')
+
+        for payment in supplier_payments:
+            label = f"Payment to {payment.beneficiary.name}"
+            reference = f"{payment.checker.type} {payment.checker.index}{payment.position}"
+
+            # Add debit and credit pair
+            entries.extend([
+                {
+                    'date': payment.paid_at.date(),
+                    'label': label,
+                    'debit': None,
+                    'credit': payment.amount,
+                    'account_code': bank_account.accounting_number,  # Bank account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'supplier_payment',
+                    'source_id': payment.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': payment.paid_at.date(),
+                    'label': label,
+                    'debit': payment.amount,
+                    'credit': None,
+                    'account_code': payment.beneficiary.accounting_code,  # Supplier account
+                    'reference': reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'supplier_payment',
+                    'source_id': payment.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
 
         # Filter entries
         if start_date or end_date:

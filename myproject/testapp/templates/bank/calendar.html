@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% block title %}Bank Calendar{% endblock %}
 
 {% block content %}
 {% csrf_token %}
@@ -60,6 +61,12 @@
                                 <span class="label">Discounted Receipts</span>
                                 <span class="amount {% if bank.pending_discounted > 0 %}text-success{% else %}text-danger{% endif %}">
                                     {{ bank.pending_discounted|format_balance }}
+                                </span>
+                            </div>
+                            <div class="amount-row">
+                                <span class="label">Supplier Payments</span>
+                                <span class="amount text-danger">
+                                    {{ bank.pending_payments|format_balance }}
                                 </span>
                             </div>
                             <div class="amount-row total">
@@ -131,7 +138,17 @@
                                                             data-bs-target="#forecastModal"
                                                             data-date="{{ day.date }}"
                                                             data-bank="{{ bank_info.bank.id }}">
-                                                        <i class="fas fa-eye"></i>
+                                                        <i class="fas fa-money-bill-wave"></i>
+                                                    </button>
+                                                {% endif %}
+                                                
+                                                {% if bank_info.has_payment_forecasts %}
+                                                    <button class="payment-forecast-btn ms-2" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#paymentForecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">
+                                                        <i class="fas fa-file-invoice-dollar"></i>
                                                     </button>
                                                 {% endif %}
                                             </div>
@@ -253,8 +270,30 @@
             </div>
         </div>
     </div>
+
+    <div class="modal fade" id="paymentForecastModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>
+                        Payment Forecasts
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="forecast-totals mt-3">
+                        <h6 class="text-end">Total: <span class="total-amount"></span></h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     
-    <style>
+<style>
     /* Base Styles */
     :root {
         --primary-color: #4361ee;
@@ -1069,41 +1108,43 @@
             }
         });
 
-        if (e.target.closest('.mark-receipt-paid')) {
-            const button = e.target.closest('.mark-receipt-paid');
-            const presentationDate = button.dataset.presentationDate;
-            
-            const paymentDateInput = document.getElementById('paymentDate');
-            paymentDateInput.min = presentationDate;
-            paymentDateInput.value = presentationDate;
-            
-            activeReceiptData = {
-                type: button.dataset.receiptType,
-                id: button.dataset.receiptId
-            };
-            
-            // Show paid marking modal
-            const paidModal = new bootstrap.Modal(document.getElementById('paidMarkingModal'));
-            paidModal.show();
-        }
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.mark-receipt-paid')) {
+                const button = e.target.closest('.mark-receipt-paid');
+                const presentationDate = button.dataset.presentationDate;
+                
+                const paymentDateInput = document.getElementById('paymentDate');
+                paymentDateInput.min = presentationDate;
+                paymentDateInput.value = presentationDate;
+                
+                activeReceiptData = {
+                    type: button.dataset.receiptType,
+                    id: button.dataset.receiptId
+                };
+                
+                // Show paid marking modal
+                const paidModal = new bootstrap.Modal(document.getElementById('paidMarkingModal'));
+                paidModal.show();
+            }
 
-        if (e.target.closest('.mark-receipt-unpaid')) {
-            const button = e.target.closest('.mark-receipt-unpaid');
-            const presentationDate = button.dataset.presentationDate;
-            
-            const unpaidDateInput = document.getElementById('unpaidDate');
-            unpaidDateInput.min = presentationDate;
-            unpaidDateInput.value = presentationDate;
-            
-            activeReceiptData = {
-                type: button.dataset.receiptType,
-                id: button.dataset.receiptId
-            };
-            
-            // Show unpaid marking modal
-            const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
-            unpaidModal.show();
-        }
+            if (e.target.closest('.mark-receipt-unpaid')) {
+                const button = e.target.closest('.mark-receipt-unpaid');
+                const presentationDate = button.dataset.presentationDate;
+                
+                const unpaidDateInput = document.getElementById('unpaidDate');
+                unpaidDateInput.min = presentationDate;
+                unpaidDateInput.value = presentationDate;
+                
+                activeReceiptData = {
+                    type: button.dataset.receiptType,
+                    id: button.dataset.receiptId
+                };
+                
+                // Show unpaid marking modal
+                const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
+                unpaidModal.show();
+            }
+        });
 
          // Initialize notifications
         window.notifications = new ForecastNotifications();
@@ -1180,6 +1221,14 @@
                 const date = this.dataset.date;
                 const bankId = this.dataset.bank;
                 loadForecasts(date, bankId);
+            });
+        });
+
+        document.querySelectorAll('.payment-forecast-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                loadPaymentForecasts(date, bankId);
             });
         });
     }
@@ -1265,10 +1314,25 @@
                                 forecastBtn.setAttribute('data-bank', bank.bank.id);
                                 
                                 const eyeIcon = document.createElement('i');
-                                eyeIcon.classList.add('fas', 'fa-eye');
+                                eyeIcon.classList.add('fas', 'fa-money-bill-wave');
                                 forecastBtn.appendChild(eyeIcon);
                                 
                                 balanceInfo.appendChild(forecastBtn);
+                            }
+
+                            if (bank.has_payment_forecasts) {  // New flag from backend
+                                const paymentForecastBtn = document.createElement('button');
+                                paymentForecastBtn.classList.add('payment-forecast-btn', 'ms-2');
+                                paymentForecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                paymentForecastBtn.setAttribute('data-bs-target', '#paymentForecastModal');
+                                paymentForecastBtn.setAttribute('data-date', day.date);
+                                paymentForecastBtn.setAttribute('data-bank', bank.bank.id);
+                                
+                                const invoiceIcon = document.createElement('i');
+                                invoiceIcon.classList.add('fas', 'fa-file-invoice-dollar');
+                                paymentForecastBtn.appendChild(invoiceIcon);
+                                
+                                balanceInfo.appendChild(paymentForecastBtn);
                             }
                             
                             bankBalanceCard.appendChild(balanceInfo);
@@ -1319,7 +1383,6 @@
             });
     }
     
-// In calendar.html, replace your existing loadForecasts function
 
     function loadForecasts(date, bankId) {
         console.log(`Loading forecasts for date: ${date}, bank ID: ${bankId}`);
@@ -1438,71 +1501,168 @@
             `;
     }
 
-    function addTooltips() {
-        console.log("=== Starting addTooltips() ===");
+    function loadPaymentForecasts(date, bankId) {
+        console.log('Loading payment forecasts:', { date, bankId });
         
-        document.querySelectorAll('.calendar-day').forEach(async (day) => {
-            // Get ALL forecast buttons for this day (multiple banks)
-            const forecastBtns = day.querySelectorAll('.forecast-details-btn');
-            if (forecastBtns.length === 0) return;
-
-            console.log(`\nProcessing day with ${forecastBtns.length} forecast buttons`);
-
-            const tooltip = document.createElement('div');
-            tooltip.className = 'calendar-tooltip';
-            tooltip.innerHTML = 'Loading...';
-            day.appendChild(tooltip);
-
-            try {
-                let total_expected = 0;
-                let total_discounted = 0;
-
-                // Fetch and process forecasts for each bank
-                for (const btn of forecastBtns) {
-                    console.log("Processing bank:", btn.dataset.bank);
+        const modal = document.getElementById('paymentForecastModal');
+        const listDiv = modal.querySelector('.forecast-list');
+        const totalSpan = modal.querySelector('.total-amount');
+        
+        listDiv.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+        
+        fetch(`/testapp/calendar/supplier-forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    listDiv.innerHTML = data.forecasts.length ? data.forecasts.map(forecast => `
+                        <div class="forecast-item mb-3">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div>
+                                            <h6 class="mb-1">${forecast.supplier.name}</h6>
+                                            <div class="text-muted small">
+                                                ${forecast.type} #${forecast.payment.reference}
+                                                <span class="mx-1">•</span>
+                                                <a href="/testapp/invoices/${forecast.invoice.id}/update/">
+                                                    ${forecast.invoice.ref}
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <span class="amount">${formatAmount(forecast.payment.amount)}</span>
+                                    </div>
+                                    <div class="dates mt-2 text-muted small">
+                                        <div>Due Date: ${forecast.dates.due_date}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `).join('') : '<div class="text-center text-muted">No payments forecasted</div>';
                     
-                    const response = await fetch(
-                        `/testapp/calendar/forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
-                    );
-                    const data = await response.json();
-                    
-                    if (data.status === 'success') {
-                        data.forecasts.forEach(forecast => {
-                            const amount = parseFloat(forecast.amount) || 0;
-                            if (forecast.type === 'Expected Payment') {
-                                total_expected += amount;
-                                console.log(`Adding ${amount} to expected payments`);
-                            } else {
-                                total_discounted += amount;
-                                console.log(`Adding ${amount} to discounted receipts`);
-                            }
-                        });
-                    }
+                    totalSpan.textContent = formatAmount(data.total);
+                } else {
+                    listDiv.innerHTML = '<div class="alert alert-danger">Failed to load forecasts</div>';
                 }
+            })
+            .catch(error => {
+                console.error('Error loading forecasts:', error);
+                listDiv.innerHTML = '<div class="alert alert-danger">Error loading forecasts</div>';
+            });
+    }
 
-                console.log("Final aggregated totals:", {
-                    expected: total_expected,
-                    discounted: total_discounted
-                });
+    function addTooltips() {
+    console.log("=== Starting addTooltips() ===");
+    
+    document.querySelectorAll('.calendar-day').forEach(async (day) => {
+        // Get both receipt and supplier payment forecast buttons
+        const receiptBtns = day.querySelectorAll('.forecast-details-btn');
+        const supplierBtns = day.querySelectorAll('.payment-forecast-btn');
+        
+        if (receiptBtns.length === 0 && supplierBtns.length === 0) return;
+        
+        console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons`);
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'calendar-tooltip';
+        tooltip.innerHTML = 'Loading...';
+        day.appendChild(tooltip);
 
-                tooltip.innerHTML = `
-                    <div class="fw-bold">Daily Summary:</div>
-                    <div>Expected Payments: ${formatBalance(total_expected)}</div>
-                    <div>Discounted Receipts: ${formatBalance(total_discounted)}</div>
-                    <div class="mt-1 pt-1 border-top">
-                        <strong>Total: ${formatBalance(total_expected + total_discounted)}</strong>
-                    </div>
-                `;
-            } catch (error) {
-                console.error("Error:", error);
-                tooltip.innerHTML = 'Error loading data';
+        try {
+            // Receipt totals
+            let total_expected = 0;
+            let total_discounted = 0;
+
+            // Supplier payment totals
+            let total_chq_payments = 0;
+            let total_lcn_payments = 0;
+
+            // Process receipt forecasts
+            for (const btn of receiptBtns) {
+                console.log("Processing receipt forecasts for bank:", btn.dataset.bank);
+                
+                const response = await fetch(
+                    `/testapp/calendar/forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                );
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    data.forecasts.forEach(forecast => {
+                        const amount = parseFloat(forecast.amount) || 0;
+                        if (forecast.type === 'Expected Payment') {
+                            total_expected += amount;
+                            console.log(`Adding ${amount} to expected payments`);
+                        } else {
+                            total_discounted += amount;
+                            console.log(`Adding ${amount} to discounted receipts`);
+                        }
+                    });
+                }
             }
 
-            // Add hover events
-            day.addEventListener('mouseenter', () => tooltip.style.display = 'block');
-            day.addEventListener('mouseleave', () => tooltip.style.display = 'none');
-        });
-    }
+            // Process supplier payment forecasts
+            for (const btn of supplierBtns) {
+                console.log("Processing supplier payments for bank:", btn.dataset.bank);
+                
+                const response = await fetch(
+                    `/testapp/calendar/supplier-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                );
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    data.forecasts.forEach(forecast => {
+                        const amount = parseFloat(forecast.payment.amount) || 0;
+                        if (forecast.type === 'LCN') {
+                            total_lcn_payments += amount;
+                            console.log(`Adding ${amount} to LCN payments`);
+                        } else {
+                            total_chq_payments += amount;
+                            console.log(`Adding ${amount} to check payments`);
+                        }
+                    });
+                }
+            }
+
+            const receipt_total = total_expected + total_discounted;
+            const payment_total = total_chq_payments + total_lcn_payments;
+
+            console.log("Final totals:", {
+                receipts: { expected: total_expected, discounted: total_discounted },
+                payments: { checks: total_chq_payments, lcns: total_lcn_payments }
+            });
+
+            tooltip.innerHTML = `
+                <div class="fw-bold">Daily Summary:</div>
+                <div>Expected Payments: ${formatBalance(total_expected)}</div>
+                <div>Discounted Receipts: ${formatBalance(total_discounted)}</div>
+                <div class="text-primary">Receipt Total: ${formatBalance(receipt_total)}</div>
+                `;
+
+            if (payment_total > 0) {
+                tooltip.innerHTML += `
+                    <div class="mt-2">
+                        <div>Supplier Check Payments: ${formatBalance(total_chq_payments)}</div>
+                        <div>Supplier LCN Payments: ${formatBalance(total_lcn_payments)}</div>
+                        <div class="text-danger">Payment Total: ${formatBalance(payment_total)}</div>
+                    </div>
+                `;
+            }
+
+            tooltip.innerHTML += `
+                <div class="mt-2 pt-2 border-top">
+                    <strong>Global Total: ${formatBalance(receipt_total - payment_total)}</strong>
+                </div>
+            `;
+
+        } catch (error) {
+            console.error("Error:", error);
+            tooltip.innerHTML = 'Error loading data';
+        }
+
+        // Add hover events
+        day.addEventListener('mouseenter', () => tooltip.style.display = 'block');
+        day.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+    });
+}
 
     // On page load, check if we need to animate in
     document.addEventListener('DOMContentLoaded', function() {
@@ -1629,6 +1789,64 @@
                 if (data.status === 'success') {
                     let html = '';
                     data.forecasts.forEach(forecast => {
+                        if (forecast.type === 'Supplier Payment') {
+                        // Supplier Payment card
+                        html += `
+                        <div class="forecast-item payment mb-3">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center bg-danger text-white">
+                                    <div>
+                                        <span class="badge bg-light text-danger me-2">
+                                            ${forecast.payment_type} Payment
+                                        </span>
+                                        <span class="fw-bold">#${forecast.number}</span>
+                                    </div>
+                                    <div class="amount fw-bold">
+                                        ${formatBalance(forecast.amount)}
+                                    </div>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-2">
+                                                <i class="fas fa-building me-2"></i>
+                                                <strong>Supplier:</strong> ${forecast.supplier.name}
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-university me-2"></i>
+                                                <strong>Bank:</strong> ${forecast.bank}
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-calendar me-2"></i>
+                                                <strong>Due Date:</strong> ${forecast.due_date}
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-2">
+                                                <i class="fas fa-balance-scale me-2"></i>
+                                                <strong>Supplier Balance:</strong>
+                                                <span class="text-danger">${formatBalance(forecast.supplier.balance)}</span>
+                                            </div>
+                                            ${forecast.invoice.ref ? `
+                                                <div class="mb-2">
+                                                    <i class="fas fa-file-invoice me-2"></i>
+                                                    <strong>Invoice:</strong>
+                                                    <a href="/testapp/invoices/${forecast.invoice.id}/update/">
+                                                        ${forecast.invoice.ref}
+                                                    </a>
+                                                    <div class="ms-4 small">
+                                                        <div>Date: ${forecast.invoice.date}</div>
+                                                        <div>Amount: ${formatBalance(forecast.invoice.amount)}</div>
+                                                    </div>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    } else {
                         const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
                         const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';
                         
@@ -1703,6 +1921,7 @@
                                 </div>
                             </div>
                         `;
+                        }
                     });
                     
                     modalBody.innerHTML = data.forecasts.length ? html : 

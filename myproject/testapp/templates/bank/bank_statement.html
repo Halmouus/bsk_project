@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% block title %}Bank Statement{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -306,6 +307,57 @@
                                             </div>
                                         </div>
                                     </div>
+                                {% elif entry.type == 'SUPPLIER_PAYMENT' %}
+                                <div class="row">
+                                    <!-- Check Details -->
+                                    <div class="col-md-6">
+                                        <h6 class="mb-3">Check Details</h6>
+                                        <div class="mb-2">
+                                            <i class="fas fa-building me-2"></i>
+                                            <strong>Supplier:</strong> {{ entry.beneficiary.name }}
+                                        </div>
+                                        <div class="mb-2">
+                                            <i class="fas fa-calendar me-2"></i>
+                                            <strong>Creation Date:</strong> {{ entry.operation_details.creation_date|date:"Y-m-d" }}
+                                        </div>
+                                        <div class="mb-2">
+                                            <i class="fas fa-calendar-check me-2"></i>
+                                            <strong>Payment Date:</strong> {{ entry.operation_details.payment_date|date:"Y-m-d" }}
+                                        </div>
+                                        {% if entry.payment_due %}
+                                        <div class="mb-2">
+                                            <i class="fas fa-clock me-2"></i>
+                                            <strong>Due Date:</strong> {{ entry.payment_due|date:"Y-m-d" }}
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                    
+                                    <!-- Invoice Details -->
+                                    <div class="col-md-6">
+                                        <h6 class="mb-3">Invoice Details</h6>
+                                        {% if entry.invoice %}
+                                            <div class="mb-2">
+                                                <i class="fas fa-file-invoice me-2"></i>
+                                                <strong>Reference:</strong>
+                                                <a href="{% url 'invoice-update' entry.invoice.id %}">{{ entry.invoice.ref }}</a>
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-calendar-alt me-2"></i>
+                                                <strong>Date:</strong> {{ entry.invoice.date|date:"Y-m-d" }}
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-tags me-2"></i>
+                                                <strong>Description:</strong> {{ entry.invoice.fiscal_label }}
+                                            </div>
+                                            <div class="mb-2">
+                                                <i class="fas fa-money-bill-wave me-2"></i>
+                                                <strong>Net Amount:</strong> {{ entry.invoice.net_amount|format_balance }}
+                                            </div>
+                                        {% else %}
+                                            <div class="text-muted">No invoice associated</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
                                 {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                                     <div class="row">
                                         <div class="col-md-6">
@@ -907,6 +959,12 @@ $(document).ready(function() {
             `[data-record-id="${recordId}"]`;
         
         const $detailsRow = $(`.details-row${detailsSelector}`);
+
+        console.log('Details row:', {
+            selector: detailsSelector,
+            found: $detailsRow.length,
+            html: $detailsRow.html()
+        })
         
         console.log('Toggle details:', {
             recordId,

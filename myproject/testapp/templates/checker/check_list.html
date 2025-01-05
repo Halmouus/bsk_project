@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% load check_tags %}
-
+{% block title %}Checks{% endblock %}
 {% block content %}
 {% csrf_token %}
 <div class="container-fluid">
@@ -246,6 +246,93 @@ const CheckFilters = {
             }
         });
 
+        // Handle print confirmation
+        $(document).on('click', '#confirm-print', async (e) => {
+            const checkId = $(e.currentTarget).data('check-id');
+            const printDate = $('#print-date').val();
+            
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        action: 'print',
+                        date: printDate
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to print check');
+                
+                $('#printDateModal').modal('hide');
+                await this.applyFilters();
+                
+            } catch (error) {
+                console.error('Error printing check:', error);
+                alert('Failed to print check: ' + error.message);
+            }
+        });
+
+        // Handle deliver confirmation
+        $(document).on('click', '#confirm-deliver', async (e) => {
+            const checkId = $(e.currentTarget).data('check-id');
+            const deliverDate = $('#deliver-date').val();
+            
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        action: 'deliver',
+                        date: deliverDate
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to deliver check');
+                
+                $('#deliverDateModal').modal('hide');
+                await this.applyFilters();
+                
+            } catch (error) {
+                console.error('Error delivering check:', error);
+                alert('Failed to deliver check: ' + error.message);
+            }
+        });
+
+        // Handle pay confirmation
+        $(document).on('click', '#confirm-pay', async (e) => {
+            const checkId = $(e.currentTarget).data('check-id');
+            const payDate = $('#pay-date').val();
+            
+            try {
+                const response = await fetch(`/testapp/checks/${checkId}/action/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        action: 'pay',
+                        date: payDate
+                    })
+                });
+
+                if (!response.ok) throw new Error('Failed to pay check');
+                
+                $('#payDateModal').modal('hide');
+                await this.applyFilters();
+                
+            } catch (error) {
+                console.error('Error paying check:', error);
+                alert('Failed to pay check: ' + error.message);
+            }
+        });
+
         // Handle check actions (deliver, pay, etc.)
         $(document).on('click', '.check-action', (e) => {
             const button = $(e.currentTarget);
@@ -260,7 +347,7 @@ const CheckFilters = {
             const signature = button.data('signature');
 
             // Handle print and sign actions separately
-            if (action === 'print' || action === 'sign') {
+            if (action === 'sign') {
                 console.log("[CheckFilters] Handling special action:", action);
                 CheckActions.handleAction(action, checkId, signature);
                 return;
@@ -361,12 +448,22 @@ const CheckFilters = {
                     await this.handleReplaceAction(checkId);
                     break;
                 case 'deliver':
+                    console.log("Opening deliver date modal for check:", checkId);
+                    $('#deliver-date').val(new Date().toISOString().split('T')[0]);
+                    $('#deliverDateModal').modal('show');
+                    $('#confirm-deliver').data('check-id', checkId);
+                    break;
                 case 'pay':
-                    await this.updateCheckStatus(checkId, action);
+                    console.log("Opening pay date modal for check:", checkId);
+                    $('#pay-date').val(new Date().toISOString().split('T')[0]);
+                    $('#payDateModal').modal('show');
+                    $('#confirm-pay').data('check-id', checkId);
                     break;
                 case 'print':
-                    console.log("Printing check:", checkId);
-                    await this.updateCheckStatus(checkId);
+                    console.log("Opening print date modal for check:", checkId);
+                    $('#print-date').val(new Date().toISOString().split('T')[0]);
+                    $('#printDateModal').modal('show');
+                    $('#confirm-print').data('check-id', checkId);
                     break;
                 case 'allocate':
                     AllocationSystem.openModal(checkId);
@@ -432,9 +529,10 @@ const CheckFilters = {
         console.log("Cancel reason field:", $('#cancellation-reason').length);
         const checkId = $('#confirm-cancel').data('check-id');
         const reason = $('#cancellation-reason').val();
-        
-        if (!reason) {
-            alert('Please provide a cancellation reason');
+        const date = $('#cancel-date').val();
+    
+        if (!reason || !date) {
+            alert('Please provide both cancellation reason and date');
             return;
         }
 
@@ -447,7 +545,8 @@ const CheckFilters = {
                 },
                 body: JSON.stringify({
                     action: 'cancel',
-                    reason: reason
+                    reason: reason,
+                    date: date
                 })
             });
 
@@ -725,6 +824,11 @@ const CheckFilters = {
             );
         }
         
+        // Printed
+        if (data.printed_at) {
+            content += this.createTimelineEntry('Printed', data.printed_at, 'print', 'info');
+        }
+
         // Delivered
         if (data.delivered_at) {
             content += this.createTimelineEntry('Delivered', data.delivered_at, 'truck', 'primary');

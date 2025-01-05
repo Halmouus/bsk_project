@@ -4,7 +4,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType
+from .models import Check, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, get_supplier_balance
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -187,6 +187,7 @@ class CalendarView(View):
                     'pending_count': pending_data['count'],
                     'pending_expected': pending_data['expected'],
                     'pending_discounted': pending_data['discounted'],
+                    'pending_payments': pending_data['payments'],
                     'pending_total': pending_data['total']
                 })
         
@@ -216,8 +217,45 @@ class CalendarView(View):
         cal = monthcalendar(year, month)
         calendar_data = []
 
-        # Keep track of cumulative forecasts for each bank
-        bank_forecasts = {bank.id: Decimal('0.00') for bank in bank_accounts}
+        # Calculate start of month and get initial balances including all prior impacts
+        start_of_month = date(year, month, 1)
+        
+        # Initialize tracking dictionaries with impacts from prior months
+        bank_forecasts = {}
+        supplier_forecasts = {}
+        
+        for bank in bank_accounts:
+            # Get all forecasts up to start of month
+            prior_receipt_forecasts = ForecastStatement.objects.filter(
+                bank_account=bank,
+                date__lt=start_of_month,
+                date__gte=timezone.now().date(),  # Only include future forecasts
+                is_processed=False,
+                source_type__in=['checkreceipt', 'lcn']
+            )
+            
+            prior_payment_forecasts = ForecastStatement.objects.filter(
+                bank_account=bank,
+                date__lt=start_of_month,
+                date__gte=timezone.now().date(),
+                is_processed=False,
+                source_type='supplier_check'
+            )
+            
+            # Calculate cumulative impacts from prior months
+            bank_forecasts[bank.id] = sum(
+                (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                for f in prior_receipt_forecasts
+            )
+            
+            supplier_forecasts[bank.id] = sum(
+                (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                for f in prior_payment_forecasts
+            )
+            
+            print(f"\nInitial impacts for {bank.account_number}:")
+            print(f"Prior receipt impact: {bank_forecasts[bank.id]}")
+            print(f"Prior payment impact: {supplier_forecasts[bank.id]}")
 
         for week in cal:
             week_data = []
@@ -238,7 +276,7 @@ class CalendarView(View):
                 for bank in bank_accounts:
                     print(f"\nProcessing bank: {bank.account_number}")
                     
-                    # Get actual balance
+                    # Get actual balance including all real transactions
                     actual_statement = BankStatement.get_statement(
                         bank_account=bank,
                         end_date=current_date,
@@ -248,24 +286,50 @@ class CalendarView(View):
                     print(f"Actual balance: {actual_balance}")
 
                     # Get forecasted transactions for this date
-                    forecasts = ForecastStatement.objects.filter(
+                    receipt_forecasts = ForecastStatement.objects.filter(
                         bank_account=bank,
                         date=current_date,
-                        date__gte=timezone.now().date(),  # Only include future forecasts
-                        is_processed=False
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type__in=['checkreceipt', 'lcn']
                     )
-                    print(f"Found {forecasts.count()} forecasts")
 
-                    # Calculate forecast impact for this day
-                    day_forecast_impact = Decimal('0.00')
+                    supplier_payment_forecasts = ForecastStatement.objects.filter(
+                        bank_account=bank,
+                        date=current_date,
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type='supplier_check'
+                    )
+
+                    # Calculate receipt forecast impact for this day
+                    day_receipt_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in receipt_forecasts
+                    )
+
+                    # Calculate supplier payment impact for this day
+                    day_payment_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in supplier_payment_forecasts
+                    )
+
+                    # Update cumulative impacts
+                    bank_forecasts[bank.id] += day_receipt_impact
+                    supplier_forecasts[bank.id] += day_payment_impact
+
+                    # Calculate total forecasted balance
+                    forecasted_balance = actual_balance + bank_forecasts[bank.id] + supplier_forecasts[bank.id]
+                    print(f"Cumulative receipt impact: {bank_forecasts[bank.id]}")
+                    print(f"Cumulative payment impact: {supplier_forecasts[bank.id]}")
+                    print(f"Forecasted balance: {forecasted_balance}")
+
+                    # Prepare forecast data for display
                     expected_payments = []
                     discounted_receipts = []
-
-                    for f in forecasts:
-                        print(f"Processing forecast: {f.label}")
+                    
+                    for f in receipt_forecasts:
                         amount = (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
-                        day_forecast_impact += amount
-                        
                         forecast_item = {
                             'label': f.label,
                             'credit': float(f.credit) if f.credit else None,
@@ -274,20 +338,10 @@ class CalendarView(View):
                             'amount': float(amount)
                         }
                         
-                        # Separate forecasts by type
                         if f.label.startswith('Expected'):
                             expected_payments.append(forecast_item)
                         else:
                             discounted_receipts.append(forecast_item)
-
-                    # Update cumulative forecast for this bank
-                    bank_forecasts[bank.id] += day_forecast_impact
-
-                    # Calculate forecasted balance
-                    forecasted_balance = actual_balance + bank_forecasts[bank.id]
-                    print(f"Actual balance: {actual_balance}")
-                    print(f"Cumulative forecast impact: {bank_forecasts[bank.id]}")
-                    print(f"Forecasted balance: {forecasted_balance}")
 
                     bank_data.append({
                         'bank': {
@@ -298,7 +352,8 @@ class CalendarView(View):
                         'balance': float(forecasted_balance),
                         'expected_payments': expected_payments,
                         'discounted_receipts': discounted_receipts,
-                        'has_forecasts': forecasts.exists()
+                        'has_forecasts': bool(expected_payments or discounted_receipts),
+                        'has_payment_forecasts': supplier_payment_forecasts.exists()
                     })
 
                 week_data.append({
@@ -307,6 +362,7 @@ class CalendarView(View):
                     'is_weekend': is_weekend,
                     'bank_data': bank_data
                 })
+                
             calendar_data.append(week_data)
         
         for bank in bank_accounts:
@@ -349,21 +405,25 @@ class CalendarView(View):
             is_processed=False
         ).select_related('bank_account')
 
-        # Filter out forecasts for paid receipts
+        # Filter out forecasts for paid receipts/checks
         filtered_forecasts = []
         for forecast in pending_forecasts:
-            receipt = None
             if forecast.source_type == 'checkreceipt':
                 receipt = CheckReceipt.objects.filter(id=forecast.source_id).first()
+                if receipt and receipt.status not in ['PAID', 'COMPENSATED']:
+                    filtered_forecasts.append(forecast)
             elif forecast.source_type == 'lcn':
                 receipt = LCN.objects.filter(id=forecast.source_id).first()
-            
-            if receipt and receipt.status not in ['PAID', 'COMPENSATED']:
-                filtered_forecasts.append(forecast)
+                if receipt and receipt.status not in ['PAID', 'COMPENSATED']:
+                    filtered_forecasts.append(forecast)
+            elif forecast.source_type == 'supplier_check':
+                check = Check.objects.filter(id=forecast.source_id).first()
+                if check and check.status not in ['paid', 'cancelled']:
+                    filtered_forecasts.append(forecast)
 
-        # Continue processing with filtered_forecasts instead of pending_forecasts
         expected = Decimal('0.00')
         discounted = Decimal('0.00')
+        payments = Decimal('0.00')
         
         for forecast in filtered_forecasts:
             print(f"\n--- Processing Forecast ---")
@@ -371,41 +431,43 @@ class CalendarView(View):
             print(f"Source type: {forecast.source_type}")
             print(f"Source ID: {forecast.source_id}")
             
-            # Get receipt first
-            receipt = None
-            if forecast.source_type == 'checkreceipt':
-                receipt = CheckReceipt.objects.filter(id=forecast.source_id).first()
-                print(f"Check Receipt found: {receipt.check_number if receipt else 'None'}")
-                print(f"Check Amount: {receipt.amount if receipt else 'None'}")
-            elif forecast.source_type == 'lcn':
-                receipt = LCN.objects.filter(id=forecast.source_id).first()
-                print(f"LCN found: {receipt.lcn_number if receipt else 'None'}")
-                print(f"LCN Amount: {receipt.amount if receipt else 'None'}")
-            
-            if receipt:
-                # Calculate amount based on forecast type
-                if forecast.label.startswith('Expected'):
-                    amount = (forecast.credit or Decimal('0.00')) - (forecast.debit or Decimal('0.00'))
-                    expected += amount
-                    print(f"Added to expected total: {expected}")
-                else:
-                    # For discounted receipts, use receipt amount
-                    amount = receipt.amount
-                    discounted += amount
-                    print(f"Added to discounted total: {discounted}")
+            if forecast.source_type == 'supplier_check':
+                amount = forecast.debit or Decimal('0.00')
+                payments += amount
+                print(f"Added to payments total: {payments}")
+            else:
+                # Get receipt
+                receipt = None
+                if forecast.source_type == 'checkreceipt':
+                    receipt = CheckReceipt.objects.filter(id=forecast.source_id).first()
+                elif forecast.source_type == 'lcn':
+                    receipt = LCN.objects.filter(id=forecast.source_id).first()
                 
-                print(f"Processed amount: {amount}")
-                
+                if receipt:
+                    # Calculate amount based on forecast type
+                    if forecast.label.startswith('Expected'):
+                        amount = (forecast.credit or Decimal('0.00')) - (forecast.debit or Decimal('0.00'))
+                        expected += amount
+                        print(f"Added to expected total: {expected}")
+                    else:
+                        amount = receipt.amount
+                        discounted += amount
+                        print(f"Added to discounted total: {discounted}")
+                    
+                    print(f"Processed amount: {amount}")
+                    
         print(f"\n=== Summary for {bank_account.account_number} ===")
         print(f"Total expected: {expected}")
         print(f"Total discounted: {discounted}")
-        print(f"Total impact: {expected + discounted}")
-            
+        print(f"Total payments: {payments}")
+        print(f"Net impact: {expected + discounted - payments}")
+                
         return {
             'count': len(filtered_forecasts),
             'expected': expected,
             'discounted': discounted,
-            'total': expected + discounted
+            'payments': payments,
+            'total': expected + discounted - payments
         }
 
 class CalendarForecastView(View):
@@ -565,11 +627,40 @@ class PendingForecastsView(View):
                 is_processed=False
             ).order_by('date')
             
+            print(f"Found forecasts: {[f.source_type for f in pending_forecasts]}")
+
             forecasts_data = []
             for forecast in pending_forecasts:
                 print("\n=== Processing Pending Forecast ===")
                 print(f"Label: {forecast.label}")
                 
+                if forecast.source_type == 'supplier_check':
+                    check = Check.objects.select_related(
+                        'beneficiary', 'checker', 'cause'
+                    ).get(id=forecast.source_id)
+                    
+                    supplier_balance = get_supplier_balance(check.beneficiary)
+                    
+                    forecast_data = {
+                        'type': 'Supplier Payment',
+                        'payment_type': check.checker.type,
+                        'number': check.position,
+                        'supplier': {
+                            'name': check.beneficiary.name,
+                            'balance': float(supplier_balance['balance'])
+                        },
+                        'bank': check.checker.bank_account.get_bank_display(),
+                        'due_date': check.payment_due.strftime('%Y-%m-%d'),
+                        'amount': float(forecast.debit or 0),
+                        'invoice': {
+                            'ref': check.cause.ref if check.cause else None,
+                            'id': str(check.cause.id) if check.cause else None,
+                            'date': check.cause.date.strftime('%Y-%m-%d') if check.cause else None,
+                            'amount': float(check.cause.total_amount) if check.cause else None
+                        }
+                    }
+                    forecasts_data.append(forecast_data)
+
                 # Get receipt first
                 receipt = None
                 if forecast.source_type == 'checkreceipt':
@@ -634,3 +725,90 @@ class PendingForecastsView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=400)
+        
+
+class SupplierForecastView(View):
+    """View for loading supplier payment forecasts for a specific date"""
+    def get(self, request):
+        try:
+            date = request.GET.get('date')
+            bank_id = request.GET.get('bank')
+            
+            print(f"\n=== Loading Supplier Payment Forecasts for {date} ===")
+            print(f"Bank ID: {bank_id}")
+            
+            forecast_date = datetime.strptime(date, '%Y-%m-%d').date()
+            bank_account = BankAccount.objects.get(id=bank_id)
+            
+            # Get forecasts for this date
+            payment_forecasts = ForecastStatement.objects.filter(
+                bank_account=bank_account,
+                date=forecast_date,
+                is_processed=False,
+                source_type='supplier_check'
+            )
+            
+            print(f"Found {payment_forecasts.count()} payment forecasts")
+            forecasts_data = []
+            total_amount = Decimal('0.00')
+            
+            for forecast in payment_forecasts:
+                print(f"\n--- Processing Forecast ---")
+                print(f"Forecast ID: {forecast.id}")
+                print(f"Amount: {forecast.debit}")
+                
+                # Get the check details
+                try:
+                    check = Check.objects.select_related(
+                        'beneficiary', 'checker', 'cause'
+                    ).get(id=forecast.source_id)
+                    
+                    print(f"Found Check {check.position}")
+                    print(f"Payment due: {check.payment_due}")
+                    print(f"Checker type: {check.checker.type}")
+                    
+                    # Get supplier balance using existing function
+                    supplier_balance = get_supplier_balance(check.beneficiary)
+                    
+                    forecast_data = {
+                        'type': 'LCN' if check.checker.type == 'LCN' else 'Check',
+                        'payment': {
+                            'reference': check.position,
+                            'amount': float(forecast.debit)
+                        },
+                        'supplier': {
+                            'name': check.beneficiary.name,
+                            'balance': float(supplier_balance['balance'])  # Using actual balance from get_supplier_balance
+                        },
+                        'dates': {
+                            'due_date': check.payment_due.strftime('%Y-%m-%d'),
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d')
+                        },
+                        'invoice': {
+                            'ref': check.cause.ref if check.cause else None,
+                            'id': str(check.cause.id) if check.cause else None
+                        }
+                    }
+                    
+                    forecasts_data.append(forecast_data)
+                    total_amount += forecast.debit
+                    print(f"Added to forecast data. Total now: {total_amount}")
+                    
+                except Check.DoesNotExist:
+                    print(f"Check {forecast.source_id} not found")
+                    continue
+            
+            return JsonResponse({
+                'status': 'success',
+                'forecasts': forecasts_data,
+                'total': float(total_amount)
+            })
+            
+        except Exception as e:
+            print(f"Error in SupplierForecastView: {str(e)}")
+            print(f"Traceback: {traceback.format_exc()}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        

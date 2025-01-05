@@ -1,3 +1,4 @@
+from datetime import datetime
 from django.urls import reverse_lazy
 from django.template.loader import render_to_string
 from django.views import View
@@ -688,7 +689,9 @@ class CheckActionView(View):
 
                 if action == 'print':
                     if check.status == 'draft':
+                        print_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
                         check.status = 'printed'
+                        check.printed_at = print_date
                         check.save()
                 elif action == 'sign':
                     signature = data.get('signature')
@@ -725,21 +728,28 @@ class CheckActionView(View):
 
                 elif action == 'cancel':
                     reason = data.get('reason')
+                    cancel_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
                     if not reason:
                         return JsonResponse({'error': 'Reason is required'}, status=400)
-                    check.cancelled_at = timezone.now()
+                    check.cancelled_at = cancel_date
                     check.cancellation_reason = reason
                     check.status = 'cancelled'
 
                 elif action == 'deliver':
-                    check.delivered_at = timezone.now()
+                    if not check.printed_at:
+                        return JsonResponse({'error': 'Check must be printed first'}, status=400)
+                    deliver_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                    check.delivered_at = deliver_date
                     check.status = 'delivered'
+                    check.save()
 
                 elif action == 'pay':
                     if not check.delivered_at:
                         return JsonResponse({'error': 'Check must be delivered first'}, status=400)
-                    check.paid_at = timezone.now()
+                    pay_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                    check.paid_at = pay_date
                     check.status = 'paid'
+                    check.save()
                 
                 elif action == 'edit':
                     # Validate check can be edited
@@ -866,6 +876,7 @@ class CheckDetailView(View):
             check = Check.objects.get(id=check_id)
             data = {
                 "creation_date": check.creation_date.strftime("%Y-%m-%d") if check.creation_date else None,
+                "printed_at": check.printed_at.strftime("%Y-%m-%d") if check.printed_at else None,
                 "delivered_at": check.delivered_at.strftime("%Y-%m-%d") if check.delivered_at else None,
                 "paid_at": check.paid_at.strftime("%Y-%m-%d") if check.paid_at else None,
                 "rejected_at": check.rejected_at.strftime("%Y-%m-%d") if check.rejected_at else None,

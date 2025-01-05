@@ -55,6 +55,10 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
+                    <label>Cancellation Date</label>
+                    <input type="date" class="form-control" id="cancel-date" required>
+                </div>
+                <div class="form-group">
                     <label>Cancellation Reason</label>
                     <textarea class="form-control" id="cancellation-reason" rows="3" required></textarea>
                 </div>
@@ -137,3 +141,68 @@
 </div>
 
 
+<!-- Print Date Modal -->
+<div class="modal fade" id="printDateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Set Print Date</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Print Date</label>
+                    <input type="date" class="form-control" id="print-date" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-print">Confirm Print</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Deliver Date Modal -->
+<div class="modal fade" id="deliverDateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Set Delivery Date</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Delivery Date</label>
+                    <input type="date" class="form-control" id="deliver-date" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-deliver">Confirm Delivery</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Pay Date Modal -->
+<div class="modal fade" id="payDateModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Set Payment Date</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Payment Date</label>
+                    <input type="date" class="form-control" id="pay-date" required>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirm-pay">Confirm Payment</button>
+            </div>
+        </div>
+    </div>
+</div>

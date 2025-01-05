@@ -2,7 +2,7 @@ from django.views.generic import ListView, View
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.template.loader import render_to_string
-from .models import BankAccount, BankFeeTransaction, Presentation
+from .models import BankAccount, BankFeeTransaction, BankStatement, Presentation
 from django.contrib import messages
 import json
 from django.core.exceptions import ValidationError
@@ -41,7 +41,8 @@ class BankAccountListView(ListView):
             queryset = queryset.filter(account_number__icontains=search)
 
         for account in queryset:
-            account.current_balance = account.get_current_balance()
+            entries = BankStatement.get_statement(account)
+            account.current_balance = entries[0]['balance'] if entries else Decimal('0.00')
             
         return queryset
 
