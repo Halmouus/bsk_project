@@ -220,6 +220,33 @@ class ReceiptUpdateView(View):
             month_choices = [(i, calendar.month_name[i]) for i in range(1, 13)]
             bank_accounts = BankAccount.objects.filter(is_active=True)
 
+            # Get existing compensations if this is a cash or transfer receipt
+            compensations = []
+            print("\nFetching existing compensations...")
+            compensation_records = CompensationRecord.objects.filter(
+                compensator_content_type=ContentType.objects.get_for_model(receipt.__class__),
+                compensator_id=receipt.id
+            ).select_related('compensated_content_type')
+            
+            print(f"Found {compensation_records.count()} compensation records")
+                
+            for record in compensation_records:
+                # Get the compensated receipt (check or LCN)
+                compensated_receipt = record.compensated_receipt
+                if compensated_receipt:
+                    comp_status = compensated_receipt.get_compensation_status()
+                    compensations.append({
+                        'id': str(compensated_receipt.id),
+                        'type': compensated_receipt.__class__.__name__,
+                        'number': compensated_receipt.get_receipt_number(),
+                        'entity': compensated_receipt.entity.name,
+                        'amount': str(record.amount),  # Convert Decimal to string
+                        'total_amount': str(compensated_receipt.amount),  # Convert Decimal to string
+                        'remaining': str(comp_status['remaining']), 
+                        'record_id': str(record.id)
+                    })
+                    print(f"Added compensation: {compensations[-1]}")
+
             print("\nPreparing context:")
             context = {
                 'receipt_type': receipt_type,
@@ -237,6 +264,7 @@ class ReceiptUpdateView(View):
                     'text': f"{receipt.entity.name} ({receipt.entity.ice_code})"
                 },
                 'bank_choices': MOROCCAN_BANKS,
+                'existing_compensations': json.dumps(compensations)  # Add compensations to context
             }
             print("Context prepared:", context)
             
@@ -478,8 +506,27 @@ class ReceiptStatusUpdateView(View):
                 unpaid_date = data.get('unpaid_date')
                 if unpaid_date:
                     unpaid_date = datetime.strptime(unpaid_date, '%Y-%m-%d')
+                    unpaid_date = timezone.make_aware(unpaid_date)
+    
+                print(f"Marking receipt {receipt.get_receipt_number()} as unpaid")
+                print(f"Cause: {cause}")
+                print(f"Unpaid date: {unpaid_date}")
+                
+                # Get the presentation receipt for history
+                presentation_receipt = None
+                if hasattr(receipt, 'check_presentations'):
+                    presentation_receipt = receipt.check_presentations.last()
+                elif hasattr(receipt, 'lcn_presentations'):
+                    presentation_receipt = receipt.lcn_presentations.last()
+                    
+                print(f"Found presentation receipt: {presentation_receipt}")
                 
                 receipt.mark_as_unpaid(cause, unpaid_date)
+                
+                if presentation_receipt:
+                    presentation_receipt.recorded_status = 'UNPAID'
+                    presentation_receipt.save()
+                    print(f"Updated presentation receipt status to UNPAID")
 
                 ForecastStatement.objects.filter(
                     source_type=receipt_type.lower(),
@@ -927,7 +974,7 @@ def compensation_timeline(request, receipt_type, pk):
         is_active=True
     ).select_related(
         'compensator_content_type'
-    ).order_by('created_at')
+    )
 
     # Format records for template
     records = []
@@ -935,11 +982,13 @@ def compensation_timeline(request, receipt_type, pk):
         compensator = record.compensator_receipt
         records.append({
             'amount': record.amount,
-            'date': record.created_at,
+            'date': compensator.operation_date, 
             'type': compensator.__class__.__name__,
             'number': compensator.get_receipt_number(),
             'entity': compensator.entity.name if hasattr(compensator, 'entity') else None
         })
+
+    records.sort(key=lambda x: x['date'], reverse=True)
 
     context = {
         'receipt': receipt,

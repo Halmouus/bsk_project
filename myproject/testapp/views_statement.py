@@ -100,6 +100,8 @@ class AccountingView(View):
                 end_date=end_date
             )
             
+            entries = [entry for entry in entries if entry['journal_code'] != '06']
+
             context = {
                 'bank_account': bank_account,
                 'entries': entries,
@@ -645,6 +647,9 @@ class PendingForecastsView(View):
                         'type': 'Supplier Payment',
                         'payment_type': check.checker.type,
                         'number': check.position,
+                        'status': check.status,
+                        'status_display': check.get_status_display(),
+                        'source_id': str(check.id),
                         'supplier': {
                             'name': check.beneficiary.name,
                             'balance': float(supplier_balance['balance'])
@@ -774,20 +779,27 @@ class SupplierForecastView(View):
                         'type': 'LCN' if check.checker.type == 'LCN' else 'Check',
                         'payment': {
                             'reference': check.position,
-                            'amount': float(forecast.debit)
+                            'amount': float(forecast.debit),
+                            'id': str(check.id),
+                            'status': check.status,
+                            'status_display': check.get_status_display()
                         },
                         'supplier': {
                             'name': check.beneficiary.name,
-                            'balance': float(supplier_balance['balance'])  # Using actual balance from get_supplier_balance
+                            'balance': float(supplier_balance['balance'])
                         },
                         'dates': {
                             'due_date': check.payment_due.strftime('%Y-%m-%d'),
-                            'forecast_date': forecast.date.strftime('%Y-%m-%d')
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                            'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+                            'printed_at': check.printed_at.strftime('%Y-%m-%d') if check.printed_at else None
                         },
                         'invoice': {
                             'ref': check.cause.ref if check.cause else None,
                             'id': str(check.cause.id) if check.cause else None
-                        }
+                        },
+                        'status': check.status,
+                        'status_display': check.get_status_display()
                     }
                     
                     forecasts_data.append(forecast_data)

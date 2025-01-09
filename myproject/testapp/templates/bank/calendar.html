@@ -292,6 +292,78 @@
             </div>
         </div>
     </div>
+
+    <!-- Payment Status Modal -->
+    <div class="modal fade" id="checkPaymentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark Payment as Paid</h5>
+                    <button type="button" class="btn-close" data-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="checkPaymentDate" class="form-label">Payment Date</label>
+                        <input type="date" 
+                            class="form-control" 
+                            id="checkPaymentDate" 
+                            required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmCheckPayment">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Check Rejection Modal -->
+    <div class="modal fade" id="checkRejectionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark Payment as Rejected</h5>
+                    <button type="button" class="btn-close" data-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="checkRejectionCause" class="form-label">Rejection Cause</label>
+                        <select class="form-control" id="checkRejectionCause" required>
+                            <option value="">Select a cause...</option>
+                            <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                            <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                            <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                            <option value="INVALID_DATE">Date Invalid/Post-dated</option>
+                            <option value="AMOUNT_DISCREPANCY">Amount Discrepancy</option>
+                            <option value="TECHNICAL_ERROR">Technical Error (MICR)</option>
+                            <option value="STOP_PAYMENT">Stop Payment Order</option>
+                            <option value="ACCOUNT_ERROR">Account Number Error</option>
+                            <option value="FORMAL_DEFECT">Formal Defect</option>
+                            <option value="BANK_ERROR">Bank Processing Error</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="checkRejectionDate" class="form-label">Rejection Date</label>
+                        <input type="date" 
+                            class="form-control" 
+                            id="checkRejectionDate" 
+                            required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="checkRejectionNote" class="form-label">Additional Notes</label>
+                        <textarea class="form-control" 
+                                id="checkRejectionNote" 
+                                rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmCheckRejection">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
     
 <style>
     /* Base Styles */
@@ -1073,7 +1145,9 @@
     }
 
     .forecast-item .badge {
-        font-weight: normal;
+        color: white !important;
+        font-weight: 500;
+        padding: 0.4rem 0.8rem;
     }
 
     .forecast-item .card-body {
@@ -1084,8 +1158,65 @@
         width: 20px;
         text-align: center;
         color: #6c757d;
-    } 
-    </style>
+    }
+
+    .forecast-item .action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;  /* More space from the amount */
+    padding-top: 1.5rem; /* Add top padding */
+    border-top: 1px solid rgba(0,0,0,0.08); /* Subtle separator */
+}
+
+.forecast-item .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Pay button */
+.forecast-item .btn-success {
+    background-color: white;
+    border: 1px solid #1cc88a;
+    color: #1cc88a;
+}
+
+.forecast-item .btn-success:hover {
+    background-color: #1cc88a;
+    color: white;
+    box-shadow: 0 4px 8px rgba(28, 200, 138, 0.2);
+}
+
+.forecast-item .btn-success i {
+    color: inherit;  /* Icon color matches text */
+}
+
+/* Reject/Unpay button */
+.forecast-item .btn-danger {
+    background-color: white;
+    border: 1px solid #e74a3b;
+    color: #e74a3b;
+}
+
+.forecast-item .btn-danger:hover {
+    background-color: #e74a3b;
+    color: white;
+    box-shadow: 0 4px 8px rgba(231, 74, 59, 0.2);
+}
+
+.forecast-item .btn-danger i {
+    color: inherit;  /* Icon color matches text */
+}
+
+     
+</style>
 {% endblock %}
 
 {% block extra_js %}
@@ -1242,7 +1373,7 @@
         // Get current date for comparison
         const today = new Date();
         today.setHours(0, 0, 0, 0);  // Reset time part for accurate comparison
-        console.log("Today's date for comparison:", today);
+        //console.log("Today's date for comparison:", today);
 
         data.forEach(week => {
             const tr = document.createElement('tr');
@@ -1255,7 +1386,7 @@
                     // Parse the day's date for comparison
                     const dayDate = new Date(day.date);
                     dayDate.setHours(0, 0, 0, 0);  // Reset time part for accurate comparison
-                    console.log(`Processing date: ${dayDate}, is past:`, dayDate < today);
+                    //console.log(`Processing date: ${dayDate}, is past:`, dayDate < today);
 
                     // Add past day class
                     if (dayDate < today) {
@@ -1406,6 +1537,12 @@
                                 </div>
                                 <div class="forecast-body">
                                     <div class="forecast-detail">
+                                        <i class="fas fa-file-alt"></i>
+                                        <span class="detail-label">Receipt Type:</span>
+                                        ${forecast.receipt_type}
+                                    </div>
+                                <div class="forecast-body">
+                                    <div class="forecast-detail">
                                         <i class="fas fa-building"></i>
                                         <span class="detail-label">Entity:</span>
                                         ${forecast.entity}
@@ -1502,45 +1639,113 @@
     }
 
     function loadPaymentForecasts(date, bankId) {
-        console.log('Loading payment forecasts:', { date, bankId });
+        console.log('\n=== Loading Payment Forecasts ===');
+        console.log('Parameters:', { date, bankId });
         
         const modal = document.getElementById('paymentForecastModal');
         const listDiv = modal.querySelector('.forecast-list');
         const totalSpan = modal.querySelector('.total-amount');
         
+        if (!modal || !listDiv || !totalSpan) {
+            console.error('Required DOM elements not found:', { modal, listDiv, totalSpan });
+            return;
+        }
+        
         listDiv.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
         
         fetch(`/testapp/calendar/supplier-forecasts/?date=${date}&bank=${bankId}`)
-            .then(response => response.json())
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log('\nReceived forecast data:', data);
+                console.log('Data status:', data.status);
+                console.log('Number of forecasts:', data.forecasts?.length || 0);
+                
                 if (data.status === 'success') {
-                    listDiv.innerHTML = data.forecasts.length ? data.forecasts.map(forecast => `
-                        <div class="forecast-item mb-3">
-                            <div class="card">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-start">
-                                        <div>
-                                            <h6 class="mb-1">${forecast.supplier.name}</h6>
-                                            <div class="text-muted small">
-                                                ${forecast.type} #${forecast.payment.reference}
-                                                <span class="mx-1">•</span>
-                                                <a href="/testapp/invoices/${forecast.invoice.id}/update/">
-                                                    ${forecast.invoice.ref}
-                                                </a>
+                    if (data.forecasts && data.forecasts.length > 0) {
+                        console.log('\nProcessing forecasts:');
+                        const htmlContent = data.forecasts.map(forecast => {
+                            console.log('\nProcessing forecast:', {
+                                supplierName: forecast.supplier?.name,
+                                type: forecast.type,
+                                reference: forecast.payment?.reference,
+                                status: forecast.payment?.status,
+                                statusDisplay: forecast.payment?.status_display,
+                                amount: forecast.payment?.amount
+                            });
+                            
+                            // Validate required data
+                            if (!forecast.payment || !forecast.supplier) {
+                                console.error('Missing required forecast data:', forecast);
+                                return '';
+                            }
+
+                            return `
+                                <div class="forecast-item mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="mb-1">${forecast.supplier.name}</h6>
+                                                    <div class="text-muted small">
+                                                        ${forecast.type} #${forecast.payment.reference}
+                                                        ${forecast.invoice?.ref ? `
+                                                            <span class="mx-1">•</span>
+                                                            <a href="/testapp/invoices/${forecast.invoice.id}/update/">
+                                                                ${forecast.invoice.ref}
+                                                            </a>
+                                                        ` : ''}
+                                                    </div>
+                                                    ${forecast.payment.status ? `
+                                                        <div class="mt-1">
+                                                            <span class="badge badge-${getStatusColor(forecast.payment.status)}">
+                                                                ${forecast.payment.status_display || forecast.payment.status}
+                                                            </span>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                                <span class="amount">${formatAmount(forecast.payment.amount)}</span>
+                                            </div>
+                                            <div class="dates mt-2 text-muted small">
+                                                <div>Due Date: ${forecast.dates?.due_date || 'N/A'}</div>
+                                                ${forecast.payment.status === 'delivered' ? `
+                                                    <div class="mt-2">
+                                                        <div>Delivered: ${formatDate(forecast.dates.delivered_at)}</div>
+                                                    </div>
+                                                    <div class="mt-2 d-flex justify-content-end">
+                                                        <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                                data-check-id="${forecast.payment.id}"
+                                                                data-delivered-at="${forecast.dates.delivered_at}">
+                                                            <i class="fas fa-check me-1"></i>Mark as Paid
+                                                        </button>
+                                                        <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                                data-check-id="${forecast.payment.id}"
+                                                                data-delivered-at="${forecast.dates.delivered_at}">
+                                                            <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                        </button>
+                                                    </div>
+                                                ` : ''}
                                             </div>
                                         </div>
-                                        <span class="amount">${formatAmount(forecast.payment.amount)}</span>
-                                    </div>
-                                    <div class="dates mt-2 text-muted small">
-                                        <div>Due Date: ${forecast.dates.due_date}</div>
                                     </div>
                                 </div>
-                            </div>
-                        </div>
-                    `).join('') : '<div class="text-center text-muted">No payments forecasted</div>';
+                            `;
+                        }).join('');
+                        
+                        console.log('HTML content length:', htmlContent.length);
+                        listDiv.innerHTML = htmlContent;
+                        
+                    } else {
+                        console.log('No forecasts found');
+                        listDiv.innerHTML = '<div class="text-center text-muted">No payments forecasted</div>';
+                    }
                     
+                    console.log('Setting total amount:', data.total);
                     totalSpan.textContent = formatAmount(data.total);
                 } else {
+                    console.error('Request failed:', data);
                     listDiv.innerHTML = '<div class="alert alert-danger">Failed to load forecasts</div>';
                 }
             })
@@ -1550,6 +1755,22 @@
             });
     }
 
+// Helper function with debug logging
+function getStatusColor(status) {
+    console.log('Getting color for status:', status);
+    const color = {
+        'draft': 'secondary',
+        'printed': 'info',
+        'pending': 'warning',
+        'delivered': 'primary',
+        'paid': 'success',
+        'rejected': 'danger',
+        'cancelled': 'dark'
+    }[status] || 'secondary';
+    
+    console.log('Selected color:', color);
+    return color;
+}
     function addTooltips() {
     console.log("=== Starting addTooltips() ===");
     
@@ -1781,16 +2002,19 @@
         
         modalBody.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
         modal.show();
+
+        console.log('\n=== Loading Pending Forecasts ===');
+        console.log('Bank ID:', bankId);
         
         // Fetch pending forecasts
         fetch(`/testapp/bank/pending-forecasts/${bankId}/`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.status === 'success') {
-                    let html = '';
-                    data.forecasts.forEach(forecast => {
-                        if (forecast.type === 'Supplier Payment') {
-                        // Supplier Payment card
+        .then(response => response.json())
+        .then(data => {
+            console.log('Received forecast data:', data);  // Debug log
+            if (data.status === 'success') {
+                let html = '';
+                data.forecasts.forEach(forecast => {
+                    if (forecast.type === 'Supplier Payment') {
                         html += `
                         <div class="forecast-item payment mb-3">
                             <div class="card">
@@ -1800,6 +2024,9 @@
                                             ${forecast.payment_type} Payment
                                         </span>
                                         <span class="fw-bold">#${forecast.number}</span>
+                                        <span class="ms-2 badge bg-${getStatusColor(forecast.status)}">
+                                            ${forecast.status_display || forecast.status}
+                                        </span>
                                     </div>
                                     <div class="amount fw-bold">
                                         ${formatBalance(forecast.amount)}
@@ -1842,6 +2069,20 @@
                                             ` : ''}
                                         </div>
                                     </div>
+                                    ${forecast.status === 'delivered' ? `
+                                    <div class="mt-3 d-flex justify-content-end">
+                                        <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                data-check-id="${forecast.source_id}"  // Change this line
+                                                data-delivered-at="${forecast.delivered_at}">
+                                            <i class="fas fa-check me-1"></i>Mark as Paid
+                                        </button>
+                                        <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                data-check-id="${forecast.source_id}"  // Change this line
+                                                data-delivered-at="${forecast.delivered_at}">
+                                            <i class="fas fa-times me-1"></i>Mark as Rejected
+                                        </button>
+                                    </div>
+                                ` : ''}
                                 </div>
                             </div>
                         </div>
@@ -1860,7 +2101,7 @@
                                             </span>
                                             <span class="fw-bold">${forecast.number}</span>
                                         </div>
-                                        <div class="d-flex align-items-center">
+                                        <div class="d-flex align-items-center ">
                                             <span class="amount ${amountClass} fw-bold me-3">
                                                 ${new Intl.NumberFormat('en-US', { 
                                                     style: 'decimal',
@@ -1887,6 +2128,10 @@
                                     <div class="card-body">
                                         <div class="row">
                                             <div class="col-md-6">
+                                                <div class="mb-2">
+                                                    <i class="fas fa-receipt me-2"></i>
+                                                    <strong>Receipt Type:</strong> ${forecast.receipt_type}
+                                                </div>
                                                 <div class="mb-2">
                                                     <i class="fas fa-building me-2"></i>
                                                     <strong>Entity:</strong> ${forecast.entity}
@@ -2023,6 +2268,110 @@
             cause: rejectionCause
         });
     });
+
+    let activeSupplierCheckData = null;
+    // Event handler for marking check as paid
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-check-paid')) {
+            const button = e.target.closest('.mark-check-paid');
+            const deliveredAt = button.dataset.deliveredAt;
+            
+            const paymentDateInput = document.getElementById('checkPaymentDate');
+            paymentDateInput.min = deliveredAt;
+            paymentDateInput.value = deliveredAt;
+            
+            activeSupplierCheckData = {
+                id: button.dataset.checkId
+            };
+            
+            const paidModal = new bootstrap.Modal(document.getElementById('checkPaymentModal'));
+            paidModal.show();
+        }
+    });
+    
+    // Event handler for marking check as rejected
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-check-rejected')) {
+            const button = e.target.closest('.mark-check-rejected');
+            const deliveredAt = button.dataset.deliveredAt;
+            
+            const rejectionDateInput = document.getElementById('checkRejectionDate');
+            rejectionDateInput.min = deliveredAt;
+            rejectionDateInput.value = deliveredAt;
+            
+            activeSupplierCheckData = {
+                id: button.dataset.checkId
+            };
+            
+            const rejectionModal = new bootstrap.Modal(document.getElementById('checkRejectionModal'));
+            rejectionModal.show();
+        }
+    });
+
+    // Handle check payment confirmation
+    document.getElementById('confirmCheckPayment').addEventListener('click', function() {
+        const paymentDate = document.getElementById('checkPaymentDate').value;
+        if (!paymentDate) {
+            alert('Please select a payment date');
+            return;
+        }
+
+        updateCheckStatus({
+            action: 'pay',
+            date: paymentDate
+        });
+    });
+
+    // Handle check rejection confirmation
+    document.getElementById('confirmCheckRejection').addEventListener('click', function() {
+        const rejectionDate = document.getElementById('checkRejectionDate').value;
+        const rejectionCause = document.getElementById('checkRejectionCause').value;
+        const rejectionNote = document.getElementById('checkRejectionNote').value;
+        
+        if (!rejectionDate || !rejectionCause) {
+            alert('Please fill in all required fields');
+            return;
+        }
+
+        updateCheckStatus({
+            action: 'reject',
+            date: rejectionDate,
+            rejection_reason: rejectionCause,
+            rejection_note: rejectionNote
+        });
+    });
+
+
+    function updateCheckStatus(data) {
+        fetch(`/testapp/checks/${activeSupplierCheckData.id}/action/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                // Close modals
+                bootstrap.Modal.getInstance(document.getElementById('checkPaymentModal'))?.hide();
+                bootstrap.Modal.getInstance(document.getElementById('checkRejectionModal'))?.hide();
+                
+                // Refresh the pending forecasts view
+                const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+                viewPendingForecasts(currentBank);
+                
+                showToast('success', result.message || 'Status updated successfully');
+            } else {
+                throw new Error(result.message || 'Failed to update status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', error.message || 'Failed to update check status');
+        });
+    }
 
     function markReceiptStatus(status, data) {
         console.log(`Marking receipt as ${status}:`, data);

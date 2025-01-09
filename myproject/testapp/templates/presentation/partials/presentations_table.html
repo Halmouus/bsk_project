@@ -5,6 +5,15 @@
 <tr>
     <td>{{ presentation.date|date:"Y-m-d" }}</td>
     <td>{{ presentation.get_presentation_type_display }}</td>
+    <td>
+        {% with first_receipt=presentation.presentation_receipts.first %}
+            {% if first_receipt.checkreceipt %}
+                Check
+            {% elif first_receipt.lcn %}
+                LCN
+            {% endif %}
+        {% endwith %}
+    </td>
     <td>{{ presentation.bank_account.bank }} - {{ presentation.bank_account.account_number }}</td>
     <td>{{ presentation.bank_reference|default:"-" }}</td>
     <td class="text-right">{{ presentation.total_amount|format_balance }}</td>

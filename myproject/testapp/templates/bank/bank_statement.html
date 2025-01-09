@@ -1073,6 +1073,7 @@ $('#startDate, #endDate').on('change', function() {
         success: function(response) {
             if (response && response.html) {
                 $('#statementTableBody').html(response.html);
+                initializeRecordCheckboxes();
             }
             
             if (response && response.totals) {
@@ -1110,6 +1111,29 @@ $('#startDate, #endDate').on('change', function() {
         }
     });
 });
+
+function initializeRecordCheckboxes() {
+    console.log("Reinitializing record checkboxes");
+    $('.record-checkbox').change(function() {
+        const $checkbox = $(this);
+        const recordData = {
+            source_type: $checkbox.data('source-type'),
+            source_id: $checkbox.data('source-id'),
+            amount: $checkbox.data('amount'),
+            date: $checkbox.data('date'),
+            label: $checkbox.data('label'),
+            reference: $checkbox.data('reference')
+        };
+        
+        if (this.checked) {
+            selectedRecords.set(recordData.source_id, recordData);
+        } else {
+            selectedRecords.delete(recordData.source_id);
+        }
+        
+        updateSelectionUI();
+    });
+}
 
 // Remove the form submit handler since we're using change events
 $('#statementFilterForm').on('submit', function(e) {

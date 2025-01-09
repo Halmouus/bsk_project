@@ -629,6 +629,7 @@ class CheckCancelView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
+@method_decorator(csrf_exempt, name='dispatch')
 class CheckActionView(View):
     def get(self, request, pk):
         """Get check details for editing"""

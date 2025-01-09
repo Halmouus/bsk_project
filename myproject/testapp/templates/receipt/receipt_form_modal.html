@@ -3,7 +3,7 @@
     Receipt type from context: {{ receipt_type }}
     Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %}
 </div>
-
+{% load accounting_filters %}
 <!-- Modal Header -->
 <div class="modal-header bg-gradient-primary text-white">
     <h5 class="modal-title">
@@ -287,6 +287,9 @@
     </button>
 </div>
 
+<input type="hidden" id="compensation-data" value="{{ existing_compensations }}">
+
+
 <style>
 .modal-header.bg-gradient-primary {
     background: linear-gradient(45deg, #4e73df, #224abe);
@@ -419,6 +422,8 @@
     color: #dc3545;
 }
 
+
+
 </style>
 
 <script>
@@ -431,6 +436,39 @@ $(document).ready(function() {
             { label: '{{ name }}', value: '{{ code }}' },
         {% endfor %}
     ];
+
+    try {
+        const compensationData = $('#compensation-data').val();
+        console.log('Raw compensation data:', compensationData);
+        
+        const existingCompensations = JSON.parse(compensationData || '[]');
+        console.log('Parsed compensations:', existingCompensations);
+
+        if (existingCompensations && existingCompensations.length > 0) {
+            existingCompensations.forEach(comp => {
+                const entry = createCompensationEntry();
+                const displayInput = entry.find('.unpaid-receipt-display');
+                const selectInput = entry.find('.unpaid-receipt-select');
+                const amountInput = entry.find('.compensation-amount');
+                
+                displayInput.val(`${comp.type} #${comp.number} - ${comp.entity}`);
+                selectInput.append($('<option>', {
+                    value: comp.id,
+                    text: `${comp.type} #${comp.number} - ${comp.entity}`,
+                    selected: true
+                }));
+                
+                amountInput
+                    .val(comp.amount)
+                    .prop('disabled', false)
+                    .attr('data-record-id', comp.record_id);
+                    
+                $('#compensations-container').append(entry);
+            });
+        }
+    } catch (error) {
+        console.error('Error loading compensations:', error);
+    }
 
     // Utility functions
     function getCookie(name) {
@@ -887,9 +925,30 @@ $(document).ready(function() {
                 showValidationFeedback($(this), 'Please select a valid receipt');
             }
         }
-    }).on('focus', function() {
+    }).data('ui-autocomplete')._renderItem = function(ul, item) {
+    return $("<li>")
+        .append(`<div class='ui-menu-item-wrapper'>
+            <span>${item.description}</span>
+            <span class='amount-info'>
+                ${item.remaining.toLocaleString('fr-MA', {minimumFractionDigits: 2})} / 
+                ${item.amount.toLocaleString('fr-MA', {minimumFractionDigits: 2})}
+            </span>
+        </div>`)
+        .appendTo(ul);
+};
+
+    // Keep the focus handler
+    $(this).on('focus', function() {
         $(this).autocomplete('search', '');
     });
+
+    function formatAmount(amount) {
+        return new Intl.NumberFormat('fr-MA', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+            useGrouping: true
+        }).format(amount);
+    }
 
     // Amount input handling
     const amountInput = entry.find('.compensation-amount');

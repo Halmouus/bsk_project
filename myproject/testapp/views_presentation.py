@@ -257,7 +257,7 @@ class PresentationUpdateView(View):
                             print("Creating discount entries")
                             # Create forecast for future payment
                             if isinstance(receipt, LCN):
-                                forecast_date = receipt.due_date
+                                forecast_date = self._calculate_business_day(receipt.due_date, 0)
                             else:
                                 days = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
                                 forecast_date = self._calculate_business_day(presentation.date, days)
@@ -271,6 +271,8 @@ class PresentationUpdateView(View):
                                 source_type=receipt.__class__.__name__.lower(),
                                 source_id=receipt.id
                             )
+                            print(f"Setting receipt {receipt.get_receipt_number()} to DISCOUNTED with presentation date {presentation.date}")
+                            receipt._presentation_date = presentation.date
                             receipt.status = 'DISCOUNTED'
                         
                         receipt.save()

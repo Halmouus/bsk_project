@@ -251,6 +251,11 @@ const CheckFilters = {
             const checkId = $(e.currentTarget).data('check-id');
             const printDate = $('#print-date').val();
             
+            if (!printDate) {
+                alert('Please select a date');
+                return;
+            }
+
             try {
                 const response = await fetch(`/testapp/checks/${checkId}/action/`, {
                     method: 'POST',

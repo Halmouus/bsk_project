@@ -1996,14 +1996,33 @@ class NegotiableReceipt(Receipt):
                     if not getattr(self, '_skip_status_history', False):
                         print("Recording status change in history")
                         
-                        # Use presentation_date for presentations, unpaid_date for unpaid status
+                        # Get appropriate business date based on status
                         business_date = None
-                        if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT']:
-                            business_date = getattr(self, '_presentation_date', None)
+                        
+                        # Get the presentation receipt for the current receipt
+                        presentation_receipt = None
+                        if hasattr(self, 'check_presentations'):
+                            presentation_receipt = self.check_presentations.last()
+                        elif hasattr(self, 'lcn_presentations'):
+                            presentation_receipt = self.lcn_presentations.last()
+                            
+                        if presentation_receipt:
+                            print(f"Found presentation receipt: {presentation_receipt.id}")
+                            print(f"Presentation date: {presentation_receipt.presentation.date}")
+                        
+                        if self.status in ['PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT', 'DISCOUNTED']:
+                            # For any presentation-related status, use the presentation date
+                            if presentation_receipt:
+                                business_date = presentation_receipt.presentation.date
+                                print(f"Using presentation date as business date: {business_date}")
                         elif self.status == 'UNPAID':
                             business_date = self.unpaid_date
+                            print(f"Using unpaid date as business date: {business_date}")
                         elif self.status in ['COMPENSATED', 'PARTIALLY_COMPENSATED']:
                             business_date = getattr(self, '_force_status_date', None)
+                            print(f"Using forced status date as business date: {business_date}")
+                        
+                        print(f"Final business date for history: {business_date}")
                         
                         self.record_history(
                             action='status_changed',
@@ -2153,14 +2172,7 @@ class NegotiableReceipt(Receipt):
         print(f"Amount: {amount}")
         
         # Get the business date from the compensating receipt's creation/operation date
-        if isinstance(compensating_receipt, (CashReceipt, TransferReceipt)):
-            business_date = compensating_receipt.operation_date
-        else:
-            # Create a timezone-aware datetime using your existing datetime module setup
-            created_date = compensating_receipt.created_at.date()
-            business_date = timezone.make_aware(
-                datetime.datetime(created_date.year, created_date.month, created_date.day)
-            )
+        business_date = compensating_receipt.operation_date
         
         print(f"Using business date from compensator creation: {business_date}")
 
@@ -3339,6 +3351,7 @@ class AccountingEntry(models.Model):
                 
                 # For discount presentations
                 elif pres.presentation_type == 'DISCOUNT':
+                    
                     # Initial discount entry
                     label = f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
                     
@@ -3373,11 +3386,21 @@ class AccountingEntry(models.Model):
                     # If marked as unpaid in this presentation, add reversal
                     if pr.recorded_status == 'UNPAID':
                         label = f"Reversal of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
+
+                        payment_history = ReceiptHistory.objects.filter(
+                            content_type=ContentType.objects.get_for_model(receipt.__class__),
+                            object_id=receipt.id,
+                            action='status_changed',
+                            new_value__status='UNPAID'
+                        ).order_by('business_date', '-timestamp').first()
                         
+                        entry_date = payment_history.business_date.date() if payment_history and payment_history.business_date else pres.date
+                        print(f"Using payment date for discounted receipt: {entry_date}")
+
                         # Add debit and credit pair for reversal
                         entries.extend([
                             {
-                                'date': pres.date,
+                                'date': entry_date,
                                 'label': label,
                                 'debit': None,
                                 'credit': receipt.amount,
@@ -3389,7 +3412,7 @@ class AccountingEntry(models.Model):
                                 'pair_index': len(entries) // 2
                             },
                             {
-                                'date': pres.date,
+                                'date': entry_date,
                                 'label': label,
                                 'debit': receipt.amount,
                                 'credit': None,
@@ -3406,10 +3429,20 @@ class AccountingEntry(models.Model):
                     elif pr.recorded_status == 'PAID':
                         label = f"Payment of discounted {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
                         
+                        payment_history = ReceiptHistory.objects.filter(
+                            content_type=ContentType.objects.get_for_model(receipt.__class__),
+                            object_id=receipt.id,
+                            action='status_changed',
+                            new_value__status='PAID'
+                        ).order_by('business_date', '-timestamp').first()
+                        
+                        entry_date = payment_history.business_date.date() if payment_history and payment_history.business_date else pres.date
+                        print(f"Using payment date for discounted receipt: {entry_date}")
+
                         # Add debit and credit pair for other operations
                         entries.extend([
                             {
-                                'date': pres.date,
+                                'date': entry_date,
                                 'label': label,
                                 'debit': receipt.amount,
                                 'credit': None,
@@ -3421,7 +3454,7 @@ class AccountingEntry(models.Model):
                                 'pair_index': len(entries) // 2
                             },
                             {
-                                'date': pres.date,
+                                'date': entry_date,
                                 'label': label,
                                 'debit': None,
                                 'credit': receipt.amount,
@@ -3590,6 +3623,7 @@ class AccountingEntry(models.Model):
                     continue
                 filtered_entries.append(entry)
             entries = filtered_entries
+            print(f"Filtered entries: {entries}")
 
         # Sort entries keeping pairs together
         entries.sort(key=lambda x: (x['date'], x['pair_index']), reverse=True)

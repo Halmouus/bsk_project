@@ -22,6 +22,7 @@
                     <th>Reference</th>
                     <th>Entity</th>
                     <th>Issue Date</th>
+                    <th>Bank</th>
                     <th>Due Date</th>
                     <th>Amount</th>
                     <th>Days to Due</th>
@@ -43,6 +44,7 @@
                     <td>{{ receipt.get_receipt_number }}</td>
                     <td>{{ receipt.entity.name }}</td>
                     <td>{{ receipt.operation_date|date:"Y-m-d" }}</td>
+                    <td>{{ receipt.get_issuing_bank_display }}</td>
                     <td>{{ receipt.due_date|date:"Y-m-d" }}</td>
                     <td class="text-right">{{ receipt.amount|format_balance }}</td>
                     <td>

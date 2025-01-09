@@ -1,24 +1,18 @@
 {% load accounting_filters %}
 
 {% for entry in entries %}
-{% if entry.entry_type == 'debit' %}  {# Show only debit entries to avoid duplicates #}
-<tr>
+<tr class="{% if entry.entry_type == 'credit' %}table-light{% endif %}">
     <td>{{ entry.date|date:"Y-m-d" }}</td>
     <td>{{ entry.label }}</td>
-    <td>
-        {% if "Payment" in entry.label %}
-            <span class="badge badge-success">Paid</span>
-        {% else %}
-            <span class="badge badge-danger">Unpaid</span>
-        {% endif %}
-    </td>
     <td class="text-right text-danger">
-        {{ entry.debit|format_balance }}
+        {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}
     </td>
     <td class="text-right text-success">
-        {{ entry.credit|format_balance }}
+        {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %}
     </td>
+    <td>{{ entry.account_code }}</td>
     <td>{{ entry.reference }}</td>
+    <td>{{ entry.journal_code }}</td>
     <td>
         {% if entry.source_type == 'presentation_receipt' %}
         <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ entry.source_id }}')">
@@ -31,9 +25,8 @@
         {% endif %}
     </td>
 </tr>
-{% endif %}
 {% empty %}
 <tr>
-    <td colspan="7" class="text-center">No entries found for this period</td>
+    <td colspan="8" class="text-center">No entries found for this period</td>
 </tr>
 {% endfor %}
