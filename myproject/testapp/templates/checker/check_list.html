@@ -12,14 +12,30 @@
                 <i class="fas fa-filter"></i> Filters
                 <span class="badge badge-light ml-2 active-filters-count" style="display:none">0</span>
             </button>
+            <button class="btn btn-outline-secondary" id="reset-filters">
+                <i class="fas fa-undo"></i> Reset
+            </button>
         </div>
     </div>
-
-    <!-- Filter Panel -->
+    
+    <!-- Updated Filter Panel -->
     <div class="filter-panel card mb-4" style="display:none">
         <div class="card-body">
-            <div class="row">
+            <div class="row g-3">
+                <!-- Quick Search Row -->
+                <div class="col-12">
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0" id="searchCheck" 
+                               placeholder="Search by reference, beneficiary...">
+                    </div>
+                </div>
+    
+                <!-- First Row of Filters -->
                 <div class="col-md-3">
+                    <label class="form-label">Bank</label>
                     <select class="form-control" id="bankFilter">
                         <option value="">All Banks</option>
                         {% for bank in banks %}
@@ -28,8 +44,19 @@
                     </select>
                 </div>
                 <div class="col-md-3">
+                    <label class="form-label">Type</label>
+                    <select class="form-control" id="typeFilter">
+                        <option value="">All Types</option>
+                        <option value="CHQ">Check</option>
+                        <option value="LCN">LCN</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
                     <select class="form-control" id="statusFilter">
                         <option value="">All Status</option>
+                        <option value="draft">Draft</option>
+                        <option value="printed">Printed</option>
                         <option value="pending">Pending</option>
                         <option value="delivered">Delivered</option>
                         <option value="paid">Paid</option>
@@ -37,13 +64,34 @@
                         <option value="cancelled">Cancelled</option>
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <select class="form-control select2" id="beneficiaryFilter">
-                        <option value="">All Beneficiaries</option>
-                    </select>
+                <div class="col-md-6">
+                    <label class="form-label">Beneficiary</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white border-end-0">
+                            <i class="fas fa-user text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0" id="beneficiarySearch"
+                               placeholder="Search beneficiary...">
+                        <input type="hidden" id="beneficiaryFilter">
+                    </div>
                 </div>
-                <div class="col-md-3">
-                    <input type="text" class="form-control" id="searchCheck" placeholder="Search...">
+    
+                <!-- Second Row - New Filters -->
+                <div class="col-md-6">
+                    <label class="form-label">Due Date Range</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control" id="dueDateFrom" placeholder="From">
+                        <span class="input-group-text">to</span>
+                        <input type="date" class="form-control" id="dueDateTo" placeholder="To">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Amount Range</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="amountFrom" placeholder="Min amount">
+                        <span class="input-group-text">to</span>
+                        <input type="number" class="form-control" id="amountTo" placeholder="Max amount">
+                    </div>
                 </div>
             </div>
         </div>
@@ -56,6 +104,7 @@
                 <tr>
                     <th>Reference</th>
                     <th>Bank</th>
+                    <th>Type</th>
                     <th>Creation Date</th>
                     <th>Signatures</th>
                     <th>Beneficiary</th>
@@ -143,54 +192,187 @@ const CheckActions = {
 
 const CheckFilters = {
     init() {
-        console.log("Initializing check filters");
-        this.bindFilters();
-        this.setupSelect2();
+        console.log("[CheckFilters] Initializing");
+        
+        // Initialize filter panel toggle
+        this.filterPanel = $('.filter-panel');
+        this.activeFiltersCount = $('.active-filters-count');
+        
+        // Initialize filters
+        this.setupFilters();
+        this.setupBeneficiarySearch();
+        this.setupResetButton();
         this.setupActionHandlers();
+        
+        // Initial filter count
+        this.updateFilterCount();
     },
 
-    bindFilters() {
-        console.log("Binding filter events");
+
+    setupFilters() {
+        // Basic filters change events
         $('#bankFilter, #statusFilter').on('change', () => {
-            console.log("Filter changed");
+            console.log("[CheckFilters] Basic filter changed");
             this.applyFilters();
         });
 
-        let timeout;
+        $('#typeFilter').on('change', () => {
+            console.log("[CheckFilters] Type filter changed");
+            this.applyFilters();
+        });
+
+        // Date range changes
+        $('#dueDateFrom, #dueDateTo').on('change', () => {
+            console.log("[CheckFilters] Date range changed");
+            this.applyFilters();
+        });
+
+        // Amount range changes
+        let amountTimeout;
+        $('#amountFrom, #amountTo').on('input', () => {
+            clearTimeout(amountTimeout);
+            amountTimeout = setTimeout(() => {
+                console.log("[CheckFilters] Amount range changed");
+                this.applyFilters();
+            }, 500);
+        });
+
+        // Search input with debounce
+        let searchTimeout;
         $('#searchCheck').on('input', () => {
-            clearTimeout(timeout);
-            timeout = setTimeout(() => this.applyFilters(), 300);
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => {
+                console.log("[CheckFilters] Search input changed");
+                this.applyFilters();
+            }, 300);
         });
     },
 
-    setupSelect2() {
-        $('#beneficiaryFilter').select2({
-            placeholder: 'Search beneficiary...',
-            allowClear: true,
-            ajax: {
-                url: "{% url 'supplier-autocomplete' %}",
-                dataType: 'json',
-                delay: 250,
-                processResults: function(data) {
-                    return {
-                        results: data.map(item => ({
-                            id: item.value,
-                            text: item.label
-                        }))
-                    };
+    setupBeneficiarySearch() {
+        console.log("[CheckFilters] Setting up beneficiary search");
+        const beneficiaryInput = $('#beneficiarySearch');
+        
+        beneficiaryInput.autocomplete({
+            minLength: 0,
+            source: async (request, response) => {
+                try {
+                    console.log("[CheckFilters] Fetching beneficiary suggestions");
+                    const result = await fetch(`/testapp/suppliers/autocomplete/?term=${request.term}`);
+                    const data = await result.json();
+                    response(data.map(item => ({
+                        label: item.label.split(' (')[0],
+                        value: item.value
+                    })));
+                } catch (error) {
+                    console.error('[CheckFilters] Error fetching beneficiaries:', error);
+                    response([]);
                 }
+            },
+            select: (event, ui) => {
+                console.log("[CheckFilters] Beneficiary selected:", ui.item);
+                beneficiaryInput.val(ui.item.label);
+                $('#beneficiaryFilter').val(ui.item.value);
+                this.applyFilters();
+                return false;
             }
-        }).on('change', () => this.applyFilters());
+        }).autocomplete("instance")._renderItem = function(ul, item) {
+            return $("<li>")
+                .append(`<div class="d-flex justify-content-between align-items-center p-2">
+                    <span>${item.label}</span>
+                    <small class="text-muted">${item.value}</small>
+                </div>`)
+                .appendTo(ul);
+        };
+
+        // Clear hidden input when search is cleared
+        beneficiaryInput.on('input', function() {
+            if (!$(this).val()) {
+                $('#beneficiaryFilter').val('');
+            }
+        });
     },
 
+    showBeneficiarySuggestions(data) {
+        const container = $('<div>').addClass('dropdown-menu show');
+        
+        data.forEach(item => {
+            $('<a>')
+                .addClass('dropdown-item')
+                .text(item.label)
+                .on('click', () => {
+                    $('#beneficiarySearch').val(item.label);
+                    $('#beneficiaryFilter').val(item.value);
+                    this.applyFilters();
+                })
+                .appendTo(container);
+        });
+
+        // Replace any existing dropdown
+        $('.beneficiary-suggestions').remove();
+        container
+            .addClass('beneficiary-suggestions')
+            .css({
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                zIndex: 1000
+            })
+            .insertAfter('#beneficiarySearch');
+    },
+
+    setupResetButton() {
+        $('#reset-filters').on('click', () => {
+            console.log("[CheckFilters] Resetting all filters");
+            
+            // Reset all inputs
+            $('select').val('');
+            $('input').val('');
+            $('#beneficiaryFilter').val('');
+            
+            // Apply filters to refresh table
+            this.applyFilters();
+        });
+
+        // Also bind to the "Clear all filters" link
+        $(document).on('click', '#clear-filters', () => {
+            $('#reset-filters').trigger('click');
+        });
+    },
+
+    updateFilterCount() {
+        const activeFilters = [
+            $('#bankFilter').val(),
+            $('#statusFilter').val(),
+            $('#beneficiaryFilter').val(),
+            $('#searchCheck').val(),
+            $('#dueDateFrom').val(),
+            $('#dueDateTo').val(),
+            $('#amountFrom').val(),
+            $('#amountTo').val(),
+            $('#typeFilter').val()
+        ].filter(Boolean).length;
+
+        if (activeFilters > 0) {
+            this.activeFiltersCount.text(activeFilters).show();
+        } else {
+            this.activeFiltersCount.hide();
+        }
+    },
 
     async applyFilters() {
-        console.log("Applying filters");
+        console.log("[CheckFilters] Applying filters");
+        
         const filters = {
             bank: $('#bankFilter').val(),
             status: $('#statusFilter').val(),
             beneficiary: $('#beneficiaryFilter').val(),
-            search: $('#searchCheck').val()
+            search: $('#searchCheck').val(),
+            due_date_from: $('#dueDateFrom').val(),
+            due_date_to: $('#dueDateTo').val(),
+            amount_from: $('#amountFrom').val(),
+            amount_to: $('#amountTo').val(),
+            type: $('#typeFilter').val()
         };
 
         try {
@@ -200,13 +382,12 @@ const CheckFilters = {
             const data = await response.json();
             $('#checksTableBody').html(data.html);
             
-            // Update filter count badge
-            const activeFilters = Object.values(filters).filter(Boolean).length;
-            const badge = $('.active-filters-count');
-            activeFilters > 0 ? badge.show().text(activeFilters) : badge.hide();
+            // Update active filters count
+            this.updateFilterCount();
+            
             
         } catch (error) {
-            console.error('Error applying filters:', error);
+            console.error('[CheckFilters] Error applying filters:', error);
         }
     },
 
@@ -810,93 +991,120 @@ const CheckFilters = {
     },
 
     updateStatusModal(data) {
+        console.log("Updating status modal with data:", data);
         let content = `<div class="timeline">`;
-        
+        let index = 0;
+
         // Creation
-        content += this.createTimelineEntry('Created', data.creation_date, 'plus', 'info');
+        content += this.createTimelineEntry({
+            title: 'Created',
+            date: data.creation_date,
+            icon: 'plus',
+            type: 'created',
+            index: index++
+        });
 
         // Show if this check replaces another
         if (data.replacement_info.replaces) {
             const replaces = data.replacement_info.replaces;
-            content += this.createTimelineEntry(
-                'Replaces Check', 
-                replaces.rejection_date, 
-                'sync', 
-                'info',
-                `<p>Replaces: ${replaces.reference}</p>
-                <p>Original Amount: ${formatMoney(replaces.amount)}</p>
-                <p>Rejection Reason: ${replaces.rejection_reason}</p>`
-            );
+            content += this.createTimelineEntry({
+                title: 'Replaces Check',
+                date: replaces.rejection_date,
+                icon: 'sync',
+                type: 'created',
+                index: index++,
+                details: `
+                    <p>Replaces: ${replaces.reference}</p>
+                    <p>Original Amount: ${formatMoney(replaces.amount)}</p>
+                    <p>Rejection Reason: ${replaces.rejection_reason}</p>
+                `
+            });
         }
-        
+
         // Printed
         if (data.printed_at) {
-            content += this.createTimelineEntry('Printed', data.printed_at, 'print', 'info');
+            content += this.createTimelineEntry({
+                title: 'Printed',
+                date: data.printed_at,
+                icon: 'print',
+                type: 'printed',
+                index: index++
+            });
         }
 
         // Delivered
         if (data.delivered_at) {
-            content += this.createTimelineEntry('Delivered', data.delivered_at, 'truck', 'primary');
-        }
-        
-        // Paid
-        if (data.paid_at) {
-            content += this.createTimelineEntry('Paid', data.paid_at, 'check', 'success');
-        }
-        
-        // Rejected
-        if (data.rejected_at) {
-            content += this.createTimelineEntry('Rejected', data.rejected_at, 'times', 'warning', 
-                `<p><strong>Reason:</strong> ${data.rejection_reason}</p>
-                 ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}`
-            );
+            content += this.createTimelineEntry({
+                title: 'Delivered',
+                date: data.delivered_at,
+                icon: 'truck',
+                type: 'delivered',
+                index: index++
+            });
         }
 
-         // Show received status if applicable
-         if (data.received_at) {
-            content += this.createTimelineEntry(
-                'Received Back', 
-                data.received_at, 
-                'hand-holding', 
-                'info',
-                data.received_notes ? `<p><strong>Notes:</strong> ${data.received_notes}</p>` : ''
-            );
-        }
-
-        // Show replacement if exists
-        if (data.replacement_info.replaced_by) {
-            const replacement = data.replacement_info.replaced_by;
-            content += this.createTimelineEntry(
-                'Replaced', 
-                replacement.date, 
-                'sync', 
-                'success',
-                `<p><strong>New Check:</strong> ${replacement.reference}</p>
-                 <p><strong>Amount:</strong> ${formatMoney(replacement.amount)}</p>`
-            );
-        }
-        
         // Cancelled
         if (data.cancelled_at) {
-            content += this.createTimelineEntry('Cancelled', data.cancelled_at, 'ban', 'danger',
-                `<p><strong>Reason:</strong> ${data.cancellation_reason}</p>`
-            );
+            content += this.createTimelineEntry({
+                title: 'Cancelled',
+                date: data.cancelled_at,
+                icon: 'ban',
+                type: 'cancelled',
+                index: index++,
+                details: `<p><strong>Reason:</strong> ${data.cancellation_reason}</p>`
+            });
         }
-        
+
+        // Paid
+        if (data.paid_at) {
+            content += this.createTimelineEntry({
+                title: 'Paid',
+                date: data.paid_at,
+                icon: 'check',
+                type: 'paid',
+                index: index++
+            });
+        }
+
+        // Rejected
+        if (data.rejected_at) {
+            content += this.createTimelineEntry({
+                title: 'Rejected',
+                date: data.rejected_at,
+                icon: 'times',
+                type: 'rejected',
+                index: index++,
+                details: `
+                    <p><strong>Reason:</strong> ${data.rejection_reason}</p>
+                    ${data.rejection_note ? `<p><strong>Note:</strong> ${data.rejection_note}</p>` : ''}
+                `
+            });
+        }
+
         content += '</div>';
         $('#statusInfoModal .modal-body').html(content);
+
+        // Update summary card
+        $('#checkRef').text(data.reference);
+        $('#checkAmount').text(formatMoney(data.amount));
+        $('#checkType').text(data.checker_type);
+        $('#checkStatus').html(`<span class="badge badge-${data.status}">${data.status_display}</span>`);
     },
 
-    createTimelineEntry(title, date, icon, color, extraContent = '') {
+    createTimelineEntry({title, date, icon, type, index, details = ''}) {
         return `
-            <div class="timeline-item">
-                <div class="timeline-badge bg-${color}">
+            <div class="timeline-item" style="--item-index: ${index}">
+                <div class="timeline-marker bg-${type}">
                     <i class="fas fa-${icon} text-white"></i>
                 </div>
-                <div class="timeline-content">
-                    <h6>${title}</h6>
-                    <p>${date}</p>
-                    ${extraContent}
+                <div class="timeline-content" data-status="${type}">
+                    <div class="d-flex justify-content-between">
+                        <h6 class="mb-0">${title}</h6>
+                        <small class="text-muted">
+                            <i class="far fa-clock me-1"></i>${date}
+                        </small>
+                    </div>
+                    ${details}
                 </div>
             </div>
         `;
@@ -1161,6 +1369,7 @@ const AllocationSystem = {
 $(document).ready(() => {
     CheckFilters.init();
     AllocationSystem.init();
+    
     // Toggle filter panel
     $('#toggle-filters').click(function() {
         $('.filter-panel').slideToggle();

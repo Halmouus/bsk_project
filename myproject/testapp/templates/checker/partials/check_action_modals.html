@@ -1,4 +1,3 @@
-<!-- templates/checker/partials/check_action_modals.html -->
 <!-- Status Info Modal -->
 <div class="modal fade" id="statusInfoModal">
     <div class="modal-dialog">
@@ -206,3 +205,231 @@
         </div>
     </div>
 </div>
+
+<!-- check_action_modals.html -->
+<div class="modal fade" id="statusInfoModal">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-history me-2"></i>Check History
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- Check Summary -->
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Reference:</strong> <span id="checkRef"></span></p>
+                                <p><strong>Amount:</strong> <span id="checkAmount"></span></p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Type:</strong> <span id="checkType"></span></p>
+                                <p><strong>Status:</strong> <span id="checkStatus"></span></p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Timeline -->
+                <div class="timeline">
+                    <!-- Will be populated dynamically -->
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+/* Enhanced Timeline Styles */
+.timeline {
+    position: relative;
+    padding-left: 3rem;
+    margin-bottom: 3rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: linear-gradient(180deg, 
+        rgba(78,115,223,0) 0%,
+        rgba(78,115,223,0.4) 10%,
+        rgba(78,115,223,0.4) 90%,
+        rgba(78,115,223,0) 100%
+    );
+}
+
+.timeline-item {
+    position: relative;
+    margin-bottom: 2rem;
+    opacity: 0;
+    transform: translateX(-20px);
+    animation: slideIn 0.5s ease forwards;
+}
+
+/* Status-specific gradients for cards */
+.timeline-content[data-status="created"] {
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
+}
+
+.timeline-content[data-status="printed"] {
+    background: linear-gradient(145deg, #ffffff, #e9ecef);
+}
+
+.timeline-content[data-status="delivered"] {
+    background: linear-gradient(145deg, #ffffff, #e3f2fd);
+}
+
+.timeline-content[data-status="paid"] {
+    background: linear-gradient(145deg, #ffffff, #f0fff4);
+}
+
+.timeline-content[data-status="rejected"] {
+    background: linear-gradient(145deg, #ffffff, #fff5f5);
+}
+
+.timeline-content[data-status="cancelled"] {
+    background: linear-gradient(145deg, #ffffff, #fff5f5);
+}
+
+/* Hover states with color accents */
+.timeline-content[data-status="created"]:hover {
+    background: linear-gradient(145deg, #f8f9fa, #e9ecef);
+    border-left: 4px solid #4e73df;
+}
+
+.timeline-content[data-status="printed"]:hover {
+    background: linear-gradient(145deg, #e9ecef, #dee2e6);
+    border-left: 4px solid #6c757d;
+}
+
+.timeline-content[data-status="delivered"]:hover {
+    background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+    border-left: 4px solid #2196f3;
+}
+
+.timeline-content[data-status="paid"]:hover {
+    background: linear-gradient(145deg, #f0fff4, #dcfce7);
+    border-left: 4px solid #22c55e;
+}
+
+.timeline-content[data-status="rejected"]:hover {
+    background: linear-gradient(145deg, #fff5f5, #ffe3e3);
+    border-left: 4px solid #ef4444;
+}
+
+.timeline-content[data-status="cancelled"]:hover {
+    background: linear-gradient(145deg, #fff5f5, #ffe3e3);
+    border-left: 4px solid #dc3545;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -3rem;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 3px rgba(233,236,239,0.5);
+    transition: all 0.3s ease;
+}
+
+/* Enhanced marker gradients */
+.timeline-marker.bg-created { 
+    background: linear-gradient(145deg, #4e73df, #224abe);
+    box-shadow: 0 2px 4px rgba(78,115,223,0.3);
+}
+
+.timeline-marker.bg-printed { 
+    background: linear-gradient(145deg, #6c757d, #495057);
+    box-shadow: 0 2px 4px rgba(108,117,125,0.3);
+}
+
+.timeline-marker.bg-delivered { 
+    background: linear-gradient(145deg, #2196f3, #1976d2);
+    box-shadow: 0 2px 4px rgba(33,150,243,0.3);
+}
+
+.timeline-marker.bg-paid { 
+    background: linear-gradient(145deg, #22c55e, #16a34a);
+    box-shadow: 0 2px 4px rgba(34,197,94,0.3);
+}
+
+.timeline-marker.bg-rejected { 
+    background: linear-gradient(145deg, #ef4444, #dc2626);
+    box-shadow: 0 2px 4px rgba(239,68,68,0.3);
+}
+
+.timeline-marker.bg-cancelled { 
+    background: linear-gradient(145deg, #dc3545, #bd2130);
+    box-shadow: 0 2px 4px rgba(220,53,69,0.3);
+}
+
+.timeline-content {
+    background: white;
+    border-radius: 0.8rem;
+    padding: 1.25rem;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.timeline-content::before {
+    content: '';
+    position: absolute;
+    left: -0.8rem;
+    top: 0.75rem;
+    width: 0.8rem;
+    height: 0.8rem;
+    background: inherit;
+    transform: rotate(45deg);
+    box-shadow: -2px 2px 4px rgba(0,0,0,0.05);
+    z-index: -1;
+}
+
+/* Enhanced hover effects */
+.timeline-item:hover .timeline-marker {
+    transform: scale(1.2) rotate(360deg);
+    transition: all 0.5s ease;
+}
+
+.timeline-item:hover .timeline-content {
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* Icon animations */
+.timeline-marker i {
+    transition: transform 0.3s ease;
+}
+
+.timeline-item:hover .timeline-marker i {
+    transform: scale(1.2);
+    color: white;
+}
+
+/* Date styling */
+.timeline-content .text-muted {
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* Details styling */
+.timeline-content p {
+    margin: 0.5rem 0 0;
+    font-size: 0.9rem;
+    opacity: 0.9;
+}
+
+.timeline-content p strong {
+    font-weight: 600;
+    color: #4a5568;
+}
+</style>

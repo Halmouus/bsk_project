@@ -817,6 +817,16 @@ class CheckerFilterView(View):
                 Q(code__icontains=search) | Q(index__icontains=search)
             )
 
+        for checker in queryset:
+            print(f"[CheckerFilterView] Processing checker {checker.id}")
+            checker.remaining_ratio = f"{checker.remaining_pages}/{checker.num_pages}"
+            checker.remaining_percentage = (
+                (checker.remaining_pages / checker.num_pages) * 100 
+                if checker.num_pages > 0 else 0
+            )
+            print(f"[CheckerFilterView] Checker stats: {checker.remaining_ratio}, {checker.remaining_percentage}%")
+
+
         html = render_to_string(
             'checker/partials/checkers_table.html',
             {'checkers': queryset},
@@ -828,36 +838,58 @@ class CheckerFilterView(View):
 class CheckFilterView(View):
     def get(self, request):
         try:
+            print("[CheckFilterView] Processing filter request")
             queryset = Check.objects.select_related(
                 'checker__bank_account',
                 'beneficiary',
                 'cause'
             )
 
-            for check in queryset:
-                print(f"Check {check.id} signatures: {check.signatures}")
-
-            # Apply bank filter
+            # Basic filters
             if bank := request.GET.get('bank'):
+                print(f"[CheckFilterView] Filtering by bank: {bank}")
                 queryset = queryset.filter(checker__bank_account__bank=bank)
-                
-            # Apply status filter
+            
+            if type := request.GET.get('type'):
+                print(f"[CheckFilterView] Filtering by type: {type}")
+                queryset = queryset.filter(checker__type=type)
+            
             if status := request.GET.get('status'):
+                print(f"[CheckFilterView] Filtering by status: {status}")
                 queryset = queryset.filter(status=status)
                 
-            # Apply beneficiary filter
             if beneficiary := request.GET.get('beneficiary'):
+                print(f"[CheckFilterView] Filtering by beneficiary: {beneficiary}")
                 queryset = queryset.filter(beneficiary_id=beneficiary)
+
+            # Date range filter
+            if due_date_from := request.GET.get('due_date_from'):
+                print(f"[CheckFilterView] Filtering by due date from: {due_date_from}")
+                queryset = queryset.filter(payment_due__gte=due_date_from)
                 
-            # Apply search
+            if due_date_to := request.GET.get('due_date_to'):
+                print(f"[CheckFilterView] Filtering by due date to: {due_date_to}")
+                queryset = queryset.filter(payment_due__lte=due_date_to)
+
+            # Amount range filter
+            if amount_from := request.GET.get('amount_from'):
+                print(f"[CheckFilterView] Filtering by amount from: {amount_from}")
+                queryset = queryset.filter(amount__gte=amount_from)
+                
+            if amount_to := request.GET.get('amount_to'):
+                print(f"[CheckFilterView] Filtering by amount to: {amount_to}")
+                queryset = queryset.filter(amount__lte=amount_to)
+
+            # Search filter
             if search := request.GET.get('search'):
+                print(f"[CheckFilterView] Searching for: {search}")
                 queryset = queryset.filter(
                     Q(position__icontains=search) |
                     Q(beneficiary__name__icontains=search) |
                     Q(cause__ref__icontains=search)
                 )
 
-            # Render partial template
+            # Render filtered results
             html = render_to_string(
                 'checker/partials/checks_table.html',
                 {'checks': queryset},

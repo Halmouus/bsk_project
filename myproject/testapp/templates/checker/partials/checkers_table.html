@@ -265,33 +265,7 @@
     </div>
 </div>
 
-<!-- Signature Modal -->
-<div class="modal fade" id="signatureModal">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Checker Signatures</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="table-responsive">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Position</th>
-                                <th>Status</th>
-                                <th>Signatures</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="signature-positions">
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <script>
 
@@ -1005,102 +979,163 @@ const PaymentSystem = {
 
 const SignatureSystem = {
     init() {
+        console.log("[SignatureSystem] Initializing");
         this.modal = $('#signatureModal');
+        this.loadingAlert = $('#signature-loading');
+        this.errorAlert = $('#signature-error');
         this.bindEvents();
     },
 
     bindEvents() {
-        $(document).on('click', '.view-signatures', (e) => {
+        console.log("[SignatureSystem] Binding events");
+        
+        // View signatures button click
+        $(document).on('click', '.view-signatures', async (e) => {
             const button = $(e.currentTarget);
-            this.openSignatureModal({
-                id: button.data('checker'),
-                start: button.data('start'),
-                end: button.data('end')
-            });
+            console.log("[SignatureSystem] View signatures clicked for checker:", button.data('checker'));
+            
+            this.currentCheckerId = button.data('checker');
+            this.currentStart = button.data('start');
+            this.currentEnd = button.data('end');
+            
+            this.modal.modal('show');
+            await this.loadSignatures();
         });
 
-        $(document).on('click', '.add-signature', (e) => {
+        // Add signature button click
+        $(document).on('click', '.add-signature', async (e) => {
             const btn = $(e.currentTarget);
-            this.addSignature(
+            console.log("[SignatureSystem] Add signature clicked:", {
+                checker: btn.data('checker'),
+                position: btn.data('position'),
+                signature: btn.data('signature')
+            });
+            
+            await this.addSignature(
                 btn.data('checker'),
                 btn.data('position'),
                 btn.data('signature')
             );
         });
+
+        // Modal show/hide events
+        this.modal.on('hidden.bs.modal', () => {
+            console.log("[SignatureSystem] Modal hidden - cleaning up");
+            $('#signature-positions').empty();
+            this.hideAlerts();
+        });
     },
 
-    async loadPositions(checkerId, start, end) {
-        console.log("Fetching signature data...");
+    showLoading() {
+        this.loadingAlert.removeClass('d-none');
+        this.errorAlert.addClass('d-none');
+    },
+
+    hideLoading() {
+        this.loadingAlert.addClass('d-none');
+    },
+
+    showError(message) {
+        this.errorAlert.text(message).removeClass('d-none');
+        this.loadingAlert.addClass('d-none');
+    },
+
+    hideAlerts() {
+        this.loadingAlert.addClass('d-none');
+        this.errorAlert.addClass('d-none');
+    },
+
+    async loadSignatures() {
+        console.log("[SignatureSystem] Loading signatures for checker:", this.currentCheckerId);
+        
         try {
-            const response = await fetch(`/testapp/checkers/${checkerId}/signatures/?start=${start}&end=${end}`);
+            this.showLoading();
+            
+            const response = await fetch(
+                `/testapp/checkers/${this.currentCheckerId}/signatures/?` +
+                `start=${this.currentStart}&end=${this.currentEnd}`
+            );
+            
+            if (!response.ok) throw new Error('Failed to load signatures');
+            
             const data = await response.json();
-            console.log("Received signature data:", data);
-            this.updateSignatureTable(data, checkerId, start, end);
+            console.log("[SignatureSystem] Signature data received:", data);
+            
+            this.updateSignatureTable(data);
+            this.hideLoading();
+            
         } catch (error) {
-            console.error("Error loading signatures:", error);
+            console.error("[SignatureSystem] Error loading signatures:", error);
+            this.showError('Failed to load signatures: ' + error.message);
         }
     },
 
-    updateSignatureTable(data, checkerId, start, end) {
+    updateSignatureTable(data) {
+        console.log("[SignatureSystem] Updating signature table");
         const tbody = $('#signature-positions');
         tbody.empty();
         
-        for (let position = start; position <= end; position++) {
-            const posInfo = data.positions[position] || { signatures: [], timestamps: [] };
-            const isUsed = data.used_positions.hasOwnProperty(position);
+        // Get used positions into a Set for O(1) lookups
+        const usedPositions = new Set(Object.keys(data.used_positions));
+        
+        for (let position = this.currentStart; position <= this.currentEnd; position++) {
+            const positionStr = position.toString();
+            const posInfo = data.positions[positionStr] || { signatures: [], timestamps: [] };
+            const isUsed = usedPositions.has(positionStr);
             
-            tbody.append(this.createPositionRow(position, posInfo, isUsed, checkerId));
+            tbody.append(this.createPositionRow(position, posInfo, isUsed));
         }
     },
 
-    createPositionRow(position, posInfo, isUsed, checkerId) {
+    createPositionRow(position, posInfo, isUsed) {
         const row = $('<tr>');
-        row.append(`<td>${position}</td>`);
-        row.append(`<td>${isUsed ? 'Used' : 'Available'}</td>`);
-        row.append(this.createSignaturesBadges(posInfo));
         
+        // Position cell
+        row.append($('<td>').text(position));
+        
+        // Status cell
+        row.append($('<td>').text(isUsed ? 'Used' : 'Available'));
+        
+        // Signatures cell
+        const signaturesCell = $('<td>');
+        posInfo.signatures.forEach((sig, idx) => {
+            const badge = $('<span>')
+                .addClass('badge badge-primary mr-1')
+                .attr('title', posInfo.timestamps[idx])
+                .text(sig);
+            signaturesCell.append(badge);
+        });
+        row.append(signaturesCell);
+        
+        // Actions cell
+        const actionsCell = $('<td>');
         if (!isUsed) {
-            row.append(this.createSignatureButtons(position, posInfo, checkerId));
-        } else {
-            row.append('<td></td>');
+            if (!posInfo.signatures.includes('OUK')) {
+                actionsCell.append(this.createSignatureButton('OUK', position));
+            }
+            if (!posInfo.signatures.includes('KEZ')) {
+                actionsCell.append(this.createSignatureButton('KEZ', position));
+            }
         }
+        row.append(actionsCell);
         
         return row;
     },
 
-    createSignaturesBadges(posInfo) {
-        const badges = posInfo.signatures.map((sig, idx) => 
-            `<span class="badge badge-primary mr-1" title="${posInfo.timestamps[idx]}">${sig}</span>`
-        ).join('');
-        return $('<td>').html(badges);
-    },
-
-    createSignatureButtons(position, posInfo, checkerId) {
-        const td = $('<td>');
-        
-        if (!posInfo.signatures.includes('OUK')) {
-            td.append(this.createSignatureButton('OUK', checkerId, position));
-        }
-        if (!posInfo.signatures.includes('KEZ')) {
-            td.append(this.createSignatureButton('KEZ', checkerId, position));
-        }
-        
-        return td;
-    },
-
-    createSignatureButton(signature, checkerId, position) {
-        return $(`
-            <button class="btn btn-sm btn-outline-primary mr-1 add-signature" 
-                data-checker="${checkerId}" 
-                data-position="${position}"
-                data-signature="${signature}">
-                Sign ${signature}
-            </button>
-        `);
+    createSignatureButton(signature, position) {
+        return $('<button>')
+            .addClass('btn btn-sm btn-outline-primary mr-1 add-signature')
+            .attr({
+                'data-checker': this.currentCheckerId,
+                'data-position': position,
+                'data-signature': signature
+            })
+            .text(`Sign ${signature}`);
     },
 
     async addSignature(checkerId, position, signature) {
-        console.log(`Adding signature ${signature} to position ${position}`);
+        console.log("[SignatureSystem] Adding signature:", {checkerId, position, signature});
+        
         try {
             const formData = new FormData();
             formData.append('position', position);
@@ -1114,23 +1149,15 @@ const SignatureSystem = {
                 body: formData
             });
             
-            if (!response.ok) throw new Error('Signature failed');
+            if (!response.ok) throw new Error('Failed to add signature');
             
-            await this.loadPositions(
-                checkerId, 
-                this.currentStart, 
-                this.currentEnd
-            );
+            // Reload signatures after successful addition
+            await this.loadSignatures();
+            
         } catch (error) {
-            console.error("Error adding signature:", error);
+            console.error("[SignatureSystem] Error adding signature:", error);
+            this.showError('Failed to add signature: ' + error.message);
         }
-    },
-
-    openSignatureModal(checkerData) {
-        this.currentStart = checkerData.start;
-        this.currentEnd = checkerData.end;
-        this.loadPositions(checkerData.id, checkerData.start, checkerData.end);
-        this.modal.modal('show');
     }
 };
 

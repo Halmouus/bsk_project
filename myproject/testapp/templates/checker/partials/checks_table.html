@@ -11,6 +11,9 @@
             <span class="ml-2">{{ check.checker.bank_account.get_bank_display }}</span>
         </div>
     </td>
+    <td>
+        <span class="badge badge-info">{{ check.checker.type }}</span>
+    </td>
     <td>{{ check.creation_date|date:"Y-m-d" }}</td>
     <td>
         {% if check.signatures %}
