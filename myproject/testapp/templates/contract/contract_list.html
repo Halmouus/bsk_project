@@ -154,6 +154,39 @@
                             <tbody></tbody>
                         </table>
                     </div>
+
+                    <!-- Domiciliation Section -->
+                    <div class="card mb-3" id="domiciliation-section">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h6 class="mb-0">
+                                <i class="fas fa-university me-2"></i>Bank Domiciliation
+                            </h6>
+                            <div class="form-check">
+                                <input type="checkbox" class="form-check-input" id="is-domiciled">
+                                <label class="form-check-label">Enable Domiciliation</label>
+                            </div>
+                        </div>
+                        <div class="card-body domiciliation-fields" style="display: none;">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label>Bank Account</label>
+                                    <select class="form-control" id="domiciliation-bank" disabled>
+                                        <option value="">Select Bank Account...</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label>Payment Day (1-28)</label>
+                                    <input type="number" class="form-control" id="domiciliation-day" 
+                                        min="1" max="28" disabled>
+                                </div>
+                            </div>
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Forecasts will be generated for one year from contract start date
+                            </div>
+                        </div>
+                    </div>
+
                 </form>
             </div>
             <div class="modal-footer">
@@ -284,6 +317,43 @@
     </div>
 </div>
 
+
+<!-- Suspension Modal -->
+<div class="modal fade" id="suspensionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-warning">
+                <h5 class="modal-title">
+                    <i class="fas fa-pause-circle me-2"></i>
+                    Suspend Domiciliation
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Warning:</strong> This will remove all future forecasts for this contract.
+                </div>
+                <div class="form-group">
+                    <label>Suspension Date</label>
+                    <input type="date" class="form-control" id="suspension-date" required>
+                </div>
+                <div class="form-group mt-3">
+                    <label>Suspension Reason</label>
+                    <textarea class="form-control" id="suspension-reason" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="confirm-suspension">
+                    <i class="fas fa-pause me-2"></i>Confirm Suspension
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <style>
 
 .ui-autocomplete {
@@ -338,6 +408,7 @@ const ContractSystem = {
         this.setupProductModal();
         this.setupGenerateModal();
         this.setupTerminateModal();
+        this.setupDomiciliationHandlers();
         this.bindActionHandlers();
     },
 
@@ -449,21 +520,7 @@ const ContractSystem = {
         $('#products-table tbody').append(row);
     },
 
-    getProductsData() {
-        const products = [];
-        $('#products-table tbody tr').each(function() {
-            products.push({
-                product_id: $(this).data('product-id'),
-                quantity: $(this).find('td:eq(1)').text(),
-                unit_price: $(this).find('td:eq(2)').text().replace(/[^0-9.-]+/g, ''),
-                vat_rate: $(this).find('td:eq(3)').text().replace('%', ''),
-                reduction_rate: $(this).find('td:eq(4)').text().replace('%', '')
-            });
-        });
-        return products;
-    },
 
-    // Add this method for contract history
     async showContractHistory(contractId) {
         try {
             const response = await fetch(`/testapp/contracts/${contractId}/history/`);
@@ -480,6 +537,7 @@ const ContractSystem = {
                                 <th>Period</th>
                                 <th>Amount</th>
                                 <th>Status</th>
+                                <th>Paid Date</th>
                                 <th>Export</th>
                                 <th>Generated</th>
                             </tr>
@@ -494,6 +552,14 @@ const ContractSystem = {
                         <td>${invoice.period_start} to ${invoice.period_end}</td>
                         <td>${this.formatMoney(invoice.amount)}</td>
                         <td><span class="badge badge-${this.getStatusBadgeClass(invoice.status)}">${invoice.status}</span></td>
+                        <td>
+                            ${invoice.paid_at ? `
+                                <span class="badge badge-success">
+                                    <i class="fas fa-check me-1"></i>
+                                    ${invoice.paid_at}
+                                </span>
+                            ` : '-'}
+                        </td>
                         <td><span class="badge badge-${invoice.export_status === 'Exported' ? 'success' : 'warning'}">${invoice.export_status}</span></td>
                         <td>${invoice.generated_at}</td>
                     </tr>
@@ -663,11 +729,12 @@ const ContractSystem = {
             products.push({
                 product_id: $row.data('product-id'),
                 quantity: $row.data('quantity'),
-                unit_price: $row.data('unit-price'),
-                vat_rate: $row.data('vat-rate'),
-                reduction_rate: $row.data('reduction')
+                // Fix: Ensure decimal format
+                unit_price: parseFloat($row.data('unit-price')).toFixed(2),
+                reduction_rate: parseFloat($row.data('reduction-rate')).toFixed(2)
             });
         });
+        console.log('Product data:', products);
         return products;
     },
 
@@ -695,12 +762,15 @@ const ContractSystem = {
     addProductToTable() {
         const productId = $('#product-id').val();
         const productName = $('#product-search').val();
-        const quantity = $('#product-quantity').val();
-        const unitPrice = $('#product-unit-price').val();
-        const reduction = $('#product-reduction').val();
+        const quantity = parseFloat($('#product-quantity').val()).toFixed(2);
+        const unitPrice = parseFloat($('#product-unit-price').val()).toFixed(2);
+        const reduction = parseFloat($('#product-reduction').val() || 0).toFixed(2);
 
         const row = `
-            <tr data-product-id="${productId}">
+            <tr data-product-id="${productId}"
+                data-quantity="${quantity}"
+                data-unit-price="${unitPrice}"
+                data-reduction-rate="${reduction}">
                 <td>${productName}</td>
                 <td>${quantity}</td>
                 <td>${this.formatMoney(unitPrice)}</td>
@@ -738,6 +808,89 @@ const ContractSystem = {
         $('#confirm-terminate').on('click', () => this.terminateContract());
     },
 
+    setupDomiciliationHandlers() {
+        console.log('Initializing domiciliation handlers');
+        
+        // Toggle domiciliation fields
+        $('#is-domiciled').on('change', function() {
+            console.log('Domiciliation toggle:', this.checked);
+            $('.domiciliation-fields').slideToggle();
+            $('#domiciliation-bank, #domiciliation-day').prop('disabled', !this.checked);
+        });
+
+        // Load bank accounts on modal open
+        $('#contractModal').on('show.bs.modal', () => {
+            if (!this.loadingBankAccounts) {
+                this.loadingBankAccounts = true;
+                console.log('Loading bank accounts for domiciliation');
+                fetch('/testapp/bank-accounts/autocomplete/')
+                    .then(response => response.json())
+                    .then(data => {
+                        const select = $('#domiciliation-bank');
+                        select.empty().append('<option value="">Select Bank Account...</option>');
+                        data.forEach(bank => {
+                            select.append(`<option value="${bank.id}">${bank.bank} - ${bank.account_number}</option>`);
+                        });
+                    })
+                    .finally(() => {
+                        this.loadingBankAccounts = false;
+                    });
+            }
+        });
+    },
+
+    setupSuspensionModal() {
+        console.log('Setting up suspension modal');
+        
+        // Initialize with today's date
+        $('#suspensionModal').on('show.bs.modal', function() {
+            $('#suspension-date').val(new Date().toISOString().split('T')[0]);
+        });
+
+        $('#confirm-suspension').on('click', async () => {
+            const contractId = $('#suspensionModal').data('contract-id');
+            const suspensionDate = $('#suspension-date').val();
+            const reason = $('#suspension-reason').val();
+
+            console.log('Suspending domiciliation:', {
+                contractId,
+                suspensionDate,
+                reason
+            });
+
+            if (!suspensionDate) {
+                this.showError('Please select a suspension date');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/testapp/contracts/${contractId}/suspend-domiciliation/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        date: suspensionDate,
+                        reason: reason
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    $('#suspensionModal').modal('hide');
+                    this.showSuccess('Domiciliation suspended successfully');
+                    this.applyFilters();  // Refresh the table
+                } else {
+                    throw new Error(data.message);
+                }
+            } catch (error) {
+                console.error('Error suspending domiciliation:', error);
+                this.showError(error.message);
+            }
+        });
+    },
+
     async saveContract() {
         if (!this.validateContractForm()) return;
 
@@ -749,8 +902,13 @@ const ContractSystem = {
             is_indefinite: $('#is-indefinite').prop('checked'),
             periodicity: $('#periodicity').val(),
             generation_day: $('#generation-day').val(),
-            products: this.getProductsData()
+            products: this.getProductsData(),
+            is_domiciled: $('#is-domiciled').prop('checked'),
+            domiciliation_bank: $('#is-domiciled').prop('checked') ? $('#domiciliation-bank').val() : null,
+            domiciliation_day: $('#is-domiciled').prop('checked') ? $('#domiciliation-day').val() : null
         };
+
+        console.log('Saving contract with data:', data);
 
         const contractId = $('#contract-id').val();
         const url = contractId ? 
@@ -804,21 +962,24 @@ const ContractSystem = {
             isValid = false;
         }
 
+        if ($('#is-domiciled').prop('checked')) {
+            if (!$('#domiciliation-bank').val()) {
+                $('#domiciliation-bank').addClass('is-invalid');
+                this.showError('Please select a bank account for domiciliation');
+                isValid = false;
+            }
+            
+            const day = parseInt($('#domiciliation-day').val());
+            if (!day || day < 1 || day > 28) {
+                $('#domiciliation-day').addClass('is-invalid');
+                this.showError('Please enter a valid payment day (1-28)');
+                isValid = false;
+            }
+        }
+
         return isValid;
     },
 
-    getProductsData() {
-        const products = [];
-        $('#products-table tbody tr').each(function() {
-            products.push({
-                product_id: $(this).data('product-id'),
-                quantity: $(this).find('td:eq(1)').text(),
-                unit_price: $(this).find('td:eq(2)').text().replace(/[^0-9.-]+/g, ''),
-                reduction_rate: $(this).find('td:eq(3)').text().replace('%', '')
-            });
-        });
-        return products;
-    },
 
     async generateInvoices() {
         const contractId = $('#generateModal').data('contract-id');
@@ -961,12 +1122,20 @@ const ContractSystem = {
         $(document).on('click', '.remove-product', function() {
             $(this).closest('tr').remove();
         });
+
+        // Handle suspend domiciliation button clicks
+        $(document).on('click', '.suspend-domiciliation', (e) => {
+            const contractId = $(e.currentTarget).data('contract-id');
+            console.log('Opening suspension modal for contract:', contractId);
+            $('#suspensionModal').data('contract-id', contractId).modal('show');
+        });
     },
 
     async loadContractDetails(contractId) {
         try {
             const response = await fetch(`/testapp/contracts/${contractId}/`);
             const data = await response.json();
+            console.log('Loaded contract details:', data);
 
             $('#modal-action').text('Edit');
             $('#contract-id').val(data.id);
@@ -997,6 +1166,14 @@ const ContractSystem = {
                 `;
                 $('#products-table tbody').append(row);
             });
+
+            // Domiciliation loading
+            $('#is-domiciled').prop('checked', data.is_domiciled).trigger('change');
+            if (data.is_domiciled) {
+                $('#domiciliation-bank').val(data.domiciliation_bank);
+                $('#domiciliation-day').val(data.domiciliation_day);
+            }
+
 
             $('#contractModal').modal('show');
 

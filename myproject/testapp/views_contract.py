@@ -1,14 +1,19 @@
+from datetime import datetime
+from decimal import Decimal
+import traceback
 from django.forms import ValidationError
 from django.views import View
 from django.views.generic import ListView
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.db import transaction
 import json
 
-from .models import Contract, ContractProduct, Supplier, Product, ContractInvoice
+from .models import BankAccount, Contract, ContractProduct, DirectDebit, ForecastStatement, Supplier, Product, ContractInvoice
 
 class ContractListView(ListView):
     model = Contract
@@ -62,9 +67,15 @@ class ContractCreateView(View):
     def post(self, request):
         try:
             data = json.loads(request.body)
+            print("\n=== Creating Contract ===")
+            print("Contract data:", data)   
             
             with transaction.atomic():
-                # Create contract
+                domiciliation_bank = None
+                if data.get('is_domiciled'):
+                    domiciliation_bank = BankAccount.objects.get(id=data['domiciliation_bank'])
+                    print(f"Found domiciliation bank: {domiciliation_bank}")
+                    
                 contract = Contract.objects.create(
                     reference=data['reference'],
                     supplier_id=data['supplier_id'],
@@ -72,26 +83,65 @@ class ContractCreateView(View):
                     end_date=data.get('end_date'),
                     is_indefinite=data.get('is_indefinite', False),
                     periodicity=data['periodicity'],
-                    generation_day=data['generation_day']
+                    generation_day=data['generation_day'],
+                    is_domiciled=data.get('is_domiciled', False),       
+                    domiciliation_bank_id=data.get('domiciliation_bank'),
+                    domiciliation_day=data.get('domiciliation_day')
                 )
                 
+                # Track total contract amount (WITH VAT)
+                total_amount = Decimal('0')
+
                 # Add products
                 for product_data in data['products']:
+                    # Get product for VAT rate
+                    product = Product.objects.get(id=product_data['product_id'])
+                    quantity = Decimal(str(product_data['quantity']))
+                    unit_price = Decimal(str(product_data['unit_price'].replace(',', '.')))
+                    reduction_rate = Decimal(str(product_data.get('reduction_rate', '0')))
+
+                    # Calculate amount with VAT included
+                    amount = quantity * unit_price
+                    if reduction_rate > 0:
+                        reduction_amount = amount * (reduction_rate / Decimal('100'))
+                        amount -= reduction_amount
+                    
+                    # Add VAT
+                    amount += amount * (product.vat_rate / Decimal('100'))
+                    total_amount += amount
+
+                    print(f"Product: {product.name}")
+                    print(f"Amount (with VAT): {amount}")
+
                     ContractProduct.objects.create(
                         contract=contract,
                         product_id=product_data['product_id'],
                         quantity=product_data['quantity'],
-                        unit_price=product_data['unit_price'],
+                        unit_price=Decimal(product_data['unit_price'].replace(',', '.')),
                         reduction_rate=product_data.get('reduction_rate', 0)
                     )
+
+                # Store the total (with VAT)
+                contract.amount = total_amount
+                contract.save()
+
+                # Generate forecasts if newly domiciled
+                if contract.is_domiciled and not contract.domiciliation_suspended:
+                    print("Generating domiciliation forecasts...")
+                    contract.refresh_from_db()
+                    print(f"Refreshed contract. Bank: {contract.domiciliation_bank}")
+                    contract.generate_domiciliation_forecasts()
                 
                 return JsonResponse({
                     'status': 'success',
                     'message': 'Contract created successfully',
-                    'id': str(contract.id)
+                    'id': str(contract.id),
+                    'amount': float(total_amount)
                 })
                 
         except Exception as e:
+            print(f"Error creating contract: {str(e)}")
+            print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
@@ -295,15 +345,32 @@ class ContractHistoryView(View):
                 contract=contract
             ).select_related('invoice').order_by('-period_start')
             
-            invoice_data = [{
-                'ref': inv.invoice.ref,
-                'period_start': inv.period_start.strftime('%Y-%m-%d'),
-                'period_end': inv.period_end.strftime('%Y-%m-%d'),
-                'amount': str(inv.invoice.total_amount),
-                'status': inv.invoice.payment_status,
-                'export_status': 'Exported' if inv.invoice.exported_at else 'Not Exported',
-                'generated_at': inv.created_at.strftime('%Y-%m-%d %H:%M'),
-            } for inv in invoices]
+            print("\n=== Getting Contract History ===")
+            invoice_data = []
+            
+            for inv in invoices:
+                print(f"\nProcessing invoice: {inv.invoice.ref}")
+                
+                # Get direct debit details
+                direct_debit = DirectDebit.objects.filter(
+                    invoice=inv
+                ).first()
+                
+                processed_date = None
+                if direct_debit and direct_debit.status == DirectDebit.PROCESSED:
+                    processed_date = direct_debit.processed_date
+                    print(f"Found processed date: {processed_date}")
+                
+                invoice_data.append({
+                    'ref': inv.invoice.ref,
+                    'period_start': inv.period_start.strftime('%Y-%m-%d'),
+                    'period_end': inv.period_end.strftime('%Y-%m-%d'),
+                    'amount': str(inv.invoice.total_amount),
+                    'status': inv.invoice.payment_status,
+                    'export_status': 'Exported' if inv.invoice.exported_at else 'Not Exported',
+                    'generated_at': inv.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'paid_at': processed_date.strftime('%Y-%m-%d') if processed_date else None
+                })
             
             return JsonResponse({
                 'status': 'success',
@@ -311,7 +378,63 @@ class ContractHistoryView(View):
             })
             
         except Exception as e:
+            print(f"Error getting contract history: {str(e)}")
+            print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
             }, status=400)
+
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ContractSuspendDomiciliationView(View):
+    def post(self, request, pk):
+        print("\n=== Processing Contract Domiciliation Suspension ===")
+        try:
+            data = json.loads(request.body)
+            contract = get_object_or_404(Contract, pk=pk)
+            
+            print(f"Contract: {contract.reference}")
+            print(f"Suspension date: {data['date']}")
+            print(f"Reason: {data.get('reason', '')}")
+            
+            if not contract.is_domiciled:
+                raise ValidationError("Contract is not domiciled")
+                
+            with transaction.atomic():
+                # Delete future forecasts
+                future_forecasts = ForecastStatement.objects.filter(
+                    source_type='contract_domiciliation',
+                    source_id=contract.id,
+                    date__gte=data['date']
+                )
+                
+                deleted_count = future_forecasts.count()
+                print(f"Deleting {deleted_count} future forecasts")
+                future_forecasts.delete()
+                
+                # Update contract
+                contract.domiciliation_suspended = True
+                contract.domiciliation_suspension_date = data['date']
+                contract.domiciliation_suspension_reason = data.get('reason', '')
+                contract.save()
+                
+                print("Domiciliation suspended successfully")
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'Domiciliation suspended. {deleted_count} forecasts removed.'
+                })
+                
+        except ValidationError as e:
+            print(f"Validation error: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': 'Failed to suspend domiciliation'
+            }, status=500)

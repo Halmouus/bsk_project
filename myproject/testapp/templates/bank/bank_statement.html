@@ -358,6 +358,43 @@
                                         {% endif %}
                                     </div>
                                 </div>
+                                {% elif entry.type == 'DIRECT_DEBIT' %}
+                                <!-- Debug info -->
+                                <pre>{{ entry|pprint }}</pre>
+                                <!-- Rest of your template -->
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <div class="detail-section">
+                                            <div class="detail-title">
+                                                <i class="fas fa-file-contract"></i>
+                                                Contract Details
+                                            </div>
+                                            <div class="detail-content">
+                                                <span class="badge bg-primary">{{ entry.contract.reference }}</span>
+                                                <div class="detail-info mt-2">
+                                                    Due Date: {{ entry.due_date }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <div class="detail-section">
+                                            <div class="detail-title">
+                                                <i class="fas fa-file-invoice"></i>
+                                                Invoice Details
+                                            </div>
+                                            <div class="detail-content">
+                                                <a href="/testapp/invoices/{{ entry.invoice.id }}/update/" 
+                                                class="badge bg-info text-decoration-none">
+                                                    {{ entry.invoice.ref }}
+                                                </a>
+                                                <div class="detail-info mt-2">
+                                                    Period: {{ entry.invoice.period_start }} to {{ entry.invoice.period_end }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                                 {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                                     <div class="row">
                                         <div class="col-md-6">
@@ -638,13 +675,75 @@
     }
 
     .details-row {
-        background-color: #f8f9fa;
+        background: transparent;
+        transition: all 0.3s ease-out;
+        overflow: hidden;
     }
 
     .details-row .card {
+        transform: translateY(-20px);
+        opacity: 0;
+        transition: all 0.3s ease-out;
         border: none;
-        margin: 0;
-        box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        background: linear-gradient(to bottom, #f8f9fa, #ffffff);
+        margin: 0.5rem 2rem;
+    }
+
+    .details-row.show {
+        background: linear-gradient(to bottom, rgba(0,0,0,0.02), transparent);
+    }
+
+    .details-row.show .card {
+        transform: translateY(0);
+        opacity: 1;
+    }
+
+    .detail-section {
+        padding: 1.25rem;
+        border-radius: 8px;
+        background: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.03);
+        height: 100%;
+        transition: transform 0.2s ease;
+    }
+
+    .detail-section:hover {
+        transform: translateY(-2px);
+    }
+
+    .detail-title {
+        font-size: 0.875rem;
+        color: #6c757d;
+        font-weight: 600;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .detail-content {
+        font-size: 1rem;
+    }
+
+    .detail-content .badge {
+        font-size: 0.875rem;
+        padding: 0.5em 0.75em;
+    }
+
+    .detail-info {
+        font-size: 0.875rem;
+        color: #6c757d;
+        margin-top: 0.5rem;
+    }
+
+    .toggle-details {
+        transition: transform 0.3s ease;
+    }
+
+    .toggle-details.active {
+        transform: rotate(180deg);
     }
 
     .details-row strong {

@@ -470,6 +470,7 @@ class Invoice(BaseModel):
 
         print(f"Direct payments - Pending: {pending_amount}, Delivered: {delivered_amount}, Paid: {paid_amount}")
 
+        # Get allocations
         print(f"Looking for allocations with invoice_id: {self.id}")
         allocations = CheckAllocation.objects.filter(invoice_id=self.id)
         print(f"Raw allocations found: {allocations.count()}")
@@ -479,15 +480,14 @@ class Invoice(BaseModel):
             print(f"Check ID: {alloc.payment.id if hasattr(alloc, 'payment') else 'No payment'}")
             print(f"Check status: {alloc.payment.status if hasattr(alloc, 'payment') else 'No status'}")
 
-        # Get allocations for this invoice
+        # Get valid allocations
         valid_allocations = CheckAllocation.objects.filter(
             invoice_id=self.id,
             payment__status__in=['pending', 'delivered', 'paid', 'draft']
         ).select_related('payment')
         print(f"Allocations found: {valid_allocations.count()}")
-        print(f"Allocations after status filter: {valid_allocations.count()}")
 
-        # Add allocated amounts to totals
+        # Add allocated amounts
         alloc_pending = sum(a.amount for a in valid_allocations.filter(payment__status='pending'))
         alloc_delivered = sum(a.amount for a in valid_allocations.filter(payment__status='delivered'))
         alloc_paid = sum(a.amount for a in valid_allocations.filter(payment__status='paid'))
@@ -495,14 +495,36 @@ class Invoice(BaseModel):
 
         print(f"Allocated payments - Pending: {alloc_pending}, Delivered: {alloc_delivered}, Paid: {alloc_paid}")
 
-        # Update totals with allocations
+        # Get contract payments if this is a contract invoice
+        direct_debit_amount = Decimal('0')
+        direct_debit_details = None
+        contract_invoice = ContractInvoice.objects.filter(invoice=self).select_related('contract', 'contract__domiciliation_bank').first()
+
+        if contract_invoice and contract_invoice.contract.is_domiciled:
+            print(f"Found contract invoice for contract: {contract_invoice.contract.reference}")
+            
+            # Get all non-rejected direct debits to subtract from amount_to_issue
+            non_rejected_debits = DirectDebit.objects.filter(
+                invoice=contract_invoice
+            ).exclude(status=DirectDebit.REJECTED)
+            
+            # Subtract from total_issued (both pending and processed)
+            total_issued += sum(dd.amount for dd in non_rejected_debits)
+            
+            direct_debit_details = {
+                'contract_ref': contract_invoice.contract.reference,
+                'bank': contract_invoice.contract.domiciliation_bank.bank,
+                'account': contract_invoice.contract.domiciliation_bank.account_number,
+            }
+
+        # Update totals with allocations only (direct debits handled in view)
         pending_amount += alloc_pending
         delivered_amount += alloc_delivered
         paid_amount += alloc_paid
         total_issued += total_allocated
 
         net_amount = self.net_amount
-        amount_to_issue = net_amount - total_issued
+        amount_to_issue = net_amount - total_issued  # Now total_issued includes non-rejected direct debits
         remaining_to_pay = net_amount - paid_amount
         payment_percentage = (paid_amount / net_amount * 100) if net_amount else 0
 
@@ -555,19 +577,17 @@ class Invoice(BaseModel):
             'remaining_to_pay': float(remaining_to_pay),
             'payment_percentage': float(payment_percentage),
             'payment_status': self.get_payment_status(paid_amount),
-            'checks': checks
+            'checks': checks,
+            'direct_debit': direct_debit_details,
+            'direct_debit_amount': float(direct_debit_amount)
         }
-
     def get_payment_status(self, paid_amount=None):
         """Determine payment status based on paid amount"""
         if paid_amount is None:
             paid_amount = sum(c.amount for c in Check.objects.filter(
                 cause=self, 
                 status='paid'
-            ).exclude(status='cancelled'))
-        
-        
-        
+            ).exclude(status='cancelled'))    
 
         if paid_amount >= self.total_amount:
             return 'paid'
@@ -589,7 +609,8 @@ class Invoice(BaseModel):
         }
 
     def update_payment_status(self):
-        """Update payment status based on PAID payments only"""
+        """Update payment status based on all payment types"""
+        print(f"\n=== Updating Payment Status for Invoice {self.ref} ===")
         total_payments = Decimal('0')
         
         # Direct check payments - only count PAID checks
@@ -607,6 +628,16 @@ class Invoice(BaseModel):
             payment__status='paid'  # Only count allocations from paid checks
         )
         total_payments += sum(allocation.amount for allocation in allocations)
+
+        contract_invoice = hasattr(self, 'contract_invoice') and self.contract_invoice
+        if contract_invoice:
+            direct_debit_paid = DirectDebit.objects.filter(
+                invoice=contract_invoice,
+                status=DirectDebit.PROCESSED
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            
+            print(f"Direct debit payments: {direct_debit_paid}")
+            total_payments += direct_debit_paid
         
         # Determine status
         if total_payments >= self.net_amount:
@@ -3068,7 +3099,7 @@ class BankStatement(models.Model):
         ).select_related('checker', 'beneficiary')
         
         print(f"Found {supplier_payments.count()} supplier payments")
-        print("Query:", supplier_payments.query)  # Print the actual SQL query
+        #print("Query:", supplier_payments.query)  # Print the actual SQL query
         
         for payment in supplier_payments:
             print(f"\nPayment details:")
@@ -3113,6 +3144,47 @@ class BankStatement(models.Model):
                     'bank_account': f"{payment.checker.bank_account.bank} - {payment.checker.bank_account.account_number}"
                 },
                 'is_expandable': True
+            })
+
+        direct_debits = DirectDebit.objects.filter(
+            bank_account=bank_account,
+            status=DirectDebit.PROCESSED
+        ).select_related('contract', 'invoice__invoice', 'bank_account')
+        
+        print(f"\nFound {direct_debits.count()} processed direct debits")
+        
+        for debit in direct_debits:
+            # Skip if outside date range
+            if start_date and debit.processed_date < start_date:
+                continue
+            if end_date and debit.processed_date > end_date:
+                continue
+                
+            print(f"\nProcessing direct debit: {debit.id}")
+            print(f"Contract: {debit.contract.reference}")
+            print(f"Amount: {debit.amount}")
+            
+            entries.append({
+                'date': debit.processed_date,
+                'label': f"Domiciled payment for contract {debit.contract.reference}",
+                'type': 'DIRECT_DEBIT',
+                'debit': debit.amount,
+                'credit': None,
+                'reference': f"DOM/{debit.contract.reference}/{debit.processed_date.strftime('%Y%m')}",
+                'source_type': 'direct_debit',
+                'source_id': debit.id,
+                'can_transfer': False,
+                'is_transferred': False,
+                'contract': {
+                    'reference': debit.contract.reference,
+                    'id': str(debit.contract.id)
+                },
+                'bank': debit.bank_account.bank,
+                'account': debit.bank_account.account_number,
+                'invoice': {
+                    'ref': debit.invoice.invoice.ref,
+                    'id': str(debit.invoice.invoice.id)
+                }
             })
         
         print("\nFinal entries count:", len(entries))
@@ -3612,6 +3684,54 @@ class AccountingEntry(models.Model):
                 }
             ])
 
+        contract_payments = ForecastStatement.objects.filter(
+            bank_account=bank_account,
+            source_type='contract_domiciliation',
+            is_processed=True
+        ).select_related('bank_account')
+
+        print(f"Found {contract_payments.count()} contract payments to account for")
+
+        for payment in contract_payments:
+            try:
+                contract = Contract.objects.get(id=payment.source_id)
+                print(f"Processing accounting for contract {contract.reference}")
+
+                entries.extend([
+                    {
+                        'date': payment.date,
+                        'label': f"Domiciled payment for contract {contract.reference}",
+                        'debit': payment.debit,
+                        'credit': None,
+                        'account_code': contract.supplier.accounting_code,
+                        'reference': payment.reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'contract_domiciliation',
+                        'source_id': payment.source_id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': payment.date,
+                        'label': f"Domiciled payment for contract {contract.reference}",
+                        'debit': None,
+                        'credit': payment.debit,
+                        'account_code': bank_account.accounting_number,
+                        'reference': payment.reference,
+                        'journal_code': bank_account.journal_number,
+                        'source_type': 'contract_domiciliation',
+                        'source_id': payment.source_id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+                print(f"Added accounting entries for payment on {payment.date}")
+            except Contract.DoesNotExist:
+                print(f"Contract {payment.source_id} not found")
+                continue
+            except Exception as e:
+                print(f"Error creating accounting entries: {str(e)}")
+                continue
+
+
         # Filter entries
         if start_date or end_date:
             filtered_entries = []
@@ -3867,6 +3987,7 @@ class ForecastStatement(BaseModel):
         return f"Forecast {self.label} on {self.date}"
     
 class Contract(BaseModel):
+    """Contract for a supplier"""
     PERIOD_MONTHLY = 'monthly'
     PERIOD_QUARTERLY = 'quarterly'
     PERIOD_BIANNUAL = 'biannual'
@@ -3904,7 +4025,24 @@ class Contract(BaseModel):
     )
     cancellation_date = models.DateField(null=True, blank=True)
     cancellation_reason = models.TextField(blank=True)
-
+    is_domiciled = models.BooleanField(default=False)
+    domiciliation_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='domiciled_contracts'
+    )
+    domiciliation_day = models.IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month for domiciliation payment (1-28)"
+    )
+    domiciliation_suspended = models.BooleanField(default=False)
+    domiciliation_suspension_date = models.DateField(null=True, blank=True)
+    domiciliation_suspension_reason = models.TextField(blank=True)
+    
     def clean(self):
         if not self.is_indefinite and not self.end_date:
             raise ValidationError("End date is required for fixed-term contracts")
@@ -3987,11 +4125,15 @@ class Contract(BaseModel):
 
     def generate_invoice(self, for_date):
         """Generate an invoice for the given date"""
+        print(f"\n=== Generating Invoice for Contract {self.reference} ===")
+        print(f"Date: {for_date}")
+        
         if not self.can_generate_invoice(for_date):
             raise ValidationError("Cannot generate invoice for this date")
 
         period_start = self.get_period_start_date(for_date)
         period_end = self.get_period_end_date(period_start)
+        print(f"Period: {period_start} to {period_end}")
 
         # Create invoice
         invoice = Invoice.objects.create(
@@ -4000,9 +4142,21 @@ class Contract(BaseModel):
             supplier=self.supplier,
             type='invoice'
         )
+        print(f"Created invoice: {invoice.ref}")
 
         # Add products from contract
+        total_amount = Decimal('0')
         for contract_product in self.products.all():
+            print(f"\nProcessing product: {contract_product.product.name}")
+            # Calculate product amount with VAT
+            amount = contract_product.quantity * contract_product.unit_price
+            if contract_product.reduction_rate:
+                reduction = amount * (contract_product.reduction_rate / Decimal('100'))
+                amount -= reduction
+            vat_amount = amount * (contract_product.product.vat_rate / Decimal('100'))
+            amount += vat_amount
+            total_amount += amount
+            
             InvoiceProduct.objects.create(
                 invoice=invoice,
                 product=contract_product.product,
@@ -4013,12 +4167,40 @@ class Contract(BaseModel):
             )
 
         # Create contract invoice record
-        ContractInvoice.objects.create(
+        contract_invoice = ContractInvoice.objects.create(
             contract=self,
             invoice=invoice,
             period_start=period_start,
             period_end=period_end
         )
+        print(f"Created contract invoice record: {contract_invoice.id}")
+
+        # If contract is domiciled, create DirectDebit
+        if self.is_domiciled and not self.domiciliation_suspended:
+            print("\nCreating DirectDebit record")
+            payment_date = period_start.replace(day=self.domiciliation_day)
+            while payment_date.weekday() >= 5:  # Skip weekends
+                payment_date += timedelta(days=1)
+            
+            # Find associated forecast
+            forecast = ForecastStatement.objects.filter(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            ).first()
+            print(f"Found forecast: {forecast.id if forecast else None}")
+
+            direct_debit = DirectDebit.objects.create(
+                invoice=contract_invoice,
+                contract=self,
+                bank_account=self.domiciliation_bank,
+                due_date=payment_date,
+                amount=total_amount,
+                forecast=forecast
+            )
+            print(f"Created DirectDebit: {direct_debit.id}")
 
         return invoice
 
@@ -4108,8 +4290,261 @@ class Contract(BaseModel):
         
         print(f"Next generation date: {next_date}")
         return next_date
+    
+    def suspend_domiciliation(self, date, reason):
+        """Suspend domiciliation and remove future forecasts"""
+        if not self.is_domiciled:
+            raise ValidationError("Contract is not domiciled")
+            
+        print(f"\n=== Suspending Domiciliation for Contract {self.id} ===")
+        print(f"Suspension date: {date}")
+        print(f"Reason: {reason}")
+        
+        self.domiciliation_suspended = True
+        self.domiciliation_suspension_date = date
+        self.domiciliation_suspension_reason = reason
+        
+        # Delete future forecasts
+        ForecastStatement.objects.filter(
+            source_type='contract_domiciliation',
+            source_id=self.id,
+            date__gte=date
+        ).delete()
+        
+        self.save()
 
+    def _next_business_day(self, date):
+        """Get next business day, skipping weekends"""
+        print(f"\n=== Getting next business day from {date} ===")
+        next_date = date
+        while next_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            next_date += timedelta(days=1)
+            print(f"Skipped to: {next_date}")
+        return next_date
+
+    def _calculate_total_amount_with_vat(self):
+        """Calculate total contract amount including VAT"""
+        total_amount = Decimal('0')
+        for contract_product in self.products.all():
+            product_amount = contract_product.quantity * contract_product.unit_price
+            
+            if contract_product.reduction_rate:
+                reduction = product_amount * (contract_product.reduction_rate / Decimal('100'))
+                product_amount -= reduction
+            
+            vat_amount = product_amount * (contract_product.product.vat_rate / Decimal('100'))
+            product_amount += vat_amount
+            
+            total_amount += product_amount
+            
+        return total_amount
+
+    def _get_or_create_invoice_for_date(self, date):
+        """Get or create invoice for the given date"""
+        period_start = self.get_period_start_date(date)
+        period_end = self.get_period_end_date(period_start)
+        
+        # Check if invoice exists
+        invoice = ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).first()
+        
+        if not invoice and self.can_generate_invoice(date):
+            print(f"Generating new invoice for period {period_start} to {period_end}")
+            invoice = self.generate_invoice(date)
+        
+        return invoice
+
+    def _create_forecast_and_direct_debit(self, payment_date, amount, invoice, current_date):
+        """Create forecast and direct debit records"""
+        # Check if forecast already exists
+        existing_forecast = ForecastStatement.objects.filter(
+            bank_account=self.domiciliation_bank,
+            date=payment_date,
+            source_type='contract_domiciliation',
+            source_id=self.id
+        ).first()
+        
+        if not existing_forecast:
+            print(f"Creating new forecast for {payment_date}")
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=amount,
+                amount=amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+        else:
+            forecast = existing_forecast
+            print(f"Using existing forecast {forecast.id}")
+        
+        # Create DirectDebit if it doesn't exist
+        direct_debit = DirectDebit.objects.filter(
+            invoice=invoice,
+            contract=self,
+            forecast=forecast
+        ).first()
+        
+        if not direct_debit:
+            print(f"Creating DirectDebit for invoice {invoice.invoice.ref}")
+            DirectDebit.objects.create(
+                invoice=invoice,
+                contract=self,
+                bank_account=self.domiciliation_bank,
+                due_date=payment_date,
+                amount=amount,
+                forecast=forecast
+            )
+        else:
+            print(f"DirectDebit already exists: {direct_debit.id}")
+
+
+    def generate_domiciliation_forecasts(self):
+        """Generate a year of forecasts for domiciled contract"""
+        if not self.is_domiciled or self.domiciliation_suspended:
+            return
+                    
+        print(f"\n=== Generating Domiciliation Forecasts for Contract {self.id} ===")
+        print(f"Contract start date: {self.start_date}")
+        print(f"Domiciliation day: {self.domiciliation_day}")
+        
+        today = timezone.now().date()
+        year_end = today + timedelta(days=365)
+        
+        # Start from the first payment date after contract start
+        current_date = self.start_date.replace(day=self.domiciliation_day)
+        if current_date < self.start_date:
+            current_date += relativedelta(months=1)
+                
+        print(f"First payment date: {current_date}")
+        
+        total_amount = Decimal('0')
+        for contract_product in self.products.all():
+            product_amount = contract_product.quantity * contract_product.unit_price
+            
+            if contract_product.reduction_rate:
+                reduction = product_amount * (contract_product.reduction_rate / Decimal('100'))
+                product_amount -= reduction
+            
+            vat_amount = product_amount * (contract_product.product.vat_rate / Decimal('100'))
+            product_amount += vat_amount
+            
+            total_amount += product_amount
+            
+        print(f"Total amount (with VAT): {total_amount}")
+        
+        while current_date < today:
+            payment_date = current_date
+            while payment_date.weekday() >= 5:
+                payment_date += timedelta(days=1)
+                    
+            print(f"\nCreating past due forecast for: {payment_date} (Original: {current_date})")
+            
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=total_amount,
+                amount=total_amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+
+            # ONLY NEW CODE: Create DirectDebit for this forecast
+            invoice = ContractInvoice.objects.filter(
+                contract=self,
+                period_start__year=current_date.year,
+                period_start__month=current_date.month
+            ).first()
+
+            if invoice:
+                DirectDebit.objects.create(
+                    invoice=invoice,
+                    contract=self,
+                    bank_account=self.domiciliation_bank,
+                    due_date=payment_date,
+                    amount=total_amount,
+                    forecast=forecast
+                )
+            
+            if self.periodicity == self.PERIOD_MONTHLY:
+                current_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                current_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                current_date += relativedelta(months=6)
+            else:
+                current_date += relativedelta(years=1)
+        
+        while current_date <= year_end:
+            payment_date = current_date
+            while payment_date.weekday() >= 5:
+                payment_date += timedelta(days=1)
+                    
+            print(f"\nCreating future forecast for: {payment_date} (Original: {current_date})")
+                
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=total_amount,
+                amount=total_amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+
+            # ONLY NEW CODE: Create DirectDebit for this forecast
+            invoice = ContractInvoice.objects.filter(
+                contract=self,
+                period_start__year=current_date.year,
+                period_start__month=current_date.month
+            ).first()
+
+            if invoice:
+                DirectDebit.objects.create(
+                    invoice=invoice,
+                    contract=self,
+                    bank_account=self.domiciliation_bank,
+                    due_date=payment_date,
+                    amount=total_amount,
+                    forecast=forecast
+                )
+
+            if self.periodicity == self.PERIOD_MONTHLY:
+                current_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                current_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                current_date += relativedelta(months=6)
+            else:
+                current_date += relativedelta(years=1)
+                
+            print(f"Next payment date: {current_date}")
+            
+    def _get_next_period_date(self, current_date):
+        """Get next period date based on contract periodicity"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return current_date + relativedelta(months=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            return current_date + relativedelta(months=3)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            return current_date + relativedelta(months=6)
+        else:  # annual
+            return current_date + relativedelta(years=1)
+
+            
 class ContractProduct(BaseModel):
+    """Product for a contract"""
     contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='products')
     product = models.ForeignKey('Product', on_delete=models.PROTECT)
     quantity = models.DecimalField(
@@ -4135,7 +4570,7 @@ class ContractProduct(BaseModel):
 class ContractInvoice(BaseModel):
     """Links generated invoices to their contract periods"""
     contract = models.ForeignKey(Contract, on_delete=models.PROTECT)
-    invoice = models.OneToOneField('Invoice', on_delete=models.PROTECT)
+    invoice = models.OneToOneField('Invoice', on_delete=models.PROTECT, related_name='contract_invoice')
     period_start = models.DateField()
     period_end = models.DateField()
 
@@ -4143,3 +4578,113 @@ class ContractInvoice(BaseModel):
         unique_together = [
             ['contract', 'period_start', 'period_end']
         ]
+
+class DirectDebit(BaseModel):
+    """Direct debit for a contract invoice"""
+
+    PENDING = 'pending'
+    PROCESSED = 'processed'
+    REJECTED = 'rejected'
+    
+    STATUS_CHOICES = [
+        (PENDING, 'Pending'),
+        (PROCESSED, 'Processed'),
+        (REJECTED, 'Rejected')
+    ]
+    
+    REJECTION_CAUSES = [
+        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
+        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
+        ('TECHNICAL_ERROR', 'Technical Error'),
+        ('STOP_PAYMENT', 'Stop Payment Order'),
+        ('BANK_ERROR', 'Bank Processing Error')
+    ]
+    
+    invoice = models.ForeignKey('ContractInvoice', on_delete=models.PROTECT)
+    contract = models.ForeignKey('Contract', on_delete=models.PROTECT)
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    
+    due_date = models.DateField()
+    processed_date = models.DateField(null=True, blank=True)
+    
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
+    
+    rejection_cause = models.CharField(
+        max_length=50, 
+        choices=REJECTION_CAUSES,
+        null=True, 
+        blank=True
+    )
+    rejection_date = models.DateField(null=True, blank=True)
+    rejection_note = models.TextField(blank=True)
+    
+    forecast = models.OneToOneField(
+        'ForecastStatement', 
+        on_delete=models.SET_NULL, 
+        null=True,
+        related_name='direct_debit'
+    )
+    
+    class Meta:
+        ordering = ['due_date']
+        verbose_name = "Direct Debit"
+        verbose_name_plural = "Direct Debits"
+    
+    def __str__(self):
+        return f"DirectDebit {self.id} for {self.invoice.invoice.ref}"
+        
+    def mark_as_processed(self, processed_date):
+        print(f"\n=== Processing DirectDebit {self.id} ===")
+        print(f"Invoice: {self.invoice.invoice.ref}")
+        print(f"Amount: {self.amount}")
+        print(f"Process date: {processed_date}")
+        
+        self.status = self.PROCESSED
+        self.processed_date = processed_date
+        self.save()
+        
+        # Update invoice payment status
+        self.invoice.invoice.update_payment_status()
+        
+        # Mark forecast as processed if exists
+        if self.forecast:
+            print(f"Marking forecast {self.forecast.id} as processed")
+            self.forecast.is_processed = True
+            self.forecast.save()
+        
+        print(f"DirectDebit processed successfully")
+        
+    def mark_as_rejected(self, rejection_date, cause, note=''):
+        print(f"\n=== Rejecting DirectDebit {self.id} ===")
+        print(f"Invoice: {self.invoice.invoice.ref}")
+        print(f"Cause: {cause}")
+        print(f"Date: {rejection_date}")
+        
+        self.status = self.REJECTED
+        self.rejection_date = rejection_date
+        self.rejection_cause = cause
+        self.rejection_note = note
+        self.save()
+        
+        # Update invoice payment status
+        self.invoice.invoice.update_payment_status()
+        
+        # Mark forecast as processed if exists
+        if self.forecast:
+            print(f"Marking forecast {self.forecast.id} as processed")
+            self.forecast.is_processed = True
+            self.forecast.save()
+            
+        print(f"DirectDebit rejected successfully")
+
+    @property
+    def presentation_info(self):
+        """Get formatted presentation information"""
+        return {
+            'date': self.due_date,
+            'type': 'Direct Debit',
+            'bank': self.bank_account,
+            'status': self.get_status_display(),
+            'rejection_cause': self.get_rejection_cause_display() if self.rejection_cause else None
+        }

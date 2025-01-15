@@ -35,6 +35,23 @@
         </div>
     </td>
     <td>
+        {% if contract.is_domiciled %}
+            <div class="mt-2">
+                <span class="badge {% if contract.domiciliation_suspended %}badge-warning{% else %}badge-info{% endif %}">
+                    <i class="fas {% if contract.domiciliation_suspended %}fa-pause-circle{% else %}fa-university{% endif %} me-1"></i>
+                    {% if contract.domiciliation_suspended %}
+                        Domiciliation Suspended
+                    {% else %}
+                        Domiciled (Day {{ contract.domiciliation_day }})
+                    {% endif %}
+                </span>
+                {% if contract.domiciliation_suspended %}
+                    <small class="text-muted d-block">
+                        Suspended: {{ contract.domiciliation_suspension_date|date:"Y-m-d" }}
+                    </small>
+                {% endif %}
+            </div>
+        {% endif %}
         <span class="badge {% if contract.status == 'draft' %}badge-secondary
                           {% elif contract.status == 'active' %}badge-success
                           {% elif contract.status == 'terminated' %}badge-danger

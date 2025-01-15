@@ -16,7 +16,7 @@ from .views_invoice import (
 
 
 from .views_contract import (
-    ContractListView, ContractFilterView, ContractCreateView,
+    ContractListView, ContractFilterView, ContractCreateView, ContractSuspendDomiciliationView,
     ContractUpdateView, ContractDeleteView, ContractGenerateInvoicesView,
     ContractTerminateView, ContractActivateView, ContractHistoryView
 )
@@ -61,7 +61,7 @@ from .views_presentation import (
 )
 
 from .views_statement import (
-    BankStatementView, AccountingView, OtherOperationsView, CalendarView, CalendarForecastView, PendingForecastsView,
+    BankStatementView, AccountingView, ContractPaymentActionView, OtherOperationsView, CalendarView, CalendarForecastView, PendingForecastsView,
     SupplierForecastView
 )
 
@@ -251,5 +251,13 @@ urlpatterns = [
 
     path('bank/pending-forecasts/<str:bank_id>/', PendingForecastsView.as_view(), name='pending_forecasts'),
 
+    # Contract URLs
+    path('contracts/<uuid:pk>/suspend-domiciliation/', 
+         ContractSuspendDomiciliationView.as_view(), 
+         name='contract-suspend-domiciliation'),
+    path('bank/contracts/<uuid:contract_id>/payment-action/', 
+        ContractPaymentActionView.as_view(), 
+        name='contract-payment-action'),
+        
 ]
 

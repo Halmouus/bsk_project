@@ -966,7 +966,7 @@
             const tbody = $('#payment-checks-tbody');
             tbody.empty();
 
-            if (checks.length === 0) {
+            if (!checks || checks.length === 0) {
                 tbody.append(`
                     <tr>
                         <td colspan="6" class="text-center text-muted py-4">
@@ -978,50 +978,87 @@
             }
 
             checks.forEach(check => {
-                const row = document.createElement('tr');
-                
-                // Common status badge
-                const statusBadge = ModalHandlers.getStatusBadge(check.status);
-                
-                // Different display for direct vs allocated payments
-                if (check.type === 'direct') {
-                    row.innerHTML = `
-                        <td>
-                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
-                            ${check.reference}
-                        </td>
-                        <td class="text-right font-weight-bold">
-                            ${Utils.formatMoney(check.amount)}
-                        </td>
-                        <td>${check.created_at}</td>
-                        <td>${check.delivered_at || '-'}</td>
-                        <td>${check.paid_at || '-'}</td>
-                        <td>${statusBadge}</td>
-                    `;
-                } else {  // allocation
-                    row.innerHTML = `
-                        <td>
-                            <i class="fas fa-money-check-alt text-muted mr-2"></i>
-                            ${check.reference}
-                            <span class="badge badge-info ml-2">Allocation</span>
-                            <br>
-                            <small class="text-muted">
-                                (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
-                            </small>
-                        </td>
-                        <td class="text-right font-weight-bold">
-                            ${Utils.formatMoney(check.allocated_amount)}
-                        </td>
-                        <td>${check.created_at}</td>
-                        <td>${check.delivered_at || '-'}</td>
-                        <td>${check.paid_at || '-'}</td>
-                        <td>${statusBadge}</td>
-                    `;
-                }
-                
-                tbody.append(row);
-            });
-        },
+        const row = document.createElement('tr');
+        
+        // Common status badge
+        const statusBadge = ModalHandlers.getStatusBadge(check.status);
+        
+        // Different display for direct vs allocated vs direct debit payments
+        if (check.type === 'direct_debit') {
+            row.innerHTML = `
+                <td>
+                    <i class="fas fa-university text-muted mr-2"></i>
+                    ${check.reference}
+                    <br>
+                    <span class="badge badge-info">${check.payment_type}</span>
+                </td>
+                <td class="text-right font-weight-bold">
+                    ${Utils.formatMoney(check.amount)}
+                </td>
+                <td>${check.created_at}</td>
+                <td>-</td>
+                <td>${check.paid_at || '-'}</td>
+                <td>
+                    ${check.status === 'processed' ? `
+                        <span class="badge badge-success">
+                            <i class="fas fa-check me-1"></i>
+                            Processed
+                        </span>
+                    ` : `
+                        <span class="badge badge-${check.status === 'rejected' ? 'danger' : 'warning'}">
+                            <i class="fas fa-${check.status === 'rejected' ? 'times' : 'clock'} me-1"></i>
+                            ${check.status.charAt(0).toUpperCase() + check.status.slice(1)}
+                        </span>
+                    `}
+                    <br>
+                    <small class="text-muted">
+                        ${check.bank} - ${check.account}
+                    </small>
+                </td>
+            `;
+        } else if (check.type === 'direct') {
+            row.innerHTML = `
+                <td>
+                    <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                    ${check.reference}
+                    <br>
+                    <span class="badge badge-info">${check.payment_type}</span>
+                </td>
+                <td class="text-right font-weight-bold">
+                    ${Utils.formatMoney(check.amount)}
+                </td>
+                <td>${check.created_at}</td>
+                <td>${check.delivered_at || '-'}</td>
+                <td>${check.paid_at || '-'}</td>
+                <td>${statusBadge}</td>
+            `;
+        } else { // allocation
+            row.innerHTML = `
+                <td>
+                    <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                    ${check.reference}
+                    <span class="badge badge-info ml-2">Allocation</span>
+                    <span class="badge badge-info">${check.payment_type}</span>
+                    <br>
+                    <small class="text-muted">
+                        (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
+                    </small>
+                </td>
+                <td class="text-right font-weight-bold">
+                    ${Utils.formatMoney(check.allocated_amount)}
+                </td>
+                <td>${check.created_at}</td>
+                <td>${check.delivered_at || '-'}</td>
+                <td>${check.paid_at || '-'}</td>
+                <td>${statusBadge}</td>
+            `;
+        }
+        
+        tbody.append(row);
+    });
+},
+
+        
 
         showAccountingSummary: function(invoiceId) {
             $.ajax({

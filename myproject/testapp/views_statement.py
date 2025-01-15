@@ -1,10 +1,11 @@
+from django.forms import ValidationError
 from django.views import View
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Check, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, get_supplier_balance
+from .models import Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, get_supplier_balance
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -15,6 +16,9 @@ from .services.forecast import PaymentForecastService
 import traceback
 from datetime import timedelta
 from django.utils import timezone
+from django.db import transaction
+
+from testapp import models
 
 class BankStatementView(View):
     """View for displaying bank statements"""
@@ -241,7 +245,7 @@ class CalendarView(View):
                 date__lt=start_of_month,
                 date__gte=timezone.now().date(),
                 is_processed=False,
-                source_type='supplier_check'
+                source_type__in=['supplier_check', 'contract_domiciliation']
             )
             
             # Calculate cumulative impacts from prior months
@@ -301,7 +305,7 @@ class CalendarView(View):
                         date=current_date,
                         date__gte=timezone.now().date(),
                         is_processed=False,
-                        source_type='supplier_check'
+                        source_type__in=['supplier_check', 'contract_domiciliation']
                     )
 
                     # Calculate receipt forecast impact for this day
@@ -354,8 +358,14 @@ class CalendarView(View):
                         'balance': float(forecasted_balance),
                         'expected_payments': expected_payments,
                         'discounted_receipts': discounted_receipts,
+                        'supplier_payments': [{
+                            'amount': float(f.debit),
+                            'label': f.label,
+                            'source_type': f.source_type
+                        } for f in supplier_payment_forecasts] if supplier_payment_forecasts else [],
                         'has_forecasts': bool(expected_payments or discounted_receipts),
-                        'has_payment_forecasts': supplier_payment_forecasts.exists()
+                        'has_payment_forecasts': supplier_payment_forecasts.exists(),
+                        'has_contract_forecasts': bool(supplier_payment_forecasts.filter(source_type='contract_domiciliation'))
                     })
 
                 week_data.append({
@@ -410,6 +420,9 @@ class CalendarView(View):
         # Filter out forecasts for paid receipts/checks
         filtered_forecasts = []
         for forecast in pending_forecasts:
+            print(f"\nProcessing pending forecast: {forecast.label}")
+            print(f"Source type: {forecast.source_type}")
+            print(f"Source ID: {forecast.source_id}")
             if forecast.source_type == 'checkreceipt':
                 receipt = CheckReceipt.objects.filter(id=forecast.source_id).first()
                 if receipt and receipt.status not in ['PAID', 'COMPENSATED']:
@@ -422,6 +435,11 @@ class CalendarView(View):
                 check = Check.objects.filter(id=forecast.source_id).first()
                 if check and check.status not in ['paid', 'cancelled']:
                     filtered_forecasts.append(forecast)
+            elif forecast.source_type == 'contract_domiciliation':
+                contract = Contract.objects.filter(id=forecast.source_id).first()
+                if contract and contract.is_domiciled and not contract.domiciliation_suspended:
+                    filtered_forecasts.append(forecast)
+                    print(f"Added contract domiciliation forecast: {forecast.label}")
 
         expected = Decimal('0.00')
         discounted = Decimal('0.00')
@@ -433,7 +451,7 @@ class CalendarView(View):
             print(f"Source type: {forecast.source_type}")
             print(f"Source ID: {forecast.source_id}")
             
-            if forecast.source_type == 'supplier_check':
+            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation':
                 amount = forecast.debit or Decimal('0.00')
                 payments += amount
                 print(f"Added to payments total: {payments}")
@@ -469,7 +487,7 @@ class CalendarView(View):
             'expected': expected,
             'discounted': discounted,
             'payments': payments,
-            'total': expected + discounted - payments
+            'total': expected - payments
         }
 
 class CalendarForecastView(View):
@@ -665,6 +683,69 @@ class PendingForecastsView(View):
                         }
                     }
                     forecasts_data.append(forecast_data)
+                
+                elif forecast.source_type == 'contract_domiciliation':
+                    print("\n=== Processing Contract Domiciliation Forecast ===")
+                    # Get contract with supplier
+                    contract = Contract.objects.select_related('supplier').get(
+                        id=forecast.source_id,
+                        is_domiciled=True,
+                        domiciliation_suspended=False
+                    )
+                    print(f"Contract: {contract.reference}")
+                    
+                    # Get direct debit and associated invoice
+                    direct_debit = DirectDebit.objects.filter(
+                        contract=contract,
+                        forecast=forecast
+                    ).select_related(
+                        'invoice__invoice'  # Follow the chain: DirectDebit -> ContractInvoice -> Invoice
+                    ).first()
+                    
+                    print(f"Direct Debit found: {direct_debit.id if direct_debit else 'None'}")
+                    if direct_debit:
+                        print(f"Invoice ref: {direct_debit.invoice.invoice.ref}")
+                        print(f"Invoice amount: {direct_debit.invoice.invoice.total_amount}")
+                        print(f"Period: {direct_debit.invoice.period_start} to {direct_debit.invoice.period_end}")
+                    
+                    supplier_balance = get_supplier_balance(contract.supplier)
+                    
+                    forecast_data = {
+                        'type': 'Contract Payment',
+                        'payment_type': 'Domiciliation',
+                        'number': forecast.reference,
+                        'status': 'pending',
+                        'status_display': 'Pending Payment',
+                        'source_id': str(contract.id),
+                        'supplier': {
+                            'name': contract.supplier.name,
+                            'balance': float(supplier_balance['balance'])
+                        },
+                        'bank': bank.get_bank_display(),
+                        'due_date': forecast.date.strftime('%Y-%m-%d'),
+                        'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                        'amount': float(forecast.debit or 0),
+                        'contract': {
+                            'reference': contract.reference,
+                            'id': str(contract.id)
+                        }
+                    }
+                    
+                    # Add invoice details if available
+                    if direct_debit and direct_debit.invoice and direct_debit.invoice.invoice:
+                        invoice = direct_debit.invoice.invoice
+                        forecast_data['invoice'] = {
+                            'ref': invoice.ref,
+                            'id': str(invoice.id),
+                            'date': invoice.date.strftime('%Y-%m-%d'),
+                            'period_start': direct_debit.invoice.period_start.strftime('%Y-%m-%d'),
+                            'period_end': direct_debit.invoice.period_end.strftime('%Y-%m-%d'),
+                            'amount': float(invoice.total_amount),
+                            'status': invoice.payment_status,
+                            'status_display': invoice.get_payment_status_display()
+                        }
+                    
+                    forecasts_data.append(forecast_data)
 
                 # Get receipt first
                 receipt = None
@@ -750,7 +831,7 @@ class SupplierForecastView(View):
                 bank_account=bank_account,
                 date=forecast_date,
                 is_processed=False,
-                source_type='supplier_check'
+                source_type__in=['supplier_check', 'contract_domiciliation']  
             )
             
             print(f"Found {payment_forecasts.count()} payment forecasts")
@@ -762,54 +843,95 @@ class SupplierForecastView(View):
                 print(f"Forecast ID: {forecast.id}")
                 print(f"Amount: {forecast.debit}")
                 
-                # Get the check details
-                try:
-                    check = Check.objects.select_related(
-                        'beneficiary', 'checker', 'cause'
-                    ).get(id=forecast.source_id)
-                    
-                    print(f"Found Check {check.position}")
-                    print(f"Payment due: {check.payment_due}")
-                    print(f"Checker type: {check.checker.type}")
-                    
-                    # Get supplier balance using existing function
-                    supplier_balance = get_supplier_balance(check.beneficiary)
-                    
-                    forecast_data = {
-                        'type': 'LCN' if check.checker.type == 'LCN' else 'Check',
-                        'payment': {
-                            'reference': check.position,
-                            'amount': float(forecast.debit),
-                            'id': str(check.id),
+                if forecast.source_type == 'supplier_check':
+                    # Get the check details
+                    try:
+                        check = Check.objects.select_related(
+                            'beneficiary', 'checker', 'cause'
+                        ).get(id=forecast.source_id)
+                        
+                        print(f"Found Check {check.position}")
+                        print(f"Payment due: {check.payment_due}")
+                        print(f"Checker type: {check.checker.type}")
+                        
+                        # Get supplier balance using existing function
+                        supplier_balance = get_supplier_balance(check.beneficiary)
+                        
+                        forecast_data = {
+                            'type': 'LCN' if check.checker.type == 'LCN' else 'Check',
+                            'payment': {
+                                'reference': check.position,
+                                'amount': float(forecast.debit),
+                                'id': str(check.id),
+                                'status': check.status,
+                                'status_display': check.get_status_display()
+                            },
+                            'supplier': {
+                                'name': check.beneficiary.name,
+                                'balance': float(supplier_balance['balance'])
+                            },
+                            'dates': {
+                                'due_date': check.payment_due.strftime('%Y-%m-%d'),
+                                'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                                'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+                                'printed_at': check.printed_at.strftime('%Y-%m-%d') if check.printed_at else None
+                            },
+                            'invoice': {
+                                'ref': check.cause.ref if check.cause else None,
+                                'id': str(check.cause.id) if check.cause else None
+                            },
                             'status': check.status,
                             'status_display': check.get_status_display()
-                        },
-                        'supplier': {
-                            'name': check.beneficiary.name,
-                            'balance': float(supplier_balance['balance'])
-                        },
-                        'dates': {
-                            'due_date': check.payment_due.strftime('%Y-%m-%d'),
-                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
-                            'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
-                            'printed_at': check.printed_at.strftime('%Y-%m-%d') if check.printed_at else None
-                        },
-                        'invoice': {
-                            'ref': check.cause.ref if check.cause else None,
-                            'id': str(check.cause.id) if check.cause else None
-                        },
-                        'status': check.status,
-                        'status_display': check.get_status_display()
-                    }
-                    
-                    forecasts_data.append(forecast_data)
-                    total_amount += forecast.debit
-                    print(f"Added to forecast data. Total now: {total_amount}")
-                    
-                except Check.DoesNotExist:
-                    print(f"Check {forecast.source_id} not found")
-                    continue
+                        }
+
+                        forecasts_data.append(forecast_data)
+                        total_amount += forecast.debit
+                        print(f"Added to forecast data. Total now: {total_amount}")
+                        
+                        
+                    except Check.DoesNotExist:
+                        print(f"Check {forecast.source_id} not found")
+                        continue
+                
             
+                elif forecast.source_type == 'contract_domiciliation':
+                    try:
+                        contract = Contract.objects.select_related('supplier').get(id=forecast.source_id)
+                        print(f"Contract: {contract.reference}")
+                        
+                        forecast_data = {
+                            'type': 'Contract Payment',
+                            'payment': {
+                                'reference': forecast.reference,
+                                'amount': float(forecast.debit),
+                                'status': 'pending',
+                                'status_display': 'Pending Payment'
+                            },
+                            'dates': {
+                                'due_date': forecast.date.strftime('%Y-%m-%d'),
+                                'forecast_date': forecast.date.strftime('%Y-%m-%d')
+                            },
+                            'supplier': {
+                                'name': contract.supplier.name,
+                                'balance': float(get_supplier_balance(contract.supplier)['balance'])
+                            },
+                            'contract': {
+                                'reference': contract.reference,
+                                'id': str(contract.id),
+                                'periodicity': contract.get_periodicity_display()
+                            }
+                        }
+                        forecasts_data.append(forecast_data)
+                        total_amount += forecast.debit
+                        print(f"Added to forecast data. Total now: {total_amount}")
+                        
+                    except Contract.DoesNotExist:
+                        print(f"Contract {forecast.source_id} not found")
+                        continue
+
+                print(f"Final forecasts data: {forecasts_data}")
+                print(f"Total amount: {total_amount}")
+
             return JsonResponse({
                 'status': 'success',
                 'forecasts': forecasts_data,
@@ -824,3 +946,62 @@ class SupplierForecastView(View):
                 'message': str(e)
             }, status=400)
         
+
+@method_decorator(csrf_exempt, name='dispatch')
+class ContractPaymentActionView(View):
+    def post(self, request, contract_id):
+        try:
+            print("\n=== Processing Contract Payment Action ===")
+            data = json.loads(request.body)
+            action = data.get('action')
+            payment_date = data.get('date')
+            forecast_date = data.get('forecast_date')
+            print(f"Action: {action}")
+            print(f"Payment Date: {payment_date}")
+            print(f"Forecast Date: {forecast_date}")
+            
+            contract = get_object_or_404(Contract, id=contract_id)
+            
+            # Find the corresponding direct debit
+            direct_debit = DirectDebit.objects.filter(
+                contract=contract,
+                due_date=forecast_date,
+                status=DirectDebit.PENDING
+            ).select_related('forecast').first()
+            
+            if not direct_debit:
+                print(f"No pending direct debit found for date {forecast_date}")
+                raise ValidationError(f"No pending direct debit found for date {forecast_date}")
+
+            print(f"Found direct debit {direct_debit.id}")
+            
+            with transaction.atomic():
+                if action == 'pay':
+                    print("Marking as paid...")
+                    direct_debit.mark_as_processed(payment_date)
+                    message = "Payment processed successfully"
+                    
+                elif action == 'reject':
+                    print("Marking as rejected...")
+                    direct_debit.mark_as_rejected(
+                        payment_date,
+                        data.get('rejection_reason'),
+                        data.get('rejection_note', '')
+                    )
+                    message = "Payment rejection processed"
+                    
+                else:
+                    raise ValidationError("Invalid action")
+                    
+            return JsonResponse({
+                'status': 'success',
+                'message': message
+            })
+                
+        except Exception as e:
+            print(f"Error processing contract payment: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)

@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.db import models
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import CheckAllocation, Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
+from .models import CheckAllocation, ContractInvoice, DirectDebit, ForecastStatement, Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -653,6 +653,7 @@ class InvoicePaymentDetailsView(View):
         allocations = CheckAllocation.objects.filter(
             invoice_id=invoice.id
         ).select_related('payment__checker__bank_account')
+        
 
         # Combine both types of checks
         check_details = []
@@ -662,6 +663,7 @@ class InvoicePaymentDetailsView(View):
             check_details.append({
                 'id': str(check.id),
                 'type': 'direct',
+                'payment_type': 'LCN' if check.checker.type == 'LCN' else 'Check',
                 'reference': f"{check.checker.bank_account.bank}-{check.position}",
                 'amount': float(check.amount),
                 'status': check.status,
@@ -675,6 +677,7 @@ class InvoicePaymentDetailsView(View):
             check_details.append({
                 'id': str(allocation.payment.id),
                 'type': 'allocation',
+                'payment_type': 'LCN' if allocation.payment.checker.type == 'LCN' else 'Check',
                 'reference': f"{allocation.payment.checker.bank_account.bank}-{allocation.payment.position}",
                 'total_amount': float(allocation.payment.amount),
                 'allocated_amount': float(allocation.amount),
@@ -683,6 +686,65 @@ class InvoicePaymentDetailsView(View):
                 'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
                 'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
             })
+        
+        # Get direct debit records if this is a contract invoice
+        contract_invoice = ContractInvoice.objects.filter(invoice=invoice).first()
+        if contract_invoice:
+            print("\n=== Processing Contract Invoice Payment Details ===")
+            print(f"Contract Invoice ID: {contract_invoice.id}")
+            
+            direct_debits = DirectDebit.objects.filter(
+                invoice=contract_invoice
+            ).select_related('bank_account')
+            
+            print(f"Found {direct_debits.count()} direct debits")
+            
+            # Convert both numbers to Decimal
+            payment_details['total_amount'] = Decimal(str(payment_details['total_amount']))
+            payment_details['paid_amount'] = Decimal(str(payment_details['paid_amount']))
+            
+            for debit in direct_debits:
+                if debit.status == DirectDebit.PROCESSED:
+                    payment_details['paid_amount'] += debit.amount
+                    print(f"Added paid amount: {debit.amount}")
+                    print(f"New total paid amount: {payment_details['paid_amount']}")
+            
+            # Recalculate remaining_to_pay after updating paid_amount
+            payment_details['remaining_to_pay'] = payment_details['total_amount'] - payment_details['paid_amount']
+            
+            payment_details['direct_debits'] = [{
+                'date': debit.due_date,
+                'bank': f"{debit.bank_account.bank} - {debit.bank_account.account_number}",
+                'amount': float(debit.amount),
+                'status': debit.get_status_display(),
+                'processed_date': debit.processed_date,
+                'rejection_cause': debit.get_rejection_cause_display() if debit.rejection_cause else None,
+                'rejection_date': debit.rejection_date,
+                'rejection_note': debit.rejection_note
+            } for debit in direct_debits]
+            
+            # Calculate percentage with Decimals, then convert to float for JSON
+            payment_details['payment_percentage'] = float(
+                (payment_details['paid_amount'] / payment_details['total_amount']) * 100
+                if payment_details['total_amount'] else 0
+            )
+            
+            print(f"Updated payment details: {payment_details}")
+                
+            # Add direct debits to check_details
+            for debit in direct_debits:
+                check_details.append({
+                    'id': str(debit.id),
+                    'type': 'direct_debit',
+                    'payment_type': 'Direct Debit',
+                    'reference': f"DOM/{debit.contract.reference}/{debit.due_date.strftime('%Y%m')}",
+                    'amount': float(debit.amount),
+                    'status': debit.status,
+                    'created_at': debit.due_date.strftime('%Y-%m-%d'),
+                    'paid_at': debit.processed_date.strftime('%Y-%m-%d') if debit.processed_date else None,
+                    'bank': debit.bank_account.bank,
+                    'account': debit.bank_account.account_number
+                })
 
         return JsonResponse({
             'payment_details': payment_details,

@@ -1215,6 +1215,53 @@
     color: inherit;  /* Icon color matches text */
 }
 
+/* Add to your existing <style> section */
+
+/* Base card styles */
+.forecast-item .card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Supplier Payment Card */
+.forecast-item.payment .card .card-header {
+    background: linear-gradient(145deg, #2c3e50, #34495e);
+    color: white;
+    border-bottom: none;
+}
+
+/* Contract Payment Card - different color scheme */
+.forecast-item.payment .card .card-header.contract-header {
+    background: linear-gradient(145deg, #1a5f7a, #2c7a94);
+    color: white;
+    border-bottom: none;
+}
+
+/* Common header elements */
+.forecast-item .card .card-header .badge.bg-light {
+    color: #2c3e50;
+    font-weight: 600;
+    background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Card body improvements */
+.forecast-item .card .card-body {
+    background: #fff;
+    padding: 1.25rem;
+}
+
+/* Info text */
+.forecast-item .card .card-body strong {
+    color: #2c3e50;
+}
+
+/* Amount styling */
+.forecast-item .card .card-header .amount {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-weight: 600;
+}
      
 </style>
 {% endblock %}
@@ -1451,7 +1498,7 @@
                                 balanceInfo.appendChild(forecastBtn);
                             }
 
-                            if (bank.has_payment_forecasts) {  // New flag from backend
+                            if (bank.has_payment_forecasts || bank.has_contract_forecasts) {
                                 const paymentForecastBtn = document.createElement('button');
                                 paymentForecastBtn.classList.add('payment-forecast-btn', 'ms-2');
                                 paymentForecastBtn.setAttribute('data-bs-toggle', 'modal');
@@ -1755,135 +1802,207 @@
             });
     }
 
-// Helper function with debug logging
-function getStatusColor(status) {
-    console.log('Getting color for status:', status);
-    const color = {
-        'draft': 'secondary',
-        'printed': 'info',
-        'pending': 'warning',
-        'delivered': 'primary',
-        'paid': 'success',
-        'rejected': 'danger',
-        'cancelled': 'dark'
-    }[status] || 'secondary';
-    
-    console.log('Selected color:', color);
-    return color;
-}
-    function addTooltips() {
-    console.log("=== Starting addTooltips() ===");
-    
-    document.querySelectorAll('.calendar-day').forEach(async (day) => {
-        // Get both receipt and supplier payment forecast buttons
-        const receiptBtns = day.querySelectorAll('.forecast-details-btn');
-        const supplierBtns = day.querySelectorAll('.payment-forecast-btn');
+    // Helper function with debug logging
+    function getStatusColor(status) {
+        console.log('Getting color for status:', status);
+        const color = {
+            'draft': 'secondary',
+            'printed': 'info',
+            'pending': 'warning',
+            'delivered': 'primary',
+            'paid': 'success',
+            'rejected': 'danger',
+            'cancelled': 'dark'
+        }[status] || 'secondary';
         
-        if (receiptBtns.length === 0 && supplierBtns.length === 0) return;
+        console.log('Selected color:', color);
+        return color;
+    }
+        function addTooltips() {
+        console.log("=== Starting addTooltips() ===");
         
-        console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons`);
-        
-        const tooltip = document.createElement('div');
-        tooltip.className = 'calendar-tooltip';
-        tooltip.innerHTML = 'Loading...';
-        day.appendChild(tooltip);
+        document.querySelectorAll('.calendar-day').forEach(async (day) => {
+            // Get both receipt and supplier payment forecast buttons
+            const receiptBtns = day.querySelectorAll('.forecast-details-btn');
+            const supplierBtns = day.querySelectorAll('.payment-forecast-btn');
+            
+            if (receiptBtns.length === 0 && supplierBtns.length === 0) return;
+            
+            console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons`);
+            
+            const tooltip = document.createElement('div');
+            tooltip.className = 'calendar-tooltip';
+            tooltip.innerHTML = 'Loading...';
+            day.appendChild(tooltip);
 
-        try {
-            // Receipt totals
-            let total_expected = 0;
-            let total_discounted = 0;
+            try {
+                // Receipt totals
+                let total_expected = 0;
+                let total_discounted = 0;
 
-            // Supplier payment totals
-            let total_chq_payments = 0;
-            let total_lcn_payments = 0;
+                // Supplier payment totals
+                let total_chq_payments = 0;
+                let total_lcn_payments = 0;
 
-            // Process receipt forecasts
-            for (const btn of receiptBtns) {
-                console.log("Processing receipt forecasts for bank:", btn.dataset.bank);
-                
-                const response = await fetch(
-                    `/testapp/calendar/forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
-                );
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    data.forecasts.forEach(forecast => {
-                        const amount = parseFloat(forecast.amount) || 0;
-                        if (forecast.type === 'Expected Payment') {
-                            total_expected += amount;
-                            console.log(`Adding ${amount} to expected payments`);
-                        } else {
-                            total_discounted += amount;
-                            console.log(`Adding ${amount} to discounted receipts`);
-                        }
-                    });
+                // Process receipt forecasts
+                for (const btn of receiptBtns) {
+                    console.log("Processing receipt forecasts for bank:", btn.dataset.bank);
+                    
+                    const response = await fetch(
+                        `/testapp/calendar/forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        data.forecasts.forEach(forecast => {
+                            const amount = parseFloat(forecast.amount) || 0;
+                            if (forecast.type === 'Expected Payment') {
+                                total_expected += amount;
+                                console.log(`Adding ${amount} to expected payments`);
+                            } else {
+                                total_discounted += amount;
+                                console.log(`Adding ${amount} to discounted receipts`);
+                            }
+                        });
+                    }
                 }
-            }
 
-            // Process supplier payment forecasts
-            for (const btn of supplierBtns) {
-                console.log("Processing supplier payments for bank:", btn.dataset.bank);
-                
-                const response = await fetch(
-                    `/testapp/calendar/supplier-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
-                );
-                const data = await response.json();
-                
-                if (data.status === 'success') {
-                    data.forecasts.forEach(forecast => {
-                        const amount = parseFloat(forecast.payment.amount) || 0;
-                        if (forecast.type === 'LCN') {
-                            total_lcn_payments += amount;
-                            console.log(`Adding ${amount} to LCN payments`);
-                        } else {
-                            total_chq_payments += amount;
-                            console.log(`Adding ${amount} to check payments`);
-                        }
-                    });
+                // Process supplier payment forecasts
+                for (const btn of supplierBtns) {
+                    console.log("Processing supplier payments for bank:", btn.dataset.bank);
+                    
+                    const response = await fetch(
+                        `/testapp/calendar/supplier-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        data.forecasts.forEach(forecast => {
+                            const amount = parseFloat(forecast.payment.amount) || 0;
+                            if (forecast.type === 'LCN') {
+                                total_lcn_payments += amount;
+                                console.log(`Adding ${amount} to LCN payments`);
+                            } else {
+                                total_chq_payments += amount;
+                                console.log(`Adding ${amount} to check payments`);
+                            }
+                        });
+                    }
                 }
-            }
 
-            const receipt_total = total_expected + total_discounted;
-            const payment_total = total_chq_payments + total_lcn_payments;
+                const receipt_total = total_expected + total_discounted;
+                const payment_total = total_chq_payments + total_lcn_payments;
 
-            console.log("Final totals:", {
-                receipts: { expected: total_expected, discounted: total_discounted },
-                payments: { checks: total_chq_payments, lcns: total_lcn_payments }
-            });
+                console.log("Final totals:", {
+                    receipts: { expected: total_expected, discounted: total_discounted },
+                    payments: { checks: total_chq_payments, lcns: total_lcn_payments }
+                });
 
-            tooltip.innerHTML = `
-                <div class="fw-bold">Daily Summary:</div>
-                <div>Expected Payments: ${formatBalance(total_expected)}</div>
-                <div>Discounted Receipts: ${formatBalance(total_discounted)}</div>
-                <div class="text-primary">Receipt Total: ${formatBalance(receipt_total)}</div>
-                `;
+                tooltip.innerHTML = `
+                    <div class="fw-bold">Daily Summary:</div>
+                    <div>Expected Payments: ${formatBalance(total_expected)}</div>
+                    <div>Discounted Receipts: ${formatBalance(total_discounted)}</div>
+                    <div class="text-primary">Receipt Total: ${formatBalance(receipt_total)}</div>
+                    `;
 
-            if (payment_total > 0) {
+                if (payment_total > 0) {
+                    tooltip.innerHTML += `
+                        <div class="mt-2">
+                            <div>Supplier Check Payments: ${formatBalance(total_chq_payments)}</div>
+                            <div>Supplier LCN Payments: ${formatBalance(total_lcn_payments)}</div>
+                            <div class="text-danger">Payment Total: ${formatBalance(payment_total)}</div>
+                        </div>
+                    `;
+                }
+
                 tooltip.innerHTML += `
-                    <div class="mt-2">
-                        <div>Supplier Check Payments: ${formatBalance(total_chq_payments)}</div>
-                        <div>Supplier LCN Payments: ${formatBalance(total_lcn_payments)}</div>
-                        <div class="text-danger">Payment Total: ${formatBalance(payment_total)}</div>
+                    <div class="mt-2 pt-2 border-top">
+                        <strong>Global Total: ${formatBalance(receipt_total - payment_total)}</strong>
                     </div>
                 `;
+
+            } catch (error) {
+                console.error("Error:", error);
+                tooltip.innerHTML = 'Error loading data';
             }
 
-            tooltip.innerHTML += `
-                <div class="mt-2 pt-2 border-top">
-                    <strong>Global Total: ${formatBalance(receipt_total - payment_total)}</strong>
-                </div>
-            `;
+            // Add hover events
+            day.addEventListener('mouseenter', () => tooltip.style.display = 'block');
+            day.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+        });
+    }
 
-        } catch (error) {
-            console.error("Error:", error);
-            tooltip.innerHTML = 'Error loading data';
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-contract-paid')) {
+            const button = e.target.closest('.mark-contract-paid');
+            const dueDate = button.dataset.dueDate;
+            
+            const paymentDateInput = document.getElementById('checkPaymentDate');
+            paymentDateInput.min = dueDate;
+            paymentDateInput.value = dueDate;
+            
+            activeContractData = {
+                id: button.dataset.contractId,
+                amount: button.dataset.amount,
+                dueDate: button.dataset.dueDate
+            };
+            
+            // Show payment modal
+            const paidModal = new bootstrap.Modal(document.getElementById('checkPaymentModal'));
+            paidModal.show();
         }
-
-        // Add hover events
-        day.addEventListener('mouseenter', () => tooltip.style.display = 'block');
-        day.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+        
+        if (e.target.closest('.mark-contract-rejected')) {
+            const button = e.target.closest('.mark-contract-rejected');
+            const dueDate = button.dataset.dueDate;
+            
+            const rejectionDateInput = document.getElementById('checkRejectionDate');
+            rejectionDateInput.min = dueDate;
+            rejectionDateInput.value = dueDate;
+            
+            activeContractData = {
+                id: button.dataset.contractId,
+                amount: button.dataset.amount,
+                dueDate: button.dataset.dueDate
+            };
+            
+            // Show rejection modal
+            const rejectionModal = new bootstrap.Modal(document.getElementById('checkRejectionModal'));
+            rejectionModal.show();
+        }
     });
-}
+
+    // Add this to handle contract status updates
+    function updateContractStatus(data) {
+        fetch(`/testapp/bank/contracts/${activeContractData.id}/payment-action/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                // Close modals
+                bootstrap.Modal.getInstance(document.getElementById('checkPaymentModal'))?.hide();
+                bootstrap.Modal.getInstance(document.getElementById('checkRejectionModal'))?.hide();
+                
+                // Refresh the pending forecasts view
+                const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+                viewPendingForecasts(currentBank);
+                
+                showToast('success', result.message || 'Status updated successfully');
+            } else {
+                throw new Error(result.message || 'Failed to update status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', error.message || 'Failed to update contract status');
+        });
+    }
 
     // On page load, check if we need to animate in
     document.addEventListener('DOMContentLoaded', function() {
@@ -2014,16 +2133,17 @@ function getStatusColor(status) {
             if (data.status === 'success') {
                 let html = '';
                 data.forecasts.forEach(forecast => {
-                    if (forecast.type === 'Supplier Payment') {
-                        html += `
+                    if (forecast.type === 'Supplier Payment' || forecast.type === 'Contract Payment') {
+                    const isContract = forecast.type === 'Contract Payment';
+                    html += `
                         <div class="forecast-item payment mb-3">
                             <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center bg-danger text-white">
+                                <div class="card-header d-flex justify-content-between align-items-center ${isContract ? 'bg-primary' : 'bg-danger'} text-white">
                                     <div>
-                                        <span class="badge bg-light text-danger me-2">
-                                            ${forecast.payment_type} Payment
+                                        <span class="badge bg-light ${isContract ? 'text-primary' : 'text-danger'} me-2">
+                                            ${isContract ? 'Domiciled Contract' : `${forecast.payment_type} Payment`}
                                         </span>
-                                        <span class="fw-bold">#${forecast.number}</span>
+                                        <span class="fw-bold">${isContract ? forecast.contract.reference : `#${forecast.number}`}</span>
                                         <span class="ms-2 badge bg-${getStatusColor(forecast.status)}">
                                             ${forecast.status_display || forecast.status}
                                         </span>
@@ -2054,35 +2174,103 @@ function getStatusColor(status) {
                                                 <strong>Supplier Balance:</strong>
                                                 <span class="text-danger">${formatBalance(forecast.supplier.balance)}</span>
                                             </div>
-                                            ${forecast.invoice.ref ? `
-                                                <div class="mb-2">
-                                                    <i class="fas fa-file-invoice me-2"></i>
-                                                    <strong>Invoice:</strong>
-                                                    <a href="/testapp/invoices/${forecast.invoice.id}/update/">
-                                                        ${forecast.invoice.ref}
-                                                    </a>
-                                                    <div class="ms-4 small">
-                                                        <div>Date: ${forecast.invoice.date}</div>
-                                                        <div>Amount: ${formatBalance(forecast.invoice.amount)}</div>
+                                            ${isContract ? `
+                                                <div class="mb-3 border-bottom pb-3">
+                                                    <i class="fas fa-file-contract me-2"></i>
+                                                    <strong>Contract Details</strong>
+                                                    <div class="ms-4 mt-2">
+                                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                                            <span>Reference:</span>
+                                                            <span class="badge bg-primary">${forecast.contract.reference}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span>Payment Type:</span>
+                                                            <span class="badge bg-info">Domiciliation - ${forecast.contract.periodicity || 'Monthly'}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between text-danger fw-bold">
+                                                            <span>Payment Amount:</span>
+                                                            <span>${formatBalance(forecast.amount)}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            ` : ''}
+                                                ${forecast.invoice ? `
+                                                    <div class="mb-2">
+                                                        <i class="fas fa-file-invoice me-2"></i>
+                                                        <strong>Invoice Details</strong>
+                                                        <div class="alert alert-light border mt-2 mb-0">
+                                                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                                                <a href="/testapp/invoices/${forecast.invoice.id}/update/" 
+                                                                class="text-primary text-decoration-none fw-bold">
+                                                                    <i class="fas fa-external-link-alt me-1"></i>
+                                                                    ${forecast.invoice.ref}
+                                                                </a>
+                                                                <span class="badge bg-${forecast.invoice.status === 'paid' ? 'success' : 
+                                                                                    forecast.invoice.status === 'partially_paid' ? 'warning' : 'danger'}">
+                                                                    ${forecast.invoice.status_display || forecast.invoice.status}
+                                                                </span>
+                                                            </div>
+                                                            <div class="border-top pt-2">
+                                                                <div class="row g-2">
+                                                                    <div class="col-6">
+                                                                        <small class="text-muted d-block">Invoice Date</small>
+                                                                        <span>${forecast.invoice.date}</span>
+                                                                    </div>
+                                                                    <div class="col-6 text-end">
+                                                                        <small class="text-muted d-block">Amount</small>
+                                                                        <span class="fw-bold ${forecast.invoice.amount >= forecast.amount ? 'text-success' : 'text-danger'}">
+                                                                            ${formatBalance(forecast.invoice.amount)}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="mt-2 pt-2 border-top">
+                                                                    <small class="text-muted d-block mb-1">Period</small>
+                                                                    <div class="d-flex align-items-center">
+                                                                        <span class="badge bg-secondary">${forecast.invoice.period_start}</span>
+                                                                        <i class="fas fa-arrow-right mx-2"></i>
+                                                                        <span class="badge bg-secondary">${forecast.invoice.period_end}</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ` : `
+                                                    <div class="alert alert-warning mb-0">
+                                                        <i class="fas fa-exclamation-triangle me-2"></i>
+                                                        No invoice linked yet - payment might be pending generation
+                                                    </div>
+                                                `}
+                                            ` : ``}
                                         </div>
                                     </div>
-                                    ${forecast.status === 'delivered' ? `
-                                    <div class="mt-3 d-flex justify-content-end">
-                                        <button class="btn btn-sm btn-success me-2 mark-check-paid" 
-                                                data-check-id="${forecast.source_id}"  // Change this line
-                                                data-delivered-at="${forecast.delivered_at}">
-                                            <i class="fas fa-check me-1"></i>Mark as Paid
-                                        </button>
-                                        <button class="btn btn-sm btn-danger mark-check-rejected" 
-                                                data-check-id="${forecast.source_id}"  // Change this line
-                                                data-delivered-at="${forecast.delivered_at}">
-                                            <i class="fas fa-times me-1"></i>Mark as Rejected
-                                        </button>
-                                    </div>
-                                ` : ''}
+                                    ${isContract ? `
+                                        <div class="mt-3 d-flex justify-content-end">
+                                            <button class="btn btn-sm btn-success me-2 mark-contract-paid" 
+                                                    data-contract-id="${forecast.source_id}"
+                                                    data-due-date="${forecast.due_date}"
+                                                    data-amount="${forecast.amount}">
+                                                <i class="fas fa-check me-1"></i>Mark as Paid
+                                            </button>
+                                            <button class="btn btn-sm btn-danger mark-contract-rejected" 
+                                                    data-contract-id="${forecast.source_id}"
+                                                    data-due-date="${forecast.due_date}"
+                                                    data-amount="${forecast.amount}">
+                                                <i class="fas fa-times me-1"></i>Mark as Rejected
+                                            </button>
+                                        </div>
+                                    ` : isContract ? '' : forecast.status === 'delivered' ? `
+                                        <div class="mt-3 d-flex justify-content-end">
+                                            <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                    data-check-id="${forecast.source_id}"
+                                                    data-delivered-at="${forecast.delivered_at}">
+                                                <i class="fas fa-check me-1"></i>Mark as Paid
+                                            </button>
+                                            <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                    data-check-id="${forecast.source_id}"
+                                                    data-delivered-at="${forecast.delivered_at}">
+                                                <i class="fas fa-times me-1"></i>Mark as Rejected
+                                            </button>
+                                        </div>
+                                    ` : ''}
                                 </div>
                             </div>
                         </div>
@@ -2270,6 +2458,7 @@ function getStatusColor(status) {
     });
 
     let activeSupplierCheckData = null;
+    let activeContractData = null;
     // Event handler for marking check as paid
     document.addEventListener('click', function(e) {
         if (e.target.closest('.mark-check-paid')) {
@@ -2316,10 +2505,19 @@ function getStatusColor(status) {
             return;
         }
 
-        updateCheckStatus({
-            action: 'pay',
-            date: paymentDate
-        });
+        // Check if we're dealing with a contract or check payment
+        if (activeContractData) {
+            updateContractStatus({
+                action: 'pay',
+                date: paymentDate,
+                forecast_date: activeContractData.dueDate
+            });
+        } else if (activeSupplierCheckData) {
+            updateCheckStatus({
+                action: 'pay',
+                date: paymentDate
+            });
+        }
     });
 
     // Handle check rejection confirmation
@@ -2333,12 +2531,34 @@ function getStatusColor(status) {
             return;
         }
 
-        updateCheckStatus({
-            action: 'reject',
-            date: rejectionDate,
-            rejection_reason: rejectionCause,
-            rejection_note: rejectionNote
-        });
+        // Check if we're dealing with a contract or check payment
+        if (activeContractData) {
+            updateContractStatus({
+                action: 'reject',
+                date: rejectionDate,
+                forecast_date: activeContractData.dueDate,
+                rejection_reason: rejectionCause,
+                rejection_note: rejectionNote
+            });
+        } else if (activeSupplierCheckData) {
+            updateCheckStatus({
+                action: 'reject',
+                date: rejectionDate,
+                rejection_reason: rejectionCause,
+                rejection_note: rejectionNote
+            });
+        }
+    });
+
+    // Clear active data when modals are hidden
+    document.getElementById('checkPaymentModal').addEventListener('hidden.bs.modal', function () {
+        activeContractData = null;
+        activeSupplierCheckData = null;
+    });
+
+    document.getElementById('checkRejectionModal').addEventListener('hidden.bs.modal', function () {
+        activeContractData = null;
+        activeSupplierCheckData = null;
     });
 
 
