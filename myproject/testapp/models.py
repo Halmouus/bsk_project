@@ -3146,6 +3146,7 @@ class BankStatement(models.Model):
                 'is_expandable': True
             })
 
+        print("\n=== Processing Direct Debits ===")
         direct_debits = DirectDebit.objects.filter(
             bank_account=bank_account,
             status=DirectDebit.PROCESSED
@@ -3154,40 +3155,50 @@ class BankStatement(models.Model):
         print(f"\nFound {direct_debits.count()} processed direct debits")
         
         for debit in direct_debits:
-            # Skip if outside date range
-            if start_date and debit.processed_date < start_date:
-                continue
-            if end_date and debit.processed_date > end_date:
-                continue
+            try:
+                print(f"\nProcessing direct debit: {debit.id}")
+                print(f"Contract: {debit.contract.reference}")
+                print(f"Invoice: {debit.invoice.invoice.ref}")
+                print(f"Amount: {debit.amount}")
+                print(f"Processed date: {debit.processed_date}")
                 
-            print(f"\nProcessing direct debit: {debit.id}")
-            print(f"Contract: {debit.contract.reference}")
-            print(f"Amount: {debit.amount}")
-            
-            entries.append({
-                'date': debit.processed_date,
-                'label': f"Domiciled payment for contract {debit.contract.reference}",
-                'type': 'DIRECT_DEBIT',
-                'debit': debit.amount,
-                'credit': None,
-                'reference': f"DOM/{debit.contract.reference}/{debit.processed_date.strftime('%Y%m')}",
-                'source_type': 'direct_debit',
-                'source_id': debit.id,
-                'can_transfer': False,
-                'is_transferred': False,
-                'contract': {
-                    'reference': debit.contract.reference,
-                    'id': str(debit.contract.id)
-                },
-                'bank': debit.bank_account.bank,
-                'account': debit.bank_account.account_number,
-                'invoice': {
-                    'ref': debit.invoice.invoice.ref,
-                    'id': str(debit.invoice.invoice.id)
-                }
-            })
-        
-        print("\nFinal entries count:", len(entries))
+                entries.append({
+                    'date': debit.processed_date,
+                    'label': f"Domiciled payment for contract {debit.contract.reference}",
+                    'type': 'DIRECT_DEBIT',
+                    'debit': debit.amount,
+                    'credit': None,
+                    'reference': f"DOM/{debit.contract.reference}/{debit.processed_date.strftime('%Y%m')}",
+                    'source_type': 'direct_debit',
+                    'source_id': debit.id,
+                    'display_id': str(debit.id), 
+                    'can_delete': False,
+                    'can_transfer': False,
+                    'is_transferred': False,
+                    'is_expandable': True,
+                    'contract': {
+                        'reference': debit.contract.reference,
+                        'id': str(debit.contract.id),
+                        'supplier': {
+                            'name': debit.contract.supplier.name,
+                            'ice_code': debit.contract.supplier.ice_code
+                        }
+                    },
+                    'invoice': {
+                        'id': str(debit.invoice.invoice.id),
+                        'ref': debit.invoice.invoice.ref,
+                        'period_start': debit.invoice.period_start.strftime('%Y-%m-%d'),
+                        'period_end': debit.invoice.period_end.strftime('%Y-%m-%d')
+                    },
+                    'due_date': debit.due_date.strftime('%Y-%m-%d'),
+                    'bank': debit.bank_account.get_bank_display(),
+                    'account': debit.bank_account.account_number
+                })
+                print("Entry added successfully")
+                
+            except Exception as e:
+                print(f"Error processing direct debit {debit.id}: {str(e)}")
+                print(traceback.format_exc())
             
         initial_balance = Decimal('0.00')
         if start_date:

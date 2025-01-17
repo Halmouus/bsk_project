@@ -445,10 +445,13 @@ class CheckAllocationView(View):
                 amount=Decimal(str(data['amount']))
             )
             
+            # Get updated available amount
+            available_amount = check.get_available_amount()
+            
             return JsonResponse({
                 'message': 'Allocation created successfully',
                 'allocation_id': str(allocation.id),
-                'available_amount': float(check.get_available_amount())
+                'available_amount': float(available_amount)
             })
             
         except Exception as e:

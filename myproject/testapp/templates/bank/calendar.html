@@ -743,26 +743,70 @@
     }
 
     /* Tooltip content styling */
-    .calendar-tooltip .fw-bold {
-        color: var(--primary-color);
-        font-size: 1.1em;
-        margin-bottom: 10px;
-    }
+    .calendar-tooltip {
+    display: none;
+    position: absolute;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    padding: 0;
+    min-width: 300px;
+    z-index: 1000;
+    border: 1px solid rgba(0,0,0,0.1);
+}
 
-    .calendar-tooltip div:not(.fw-bold) {
-        padding: 8px 0;
-        display: flex;
-        justify-content: space-between;
-        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-    }
+.tooltip-content {
+    padding: 0;
+}
 
-    .calendar-tooltip div:last-child {
-        margin-top: 8px;
-        border-top: 2px solid var(--primary-color);
-        border-bottom: none;
-        padding-top: 12px;
-        font-weight: 600;
-    }
+.tooltip-section {
+    padding: 1rem;
+    border-bottom: 1px solid rgba(0,0,0,0.05);
+}
+
+.tooltip-section:last-child {
+    border-bottom: none;
+}
+
+.tooltip-header {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: #6c757d;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.tooltip-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    font-size: 0.875rem;
+}
+
+.tooltip-row.total {
+    border-top: 1px dashed rgba(0,0,0,0.1);
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+}
+
+.total-section {
+    background: #f8f9fa;
+}
+
+.tooltip-loader {
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #6c757d;
+}
+
+.tooltip-error {
+    padding: 1rem;
+    color: #dc3545;
+    font-size: 0.875rem;
+}
 
     .modal-content {
         border-radius: var(--radius-lg);
@@ -1223,26 +1267,7 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Supplier Payment Card */
-.forecast-item.payment .card .card-header {
-    background: linear-gradient(145deg, #2c3e50, #34495e);
-    color: white;
-    border-bottom: none;
-}
 
-/* Contract Payment Card - different color scheme */
-.forecast-item.payment .card .card-header.contract-header {
-    background: linear-gradient(145deg, #1a5f7a, #2c7a94);
-    color: white;
-    border-bottom: none;
-}
-
-/* Common header elements */
-.forecast-item .card .card-header .badge.bg-light {
-    color: #2c3e50;
-    font-weight: 600;
-    background-color: rgba(255, 255, 255, 0.9) !important;
-}
 
 /* Card body improvements */
 .forecast-item .card .card-body {
@@ -1254,7 +1279,46 @@
 .forecast-item .card .card-body strong {
     color: #2c3e50;
 }
+.bg-gradient-primary {
+    background: linear-gradient(45deg, #4e73df 0%, #224abe 100%);
+}
 
+.bg-gradient-danger {
+    background: linear-gradient(45deg, #e74a3b 0%, #be2a1e 100%);
+}
+
+.section-title {
+    font-size: 0.875rem;
+    color: #5a6960;
+    margin-bottom: 1rem;
+    font-weight: 700;
+}
+
+.badge {
+    padding: 0.5rem 0.75rem;
+    font-weight: 600;
+}
+
+.card {
+    transition: all 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.15) !important;
+}
+
+.bg-light {
+    background-color: #f8f9fc !important;
+}
+
+.card-header .badge {
+    font-size: 0.875rem;
+}
+
+.section-content {
+    border: 1px solid rgba(0,0,0,0.05);
+}
 /* Amount styling */
 .forecast-item .card .card-header .amount {
     background: rgba(255, 255, 255, 0.1);
@@ -1818,7 +1882,7 @@
         console.log('Selected color:', color);
         return color;
     }
-        function addTooltips() {
+    function addTooltips() {
         console.log("=== Starting addTooltips() ===");
         
         document.querySelectorAll('.calendar-day').forEach(async (day) => {
@@ -1832,17 +1896,30 @@
             
             const tooltip = document.createElement('div');
             tooltip.className = 'calendar-tooltip';
-            tooltip.innerHTML = 'Loading...';
-            day.appendChild(tooltip);
+            tooltip.innerHTML = `
+                <div class="tooltip-loader">
+                    <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    <span class="ms-2">Loading summary...</span>
+                </div>
+            `;
+            document.body.appendChild(tooltip);
 
             try {
                 // Receipt totals
                 let total_expected = 0;
+                let total_expected_count = 0;
                 let total_discounted = 0;
+                let total_discounted_count = 0;
+                let receipt_count = 0;
 
                 // Supplier payment totals
                 let total_chq_payments = 0;
+                let total_chq_count = 0;
                 let total_lcn_payments = 0;
+                let total_lcn_count = 0;
+                let total_direct_debits = 0;
+                let total_direct_count = 0;
+                let payment_count = 0;
 
                 // Process receipt forecasts
                 for (const btn of receiptBtns) {
@@ -1858,9 +1935,11 @@
                             const amount = parseFloat(forecast.amount) || 0;
                             if (forecast.type === 'Expected Payment') {
                                 total_expected += amount;
+                                total_expected_count++;
                                 console.log(`Adding ${amount} to expected payments`);
                             } else {
                                 total_discounted += amount;
+                                total_discounted_count++;
                                 console.log(`Adding ${amount} to discounted receipts`);
                             }
                         });
@@ -1881,9 +1960,15 @@
                             const amount = parseFloat(forecast.payment.amount) || 0;
                             if (forecast.type === 'LCN') {
                                 total_lcn_payments += amount;
+                                total_lcn_count++;
                                 console.log(`Adding ${amount} to LCN payments`);
+                            } else if (forecast.type === 'Contract Payment') {
+                                total_direct_debits += amount;
+                                total_direct_count++;
+                                console.log(`Adding ${amount} to direct debits`);
                             } else {
                                 total_chq_payments += amount;
+                                total_chq_count++;
                                 console.log(`Adding ${amount} to check payments`);
                             }
                         });
@@ -1891,44 +1976,120 @@
                 }
 
                 const receipt_total = total_expected + total_discounted;
-                const payment_total = total_chq_payments + total_lcn_payments;
+                const payment_total = total_chq_payments + total_lcn_payments + total_direct_debits;
+                const global_total = receipt_total - total_discounted - payment_total;
 
                 console.log("Final totals:", {
-                    receipts: { expected: total_expected, discounted: total_discounted },
-                    payments: { checks: total_chq_payments, lcns: total_lcn_payments }
+                    receipts: { expected: total_expected, discounted: total_discounted, count: total_expected_count },
+                    payments: { checks: total_chq_payments, lcns: total_lcn_payments, debits: total_direct_debits, count: total_chq_count + total_lcn_count + total_direct_count }
                 });
 
                 tooltip.innerHTML = `
-                    <div class="fw-bold">Daily Summary:</div>
-                    <div>Expected Payments: ${formatBalance(total_expected)}</div>
-                    <div>Discounted Receipts: ${formatBalance(total_discounted)}</div>
-                    <div class="text-primary">Receipt Total: ${formatBalance(receipt_total)}</div>
-                    `;
+                    <div class="tooltip-content">
+                        <div class="tooltip-section">
+                            <div class="tooltip-header">Incoming Transactions</div>
+                            <div class="tooltip-row">
+                                <span>Expected Payments (${total_expected_count})</span>
+                                <span class="text-success">${formatBalance(total_expected)}</span>
+                            </div>
+                            <div class="tooltip-row">
+                                <span>Discounted Receipts (${total_discounted_count})</span>
+                                <span class="text-primary">${formatBalance(total_discounted)}</span>
+                            </div>
+                            <div class="tooltip-row total">
+                                <span>Total Incoming</span>
+                                <span class="text-primary fw-bold">${formatBalance(receipt_total)}</span>
+                            </div>
+                        </div>
+                `;
 
                 if (payment_total > 0) {
                     tooltip.innerHTML += `
-                        <div class="mt-2">
-                            <div>Supplier Check Payments: ${formatBalance(total_chq_payments)}</div>
-                            <div>Supplier LCN Payments: ${formatBalance(total_lcn_payments)}</div>
-                            <div class="text-danger">Payment Total: ${formatBalance(payment_total)}</div>
+                        <div class="tooltip-section">
+                            <div class="tooltip-header">Outgoing Payments</div>
+                            <div class="tooltip-row">
+                                <span>Check Payments (${total_chq_count})</span>
+                                <span class="text-danger">${formatBalance(total_chq_payments)}</span>
+                            </div>
+                            <div class="tooltip-row">
+                                <span>LCN Payments (${total_lcn_count})</span>
+                                <span class="text-danger">${formatBalance(total_lcn_payments)}</span>
+                            </div>
+                            ${total_direct_debits > 0 ? `
+                                <div class="tooltip-row">
+                                    <span>Direct Debits (${total_direct_count})</span>
+                                    <span class="text-danger">${formatBalance(total_direct_debits)}</span>
+                                </div>
+                            ` : ''}
+                            <div class="tooltip-row total">
+                                <span>Total Outgoing</span>
+                                <span class="text-danger fw-bold">${formatBalance(payment_total + total_direct_debits)}</span>
+                            </div>
                         </div>
                     `;
                 }
 
                 tooltip.innerHTML += `
-                    <div class="mt-2 pt-2 border-top">
-                        <strong>Global Total: ${formatBalance(receipt_total - payment_total)}</strong>
+                        <div class="tooltip-section total-section">
+                            <div class="tooltip-row">
+                                <span>Global Balance</span>
+                                <span class="fw-bold ${global_total >= 0 ? 'text-success' : 'text-danger'}">
+                                    ${formatBalance(global_total)}
+                                </span>
+                            </div>
+                        </div>
                     </div>
                 `;
 
             } catch (error) {
                 console.error("Error:", error);
-                tooltip.innerHTML = 'Error loading data';
+                tooltip.innerHTML = `
+                    <div class="tooltip-error">
+                        <i class="fas fa-exclamation-circle text-danger me-2"></i>
+                        Error loading data
+                    </div>
+                `;
             }
 
-            // Add hover events
-            day.addEventListener('mouseenter', () => tooltip.style.display = 'block');
-            day.addEventListener('mouseleave', () => tooltip.style.display = 'none');
+            // Add hover events with position calculation
+            day.addEventListener('mouseenter', () => {
+                const dayRect = day.getBoundingClientRect();
+                const tooltipRect = tooltip.getBoundingClientRect();
+                const viewportWidth = window.innerWidth;
+                const viewportHeight = window.innerHeight;
+
+                // Start with default positioning to the right
+                let left = dayRect.right + 12;
+                let top = dayRect.top + window.scrollY;
+
+                // If tooltip would go off right edge
+                if (left + tooltipRect.width > viewportWidth - 20) {
+                    // Try positioning to the left
+                    left = dayRect.left - tooltipRect.width - 12;
+                    
+                    // If that would go off left edge, position below
+                    if (left < 20) {
+                        left = dayRect.left;
+                        top = dayRect.bottom + 12 + window.scrollY;
+                    }
+                }
+
+                // If tooltip would go off bottom edge
+                if (top + tooltipRect.height > viewportHeight + window.scrollY - 20) {
+                    // Position above if there's room
+                    if (dayRect.top - tooltipRect.height - 12 > 0) {
+                        top = dayRect.top - tooltipRect.height - 12 + window.scrollY;
+                    }
+                }
+
+                tooltip.style.left = `${left}px`;
+                tooltip.style.top = `${top}px`;
+                tooltip.style.display = 'block';
+            });
+
+            day.addEventListener('mouseleave', () => {
+                tooltip.style.display = 'none';
+            });
         });
     }
 
@@ -2134,147 +2295,223 @@
                 let html = '';
                 data.forecasts.forEach(forecast => {
                     if (forecast.type === 'Supplier Payment' || forecast.type === 'Contract Payment') {
-                    const isContract = forecast.type === 'Contract Payment';
-                    html += `
-                        <div class="forecast-item payment mb-3">
-                            <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center ${isContract ? 'bg-primary' : 'bg-danger'} text-white">
-                                    <div>
-                                        <span class="badge bg-light ${isContract ? 'text-primary' : 'text-danger'} me-2">
-                                            ${isContract ? 'Domiciled Contract' : `${forecast.payment_type} Payment`}
-                                        </span>
-                                        <span class="fw-bold">${isContract ? forecast.contract.reference : `#${forecast.number}`}</span>
-                                        <span class="ms-2 badge bg-${getStatusColor(forecast.status)}">
+    const isContract = forecast.type === 'Contract Payment';
+    html += `
+        <div class="forecast-item payment mb-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header border-0 d-flex justify-content-between align-items-center ${isContract ? 'bg-gradient-primary' : 'bg-gradient-danger'} py-3">
+                    <div class="d-flex align-items-center gap-2">
+                        <div class="badge bg-white bg-opacity-25 border border-white text-white">
+                            ${isContract ? 'Domiciled Contract' : `${forecast.payment_type} Payment`}
+                        </div>
+                        <div class="badge bg-white bg-opacity-10 border border-white text-white">
+                            ${forecast.status_display || forecast.status}
+                        </div>
+                    </div>
+                    <div class="text-white fw-bold">
+                        ${formatBalance(forecast.amount)}
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    <!-- Primary Info Section -->
+                    <div class="p-3 bg-white border-bottom">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <div class="d-flex flex-column">
+                                    <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                    <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
+                                        ${isContract ? forecast.contract.reference : `#${forecast.number}`}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex flex-column">
+                                    <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                    <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="d-flex flex-column">
+                                    <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                    <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
+                                        ${formatBalance(forecast.amount)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Details Grid -->
+                    <div class="row g-0">
+                        <!-- Left Column -->
+                        <div class="col-md-6 border-end">
+                            <!-- Supplier Info -->
+                            <div class="p-3 border-bottom">
+                                <h6 class="section-title d-flex align-items-center">
+                                    <i class="fas fa-building text-muted me-2"></i>
+                                    Supplier Information
+                                </h6>
+                                <div class="bg-light rounded-3 p-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Name</span>
+                                        <span class="fw-semibold">${forecast.supplier.name}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Bank</span>
+                                        <span>${forecast.bank}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between">
+                                        <span class="text-muted">Current Balance</span>
+                                        <span class="badge bg-danger">${formatBalance(forecast.supplier.balance)}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Payment Status -->
+                            <div class="p-3">
+                                <h6 class="section-title d-flex align-items-center">
+                                    <i class="fas fa-info-circle text-muted me-2"></i>
+                                    Payment Status
+                                </h6>
+                                <div class="bg-light rounded-3 p-3">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span class="text-muted">Current Status</span>
+                                        <span class="badge bg-${getStatusColor(forecast.status)}">
                                             ${forecast.status_display || forecast.status}
                                         </span>
                                     </div>
-                                    <div class="amount fw-bold">
-                                        ${formatBalance(forecast.amount)}
-                                    </div>
-                                </div>
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-6">
-                                            <div class="mb-2">
-                                                <i class="fas fa-building me-2"></i>
-                                                <strong>Supplier:</strong> ${forecast.supplier.name}
-                                            </div>
-                                            <div class="mb-2">
-                                                <i class="fas fa-university me-2"></i>
-                                                <strong>Bank:</strong> ${forecast.bank}
-                                            </div>
-                                            <div class="mb-2">
-                                                <i class="fas fa-calendar me-2"></i>
-                                                <strong>Due Date:</strong> ${forecast.due_date}
-                                            </div>
+                                    ${forecast.delivered_at ? `
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Delivered Date</span>
+                                            <span class="badge bg-info">${forecast.delivered_at}</span>
                                         </div>
-                                        <div class="col-md-6">
-                                            <div class="mb-2">
-                                                <i class="fas fa-balance-scale me-2"></i>
-                                                <strong>Supplier Balance:</strong>
-                                                <span class="text-danger">${formatBalance(forecast.supplier.balance)}</span>
-                                            </div>
-                                            ${isContract ? `
-                                                <div class="mb-3 border-bottom pb-3">
-                                                    <i class="fas fa-file-contract me-2"></i>
-                                                    <strong>Contract Details</strong>
-                                                    <div class="ms-4 mt-2">
-                                                        <div class="d-flex justify-content-between align-items-center mb-2">
-                                                            <span>Reference:</span>
-                                                            <span class="badge bg-primary">${forecast.contract.reference}</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between mb-2">
-                                                            <span>Payment Type:</span>
-                                                            <span class="badge bg-info">Domiciliation - ${forecast.contract.periodicity || 'Monthly'}</span>
-                                                        </div>
-                                                        <div class="d-flex justify-content-between text-danger fw-bold">
-                                                            <span>Payment Amount:</span>
-                                                            <span>${formatBalance(forecast.amount)}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                ${forecast.invoice ? `
-                                                    <div class="mb-2">
-                                                        <i class="fas fa-file-invoice me-2"></i>
-                                                        <strong>Invoice Details</strong>
-                                                        <div class="alert alert-light border mt-2 mb-0">
-                                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                                <a href="/testapp/invoices/${forecast.invoice.id}/update/" 
-                                                                class="text-primary text-decoration-none fw-bold">
-                                                                    <i class="fas fa-external-link-alt me-1"></i>
-                                                                    ${forecast.invoice.ref}
-                                                                </a>
-                                                                <span class="badge bg-${forecast.invoice.status === 'paid' ? 'success' : 
-                                                                                    forecast.invoice.status === 'partially_paid' ? 'warning' : 'danger'}">
-                                                                    ${forecast.invoice.status_display || forecast.invoice.status}
-                                                                </span>
-                                                            </div>
-                                                            <div class="border-top pt-2">
-                                                                <div class="row g-2">
-                                                                    <div class="col-6">
-                                                                        <small class="text-muted d-block">Invoice Date</small>
-                                                                        <span>${forecast.invoice.date}</span>
-                                                                    </div>
-                                                                    <div class="col-6 text-end">
-                                                                        <small class="text-muted d-block">Amount</small>
-                                                                        <span class="fw-bold ${forecast.invoice.amount >= forecast.amount ? 'text-success' : 'text-danger'}">
-                                                                            ${formatBalance(forecast.invoice.amount)}
-                                                                        </span>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="mt-2 pt-2 border-top">
-                                                                    <small class="text-muted d-block mb-1">Period</small>
-                                                                    <div class="d-flex align-items-center">
-                                                                        <span class="badge bg-secondary">${forecast.invoice.period_start}</span>
-                                                                        <i class="fas fa-arrow-right mx-2"></i>
-                                                                        <span class="badge bg-secondary">${forecast.invoice.period_end}</span>
-                                                                    </div>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ` : `
-                                                    <div class="alert alert-warning mb-0">
-                                                        <i class="fas fa-exclamation-triangle me-2"></i>
-                                                        No invoice linked yet - payment might be pending generation
-                                                    </div>
-                                                `}
-                                            ` : ``}
-                                        </div>
-                                    </div>
-                                    ${isContract ? `
-                                        <div class="mt-3 d-flex justify-content-end">
-                                            <button class="btn btn-sm btn-success me-2 mark-contract-paid" 
-                                                    data-contract-id="${forecast.source_id}"
-                                                    data-due-date="${forecast.due_date}"
-                                                    data-amount="${forecast.amount}">
-                                                <i class="fas fa-check me-1"></i>Mark as Paid
-                                            </button>
-                                            <button class="btn btn-sm btn-danger mark-contract-rejected" 
-                                                    data-contract-id="${forecast.source_id}"
-                                                    data-due-date="${forecast.due_date}"
-                                                    data-amount="${forecast.amount}">
-                                                <i class="fas fa-times me-1"></i>Mark as Rejected
-                                            </button>
-                                        </div>
-                                    ` : isContract ? '' : forecast.status === 'delivered' ? `
-                                        <div class="mt-3 d-flex justify-content-end">
-                                            <button class="btn btn-sm btn-success me-2 mark-check-paid" 
-                                                    data-check-id="${forecast.source_id}"
-                                                    data-delivered-at="${forecast.delivered_at}">
-                                                <i class="fas fa-check me-1"></i>Mark as Paid
-                                            </button>
-                                            <button class="btn btn-sm btn-danger mark-check-rejected" 
-                                                    data-check-id="${forecast.source_id}"
-                                                    data-delivered-at="${forecast.delivered_at}">
-                                                <i class="fas fa-times me-1"></i>Mark as Rejected
-                                            </button>
+                                    ` : ''}
+                                    ${forecast.printed_at ? `
+                                        <div class="d-flex justify-content-between">
+                                            <span class="text-muted">Printed Date</span>
+                                            <span class="badge bg-secondary">${forecast.printed_at}</span>
                                         </div>
                                     ` : ''}
                                 </div>
                             </div>
                         </div>
-                    `;
+
+                        <!-- Right Column -->
+                        <div class="col-md-6">
+                            ${isContract ? `
+                                <!-- Contract Details -->
+                                <div class="p-3 border-bottom">
+                                    <h6 class="section-title d-flex align-items-center">
+                                        <i class="fas fa-file-contract text-muted me-2"></i>
+                                        Contract Details
+                                    </h6>
+                                    <div class="bg-light rounded-3 p-3">
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Contract Type</span>
+                                            <span class="badge bg-primary">${forecast.contract.periodicity || 'Monthly'}</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Payment Number</span>
+                                            <span class="badge bg-info">To be generated</span>
+                                        </div>
+                                        <div class="d-flex justify-content-between">
+                                            <span class="text-muted">Status</span>
+                                            <span class="badge bg-success">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : ''}
+
+                            <!-- Invoice Details -->
+                            ${forecast.invoice ? `
+                                <div class="p-3">
+                                    <h6 class="section-title d-flex align-items-center">
+                                        <i class="fas fa-file-invoice text-muted me-2"></i>
+                                        Invoice Information
+                                    </h6>
+                                    <div class="bg-light rounded-3 p-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                            <a href="/testapp/invoices/${forecast.invoice.id}/update/" 
+                                               class="btn btn-sm btn-outline-primary">
+                                                <i class="fas fa-external-link-alt me-1"></i>
+                                                ${forecast.invoice.ref}
+                                            </a>
+                                            <span class="badge bg-${forecast.invoice.status === 'paid' ? 'success' : 
+                                                                 forecast.invoice.status === 'partially_paid' ? 'warning' : 'danger'}">
+                                                ${forecast.invoice.status_display || forecast.invoice.status}
+                                            </span>
+                                        </div>
+                                        <div class="d-flex justify-content-between mb-2">
+                                            <span class="text-muted">Invoice Date</span>
+                                            <span class="badge bg-secondary">${forecast.invoice.date}</span>
+                                        </div>
+                                        ${isContract ? `
+                                            <div class="border-top border-bottom py-2 my-2">
+                                                <div class="text-muted small mb-1">Period Coverage</div>
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <span class="badge bg-secondary">${forecast.invoice.period_start}</span>
+                                                    <i class="fas fa-arrow-right text-muted"></i>
+                                                    <span class="badge bg-secondary">${forecast.invoice.period_end}</span>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                        <div class="d-flex justify-content-between mt-2">
+                                            <span class="text-muted">Invoice Amount</span>
+                                            <span class="badge ${forecast.invoice.amount >= forecast.amount ? 'bg-success' : 'bg-danger'}">
+                                                ${formatBalance(forecast.invoice.amount)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            ` : `
+                                <div class="p-3">
+                                    <div class="alert alert-warning border-warning bg-warning bg-opacity-10 mb-0">
+                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                        No invoice linked yet - payment might be pending generation
+                                    </div>
+                                </div>
+                            `}
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    ${isContract ? `
+                        <div class="p-3 bg-light border-top">
+                            <div class="d-flex justify-content-end">
+                                <button class="btn btn-sm btn-success me-2 mark-contract-paid" 
+                                        data-contract-id="${forecast.source_id}"
+                                        data-due-date="${forecast.due_date}"
+                                        data-amount="${forecast.amount}">
+                                    <i class="fas fa-check me-1"></i>Mark as Paid
+                                </button>
+                                <button class="btn btn-sm btn-danger mark-contract-rejected" 
+                                        data-contract-id="${forecast.source_id}"
+                                        data-due-date="${forecast.due_date}"
+                                        data-amount="${forecast.amount}">
+                                    <i class="fas fa-times me-1"></i>Mark as Rejected
+                                </button>
+                            </div>
+                        </div>
+                    ` : forecast.status === 'delivered' ? `
+                        <div class="p-3 bg-light border-top">
+                            <div class="d-flex justify-content-end">
+                                <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                        data-check-id="${forecast.source_id}"
+                                        data-delivered-at="${forecast.delivered_at}">
+                                    <i class="fas fa-check me-1"></i>Mark as Paid
+                                </button>
+                                <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                        data-check-id="${forecast.source_id}"
+                                        data-delivered-at="${forecast.delivered_at}">
+                                    <i class="fas fa-times me-1"></i>Mark as Rejected
+                                </button>
+                            </div>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
                     } else {
                         const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
                         const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';

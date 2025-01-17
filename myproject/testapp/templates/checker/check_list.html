@@ -1286,8 +1286,19 @@ const AllocationSystem = {
                 throw new Error(error.error || 'Failed to create allocation');
             }
 
-            // Reload allocation data
-            await this.loadAllocationData(this.currentCheckId);
+            const data = await response.json();
+            
+            // Check if check is fully allocated
+            console.log("[AllocationSystem] Checking allocation status:", data);
+            if (data.available_amount === 0) {
+                console.log("[AllocationSystem] Check fully allocated, closing modal");
+                this.modal.modal('hide');
+                // Refresh the entire table to update buttons
+                await CheckFilters.applyFilters();
+            } else {
+                // Just reload allocation data
+                await this.loadAllocationData(this.currentCheckId);
+            }
             
             // Reset form
             this.form[0].reset();
