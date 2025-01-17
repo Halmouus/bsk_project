@@ -1,61 +1,22 @@
-from django.shortcuts import render, redirect
-from django.contrib.auth import authenticate, login
-from django.contrib.auth.views import LoginView
-from django.contrib import messages
+from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
-from django.views.decorators.cache import never_cache, cache_control
-from django.http import HttpResponseRedirect
-from django.contrib.auth import logout
-from .views_supplier import SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView
 from django.views.decorators.http import require_http_methods
+from django.http import JsonResponse
 from .models import Entity, Client, CheckReceipt, LCN
 import json
+import logging
 
+logger = logging.getLogger(__name__)
 
-# Create your views here.
-def home(request):
-    if request.method == 'POST':
-        username = request.POST['username']
-        password = request.POST['password']
-        user = authenticate(request, username=username, password=password)
-        if user is not None:
-            login(request, user)
-            return redirect('profile')  # Redirect to the profile view after successful login
-        else:
-            messages.error(request, 'Invalid username or password.')
-    return render(request, 'login.html')  # Render the login template
-
-@never_cache
 @login_required
-@cache_control(no_store=True, no_cache=True, must_revalidate=True)
-def profile(request):
-    return render(request, 'profile.html')  # Use 'profile.html' directly
-
-
-class CustomLoginView(LoginView):
-    template_name = 'login.html'
-
-    def form_valid(self, form):
-        messages.success(self.request, f'Welcome, {form.get_user().first_name}!')
-        return super().form_valid(form)
-
-    def form_invalid(self, form):
-        messages.error(self.request, 'Invalid username or password. Please try again.')
-        return super().form_invalid(form)
-
-# Custom logout view to prevent back button access after logout
-@cache_control(no_cache=True, must_revalidate=True)
-def logout_view(request):
-    logout(request)
-    # Redirect to the login page after logout
-    response = HttpResponseRedirect('/')
-    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    response['Pragma'] = 'no-cache'
-    response['Expires'] = '0'
-    return response
+def home(request):
+    print("[HomeView] Accessing home page")
+    return render(request, 'home.html')
 
 @require_http_methods(["POST"])
+@login_required
 def check_receipt_duplicate(request):
+    print("[CheckReceiptDuplicate] Checking for duplicate receipt")
     data = json.loads(request.body)
     number = data.get('number')
     entity = data.get('entity')
@@ -75,23 +36,34 @@ def check_receipt_duplicate(request):
             issuing_bank=bank
         ).exists()
     
+    print(f"[CheckReceiptDuplicate] Result: {exists}")
     return JsonResponse({'exists': exists})
 
 @require_http_methods(["GET"])
+@login_required
 def validate_entity(request, entity_id):
+    print(f"[ValidateEntity] Validating entity: {entity_id}")
     valid = Entity.objects.filter(id=entity_id).exists()
     return JsonResponse({'valid': valid})
 
 @require_http_methods(["GET"])
+@login_required
 def validate_client(request, client_id):
+    print(f"[ValidateClient] Validating client: {client_id}")
     valid = Client.objects.filter(id=client_id).exists()
     return JsonResponse({'valid': valid})
 
 @require_http_methods(["GET"])
+@login_required
 def validate_receipt(request, receipt_id):
-    # Check both CheckReceipt and LCN models
+    print(f"[ValidateReceipt] Validating receipt: {receipt_id}")
     valid = (
         CheckReceipt.objects.filter(id=receipt_id).exists() or
         LCN.objects.filter(id=receipt_id).exists()
     )
     return JsonResponse({'valid': valid})
+
+def custom_403(request, exception=None):
+    return render(request, 'unauthorized.html', {
+        'reason': 'You do not have permission to access this resource.',
+    }, status=403)

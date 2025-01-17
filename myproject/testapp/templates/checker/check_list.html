@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load check_tags %}
+{% load permission_tags %}
 {% block title %}Checks{% endblock %}
 {% block content %}
 {% csrf_token %}
@@ -98,6 +99,7 @@
     </div>
 
     <!-- Checks Table -->
+    {% if request.user.userprofile.role.can_view_checks %}
     <div class="table-responsive">
         <table class="table table-hover">
             <thead>
@@ -121,6 +123,7 @@
             </tbody>
         </table>
     </div>
+    {% endif %}
 </div>
 
 {% include 'checker/partials/allocation_modal.html' %}

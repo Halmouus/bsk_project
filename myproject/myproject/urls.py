@@ -16,15 +16,15 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from django.shortcuts import render
-from django.contrib.auth import views as auth_views
-from testapp.views import CustomLoginView, logout_view
+from django.shortcuts import redirect
+from testapp.views_auth import login_view, logout_view, profile_view
+
+handler403 = 'testapp.views.custom_403'
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', CustomLoginView.as_view(), name='login'),  # Use custom login view
-    path('testapp/', include('testapp.urls')),  # Include the URLs from testapp
-    path('profile/', lambda request: render(request, 'profile.html'), name='profile'),  # Profile page
-    path('logout/', logout_view, name='logout'),  # Logout view   
+    path('', login_view, name='login'),
+    path('testapp/', include('testapp.urls')),
+    path('profile/', profile_view, name='profile'),
+    path('logout/', logout_view, name='logout'),
 ]
-

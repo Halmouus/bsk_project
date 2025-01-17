@@ -1,21 +1,385 @@
 {% extends 'base.html' %}
 
-{% block title %}Login - MyProject{% endblock %}
+{% block login_content %}
+<!-- Background with brick effect -->
+<div style="
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: -2;
+    background: 
+        linear-gradient(335deg, rgba(255,255,255,.03) 23px, transparent 23px),
+        linear-gradient(155deg, rgba(255,255,255,.03) 23px, transparent 23px),
+        linear-gradient(335deg, rgba(255,255,255,.03) 23px, transparent 23px),
+        linear-gradient(155deg, rgba(255,255,255,.03) 23px, transparent 23px);
+    background-size: 200px 200px;
+    background-position: 0 0, 0 50px, 100px 50px, 100px 0px;
+    pointer-events: none;
+"></div>
 
-{% block content %}
-<div class="container">
-    <h2>Login</h2>
-    <form method="post">
-        {% csrf_token %}
-        <div class="form-group">
-            <label for="username">Username:</label>
-            <input type="text" id="username" name="username" class="form-control" required>
-        </div>
-        <div class="form-group">
-            <label for="password">Password:</label>
-            <input type="password" id="password" name="password" class="form-control" required>
-        </div>
-        <button type="submit" class="btn btn-primary">Login</button>
-    </form>
+<style>
+    body {
+        background: linear-gradient(-45deg, #ee7752, #e73c7e, #23a6d5, #23d5ab);
+        background-size: 400% 400%;
+        animation: gradient 15s ease infinite;
+        height: 100vh;
+        margin: 0;
+        overflow: hidden;
+    }
+
+    @keyframes gradient {
+        0% {
+            background-position: 0% 50%;
+        }
+        50% {
+            background-position: 100% 50%;
+        }
+        100% {
+            background-position: 0% 50%;
+        }
+    }
+
+    .login-container {
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border-radius: 20px;
+        padding: 2rem;
+        box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        transform: translateY(20px);
+        animation: float 6s ease-in-out infinite;
+    }
+
+    @keyframes float {
+        0% {
+            transform: translateY(0px);
+        }
+        50% {
+            transform: translateY(-20px);
+        }
+        100% {
+            transform: translateY(0px);
+        }
+    }
+
+    .form-control {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 10px;
+        padding: 15px;
+        color: white;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+        background: rgba(255, 255, 255, 0.3);
+        box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+
+    .form-control::placeholder {
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .btn-primary {
+        background: linear-gradient(45deg, #6b5ce7, #a177ff);
+        border: none;
+        border-radius: 10px;
+        padding: 12px 30px;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .btn-primary span {
+        display: inline-block;
+        transition: transform 0.3s ease-out;
+    }
+
+    .btn-primary:hover span {
+        transform: translateX(-100%);
+        opacity: 0;
+    }
+
+    .btn-primary::after {
+        content: '→';
+        position: absolute;
+        left: 100%;
+        top: 50%;
+        transform: translateY(-50%);
+        opacity: 0;
+        transition: all 0.3s ease-out;
+    }
+
+    .btn-primary:hover::after {
+        left: 50%;
+        transform: translate(-50%, -50%);
+        opacity: 1;
+    }
+
+    .login-title {
+        color: white;
+        font-weight: 700;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .text-muted {
+        color: rgba(255, 255, 255, 0.8) !important;
+    }
+
+    .alert {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        backdrop-filter: blur(5px);
+    }
+
+    .input-group-text {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+    }
+
+    .close {
+        color: white;
+    }
+
+    /* Glowing effect for icons */
+    .fas {
+        filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.5));
+    }
+
+    /* About Page Slider */
+    .about-trigger {
+        position: fixed;
+        top: 20px;
+        transition: all 0.5s ease;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 50%;
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        z-index: 1000;
+    }
+
+    .about-trigger.initial {
+        right: 20px;
+    }
+
+    .about-trigger.moved {
+        left: 20px;
+    }
+
+    .about-trigger i {
+        color: white;
+        font-size: 1.5rem;
+        transition: transform 0.3s ease;
+    }
+
+    .about-trigger:hover i {
+        transform: translateX(5px);
+    }
+
+    .about-trigger.moved i {
+        transform: rotate(180deg);
+    }
+
+    .about-trigger.moved:hover i {
+        transform: rotate(180deg) translateX(5px);
+    }
+
+    .about-page {
+        position: fixed;
+        top: 0;
+        right: -100%;
+        width: 100%;
+        height: 100vh;
+        background: linear-gradient(135deg, #1e3c72, #2a5298);
+        padding: 2rem;
+        transition: right 0.5s ease;
+        z-index: 999;
+        overflow-y: auto;
+    }
+
+    .about-page.active {
+        right: 0;
+    }
+
+    .about-content {
+        max-width: 800px;
+        margin: 4rem auto;
+        color: white;
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.5s ease 0.3s;
+    }
+
+    .about-page.active .about-content {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .close-about {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        color: white;
+        background: none;
+        border: none;
+        font-size: 2rem;
+        cursor: pointer;
+        transition: transform 0.3s ease;
+    }
+
+    .close-about:hover {
+        transform: rotate(90deg);
+    }
+</style>
+
+<!-- About Trigger Button -->
+<div class="about-trigger">
+    <i class="fas fa-arrow-right"></i>
 </div>
+
+<!-- About Page -->
+<div class="about-page">
+    <button class="close-about">&times;</button>
+    <div class="about-content">
+        <h2 class="mb-4">About BSK Management</h2>
+        <p class="lead mb-4">Welcome to the future of business management.</p>
+        
+        <div class="row">
+            <div class="col-md-6 mb-4">
+                <h4><i class="fas fa-rocket me-2"></i> Our Mission</h4>
+                <p>To provide cutting-edge solutions that empower businesses to reach their full potential through efficient management and innovative technologies.</p>
+            </div>
+            
+            <div class="col-md-6 mb-4">
+                <h4><i class="fas fa-eye me-2"></i> Our Vision</h4>
+                <p>To become the leading platform in business management solutions, setting new standards in efficiency and user experience.</p>
+            </div>
+        </div>
+
+        <div class="row mt-4">
+            <div class="col-md-4 mb-4">
+                <h5><i class="fas fa-check-circle me-2"></i> Reliability</h5>
+                <p>Built with robust technology ensuring 99.9% uptime and secure data management.</p>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <h5><i class="fas fa-users me-2"></i> Support</h5>
+                <p>24/7 dedicated support team ready to assist you with any queries.</p>
+            </div>
+            
+            <div class="col-md-4 mb-4">
+                <h5><i class="fas fa-shield-alt me-2"></i> Security</h5>
+                <p>Enterprise-grade security measures protecting your sensitive data.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Login Form -->
+<div class="row justify-content-center align-items-center min-vh-100">
+    <div class="col-md-4">
+        <div class="login-container">
+            <div class="text-center mb-4">
+                <h1 class="login-title mb-2">BSK Management</h1>
+                <p class="text-muted">Please sign in to continue</p>
+            </div>
+            
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                        {{ message }}
+                        <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                            <span aria-hidden="true">&times;</span>
+                        </button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+
+            <form method="post" class="needs-validation" novalidate>
+                {% csrf_token %}
+                <input type="hidden" name="next" value="{{ request.GET.next }}">
+                
+                <div class="form-group mb-4">
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">
+                                <i class="fas fa-user"></i>
+                            </span>
+                        </div>
+                        <input type="text" name="username" class="form-control" 
+                               placeholder="Username" required autofocus>
+                    </div>
+                </div>
+
+                <div class="form-group mb-4">
+                    <div class="input-group">
+                        <div class="input-group-prepend">
+                            <span class="input-group-text">
+                                <i class="fas fa-lock"></i>
+                            </span>
+                        </div>
+                        <input type="password" name="password" class="form-control" 
+                               placeholder="Password" required>
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-primary btn-block">
+                        <span><i class="fas fa-sign-in-alt me-2"></i> Sign In</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const aboutTrigger = document.querySelector('.about-trigger');
+        const aboutPage = document.querySelector('.about-page');
+        const closeAbout = document.querySelector('.close-about');
+    
+        // Add initial class
+        aboutTrigger.classList.add('initial');
+    
+        aboutTrigger.addEventListener('click', function() {
+            if (aboutPage.classList.contains('active')) {
+                aboutPage.classList.remove('active');
+                aboutTrigger.classList.remove('moved');
+                aboutTrigger.classList.add('initial');
+            } else {
+                aboutPage.classList.add('active');
+                aboutTrigger.classList.remove('initial');
+                aboutTrigger.classList.add('moved');
+            }
+        });
+    
+        closeAbout.addEventListener('click', function() {
+            aboutPage.classList.remove('active');
+            aboutTrigger.classList.remove('moved');
+            aboutTrigger.classList.add('initial');
+        });
+    
+        // Update click-outside handler
+        document.addEventListener('click', function(e) {
+            if (aboutPage.classList.contains('active') && 
+                !aboutPage.contains(e.target) && 
+                !aboutTrigger.contains(e.target)) {
+                aboutPage.classList.remove('active');
+                aboutTrigger.classList.remove('moved');
+                aboutTrigger.classList.add('initial');
+            }
+        });
+    });
+</script>
 {% endblock %}

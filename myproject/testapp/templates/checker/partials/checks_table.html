@@ -1,5 +1,6 @@
 <!-- checker/partials/checks_table.html -->
 {% load check_tags %}
+{% load permission_tags %}
 {% for check in checks %}
 <tr class="{% if check.status == 'paid' %}table-success{% elif check.status == 'cancelled' %}table-danger{% elif check.status == 'rejected' %}table-warning{% elif check.status == 'delivered' %}table-info{% endif %}">
     <td>
@@ -45,6 +46,7 @@
         </span>
     </td>
     <td>
+        {% if request.user.userprofile.role.can_manage_checks %}    
         <div class="btn-group">
             {% if check.is_supplier_payment and check.get_available_amount > 0 %}
                 <button class="btn btn-sm btn-info check-action" 
@@ -139,6 +141,7 @@
                 {% endif %}
             {% endif %}
         </div>
+        {% endif %}
     </td>
 </tr>
 {% empty %}

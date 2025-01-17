@@ -1,4 +1,8 @@
 from django.urls import path, include
+
+from .views_users import initialize_user_profiles, user_management, user_activity, create_user
+
+from .views_auth import login_view, profile_view, logout_view
 from . import views
 from .views_supplier import (
     SupplierDetailView, SupplierListView, SupplierCreateView, SupplierUpdateView, SupplierDeleteView, SupplierBalanceView
@@ -71,8 +75,17 @@ from .views_transfer import (
 
 
 urlpatterns = [
-    path('', views.home, name='home'),  # Home view
-    path('profile/', views.profile, name='profile'),  # Profile view
+    path('', views.home, name='home'),
+    path('', views.home, name='home'),
+    path('login/', login_view, name='login'),
+    path('logout/', logout_view, name='logout'),
+    path('profile/', profile_view, name='profile'),
+
+    # User Management URLs
+    path('users/initialize/', initialize_user_profiles, name='initialize-user-profiles'),
+    path('users/', user_management, name='user-management'),
+    path('users/activity/', user_activity, name='user-activity'),
+    path('users/create/', create_user, name='create-user'),
 
     # Suppliers URLs
     path('suppliers/', SupplierListView.as_view(), name='supplier-list'),  # List all suppliers

@@ -1,8 +1,12 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!--favicon-->
+    <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
     <title>{% block title %}BSK Management{% endblock %}</title>
     
    <!-- CSS -->
@@ -250,6 +254,7 @@
 </head>
 <body>
     <!-- Sidebar -->
+    {% if user.is_authenticated %}
     <nav id="sidebar">
         <div class="d-flex flex-column h-100">
             <div class="p-3 text-center">
@@ -263,6 +268,16 @@
                         <i class="fas fa-home me-2"></i> Dashboard
                     </a>
                 </li>
+
+                <!-- User Management Section -->
+                {% if user.is_authenticated and user.userprofile.role.can_manage_users %}
+                <li class="nav-item">
+                    <a class="nav-link {% if 'users' in request.path %}active{% endif %}" 
+                    href="{% url 'user-management' %}">
+                        <i class="fas fa-users-cog me-2"></i> User Management
+                    </a>
+                </li>
+                {% endif %}
 
                 <!-- Business Operations Section -->
                 <li class="nav-item nav-item-parent">
@@ -359,11 +374,16 @@
             <!-- Bottom Section -->
             <div class="mt-auto p-3">
                 <div class="dropdown">
-                    <button class="btn btn-dark dropdown-toggle w-100" type="button" data-bs-toggle="dropdown">
+                    <button class="btn btn-dark dropdown-toggle w-100" 
+                            type="button" 
+                            id="userDropdown" 
+                            data-toggle="dropdown" 
+                            aria-expanded="false">
                         <i class="fas fa-user-circle me-2"></i>
                         {{ request.user.username }}
                     </button>
-                    <ul class="dropdown-menu dropdown-menu-dark w-100">
+                    <ul class="dropdown-menu dropdown-menu-dark w-100" 
+                        aria-labelledby="userDropdown">
                         <li>
                             <a class="dropdown-item" href="{% url 'profile' %}">
                                 <i class="fas fa-id-card me-2"></i> Profile
@@ -406,6 +426,12 @@
     <main id="main-content" class="p-4">
         {% block content %}{% endblock %}
     </main>
+    {% else %}
+        <!-- Login page gets a clean layout -->
+        <div class="container mt-5">
+            {% block login_content %}{% endblock %}
+        </div>
+    {% endif %}
 
     <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.1/dist/umd/popper.min.js"></script>
@@ -414,6 +440,9 @@
 
   <script>
     $(document).ready(function() {
+
+        {% if user.is_authenticated %}
+            console.log("[UI] Initializing authenticated interface");
         // Sidebar Toggle
         $('#sidebar-toggle').click(function() {
             $('#sidebar').toggleClass('collapsed');
@@ -435,6 +464,10 @@
             $('#clientSubmenu').prev('.nav-link').attr('aria-expanded', 'true');
         }
     });
+
+        {% else %}
+            console.log("[UI] Showing login interface");
+        {% endif %}
 
     // Toast function
     function showToast(message, type = 'success') {

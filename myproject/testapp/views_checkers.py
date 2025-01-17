@@ -3,6 +3,8 @@ from django.urls import reverse_lazy
 from django.template.loader import render_to_string
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
+
+from .decorators import require_permission
 from .models import CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -50,6 +52,7 @@ class CheckerListView(ListView):
         return context
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckerCreateView(View):
     def post(self, request):
         try:
@@ -86,6 +89,7 @@ class CheckerCreateView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckerDetailsView(View):
     def get(self, request, pk):
         try:
@@ -120,6 +124,7 @@ class CheckerDetailsView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckerDeleteView(View):
     def post(self, request, pk):
         try:
@@ -131,6 +136,7 @@ class CheckerDeleteView(View):
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
         
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class AvailableCheckersView(View):
     def get(self, request):
         try:
@@ -252,6 +258,7 @@ def invoice_autocomplete(request):
     
     return JsonResponse(invoice_list, safe=False)
 
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckerSignatureView(View):
     def get(self, request, pk):
         checker = get_object_or_404(Checker, pk=pk)
@@ -282,6 +289,7 @@ class CheckerSignatureView(View):
         
         return JsonResponse({'status': 'success'})
     
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckerPositionStatusView(View):
     def get(self, request, checker_id, position):
         print(f"Checking status for position {position} in checker {checker_id}")
@@ -302,6 +310,7 @@ class CheckerPositionStatusView(View):
         })
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckCreateView(View):
     def post(self, request):
         try:
@@ -391,6 +400,7 @@ class CheckCreateView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
 
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckAllocationView(View):
     def get(self, request, pk):
         """Get allocation details for a check"""
@@ -473,6 +483,7 @@ class CheckAllocationView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
 
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckListView(ListView):
     model = Check
     template_name = 'checker/check_list.html'
@@ -502,6 +513,7 @@ class CheckListView(ListView):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckStatusView(View):
     def post(self, request, pk, action):
         try:
@@ -540,6 +552,7 @@ def supplier_autocomplete(request):
     return JsonResponse(supplier_list, safe=False)
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckUpdateView(View):
     def get(self, request, pk):
         try:
@@ -614,6 +627,7 @@ class CheckUpdateView(View):
         
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_manage_checks'), name='dispatch')
 class CheckCancelView(View):
     def post(self, request, pk):
         try:
@@ -633,6 +647,7 @@ class CheckCancelView(View):
             return JsonResponse({'error': str(e)}, status=400)
 
 @method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
 class CheckActionView(View):
     def get(self, request, pk):
         """Get check details for editing"""

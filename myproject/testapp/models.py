@@ -45,6 +45,58 @@ class item(BaseModel):
 
     def __str__(self):
         return self.name
+
+class UserRole(BaseModel):
+    name = models.CharField(max_length=50, unique=True)
+    description = models.TextField(blank=True)
+    
+    # Permissions for different sections
+    can_manage_users = models.BooleanField(default=False)
+    can_view_bank = models.BooleanField(default=False)
+    can_manage_bank = models.BooleanField(default=False)
+    can_view_checks = models.BooleanField(default=False)
+    can_manage_checks = models.BooleanField(default=False)
+    can_view_clients = models.BooleanField(default=False)
+    can_manage_clients = models.BooleanField(default=False)
+    can_view_suppliers = models.BooleanField(default=False)
+    can_manage_suppliers = models.BooleanField(default=False)
+    can_view_products = models.BooleanField(default=False)
+    can_manage_products = models.BooleanField(default=False)
+    can_view_invoices = models.BooleanField(default=False)
+    can_manage_invoices = models.BooleanField(default=False)
+    can_view_receipts = models.BooleanField(default=False)
+    can_manage_receipts = models.BooleanField(default=False)
+    can_view_contracts = models.BooleanField(default=False)
+    can_manage_contracts = models.BooleanField(default=False)
+    can_view_bank_accounts = models.BooleanField(default=False)
+    can_manage_bank_accounts = models.BooleanField(default=False)
+    
+    def __str__(self):
+        return self.name
+
+class UserProfile(BaseModel):
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    role = models.ForeignKey(UserRole, on_delete=models.PROTECT)
+    is_active = models.BooleanField(default=True)
+    last_login = models.DateTimeField(null=True, blank=True)
+    
+    def __str__(self):
+        return f"{self.user.username} ({self.role.name})"
+
+class UserActivity(BaseModel):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    action = models.CharField(max_length=255)
+    target_model = models.CharField(max_length=50)
+    target_id = models.CharField(max_length=50, null=True, blank=True)
+    details = models.JSONField(null=True)
+    ip_address = models.GenericIPAddressField(null=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = 'User Activities'
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.action} - {self.created_at}"
     
 class Profile(BaseModel):
     user = models.OneToOneField(User, on_delete=models.CASCADE)

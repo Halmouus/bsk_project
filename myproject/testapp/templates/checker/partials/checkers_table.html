@@ -1,5 +1,5 @@
 {% load custom_filters %}
-
+{% load permission_tags %}
 <!-- checkers_table.html -->
 {% for checker in checkers %}
 <tr>
@@ -57,7 +57,7 @@
    </td>
    <td>{{ checker.created_at|date:"d/m/Y" }}</td>
    <td class="actions">
-    {% if checker.status != 'completed' and checker.is_active %}
+    {% if checker.status != 'completed' and checker.is_active and request.user.userprofile.role.can_manage_checks %}
         <div class="btn-group">
             <button class="btn btn-sm btn-info view-signatures" data-checker="{{ checker.id }}"
                 data-start="{{ checker.starting_page }}" 
