@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
+from .forms import SupplierCreateForm
 from .models import Invoice, Supplier, get_supplier_balance
 from django.contrib.messages.views import SuccessMessageMixin
 from django.db import models
@@ -22,15 +23,20 @@ class SupplierListView(ListView):
 # Create a new Supplier
 class SupplierCreateView(SuccessMessageMixin, CreateView):
     model = Supplier
-    fields = ['name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 'accounting_code', 'is_energy', 'service', 'delay_convention', 'is_regulated', 'regulation_file_path']
+    form_class = SupplierCreateForm
     template_name = 'supplier/supplier_form.html'
     success_url = reverse_lazy('supplier-list')
     success_message = "Supplier successfully created."
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['is_create_mode'] = True
+        return context
+
 # Update an existing Supplier
 class SupplierUpdateView(SuccessMessageMixin, UpdateView):
     model = Supplier
-    fields = ['name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 'accounting_code', 'is_energy', 'service', 'delay_convention', 'is_regulated', 'regulation_file_path']
+    form_class = SupplierCreateForm  # Use the custom form
     template_name = 'supplier/supplier_form.html'
     success_url = reverse_lazy('supplier-list')
     success_message = "Supplier successfully updated."

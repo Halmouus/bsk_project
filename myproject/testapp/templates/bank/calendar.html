@@ -64,7 +64,7 @@
                                 </span>
                             </div>
                             <div class="amount-row">
-                                <span class="label">Supplier Payments</span>
+                                <span class="label">Debit Movements</span>
                                 <span class="amount text-danger">
                                     {{ bank.pending_payments|format_balance }}
                                 </span>
@@ -151,6 +151,16 @@
                                                         <i class="fas fa-file-invoice-dollar"></i>
                                                     </button>
                                                 {% endif %}
+
+                                                {% if bank_info.has_vat_forecasts %}
+                                                    <button class="vat-forecast-btn ms-2" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#vatForecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">
+                                                        <i class="fas fa-percent"></i>
+                                                    </button>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     {% endfor %}
@@ -193,6 +203,29 @@
                 <div class="modal-body">
                     <div class="forecast-list">
                         <!-- Will be populated by JavaScript -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VAT Forecast Modal -->
+    <div class="modal fade" id="vatForecastModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-percent me-2"></i>
+                        VAT Payments
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="forecast-totals mt-3">
+                        <h6 class="text-end">Total: <span class="total-amount"></span></h6>
                     </div>
                 </div>
             </div>
@@ -360,6 +393,62 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-danger" id="confirmCheckRejection">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VAT Payment Modal -->
+    <div class="modal fade" id="vatPaymentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark VAT as Paid</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="vatPaymentForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="vatPaymentDate" class="form-label">Payment Date</label>
+                            <input type="date" 
+                                   class="form-control" 
+                                   id="vatPaymentDate" 
+                                   name="payment_date"
+                                   required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmVATPayment">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VAT Rejection Modal -->
+    <div class="modal fade" id="vatRejectionModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Mark VAT as Rejected</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="vatRejectionForm">
+                        <div class="mb-3">
+                            <label for="vatRejectionDate" class="form-label">Rejection Date</label>
+                            <input type="date" 
+                                class="form-control" 
+                                id="vatRejectionDate" 
+                                required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmVATRejection">Confirm</button>
                 </div>
             </div>
         </div>
@@ -722,6 +811,25 @@
     
     .amount.negative {
         color: #f72585;
+    }
+
+    .vat-forecast-btn {
+        background: none;
+        border: none;
+        color: #3e4396;
+        cursor: pointer;
+        padding: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .vat-forecast-btn:hover {
+        color: #2d3070;
+        transform: scale(1.1);
+    }
+
+    .forecast-item .badge-primary {
+        background-color: #3e4396;
+        color: white;
     }
 
     .calendar-tooltip {
@@ -1333,22 +1441,26 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
+    function addModalCleanup(modalId) {
+        const modal = document.getElementById(modalId);
+        if (modal) {
+            modal.addEventListener('hidden.bs.modal', function () {
+                document.body.classList.remove('modal-open');
+                document.body.style.overflow = 'auto';
+                const modalBackdrops = document.getElementsByClassName('modal-backdrop');
+                while(modalBackdrops.length > 0) {
+                    modalBackdrops[0].parentNode.removeChild(modalBackdrops[0]);
+                }
+            });
+        }
+    }
     document.addEventListener('DOMContentLoaded', function () {
         console.log("Page loaded. Initializing event listeners...");
         initializeEventListeners();
         loadSelectedBanks();
         addTooltips();
-
-        // Add modal cleanup code
-        const forecastModal = document.getElementById('forecastModal');
-        forecastModal.addEventListener('hidden.bs.modal', function () {
-            document.body.classList.remove('modal-open');
-            document.body.style.overflow = 'auto';
-            const modalBackdrops = document.getElementsByClassName('modal-backdrop');
-            while(modalBackdrops.length > 0) {
-                modalBackdrops[0].parentNode.removeChild(modalBackdrops[0]);
-            }
-        });
+        ['forecastModal', 'paymentForecastModal', 'paymentModal', 'checkRejectionModal', 
+        'checkPaymentModal', 'pendingForecastsModal', 'vatForecastModal'].forEach(addModalCleanup);
 
         document.addEventListener('click', function(e) {
             if (e.target.closest('.mark-receipt-paid')) {
@@ -1473,6 +1585,14 @@
                 loadPaymentForecasts(date, bankId);
             });
         });
+
+        document.querySelectorAll('.vat-forecast-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                loadVATForecasts(date, bankId);
+            });
+        });
     }
     
     function renderCalendar(data) {
@@ -1575,6 +1695,21 @@
                                 paymentForecastBtn.appendChild(invoiceIcon);
                                 
                                 balanceInfo.appendChild(paymentForecastBtn);
+                            }
+
+                            if (bank.has_vat_forecasts) {
+                                const vatForecastBtn = document.createElement('button');
+                                vatForecastBtn.classList.add('vat-forecast-btn', 'ms-2');
+                                vatForecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                vatForecastBtn.setAttribute('data-bs-target', '#vatForecastModal');
+                                vatForecastBtn.setAttribute('data-date', day.date);
+                                vatForecastBtn.setAttribute('data-bank', bank.bank.id);
+                                
+                                const vatIcon = document.createElement('i');
+                                vatIcon.classList.add('fas', 'fa-percent');
+                                vatForecastBtn.appendChild(vatIcon);
+                                
+                                balanceInfo.appendChild(vatForecastBtn);
                             }
                             
                             bankBalanceCard.appendChild(balanceInfo);
@@ -1866,6 +2001,86 @@
             });
     }
 
+    function loadVATForecasts(date, bankId) {
+        console.log('\n=== Loading VAT Forecasts ===');
+        console.log('Parameters:', { date, bankId });
+        
+        const modal = document.getElementById('vatForecastModal');
+        const listDiv = modal.querySelector('.forecast-list');
+        const totalSpan = modal.querySelector('.total-amount');
+        
+        if (!modal || !listDiv || !totalSpan) {
+            console.error('Required DOM elements not found:', { modal, listDiv, totalSpan });
+            return;
+        }
+        
+        listDiv.innerHTML = '<div class="text-center"><div class="spinner-border"></div></div>';
+        
+        fetch(`/testapp/calendar/vat-forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => {
+                console.log('Response status:', response.status);
+                return response.json();
+            })
+            .then(data => {
+                console.log('\nReceived VAT forecast data:', data);
+                console.log('Data status:', data.status);
+                console.log('Number of forecasts:', data.forecasts?.length || 0);
+                
+                if (data.status === 'success') {
+                    if (data.forecasts && data.forecasts.length > 0) {
+                        console.log('\nProcessing forecasts:');
+                        const htmlContent = data.forecasts.map(forecast => {
+                            console.log('\nProcessing VAT forecast:', {
+                                period: forecast.period,
+                                amount: forecast.amount,
+                                dueDate: forecast.due_date
+                            });
+
+                            return `
+                                <div class="forecast-item mb-3">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="mb-1">VAT Declaration ${forecast.period}</h6>
+                                                    <div class="text-muted small">
+                                                        Due Date: ${forecast.due_date}
+                                                    </div>
+                                                    <div class="mt-1">
+                                                        <span class="badge badge-primary">
+                                                            ${forecast.status_display}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <span class="amount">${formatAmount(forecast.amount)}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('');
+                        
+                        console.log('HTML content length:', htmlContent.length);
+                        listDiv.innerHTML = htmlContent;
+                        
+                    } else {
+                        console.log('No VAT forecasts found');
+                        listDiv.innerHTML = '<div class="text-center text-muted">No VAT payments forecasted</div>';
+                    }
+                    
+                    console.log('Setting total amount:', data.total);
+                    totalSpan.textContent = formatAmount(data.total);
+                } else {
+                    console.error('Request failed:', data);
+                    listDiv.innerHTML = '<div class="alert alert-danger">Failed to load VAT forecasts</div>';
+                }
+            })
+            .catch(error => {
+                console.error('Error loading VAT forecasts:', error);
+                listDiv.innerHTML = '<div class="alert alert-danger">Error loading VAT forecasts</div>';
+            });
+    }
+
     // Helper function with debug logging
     function getStatusColor(status) {
         console.log('Getting color for status:', status);
@@ -1882,6 +2097,17 @@
         console.log('Selected color:', color);
         return color;
     }
+
+    function getVATStatusColor(status) {
+        console.log('Getting VAT status color for:', status);
+        const color = {
+            'pending': 'primary',
+            'paid': 'success',
+            'processing': 'warning'
+        }[status] || 'secondary';
+        console.log('Selected color:', color);
+        return color;
+    }
     function addTooltips() {
         console.log("=== Starting addTooltips() ===");
         
@@ -1889,8 +2115,8 @@
             // Get both receipt and supplier payment forecast buttons
             const receiptBtns = day.querySelectorAll('.forecast-details-btn');
             const supplierBtns = day.querySelectorAll('.payment-forecast-btn');
-            
-            if (receiptBtns.length === 0 && supplierBtns.length === 0) return;
+            const vatBtns = day.querySelectorAll('.vat-forecast-btn');
+            if (receiptBtns.length === 0 && supplierBtns.length === 0 && vatBtns.length === 0) return;
             
             console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons`);
             
@@ -1920,6 +2146,10 @@
                 let total_direct_debits = 0;
                 let total_direct_count = 0;
                 let payment_count = 0;
+
+                //vat
+                let total_vat_payments = 0;
+                let total_vat_count = 0;
 
                 // Process receipt forecasts
                 for (const btn of receiptBtns) {
@@ -1975,9 +2205,33 @@
                     }
                 }
 
-                const receipt_total = total_expected + total_discounted;
-                const payment_total = total_chq_payments + total_lcn_payments + total_direct_debits;
-                const global_total = receipt_total - total_discounted - payment_total;
+                // Process VAT forecasts
+                for (const btn of vatBtns) {
+                    console.log("Processing VAT forecasts for bank:", btn.dataset.bank);
+                    
+                    const response = await fetch(
+                        `/testapp/calendar/vat-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        data.forecasts.forEach(forecast => {
+                            total_vat_payments += forecast.amount;
+                            total_vat_count++;
+                            console.log(`Adding ${forecast.amount} to VAT payments`);
+                        });
+                    }
+                }
+
+                const receipt_total = total_expected;
+                const payment_total = total_chq_payments + total_lcn_payments + total_direct_debits + total_vat_payments;
+                console.log(`payment_total = ${total_chq_payments} + ${total_lcn_payments} + ${total_direct_debits} + ${total_vat_payments}`);
+                console.log(`receipt_total = ${total_expected}`);
+                console.log(`total_vat_payments = ${total_vat_payments}`);
+                console.log(`total chq_payments = ${total_chq_payments}`);
+                console.log(`total lcn_payments = ${total_lcn_payments}`);
+                console.log(`total direct_debits = ${total_direct_debits}`);
+                const global_total = receipt_total - payment_total;
 
                 console.log("Final totals:", {
                     receipts: { expected: total_expected, discounted: total_discounted, count: total_expected_count },
@@ -2021,9 +2275,15 @@
                                     <span class="text-danger">${formatBalance(total_direct_debits)}</span>
                                 </div>
                             ` : ''}
+                            ${total_vat_payments > 0 ? `
+                                <div class="tooltip-row">
+                                    <span>VAT Payments (${total_vat_count})</span>
+                                    <span class="text-danger">${formatBalance(total_vat_payments)}</span>
+                                </div>
+                            ` : ''}
                             <div class="tooltip-row total">
                                 <span>Total Outgoing</span>
-                                <span class="text-danger fw-bold">${formatBalance(payment_total + total_direct_debits)}</span>
+                                <span class="text-danger fw-bold">${formatBalance(payment_total)}</span>
                             </div>
                         </div>
                     `;
@@ -2131,6 +2391,121 @@
             const rejectionModal = new bootstrap.Modal(document.getElementById('checkRejectionModal'));
             rejectionModal.show();
         }
+        if (e.target.closest('.mark-vat-paid')) {
+            const button = e.target.closest('.mark-vat-paid');
+            const vatPaymentDate = document.getElementById('vatPaymentDate');
+            const dueDate = button.dataset.dueDate;
+            
+            vatPaymentDate.min = dueDate;
+            vatPaymentDate.value = dueDate;
+            
+            // Store active data for the confirmation handler
+            window.activeVATData = {
+                id: button.dataset.declarationId,
+                dueDate: dueDate
+            };
+            
+            const modal = new bootstrap.Modal(document.getElementById('vatPaymentModal'));
+            modal.show();
+        } 
+        
+        if (e.target.closest('.mark-vat-rejected')) {
+            const button = e.target.closest('.mark-vat-rejected');
+            const vatRejectionDate = document.getElementById('vatRejectionDate');
+            const dueDate = button.dataset.dueDate;
+            
+            vatRejectionDate.min = dueDate;
+            vatRejectionDate.value = dueDate;
+            
+            // Store active data for the confirmation handler
+            window.activeVATData = {
+                id: button.dataset.declarationId,
+                dueDate: dueDate
+            };
+            
+            const modal = new bootstrap.Modal(document.getElementById('vatRejectionModal'));
+            modal.show();
+        }
+    });
+
+document.getElementById('confirmVATPayment').addEventListener('click', function() {
+    const paymentDate = document.getElementById('vatPaymentDate').value;
+    console.log('Payment date selected:', paymentDate);  // Debug line
+    console.log('Active VAT Data:', window.activeVATData); // Debug line
+    
+    if (!paymentDate) {
+        console.error('No payment date selected');
+        alert('Please select a payment date');
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('payment_date', paymentDate);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+    fetch(`/testapp/vat/${window.activeVATData.id}/pay/`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => {
+                throw new Error(data.message || 'Failed to record VAT payment');
+            });
+        }
+        return response.json();
+    })
+    .then(result => {
+        if (result.status === 'success') {
+            console.log('Payment recorded successfully');  // Debug line
+            bootstrap.Modal.getInstance(document.getElementById('vatPaymentModal')).hide();
+            // Refresh the pending forecasts view
+            const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+            viewPendingForecasts(currentBank);
+            showToast('success', result.message || 'VAT payment recorded successfully');
+        } else {
+            throw new Error(result.message || 'Failed to record VAT payment');
+        }
+    })
+    .catch(error => {
+        console.error('Error recording payment:', error);  // Debug line
+        showToast('error', error.message || 'Failed to record VAT payment');
+    });
+});
+
+    document.getElementById('confirmVATRejection').addEventListener('click', function() {
+        const rejectionDate = document.getElementById('vatRejectionDate').value;
+        if (!rejectionDate) {
+            alert('Please select a rejection date');
+            return;
+        }
+
+        fetch(`/testapp/vat/${window.activeVATData.id}/reject/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify({
+                rejection_date: rejectionDate
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                bootstrap.Modal.getInstance(document.getElementById('vatRejectionModal')).hide();
+                // Refresh the pending forecasts view
+                const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+                viewPendingForecasts(currentBank);
+                showToast('success', result.message || 'VAT rejection recorded successfully');
+            } else {
+                throw new Error(result.message || 'Failed to record VAT rejection');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', error.message || 'Failed to record VAT rejection');
+        });
     });
 
     // Add this to handle contract status updates
@@ -2295,223 +2670,335 @@
                 let html = '';
                 data.forecasts.forEach(forecast => {
                     if (forecast.type === 'Supplier Payment' || forecast.type === 'Contract Payment') {
-    const isContract = forecast.type === 'Contract Payment';
-    html += `
-        <div class="forecast-item payment mb-3">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header border-0 d-flex justify-content-between align-items-center ${isContract ? 'bg-gradient-primary' : 'bg-gradient-danger'} py-3">
-                    <div class="d-flex align-items-center gap-2">
-                        <div class="badge bg-white bg-opacity-25 border border-white text-white">
-                            ${isContract ? 'Domiciled Contract' : `${forecast.payment_type} Payment`}
-                        </div>
-                        <div class="badge bg-white bg-opacity-10 border border-white text-white">
-                            ${forecast.status_display || forecast.status}
-                        </div>
-                    </div>
-                    <div class="text-white fw-bold">
-                        ${formatBalance(forecast.amount)}
-                    </div>
-                </div>
-                <div class="card-body p-0">
-                    <!-- Primary Info Section -->
-                    <div class="p-3 bg-white border-bottom">
-                        <div class="row g-3">
-                            <div class="col-md-4">
-                                <div class="d-flex flex-column">
-                                    <small class="text-muted text-uppercase fw-semibold">Reference</small>
-                                    <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
-                                        ${isContract ? forecast.contract.reference : `#${forecast.number}`}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="d-flex flex-column">
-                                    <small class="text-muted text-uppercase fw-semibold">Due Date</small>
-                                    <span class="badge bg-info mt-1">${forecast.due_date}</span>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="d-flex flex-column">
-                                    <small class="text-muted text-uppercase fw-semibold">Amount</small>
-                                    <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
-                                        ${formatBalance(forecast.amount)}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                        const isContract = forecast.type === 'Contract Payment';
+                        html += `
+                            <div class="forecast-item payment mb-3">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-header border-0 d-flex justify-content-between align-items-center ${isContract ? 'bg-gradient-primary' : 'bg-gradient-danger'} py-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="text-white">
+                                                ${isContract ? 'Domiciled Contract' : `${forecast.payment_type} Payment`}
+                                            </div>
+                                            <div class="ms-2 text-white opacity-75">
+                                                ${forecast.status_display || forecast.status}
+                                            </div>
+                                        </div>
+                                        <div class="text-white fw-bold">
+                                            ${formatBalance(forecast.amount)}
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <!-- Primary Info Section -->
+                                        <div class="p-3 bg-white border-bottom">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                                        <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
+                                                            ${isContract ? forecast.contract.reference : `#${forecast.number}`}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                                        <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                                        <span class="badge bg-${isContract ? 'primary' : 'danger'} mt-1">
+                                                            ${formatBalance(forecast.amount)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                    <!-- Details Grid -->
-                    <div class="row g-0">
-                        <!-- Left Column -->
-                        <div class="col-md-6 border-end">
-                            <!-- Supplier Info -->
-                            <div class="p-3 border-bottom">
-                                <h6 class="section-title d-flex align-items-center">
-                                    <i class="fas fa-building text-muted me-2"></i>
-                                    Supplier Information
-                                </h6>
-                                <div class="bg-light rounded-3 p-3">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Name</span>
-                                        <span class="fw-semibold">${forecast.supplier.name}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Bank</span>
-                                        <span>${forecast.bank}</span>
-                                    </div>
-                                    <div class="d-flex justify-content-between">
-                                        <span class="text-muted">Current Balance</span>
-                                        <span class="badge bg-danger">${formatBalance(forecast.supplier.balance)}</span>
-                                    </div>
-                                </div>
-                            </div>
+                                        <!-- Details Grid -->
+                                        <div class="row g-0">
+                                            <!-- Left Column -->
+                                            <div class="col-md-6 border-end">
+                                                <!-- Supplier Info -->
+                                                <div class="p-3 border-bottom">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-building text-muted me-2"></i>
+                                                        Supplier Information
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Name</span>
+                                                            <span class="fw-semibold">${forecast.supplier.name}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Bank</span>
+                                                            <span>${forecast.bank}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span class="text-muted">Current Balance</span>
+                                                            <span class="badge bg-danger">${formatBalance(forecast.supplier.balance)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
 
-                            <!-- Payment Status -->
-                            <div class="p-3">
-                                <h6 class="section-title d-flex align-items-center">
-                                    <i class="fas fa-info-circle text-muted me-2"></i>
-                                    Payment Status
-                                </h6>
-                                <div class="bg-light rounded-3 p-3">
-                                    <div class="d-flex justify-content-between mb-2">
-                                        <span class="text-muted">Current Status</span>
-                                        <span class="badge bg-${getStatusColor(forecast.status)}">
-                                            ${forecast.status_display || forecast.status}
-                                        </span>
-                                    </div>
-                                    ${forecast.delivered_at ? `
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Delivered Date</span>
-                                            <span class="badge bg-info">${forecast.delivered_at}</span>
-                                        </div>
-                                    ` : ''}
-                                    ${forecast.printed_at ? `
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Printed Date</span>
-                                            <span class="badge bg-secondary">${forecast.printed_at}</span>
-                                        </div>
-                                    ` : ''}
-                                </div>
-                            </div>
-                        </div>
+                                                <!-- Payment Status -->
+                                                <div class="p-3">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-info-circle text-muted me-2"></i>
+                                                        Payment Status
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Current Status</span>
+                                                            <span class="badge bg-${getStatusColor(forecast.status)}">
+                                                                ${forecast.status_display || forecast.status}
+                                                            </span>
+                                                        </div>
+                                                        ${forecast.delivered_at ? `
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Delivered Date</span>
+                                                                <span class="badge bg-info">${forecast.delivered_at}</span>
+                                                            </div>
+                                                        ` : ''}
+                                                        ${forecast.printed_at ? `
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Printed Date</span>
+                                                                <span class="badge bg-secondary">${forecast.printed_at}</span>
+                                                            </div>
+                                                        ` : ''}
+                                                    </div>
+                                                </div>
+                                            </div>
 
-                        <!-- Right Column -->
-                        <div class="col-md-6">
-                            ${isContract ? `
-                                <!-- Contract Details -->
-                                <div class="p-3 border-bottom">
-                                    <h6 class="section-title d-flex align-items-center">
-                                        <i class="fas fa-file-contract text-muted me-2"></i>
-                                        Contract Details
-                                    </h6>
-                                    <div class="bg-light rounded-3 p-3">
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Contract Type</span>
-                                            <span class="badge bg-primary">${forecast.contract.periodicity || 'Monthly'}</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Payment Number</span>
-                                            <span class="badge bg-info">To be generated</span>
-                                        </div>
-                                        <div class="d-flex justify-content-between">
-                                            <span class="text-muted">Status</span>
-                                            <span class="badge bg-success">Active</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            ` : ''}
+                                            <!-- Right Column -->
+                                            <div class="col-md-6">
+                                                ${isContract ? `
+                                                    <!-- Contract Details -->
+                                                    <div class="p-3 border-bottom">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-file-contract text-muted me-2"></i>
+                                                            Contract Details
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Contract Type</span>
+                                                                <span class="badge bg-primary">${forecast.contract.periodicity || 'Monthly'}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Payment Number</span>
+                                                                <span class="badge bg-info">To be generated</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Status</span>
+                                                                <span class="badge bg-success">Active</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ` : ''}
 
-                            <!-- Invoice Details -->
-                            ${forecast.invoice ? `
-                                <div class="p-3">
-                                    <h6 class="section-title d-flex align-items-center">
-                                        <i class="fas fa-file-invoice text-muted me-2"></i>
-                                        Invoice Information
-                                    </h6>
-                                    <div class="bg-light rounded-3 p-3">
-                                        <div class="d-flex justify-content-between align-items-center mb-3">
-                                            <a href="/testapp/invoices/${forecast.invoice.id}/update/" 
-                                               class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-external-link-alt me-1"></i>
-                                                ${forecast.invoice.ref}
-                                            </a>
-                                            <span class="badge bg-${forecast.invoice.status === 'paid' ? 'success' : 
-                                                                 forecast.invoice.status === 'partially_paid' ? 'warning' : 'danger'}">
-                                                ${forecast.invoice.status_display || forecast.invoice.status}
-                                            </span>
+                                                <!-- Invoice Details -->
+                                                ${forecast.invoice ? `
+                                                    <div class="p-3">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-file-invoice text-muted me-2"></i>
+                                                            Invoice Information
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                                                <a href="/testapp/invoices/${forecast.invoice.id}/update/" 
+                                                                class="btn btn-sm btn-outline-primary">
+                                                                    <i class="fas fa-external-link-alt me-1"></i>
+                                                                    ${forecast.invoice.ref}
+                                                                </a>
+                                                                <span class="badge bg-${forecast.invoice.status === 'paid' ? 'success' : 
+                                                                                    forecast.invoice.status === 'partially_paid' ? 'warning' : 'danger'}">
+                                                                    ${forecast.invoice.status_display || forecast.invoice.status}
+                                                                </span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Invoice Date</span>
+                                                                <span class="badge bg-secondary">${forecast.invoice.date}</span>
+                                                            </div>
+                                                            ${isContract ? `
+                                                                <div class="border-top border-bottom py-2 my-2">
+                                                                    <div class="text-muted small mb-1">Period Coverage</div>
+                                                                    <div class="d-flex align-items-center gap-2">
+                                                                        <span class="badge bg-secondary">${forecast.invoice.period_start}</span>
+                                                                        <i class="fas fa-arrow-right text-muted"></i>
+                                                                        <span class="badge bg-secondary">${forecast.invoice.period_end}</span>
+                                                                    </div>
+                                                                </div>
+                                                            ` : ''}
+                                                            <div class="d-flex justify-content-between mt-2">
+                                                                <span class="text-muted">Invoice Amount</span>
+                                                                <span class="badge ${forecast.invoice.amount >= forecast.amount ? 'bg-success' : 'bg-danger'}">
+                                                                    ${formatBalance(forecast.invoice.amount)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ` : `
+                                                    <div class="p-3">
+                                                        <div class="alert alert-warning border-warning bg-warning bg-opacity-10 mb-0">
+                                                            <i class="fas fa-exclamation-triangle text-warning me-2"></i>
+                                                            No invoice linked yet - payment might be pending generation
+                                                        </div>
+                                                    </div>
+                                                `}
+                                            </div>
                                         </div>
-                                        <div class="d-flex justify-content-between mb-2">
-                                            <span class="text-muted">Invoice Date</span>
-                                            <span class="badge bg-secondary">${forecast.invoice.date}</span>
-                                        </div>
+
+                                        <!-- Action Buttons -->
                                         ${isContract ? `
-                                            <div class="border-top border-bottom py-2 my-2">
-                                                <div class="text-muted small mb-1">Period Coverage</div>
-                                                <div class="d-flex align-items-center gap-2">
-                                                    <span class="badge bg-secondary">${forecast.invoice.period_start}</span>
-                                                    <i class="fas fa-arrow-right text-muted"></i>
-                                                    <span class="badge bg-secondary">${forecast.invoice.period_end}</span>
+                                            <div class="p-3 bg-light border-top">
+                                                <div class="d-flex justify-content-end">
+                                                    <button class="btn btn-sm btn-success me-2 mark-contract-paid" 
+                                                            data-contract-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}"
+                                                            data-amount="${forecast.amount}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-contract-rejected" 
+                                                            data-contract-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}"
+                                                            data-amount="${forecast.amount}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ` : forecast.status === 'delivered' ? `
+                                            <div class="p-3 bg-light border-top">
+                                                <div class="d-flex justify-content-end">
+                                                    <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                            data-check-id="${forecast.source_id}"
+                                                            data-delivered-at="${forecast.delivered_at}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                            data-check-id="${forecast.source_id}"
+                                                            data-delivered-at="${forecast.delivered_at}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
                                                 </div>
                                             </div>
                                         ` : ''}
-                                        <div class="d-flex justify-content-between mt-2">
-                                            <span class="text-muted">Invoice Amount</span>
-                                            <span class="badge ${forecast.invoice.amount >= forecast.amount ? 'bg-success' : 'bg-danger'}">
-                                                ${formatBalance(forecast.invoice.amount)}
-                                            </span>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        } else if (forecast.type === 'VAT Payment') {
+                            html += `
+                                <div class="forecast-item payment mb-3">
+                                    <div class="card border-0 shadow-sm">
+                                        <div class="card-header border-0 d-flex justify-content-between align-items-center bg-gradient-primary py-3">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="text-white">
+                                                    VAT Declaration
+                                                </div>
+                                                <div class="ms-2 text-white opacity-75">
+                                                    ${forecast.status_display}
+                                                </div>
+                                            </div>
+                                            <div class="text-white fw-bold">
+                                                ${formatBalance(forecast.amount)}
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <!-- Primary Info Section -->
+                                            <div class="p-3 bg-white border-bottom">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                                            <span class="badge bg-primary mt-1">
+                                                                ${forecast.declaration.ref}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                                            <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                                            <span class="badge bg-primary mt-1">
+                                                                ${formatBalance(forecast.amount)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Details Grid -->
+                                            <div class="row g-0">
+                                                <div class="col-md-6 border-end">
+                                                    <!-- VAT Declaration Details -->
+                                                    <div class="p-3 border-bottom">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-percent text-muted me-2"></i>
+                                                            Declaration Details
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Period</span>
+                                                                <span class="fw-semibold">${forecast.declaration.period}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Bank</span>
+                                                                <span>${forecast.bank}</span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="col-md-6">
+                                                    <!-- VAT Amounts -->
+                                                    <div class="p-3">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-calculator text-muted me-2"></i>
+                                                            VAT Summary
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Invoiced VAT</span>
+                                                                <span class="badge bg-success">
+                                                                    ${formatBalance(forecast.declaration.invoiced_vat)}
+                                                                </span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Deducted VAT</span>
+                                                                <span class="badge bg-danger">
+                                                                    ${formatBalance(forecast.declaration.deducted_vat)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Action Buttons -->
+                                            <div class="p-3 bg-light border-top">
+                                                <div class="d-flex justify-content-end">
+                                                    <button class="btn btn-sm btn-success me-2 mark-vat-paid" 
+                                                            data-declaration-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-vat-rejected" 
+                                                            data-declaration-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
-                            ` : `
-                                <div class="p-3">
-                                    <div class="alert alert-warning border-warning bg-warning bg-opacity-10 mb-0">
-                                        <i class="fas fa-exclamation-triangle text-warning me-2"></i>
-                                        No invoice linked yet - payment might be pending generation
-                                    </div>
-                                </div>
-                            `}
-                        </div>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    ${isContract ? `
-                        <div class="p-3 bg-light border-top">
-                            <div class="d-flex justify-content-end">
-                                <button class="btn btn-sm btn-success me-2 mark-contract-paid" 
-                                        data-contract-id="${forecast.source_id}"
-                                        data-due-date="${forecast.due_date}"
-                                        data-amount="${forecast.amount}">
-                                    <i class="fas fa-check me-1"></i>Mark as Paid
-                                </button>
-                                <button class="btn btn-sm btn-danger mark-contract-rejected" 
-                                        data-contract-id="${forecast.source_id}"
-                                        data-due-date="${forecast.due_date}"
-                                        data-amount="${forecast.amount}">
-                                    <i class="fas fa-times me-1"></i>Mark as Rejected
-                                </button>
-                            </div>
-                        </div>
-                    ` : forecast.status === 'delivered' ? `
-                        <div class="p-3 bg-light border-top">
-                            <div class="d-flex justify-content-end">
-                                <button class="btn btn-sm btn-success me-2 mark-check-paid" 
-                                        data-check-id="${forecast.source_id}"
-                                        data-delivered-at="${forecast.delivered_at}">
-                                    <i class="fas fa-check me-1"></i>Mark as Paid
-                                </button>
-                                <button class="btn btn-sm btn-danger mark-check-rejected" 
-                                        data-check-id="${forecast.source_id}"
-                                        data-delivered-at="${forecast.delivered_at}">
-                                    <i class="fas fa-times me-1"></i>Mark as Rejected
-                                </button>
-                            </div>
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        </div>
-    `;
+                            `;
                     } else {
                         const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
                         const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';

@@ -15,6 +15,9 @@
    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
    <link href="https://code.jquery.com/ui/1.12.1/themes/base/jquery-ui.css" rel="stylesheet">
    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+   
+    <!-- Animate.css -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
         
     <!-- Custom Styles -->
     <style>
@@ -366,6 +369,10 @@
                         href="{% url 'checker-list' %}">
                             <i class="fas fa-user-shield me-2"></i> Checkers
                         </a>
+                        <a class="nav-link {% if 'vat' in request.path %}active{% endif %}" 
+                        href="{% url 'vat-list' %}">
+                            <i class="fas fa-file-invoice-dollar me-2"></i> VAT
+                        </a>
                     </div>
                 </li>
 
@@ -407,6 +414,17 @@
             <i class="fas fa-bars"></i>
         </button>
         <div class="ms-auto d-flex align-items-center">
+            <!-- Display User Name or Username -->
+            <span class="me-3 text-dark">
+                <i class="fas fa-user-circle me-2"></i>
+                {% if user.is_authenticated %}
+                    {{ user.get_full_name|default:user.username }}
+                {% else %}
+                    Guest
+                {% endif %}
+            </span>
+
+            <!-- Notifications Dropdown -->
             <div class="dropdown">
                 <button class="btn btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <i class="fas fa-bell"></i>
@@ -420,7 +438,7 @@
                 </ul>
             </div>
         </div>
-    </nav>
+</nav>
 
     <!-- Main Content -->
     <main id="main-content" class="p-4">

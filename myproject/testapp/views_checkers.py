@@ -5,7 +5,7 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from .decorators import require_permission
-from .models import CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices
+from .models import CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
@@ -183,7 +183,7 @@ def invoice_autocomplete(request):
         supplier_id=supplier_id,
         ref__icontains=query,
         type='invoice'
-    )
+    ).select_related('contract_invoice')  # Fixed field name
     
     invoice_list = []
     for invoice in invoices:
@@ -208,9 +208,22 @@ def invoice_autocomplete(request):
                 payment__status='cancelled'  # Only exclude cancelled allocations
             )
         ) or 0)
+
+        # Calculate total from direct debits - including pending and processed
+        direct_debits_amount = 0
+        contract_invoice = getattr(invoice, 'contract_invoice', None)  # Fixed attribute name
+        if contract_invoice:
+            direct_debits_amount = float(sum(
+                debit.amount
+                for debit in DirectDebit.objects.filter(
+                    invoice=contract_invoice
+                ).exclude(
+                    status='rejected'  # Only exclude rejected direct debits
+                )
+            ) or 0)
         
-        # Calculate total payments
-        total_payments = direct_checks_amount + allocated_amount
+        # Calculate total payments including direct debits
+        total_payments = direct_checks_amount + allocated_amount + direct_debits_amount
         
         # Calculate available amount
         available_amount = max(0, net_amount - total_payments)
@@ -219,19 +232,31 @@ def invoice_autocomplete(request):
         if available_amount <= 0:
             continue
 
-        # Only consider paid checks for payment status
-        paid_amount = float(sum(
+        # Calculate paid amount including processed direct debits
+        paid_checks_amount = float(sum(
             check.amount for check in Check.objects.filter(
                 cause=invoice,
                 status='paid'
             )
         ) or 0)
 
-        # Determine status icon based only on paid amounts
+        paid_direct_debits = 0
+        if contract_invoice:
+            paid_direct_debits = float(sum(
+                debit.amount
+                for debit in DirectDebit.objects.filter(
+                    invoice=contract_invoice,
+                    status='processed'
+                )
+            ) or 0)
+
+        total_paid_amount = paid_checks_amount + paid_direct_debits
+
+        # Determine status icon based on total paid amounts
         status_icon = '📄 Not Paid'
-        if paid_amount >= net_amount:
+        if total_paid_amount >= net_amount:
             status_icon = '🔒 Paid'
-        elif paid_amount > 0:
+        elif total_paid_amount > 0:
             status_icon = '⏳ Partially Paid'
 
         credit_note_info = ""
@@ -247,7 +272,7 @@ def invoice_autocomplete(request):
             'payment_info': {
                 'total_amount': net_amount,
                 'issued_amount': float(total_payments),
-                'paid_amount': float(paid_amount),
+                'paid_amount': float(total_paid_amount),
                 'available_amount': available_amount
             },
             'label': (

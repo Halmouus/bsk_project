@@ -3,33 +3,83 @@
 {% block title %}Product List{% endblock %}
 
 {% block content %}
-<h1>Product List</h1>
-<a href="{% url 'product-create' %}" class="btn btn-primary">Add New Product</a>
-<table class="table mt-4">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>VAT Rate</th>
-            <th>Expense Code</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for product in products %}
-            <tr>
-                <td>{{ product.name }}</td>
-                <td>{{ product.vat_rate }}</td>
-                <td>{{ product.expense_code }}</td>
-                <td>
-                    <a href="{% url 'product-update' product.pk %}" class="btn btn-warning">Edit</a>
-                    <a href="{% url 'product-delete' product.pk %}" class="btn btn-danger">Delete</a>
-                </td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="4">No products found.</td>
-            </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="container mt-5">
+    <h1 class="mb-4 animate__animated animate__fadeInDown">Product List</h1>
+    <a href="{% url 'product-create' %}" class="btn btn-primary mb-4 animate__animated animate__fadeIn">
+        <i class="fas fa-plus me-2"></i> Add New Product
+    </a>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped animate__animated animate__fadeInUp">
+            <thead class="table-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>VAT Rate</th>
+                    <th>Expense Code</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                    <tr class="animate__animated animate__fadeIn">
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.vat_rate }}</td>
+                        <td>{{ product.expense_code }}</td>
+                        <td>
+                            <a href="{% url 'product-update' product.pk %}" class="btn btn-warning btn-sm">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                            <a href="{% url 'product-delete' product.pk %}" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i> Delete
+                            </a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="4" class="text-center">No products found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .animate__animated {
+        animation-duration: 1s;
+    }
+
+    .table-hover tbody tr:hover {
+        transform: scale(1.02);
+        transition: transform 0.3s ease;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .btn-warning {
+        background-color: #f59e0b;
+        border-color: #f59e0b;
+    }
+
+    .btn-warning:hover {
+        background-color: #d97706;
+        border-color: #d97706;
+    }
+
+    .btn-danger {
+        background-color: #ef4444;
+        border-color: #ef4444;
+    }
+
+    .btn-danger:hover {
+        background-color: #dc2626;
+        border-color: #dc2626;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(37, 99, 235, 0.05);
+    }
+
+    .table-striped tbody tr:nth-of-type(even) {
+        background-color: rgba(255, 255, 255, 0.05);
+    }
+</style>
 {% endblock %}

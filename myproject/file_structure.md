@@ -171,6 +171,9 @@
 │   │   ├── client.css
 │   │   └── styles.css
 │   ├── img
+│   │   ├── favicon.ico
+│   │   ├── favicon.ico:Zone.Identifier
+│   │   ├── logo.png
 │   │   ├── logo.png.png
 │   │   └── logo.png.png:Zone.Identifier
 │   └── js
@@ -187,29 +190,35 @@
     │   ├── admin.cpython-38.pyc
     │   ├── apps.cpython-38.pyc
     │   ├── base.cpython-38.pyc
+    │   ├── decorators.cpython-38.pyc
     │   ├── forms.cpython-38.pyc
     │   ├── middleware.cpython-38.pyc
     │   ├── models.cpython-38.pyc
     │   ├── signals.cpython-38.pyc
     │   ├── urls.cpython-38.pyc
     │   ├── views.cpython-38.pyc
+    │   ├── views_auth.cpython-38.pyc
     │   ├── views_bank.cpython-38.pyc
     │   ├── views_checkers.cpython-38.pyc
     │   ├── views_client.cpython-38.pyc
     │   ├── views_contract.cpython-38.pyc
     │   ├── views_credit_notes.cpython-38.pyc
+    │   ├── views_direct_debit.cpython-38.pyc
     │   ├── views_entity.cpython-38.pyc
     │   ├── views_invoice.cpython-38.pyc
+    │   ├── views_organism.cpython-38.pyc
     │   ├── views_presentation.cpython-38.pyc
     │   ├── views_product.cpython-38.pyc
     │   ├── views_receipts.cpython-38.pyc
     │   ├── views_statement.cpython-38.pyc
     │   ├── views_supplier.cpython-38.pyc
-    │   └── views_transfer.cpython-38.pyc
+    │   ├── views_transfer.cpython-38.pyc
+    │   └── views_users.cpython-38.pyc
     ├── admin.py
     ├── apps.py
     ├── base.py
     ├── codebase.md
+    ├── decorators.py
     ├── file_structure.md
     ├── forms.py
     ├── management
@@ -241,6 +250,16 @@
     │   ├── 0021_supplier_delay_check_supplier_delay_lcn.py
     │   ├── 0022_remove_supplier_delay_check_and_more.py
     │   ├── 0023_supplier_delay_check_supplier_delay_lcn.py
+    │   ├── 0024_check_printed_at.py
+    │   ├── 0025_contract_domiciliation_bank_and_more.py
+    │   ├── 0026_remove_contract_domiciliation_bank_and_more.py
+    │   ├── 0027_contract_domiciliation_bank_and_more.py
+    │   ├── 0028_directdebit.py
+    │   ├── 0029_alter_contractinvoice_invoice.py
+    │   ├── 0030_userrole_userprofile_useractivity.py
+    │   ├── 0031_userrole_can_manage_bank_accounts_and_more.py
+    │   ├── 0032_directdebit_contract_invoice_and_more.py
+    │   ├── 0033_remove_directdebit_contract_invoice_and_more.py
     │   ├── __init__.py
     │   └── __pycache__
     ├── models.py
@@ -253,7 +272,9 @@
     ├── signals.py
     ├── static
     │   ├── css
+    │   ├── images
     │   ├── js
+    │   ├── manifest.json
     │   └── sounds
     ├── templates
     │   ├── bank
@@ -268,19 +289,23 @@
     │   ├── product
     │   ├── profile.html
     │   ├── receipt
-    │   └── supplier
+    │   ├── supplier
+    │   ├── unauthorized.html
+    │   └── users
     ├── templatetags
     │   ├── __init__.py
     │   ├── __pycache__
     │   ├── accounting_filters.py
     │   ├── check_tags.py
     │   ├── custom_filters.py
+    │   ├── permission_tags.py
     │   ├── presentation_filters.py
     │   ├── receipt_filters.py
     │   └── status_filters.py
     ├── tests.py
     ├── urls.py
     ├── views.py
+    ├── views_auth.py
     ├── views_bank.py
     ├── views_checkers.py
     ├── views_client.py
@@ -293,6 +318,7 @@
     ├── views_receipts.py
     ├── views_statement.py
     ├── views_supplier.py
-    └── views_transfer.py
+    ├── views_transfer.py
+    └── views_users.py
 
-97 directories, 198 files
+99 directories, 222 files

@@ -1,10 +1,34 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, TransferReceipt, 
+from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, Supplier, TransferReceipt, 
     Presentation, PresentationReceipt, MOROCCAN_BANKS)
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
 
+
+class SupplierCreateForm(forms.ModelForm):
+    class Meta:
+        model = Supplier
+        fields = [
+            'name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 
+            'accounting_code', 'is_energy', 'service', 'delay_convention', 
+            'is_regulated', 'regulation_file_path'
+        ]
+
+    def clean_ice_code(self):
+        ice_code = self.cleaned_data.get('ice_code')
+        if len(ice_code) != 15:
+            raise ValidationError("ICE code must be exactly 15 digits.")
+        return ice_code
+
+    def clean_delay_convention(self):
+        delay_convention = self.cleaned_data.get('delay_convention')
+        valid_values = [0, 30, 60, 90, 120]
+        if delay_convention not in valid_values:
+            raise ValidationError("Delay convention must be 0, 30, 60, 90, or 120.")
+        return delay_convention
+    
+    
 # Define the inline formset for linking Invoice and InvoiceProduct
 InvoiceProductFormset = inlineformset_factory(
     Invoice,

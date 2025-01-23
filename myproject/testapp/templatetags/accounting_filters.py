@@ -104,3 +104,10 @@ def percentage(value, total):
 @register.filter
 def get_item(dictionary, key):
     return dictionary.get(str(key), {'count': 0, 'expected': 0, 'discounted': 0, 'total': 0})
+
+@register.filter
+def sum_by(queryset, field):
+    """Sum a specific field in a queryset or list of dicts"""
+    if not queryset:
+        return Decimal('0.00')
+    return sum(Decimal(str(getattr(item, field, 0) or 0)) for item in queryset)

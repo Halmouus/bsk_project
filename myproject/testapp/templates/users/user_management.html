@@ -78,6 +78,10 @@
                                     data-toggle="tooltip" title="View Activity">
                                 <i class="fas fa-history"></i>
                             </button>
+                            <button class="btn btn-sm btn-outline-info" onclick="UserManagement.editUserPermissions('{{ profile.user.id }}')"
+                                    data-toggle="tooltip" title="Edit Permissions">
+                                <i class="fas fa-user-shield"></i>
+                            </button>
                             <button class="btn btn-sm btn-outline-warning" onclick="editUser('{{ profile.user.id }}')"
                                     data-toggle="tooltip" title="Edit User">
                                 <i class="fas fa-edit"></i>
@@ -172,6 +176,88 @@
     </div>
 </div>
 
+<!-- Edit User Permissions Modal -->
+<div class="modal fade" id="editPermissionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Edit User Permissions</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <form id="permissionsForm">
+                    {% csrf_token %}
+                    <input type="hidden" id="edit_user_id" name="user_id">
+                    
+                    <div class="row mb-4">
+                        <div class="col">
+                            <strong class="d-block mb-3">User Management</strong>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="can_manage_users" name="can_manage_users">
+                                <label class="custom-control-label" for="can_manage_users">Can Manage Users</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <strong class="d-block mb-3">Bank Operations</strong>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="can_view_bank" name="can_view_bank">
+                                <label class="custom-control-label" for="can_view_bank">Can View Bank</label>
+                            </div>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="can_manage_bank" name="can_manage_bank">
+                                <label class="custom-control-label" for="can_manage_bank">Can Manage Bank</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <strong class="d-block mb-3">Check Operations</strong>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="can_view_checks" name="can_view_checks">
+                                <label class="custom-control-label" for="can_view_checks">Can View Checks</label>
+                            </div>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="can_manage_checks" name="can_manage_checks">
+                                <label class="custom-control-label" for="can_manage_checks">Can Manage Checks</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <strong class="d-block mb-3">Client Operations</strong>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="can_view_clients" name="can_view_clients">
+                                <label class="custom-control-label" for="can_view_clients">Can View Clients</label>
+                            </div>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="can_manage_clients" name="can_manage_clients">
+                                <label class="custom-control-label" for="can_manage_clients">Can Manage Clients</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <strong class="d-block mb-3">Supplier Operations</strong>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input" id="can_view_suppliers" name="can_view_suppliers">
+                                <label class="custom-control-label" for="can_view_suppliers">Can View Suppliers</label>
+                            </div>
+                            <div class="custom-control custom-checkbox mt-2">
+                                <input type="checkbox" class="custom-control-input" id="can_manage_suppliers" name="can_manage_suppliers">
+                                <label class="custom-control-label" for="can_manage_suppliers">Can Manage Suppliers</label>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="savePermissions">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
 /* Timeline Styling */
 .timeline {
@@ -223,6 +309,7 @@ const UserManagement = {
     setupEventHandlers() {
         $('#saveUser').on('click', () => this.createUser());
         $('#viewActivityLog').on('click', () => this.viewActivityLog());
+        $('#savePermissions').on('click', () => this.savePermissions());
     },
 
     setupFilters() {
@@ -318,6 +405,56 @@ const UserManagement = {
         } catch (error) {
             console.error('[UserManagement] Error:', error);
             alert('Failed to filter users');
+        }
+    },
+
+    async editUserPermissions(userId) {
+        console.log(`[UserManagement] Loading permissions for user ${userId}`);
+        
+        try {
+            const response = await fetch(`/testapp/users/${userId}/permissions/`);
+            if (!response.ok) throw new Error('Failed to load permissions');
+            
+            const data = await response.json();
+            
+            // Set user ID in form
+            $('#edit_user_id').val(userId);
+            
+            // Set checkbox states based on current permissions
+            for (const [permission, value] of Object.entries(data.permissions)) {
+                $(`#${permission}`).prop('checked', value);
+            }
+            
+            $('#editPermissionsModal').modal('show');
+            
+        } catch (error) {
+            console.error('[UserManagement] Error:', error);
+            alert('Failed to load user permissions');
+        }
+    },
+
+    async savePermissions() {
+        console.log('[UserManagement] Saving permissions');
+        const userId = $('#edit_user_id').val();
+        
+        try {
+            const formData = new FormData($('#permissionsForm')[0]);
+            const response = await fetch(`/testapp/users/${userId}/permissions/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error('Failed to save permissions');
+            
+            $('#editPermissionsModal').modal('hide');
+            location.reload();
+            
+        } catch (error) {
+            console.error('[UserManagement] Error:', error);
+            alert('Failed to save permissions');
         }
     }
 };

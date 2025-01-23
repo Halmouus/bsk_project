@@ -1,3 +1,4 @@
+import calendar
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
@@ -18,7 +19,7 @@ from operator import itemgetter
 import traceback
 from dateutil.relativedelta import relativedelta
 from django.db.models.functions import Coalesce
-from django.db.models import Sum
+from django.db.models import Sum, Manager
 
 logger = logging.getLogger(__name__)
 
@@ -211,6 +212,10 @@ class Product(BaseModel):
     expense_code = models.CharField(max_length=25, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
     is_energy = models.BooleanField(default=False)
     fiscal_label = models.CharField(max_length=255, blank=False)
+    non_deductible_vat = models.BooleanField(
+        default=False,
+        help_text="If true, VAT from this product cannot be deducted"
+    )
 
     class Meta:
         constraints = [
@@ -249,6 +254,23 @@ class Invoice(BaseModel):
         max_length=25,
         choices=INVOICE_TYPE_CHOICES,
         default='invoice'
+    )
+
+    
+    vat_deduction_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('100.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('100.00'))
+        ],
+        help_text="Percentage of VAT that can be deducted"
+    )
+
+    non_deductible_vat = models.BooleanField(
+        default=False,
+        help_text="If true, VAT from this invoice cannot be deducted"
     )
 
     original_invoice = models.ForeignKey(
@@ -701,6 +723,108 @@ class Invoice(BaseModel):
             
         self.save()
 
+    def calculate_vat_details(self):
+        """Calculate VAT amounts by rate, considering credit notes"""
+        print("\n=== Calculating VAT Details ===")
+        print(f"Invoice: {self.ref}")
+        
+        vat_details = {}
+        
+        # Group by VAT rate
+        for product in self.products.all():
+            if product.product.non_deductible_vat:
+                print(f"Skipping non-deductible product: {product.product.name}")
+                continue
+                
+            rate = product.vat_rate
+            if rate not in vat_details:
+                vat_details[rate] = {
+                    'original_amount': Decimal('0.00'),
+                    'original_vat': Decimal('0.00'),
+                    'credit_amount': Decimal('0.00'),
+                    'credit_vat': Decimal('0.00')
+                }
+            
+            # Calculate original amounts
+            subtotal = round(product.quantity * product.unit_price * 
+                    (1 - product.reduction_rate / 100), 2)
+            vat_amount = round(subtotal * (rate / Decimal('100.00')), 2)
+            
+            print(f"\nProduct: {product.product.name}")
+            print(f"VAT Rate: {rate}%")
+            print(f"Original Amount: {subtotal}")
+            print(f"VAT Amount: {vat_amount}")
+            
+            vat_details[rate]['original_amount'] += subtotal
+            vat_details[rate]['original_vat'] += vat_amount
+            
+            # Process credit notes
+            for credit_note in self.credit_notes.all():
+                for credited_product in credit_note.products.filter(product=product.product):
+                    credit_subtotal = (credited_product.quantity * 
+                                    credited_product.unit_price *
+                                    (1 - credited_product.reduction_rate / 100))
+                    credit_vat = round(credit_subtotal * (rate / Decimal('100.00')), 2)
+                    
+                    print(f"\nCredit Note: {credit_note.ref}")
+                    print(f"Credited Amount: {credit_subtotal}")
+                    print(f"Credited VAT: {credit_vat}")
+                    
+                    vat_details[rate]['credit_amount'] += credit_subtotal
+                    vat_details[rate]['credit_vat'] += credit_vat
+        
+        # Calculate net amounts
+        for rate_details in vat_details.values():
+            rate_details['net_amount'] = (
+                rate_details['original_amount'] - rate_details['credit_amount']
+            )
+            rate_details['net_vat'] = (
+                rate_details['original_vat'] - rate_details['credit_vat']
+            )
+        
+        print("\nFinal VAT Details:")
+        for rate, details in vat_details.items():
+            print(f"\nRate {rate}%:")
+            print(f"Net Amount: {details['net_amount']}")
+            print(f"Net VAT: {details['net_vat']}")
+        
+        return vat_details
+
+    def calculate_payment_vat(self, payment_amount):
+        """Calculate VAT for a specific payment amount"""
+        print(f"\n=== Calculating VAT for Payment {payment_amount} ===")
+        
+        #setting deduction rate to 100%
+        self.vat_deduction_rate = Decimal('100.00')
+
+        payment_percentage = round(payment_amount / self.total_amount, 4)
+        print(f"Payment Amount: {payment_amount}")
+        print(f"Total Amount: {self.total_amount}")
+        print(f"Payment Percentage: {payment_percentage}")
+        
+        vat_details = self.calculate_vat_details()
+        payment_vat = {}
+        
+        for rate, details in vat_details.items():
+            deductible_vat = (
+                details['net_vat'] * 
+                payment_percentage * 
+                (self.vat_deduction_rate / Decimal('100.00'))
+            )
+            
+            print(f"\nRate {rate}%:")
+            print(f"Net VAT: {round(details['net_vat'], 2)}")
+            print(f"payment_percentage: {round(payment_percentage, 2)}")
+            print(f"deduction_rate: {round(self.vat_deduction_rate, 2)}")
+            print(f"Deductible VAT: {round(deductible_vat, 2)}")
+            
+            payment_vat[rate] = {
+                'amount': details['net_amount'] * payment_percentage,
+                'vat': deductible_vat
+            }
+        
+        return payment_vat
+
     def __str__(self):
         return f'Invoice {self.ref} from {self.supplier.name}'
 
@@ -1118,6 +1242,19 @@ class Check(BaseModel):
     received_notes = models.TextField(blank=True)
 
     signatures = models.JSONField(default=list)
+
+    vat_declared = models.BooleanField(default=False)
+    vat_declaration_period = models.CharField(
+        max_length=7,  
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r'^\d{2}-\d{4}$',
+                'Period must be in MM-YYYY format'
+            )
+        ]
+    )
 
     def get_allocated_amount(self):
         """Get total allocated amount"""
@@ -1799,6 +1936,18 @@ class Receipt(BaseModel):
     client_month = models.IntegerField()
     bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
     notes = models.TextField(blank=True)
+    vat_declared = models.BooleanField(default=False)
+    vat_declaration_period = models.CharField(
+        max_length=7,
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r'^\d{2}-\d{4}$',
+                'Period must be in MM-YYYY format'
+            )
+        ]
+    )
 
     class Meta:
         abstract = True
@@ -3143,7 +3292,6 @@ class BankStatement(models.Model):
                 }
         })
 
-        # Add supplier payments entries
         print("\n=== Getting Supplier Payments ===")
         supplier_payments = Check.objects.filter(
             checker__bank_account=bank_account,
@@ -3251,6 +3399,51 @@ class BankStatement(models.Model):
             except Exception as e:
                 print(f"Error processing direct debit {debit.id}: {str(e)}")
                 print(traceback.format_exc())
+        
+        print("\n=== Processing VAT Declarations ===")
+        vat_config = VATConfiguration.objects.first()
+        if vat_config and vat_config.domiciliation_bank_id == bank_account.id:
+            declarations = VATDeclaration.objects.filter(
+                status=VATDeclaration.PAID,
+                payment_date__isnull=False
+            )
+            
+            if start_date:
+                declarations = declarations.filter(payment_date__gte=start_date)
+            if end_date:
+                declarations = declarations.filter(payment_date__lte=end_date)
+                
+            print(f"Found {declarations.count()} paid VAT declarations")
+            for declaration in declarations:
+                print(f"\nProcessing VAT declaration: {declaration.period_month}/{declaration.period_year}")
+                print(f"Payment date: {declaration.payment_date}")
+                print(f"Total invoiced VAT: {declaration.total_invoiced_vat}")
+                print(f"Total deducted VAT: {declaration.total_deducted_vat}")
+                net_vat = declaration.total_invoiced_vat - declaration.total_deducted_vat
+                print(f"Net VAT to pay: {net_vat}")
+                
+                entries.append({
+                    'date': declaration.payment_date,
+                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'type': 'VAT_PAYMENT',
+                    'debit': net_vat if net_vat > 0 else None,
+                    'credit': abs(net_vat) if net_vat < 0 else None,
+                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'source_type': 'vat_declaration',
+                    'source_id': declaration.id,
+                    'can_delete': False,
+                    'can_transfer': False,
+                    'is_transferred': False,
+                    'declaration': {
+                        'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                        'invoiced_vat': float(declaration.total_invoiced_vat),
+                        'deducted_vat': float(declaration.total_deducted_vat),
+                        'payment_date': declaration.payment_date.strftime('%Y-%m-%d'),
+                        'due_date': declaration.due_date.strftime('%Y-%m-%d')
+                    }
+                })
+        else:
+            print("No VAT configuration found or bank account mismatch")
             
         initial_balance = Decimal('0.00')
         if start_date:
@@ -3328,9 +3521,19 @@ class BankStatement(models.Model):
     @classmethod
     def calculate_balance_until(cls, bank_account, date):
         """Calculate total balance up to a specific date"""
+        print(f"\n=== Calculating Balance Until {date} ===")
+        print(f"Bank Account: {bank_account.bank} - {bank_account.account_number}")
+        
         entries = cls.get_statement(bank_account, end_date=date, include_forecasts=False)
+        
+        print(f"Found {len(entries)} entries")
+        
         if entries:
-            return entries[0]['balance']  # First entry has final balance since they're sorted in reverse
+            balance = entries[0]['balance']  # First entry has final balance since they're sorted in reverse
+            print(f"Final balance: {balance}")
+            return balance
+            
+        print("No entries found, returning 0")
         return Decimal('0.00')
         
 
@@ -3794,6 +3997,127 @@ class AccountingEntry(models.Model):
                 print(f"Error creating accounting entries: {str(e)}")
                 continue
 
+
+        print("\n=== Getting VAT Accounting Entries ===")
+        declarations = VATDeclaration.objects.filter(
+            status=VATDeclaration.PAID,
+            payment_date__range=(start_date, end_date) if start_date and end_date else (None, None)
+        ).select_related('forecast')
+
+        print(f"Found {declarations.count()} paid declarations")
+        print(f"Query: {declarations.query}")  # Print the query
+
+        for declaration in declarations:
+            print(f"\nProcessing declaration: {declaration.period_month}/{declaration.period_year}")
+            config = VATConfiguration.objects.first()
+            print(f"Config found: {bool(config)}")
+            if not config:
+                continue
+
+            # Print payment details    
+            print(f"Payment date: {declaration.payment_date}")
+            print(f"Total invoiced VAT: {declaration.total_invoiced_vat}")
+            print(f"Total deducted VAT: {declaration.total_deducted_vat}")
+            print(f"Net VAT: {declaration.total_invoiced_vat - declaration.total_deducted_vat}")
+                
+            # Get period end date for accounting entries
+            period_end = datetime.date(
+                declaration.period_year + (declaration.period_month == 12),
+                (declaration.period_month % 12) + 1,
+                1
+            ) - timedelta(days=1)
+            
+            # Payment entry in bank journal
+            entries.extend([
+                {
+                    'date': declaration.payment_date,
+                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'debit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
+                    'credit': None,
+                    'account_code': config.deducted_vat_account,
+                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'vat_declaration',
+                    'source_id': declaration.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': declaration.payment_date,
+                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'debit': None,
+                    'credit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
+                    'account_code': bank_account.accounting_number,
+                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'vat_declaration',
+                    'source_id': declaration.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+            
+            # VAT declaration entries in VAT journal
+            # First entry: Total invoiced VAT
+            entries.extend([
+                {
+                    'date': period_end,
+                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
+                    'debit': declaration.total_invoiced_vat,
+                    'credit': None,
+                    'account_code': config.invoiced_vat_account,
+                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'journal_code': config.journal,
+                    'source_type': 'vat_declaration',
+                    'source_id': declaration.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': period_end,
+                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
+                    'debit': None,
+                    'credit': declaration.total_invoiced_vat,
+                    'account_code': config.deducted_vat_account,
+                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'journal_code': config.journal,
+                    'source_type': 'vat_declaration',
+                    'source_id': declaration.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+            
+            # Process deducted VAT by rate
+            details = declaration.details.exclude(source_type='receipt')
+            by_rate = {}
+            for detail in details:
+                by_rate[detail.vat_rate] = by_rate.get(detail.vat_rate, Decimal('0')) + detail.vat_amount
+            
+            # Create entries for each VAT rate
+            for rate, amount in by_rate.items():
+                entries.extend([
+                    {
+                        'date': period_end,
+                        'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                        'debit': amount,
+                        'credit': None,
+                        'account_code': config.deducted_vat_account,
+                        'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                        'journal_code': config.journal,
+                        'source_type': 'vat_declaration',
+                        'source_id': declaration.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': period_end,
+                        'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                        'debit': None,
+                        'credit': amount,
+                        'account_code': f"345{int(rate):02d}",  # VAT rate specific account
+                        'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                        'journal_code': config.journal,
+                        'source_type': 'vat_declaration',
+                        'source_id': declaration.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
 
         # Filter entries
         if start_date or end_date:
@@ -4663,8 +4987,8 @@ class DirectDebit(BaseModel):
         ('BANK_ERROR', 'Bank Processing Error')
     ]
     
-    invoice = models.ForeignKey('ContractInvoice', on_delete=models.PROTECT)
-    contract = models.ForeignKey('Contract', on_delete=models.PROTECT)
+    invoice = models.ForeignKey('ContractInvoice', on_delete=models.PROTECT, null=True, blank=True)
+    contract = models.ForeignKey('Contract', on_delete=models.PROTECT, null=True, blank=True)
     bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
     
     due_date = models.DateField()
@@ -4687,6 +5011,18 @@ class DirectDebit(BaseModel):
         on_delete=models.SET_NULL, 
         null=True,
         related_name='direct_debit'
+    )
+    vat_declared = models.BooleanField(default=False)
+    vat_declaration_period = models.CharField(
+        max_length=7,  
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r'^\d{2}-\d{4}$',
+                'Period must be in MM-YYYY format'
+            )
+        ]
     )
     
     class Meta:
@@ -4751,3 +5087,919 @@ class DirectDebit(BaseModel):
             'status': self.get_status_display(),
             'rejection_cause': self.get_rejection_cause_display() if self.rejection_cause else None
         }
+    
+
+
+# VAT Management
+class VATConfiguration(BaseModel):
+    """Global VAT configuration settings"""
+    declaration_day = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month for VAT declaration (1-28)"
+    )
+    domiciliation_bank = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='vat_declarations'
+    )
+    invoiced_vat_account = models.CharField(
+        max_length=5,
+        default='4300',
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ]
+    )
+    deducted_vat_account = models.CharField(
+        max_length=5,
+        default='4400',
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ]
+    )
+    journal = models.CharField(
+        max_length=2,
+        default='06',
+        validators=[
+            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+        ]
+    )
+
+    @classmethod
+    def get_config(cls):
+        """Get or create VAT configuration"""
+        config = VATConfiguration.objects.first()
+        if not config:
+            raise ValidationError("VAT Configuration must be set up")
+        return config
+
+    @classmethod
+    def initialize(cls, declaration_day, domiciliation_bank):
+        """Initialize or update VAT configuration"""
+        print("\n=== Initializing VAT Configuration ===")
+        
+        config = cls.objects.first()
+        if config:
+            print("Updating existing configuration")
+            config.declaration_day = declaration_day
+            config.domiciliation_bank = domiciliation_bank
+            config.save()
+        else:
+            print("Creating new configuration")
+            config = cls.objects.create(
+                declaration_day=declaration_day,
+                domiciliation_bank=domiciliation_bank
+            )
+            
+        # Generate initial forecasts
+        VATDeclaration.generate_initial_forecasts()
+        return config
+
+    def clean(self):
+        super().clean()
+        if self.pk and VATConfiguration.objects.exclude(pk=self.pk).exists():
+            raise ValidationError("Only one VAT configuration can exist")
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving VAT Configuration ===")
+        print(f"Declaration day: {self.declaration_day}")
+        print(f"Bank: {self.domiciliation_bank}")
+        
+        if not self.pk and VATConfiguration.objects.exists():
+            raise ValidationError("Only one VAT configuration can exist")
+        
+        super().save(*args, **kwargs)
+
+class VATDeclarationManager(Manager):
+    def get_pending_declarations(self):
+        """Get declarations ready for processing"""
+        today = timezone.now().date()
+        return self.filter(
+            status=VATDeclaration.DRAFT,
+            due_date__lte=today
+        ).order_by('due_date')
+        
+    def get_future_declarations(self):
+        """Get all future declarations"""
+        today = timezone.now().date()
+        return self.filter(
+            Q(period_year__gt=today.year) |
+            Q(period_year=today.year, period_month__gt=today.month)
+        ).order_by('period_year', 'period_month')
+
+class VATDeclaration(BaseModel):
+    """Monthly VAT declaration"""
+    DRAFT = 'draft'
+    DECLARED = 'declared'
+    PAID = 'paid'
+    
+    STATUS_CHOICES = [
+        (DRAFT, 'Draft'),
+        (DECLARED, 'Declared'),
+        (PAID, 'Paid')
+    ]
+
+    period_month = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+    period_year = models.IntegerField()
+    status = models.CharField(
+        max_length=10,
+        choices=STATUS_CHOICES,
+        default=DRAFT
+    )
+    total_invoiced_vat = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+    total_deducted_vat = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+    due_date = models.DateField()
+    payment_date = models.DateField(null=True, blank=True)
+    is_processed = models.BooleanField(default=False)
+    forecast = models.OneToOneField(
+        'ForecastStatement',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='vat_declaration'
+    )
+    objects = VATDeclarationManager()
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['period_month', 'period_year'],
+                name='unique_vat_period'
+            )
+        ]
+        ordering = ['-period_year', '-period_month']
+
+    def __str__(self):
+        return f"VAT Declaration {self.id} for {self.period_month}/{self.period_year}"
+
+    def get_config(self):
+        """Get VAT configuration"""
+        return VATConfiguration.get_config()
+
+    def update_forecast(self):
+        """Update or create forecast for this declaration"""
+        print(f"\n=== Updating Forecast for {self.period_month}/{self.period_year} ===")
+        
+        config = self.get_config()
+        
+        # Only generate forecast for draft declarations
+        if self.status != self.DRAFT:
+            print("Declaration not in draft status, skipping forecast")
+            return
+            
+        # Calculate expected VAT amounts
+        total_expected_vat = Decimal('0.00')
+        
+        # Try to estimate from historical data
+        previous_declarations = VATDeclaration.objects.filter(
+            status=self.PAID
+        ).order_by('-period_year', '-period_month')[:3]
+        
+        if previous_declarations:
+            # Average of last 3 declarations
+            total_expected_vat = sum(
+                d.total_invoiced_vat - d.total_deducted_vat 
+                for d in previous_declarations
+            ) / len(previous_declarations)
+            print(f"Estimated from historical average: {total_expected_vat}")
+        
+        # Get or create forecast
+        if self.forecast:
+            print("Updating existing forecast")
+            forecast = self.forecast
+            forecast.amount = total_expected_vat
+            forecast.save()
+        else:
+            print("Creating new forecast")
+            forecast = ForecastStatement.objects.create(
+                bank_account=config.domiciliation_bank,
+                date=self.due_date,
+                label=f"Expected VAT Payment {self.period_month:02d}/{self.period_year}",
+                debit=total_expected_vat if total_expected_vat > 0 else None,
+                credit=abs(total_expected_vat) if total_expected_vat < 0 else None,
+                reference=f"VAT-{self.period_month:02d}-{self.period_year}",
+                source_type='vat_declaration',
+                source_id=self.id
+            )
+            self.forecast = forecast
+            self.save()
+    
+    def calculate_invoiced_vat(self):
+        """Calculate VAT from paid receipts in this period"""
+        print("\n=== Calculating Invoiced VAT ===")
+        print(f"Period: {self.period_month}/{self.period_year}")
+        
+        period_start = datetime.date(self.period_year, self.period_month, 1)
+        period_end = datetime.date(
+            self.period_year + (self.period_month == 12),
+            (self.period_month % 12) + 1,
+            1
+        ) - timedelta(days=1)
+        
+        print(f"Period range: {period_start} to {period_end}")
+        total_vat = Decimal('0.00')
+        
+        # For TransferReceipts & CashReceipts - use operation_date
+        print("\nProcessing transfers...")
+        transfers = TransferReceipt.objects.filter(
+            operation_date__range=(period_start, period_end),
+            vat_declared=False
+        ).select_related('entity')
+        
+        for transfer in transfers:
+            vat_amount = transfer.amount / Decimal('6')
+            print(f"Transfer #{transfer.transfer_reference}: VAT = {vat_amount}")
+            
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=transfer.id,
+                vat_rate=Decimal('20.00'),
+                vat_amount=vat_amount,
+                original_amount=transfer.amount,
+                credit_amount=Decimal('0.00')
+            )
+            
+            transfer.vat_declared = True
+            transfer.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            transfer.save()
+            
+            total_vat += vat_amount
+        
+        print("\nProcessing cash receipts...")
+        cash_receipts = CashReceipt.objects.filter(
+            operation_date__range=(period_start, period_end),
+            vat_declared=False
+        ).select_related('entity')
+        
+        for receipt in cash_receipts:
+            vat_amount = receipt.amount / Decimal('6')
+            print(f"Cash Receipt #{receipt.reference_number}: VAT = {vat_amount}")
+            
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=receipt.id,
+                vat_rate=Decimal('20.00'),
+                vat_amount=vat_amount,
+                original_amount=receipt.amount,
+                credit_amount=Decimal('0.00')
+            )
+            
+            receipt.vat_declared = True
+            receipt.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            receipt.save()
+            
+            total_vat += vat_amount
+
+        # For Checks and LCNs - use presentation history
+        presentations = Presentation.objects.all().prefetch_related(
+            'presentation_receipts__checkreceipt',
+            'presentation_receipts__lcn'
+        )
+
+        for pres in presentations:
+            for pr in pres.presentation_receipts.all():
+                receipt = pr.checkreceipt or pr.lcn
+                if not receipt:
+                    continue
+
+                if pr.recorded_status != 'PAID':
+                    continue
+
+                # Get payment date from history
+                payment_history = ReceiptHistory.objects.filter(
+                    content_type=ContentType.objects.get_for_model(receipt.__class__),
+                    object_id=receipt.id,
+                    action='status_changed',
+                    new_value__status='PAID'
+                ).order_by('-business_date').first()
+
+                payment_date = (payment_history.business_date.date() 
+                    if payment_history and payment_history.business_date 
+                    else pres.date)
+
+                if not (period_start <= payment_date <= period_end):
+                    continue
+
+                if receipt.vat_declared:
+                    continue
+
+                print(f"\nProcessing {receipt.__class__.__name__} #{receipt.get_receipt_number()}")
+                print(f"Payment date: {payment_date}")
+
+                vat_amount = receipt.amount / Decimal('6')
+                print(f"VAT amount: {vat_amount}")
+
+                VATDeclarationDetail.objects.create(
+                    declaration=self,
+                    source_type='receipt',
+                    source_id=receipt.id,
+                    vat_rate=Decimal('20.00'),
+                    vat_amount=vat_amount,
+                    original_amount=receipt.amount,
+                    credit_amount=Decimal('0.00')
+                )
+
+                receipt.vat_declared = True
+                receipt.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+                receipt.save()
+
+                total_vat += vat_amount
+
+        print(f"\nTotal invoiced VAT: {total_vat}")
+        return total_vat
+
+    def calculate_deducted_vat(self):
+        """Calculate VAT from paid invoices in this period and non-deducted from previous periods"""
+        print("\n=== Calculating Deducted VAT ===")
+        print(f"Period: {self.period_month}/{self.period_year}")
+        
+        period_start = datetime.date(self.period_year, self.period_month, 1)
+        period_end = datetime.date(
+            self.period_year + (self.period_month == 12),
+            (self.period_month % 12) + 1,
+            1
+        ) - timedelta(days=1)
+        
+        total_deducted = Decimal('0.00')
+        
+        # Process Check payments
+        print("\nProcessing check payments...")
+        checks = Check.objects.filter(
+            Q(
+                paid_at__range=(period_start, period_end),
+                vat_declared=False
+            ) | Q(
+                vat_declared=False,
+                paid_at__lt=period_start
+            )
+        ).select_related('cause', 'checker__bank_account')
+        
+        for check in checks:
+            if not check.cause or check.cause.non_deductible_vat:
+                print(f"Skipping check {check.position} - non-deductible")
+                continue
+                
+            vat_details = check.cause.calculate_payment_vat(check.amount)
+            print(f"\nCheck {check.position} VAT details:", vat_details)
+            
+            # Create detail records for each VAT rate
+            for rate, details in vat_details.items():
+                VATDeclarationDetail.objects.create(
+                    declaration=self,
+                    source_type='invoice_check',
+                    source_id=check.id,
+                    vat_rate=rate,
+                    vat_amount=details['vat'],
+                    original_amount=details['amount'],
+                    credit_amount=Decimal('0.00')
+                )
+                total_deducted += details['vat']
+            
+            # Mark check as declared
+            check.vat_declared = True
+            check.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            check.save()
+
+        # Process DirectDebit payments
+        print("\nProcessing direct debit payments...")
+        direct_debits = DirectDebit.objects.filter(
+            Q(
+                processed_date__range=(period_start, period_end),
+                vat_declared=False
+            ) | Q(
+                vat_declared=False,
+                processed_date__lt=period_start
+            )
+        ).select_related('invoice__invoice')
+        
+        for debit in direct_debits:
+            invoice = debit.invoice.invoice
+            if not invoice or invoice.non_deductible_vat:
+                print(f"Skipping debit {debit.id} - non-deductible")
+                continue
+            
+            vat_details = invoice.calculate_payment_vat(debit.amount)
+            print(f"\nDirect Debit {debit.id} VAT details:", vat_details)
+            
+            # Create detail records for each VAT rate
+            for rate, details in vat_details.items():
+                VATDeclarationDetail.objects.create(
+                    declaration=self,
+                    source_type='invoice_direct_debit',
+                    source_id=debit.id,
+                    vat_rate=rate,
+                    vat_amount=details['vat'],
+                    original_amount=details['amount'],
+                    credit_amount=Decimal('0.00')
+                )
+                total_deducted += details['vat']
+            
+            # Mark direct debit as declared
+            debit.vat_declared = True
+            debit.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            debit.save()
+        
+        print(f"\nTotal deducted VAT: {total_deducted}")
+        return total_deducted
+
+    def process_declaration(self):
+        """Calculate and store VAT details"""
+        print("\n=== Processing VAT Declaration ===")
+        print(f"Declaration ID: {self.id}")
+        print(f"Period: {self.period_month}/{self.period_year}")
+        
+        if self.status != self.DRAFT:
+            print("Declaration not in draft status - skipping")
+            raise ValidationError("Can only process draft declarations")
+        
+        print("\nResetting previously declared items...")
+        details = self.details.all()
+        for detail in details:
+            if detail.source_type == 'receipt':
+                for model in [CheckReceipt, LCN, TransferReceipt, CashReceipt]:
+                    try:
+                        item = model.objects.get(id=detail.source_id)
+                        if item.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                            print(f"Resetting declaration status for {model.__name__} #{item.get_receipt_number()}")
+                            item.vat_declared = False
+                            item.vat_declaration_period = None
+                            item.save()
+                    except model.DoesNotExist:
+                        continue
+            elif detail.source_type in ['invoice_check', 'invoice_direct_debit']:
+                for model in [Check, DirectDebit]:
+                    try:
+                        item = model.objects.get(id=detail.source_id)
+                        if item.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                            print(f"Resetting declaration status for payment {item.id}")
+                            item.vat_declared = False
+                            item.vat_declaration_period = None
+                            item.save()
+                    except model.DoesNotExist:
+                        continue
+
+        print("Clearing existing details...")
+        self.details.all().delete()
+
+        print("\nCalculating invoiced VAT...")
+        self.total_invoiced_vat = self.calculate_invoiced_vat()
+        print(f"Total invoiced VAT: {self.total_invoiced_vat}")
+        
+        print("\nCalculating deducted VAT...")
+        self.total_deducted_vat = self.calculate_deducted_vat()
+        print(f"Total deducted VAT: {self.total_deducted_vat}")
+        
+        self.save()
+
+    @classmethod
+    def generate_initial_forecasts(cls):
+        """Generate initial forecasts for all upcoming declarations"""
+        print("\n=== Generating Initial VAT Forecasts ===")
+        
+        config = VATConfiguration.objects.first()
+        if not config:
+            print("No VAT configuration found")
+            return
+            
+        # Get last declaration
+        last_declaration = cls.objects.order_by('-period_year', '-period_month').first()
+        
+        if last_declaration:
+            # Start from month after last declaration
+            if last_declaration.period_month == 12:
+                start_month = 1
+                start_year = last_declaration.period_year + 1
+            else:
+                start_month = last_declaration.period_month + 1
+                start_year = last_declaration.period_year
+        else:
+            # Start from current month
+            today = timezone.now().date()
+            start_month = today.month
+            start_year = today.year
+        
+        print(f"Starting forecasts from {start_month}/{start_year}")
+        
+        # Generate for 12 months
+        current_month = start_month
+        current_year = start_year
+        
+        for _ in range(12):
+            # Create declaration if doesn't exist
+            declaration, created = cls.objects.get_or_create(
+                period_month=current_month,
+                period_year=current_year
+            )
+            
+            if created:
+                print(f"Created declaration for {current_month}/{current_year}")
+                
+            # Increment month/year
+            if current_month == 12:
+                current_month = 1
+                current_year += 1
+            else:
+                current_month += 1
+
+    def declare(self):
+        """Mark declaration as declared and create forecast"""
+        print("\n=== Declaring VAT ===")
+        
+        if not self.is_processed:
+            raise ValidationError("Declaration must be processed before declaring")
+            
+        if self.status != self.DRAFT:
+            raise ValidationError("Can only declare draft declarations")
+        
+        config = VATConfiguration.objects.first()
+        if not config:
+            raise ValidationError("VAT Configuration required")
+        
+        # Create forecast for VAT payment
+        net_vat = self.total_invoiced_vat - self.total_deducted_vat
+        
+        if net_vat > 0:  # Only create forecast if VAT is payable
+            print(f"Creating forecast for VAT payment: {net_vat}")
+            forecast = ForecastStatement.objects.create(
+                bank_account=config.domiciliation_bank,
+                date=self.due_date,
+                label=f"VAT Payment for {self.period_month:02d}/{self.period_year}",
+                debit=net_vat,
+                reference=f"VAT-{self.period_month:02d}-{self.period_year}",
+                source_type='vat_declaration',
+                source_id=self.id,
+                amount=net_vat
+            )
+            self.forecast = forecast
+        
+        self.status = self.DECLARED
+        self.save()
+
+    def mark_as_paid(self, payment_date):
+        """Mark declaration as paid"""
+        print(f"\n=== Marking VAT Declaration {self.period_month}/{self.period_year} as Paid ===")
+        print(f"Payment date: {payment_date}")
+        
+        if not self.is_processed:
+            raise ValidationError("Declaration must be processed before payment")
+            
+        if self.status != self.DECLARED:
+            raise ValidationError("Can only pay declared VAT declarations")
+        
+        if payment_date < self.due_date:
+            print(f"Payment date {payment_date} cannot be before due date {self.due_date}")
+            raise ValidationError("Payment date cannot be before due date")
+        
+        self.payment_date = payment_date
+        self.status = self.PAID
+        
+        # Mark forecast as processed if exists
+        if self.forecast:
+            print(f"Marking forecast {self.forecast.id} as processed")
+            self.forecast.is_processed = True
+            self.forecast.save()
+        
+        self.save()
+        print(f"Declaration marked as paid successfully")
+    
+    def mark_as_rejected(self, rejection_date):
+        """Mark declaration as rejected"""
+        print(f"\n=== Marking VAT Declaration {self.period_month}/{self.period_year} as Rejected ===")
+        print(f"Rejection date: {rejection_date}")
+        
+        if not self.is_processed:
+            raise ValidationError("Declaration must be processed before rejection")
+            
+        if self.status != self.DECLARED:
+            raise ValidationError("Can only reject declared VAT declarations")
+        
+        self.status = self.DRAFT
+        
+        if self.forecast:
+            print(f"Unmarking forecast {self.forecast.id}")
+            self.forecast.is_processed = False
+            self.forecast.save()
+        
+        self.save()
+        print(f"Declaration marked as rejected")
+
+    @classmethod
+    def update_forecasts(cls):
+        """Update all future VAT forecasts"""
+        print("\n=== Updating VAT Forecasts ===")
+        
+        today = timezone.now().date()
+        
+        # Get all future declarations
+        future_declarations = cls.objects.filter(
+            Q(period_year__gt=today.year) |
+            Q(period_year=today.year, period_month__gt=today.month)
+        ).order_by('period_year', 'period_month')
+        
+        print(f"Found {future_declarations.count()} future declarations")
+        
+        # Ensure we have at least 12 months of forecasts
+        if not future_declarations.exists():
+            print("No future declarations found, generating initial forecasts")
+            cls.generate_initial_forecasts()
+        else:
+            last_declaration = future_declarations.last()
+            months_ahead = 12 - future_declarations.count()
+            
+            if months_ahead > 0:
+                print(f"Generating {months_ahead} additional months")
+                current_month = last_declaration.period_month
+                current_year = last_declaration.period_year
+                
+                for _ in range(months_ahead):
+                    if current_month == 12:
+                        current_month = 1
+                        current_year += 1
+                    else:
+                        current_month += 1
+                        
+                    declaration, created = cls.objects.get_or_create(
+                        period_month=current_month,
+                        period_year=current_year
+                    )
+                    
+                    if created:
+                        print(f"Created declaration for {current_month}/{current_year}")
+
+    def clean(self):
+        super().clean()
+        if self.status != self.DRAFT and not self.is_processed:
+            raise ValidationError("Declaration must be processed before being declared or paid")
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving VAT Declaration ===")
+        print(f"Period: {self.period_month}/{self.period_year}")
+        print(f"Status: {self.status}")
+        print(f"Total Invoiced VAT: {self.total_invoiced_vat}")
+        print(f"Total Deducted VAT: {self.total_deducted_vat}")
+
+        # Calculate due date if not set
+        if not self.due_date:
+            config = VATConfiguration.objects.first()
+            if not config:
+                raise ValidationError("VAT Configuration must exist before creating declarations")
+            
+            # Set to declaration day of next month
+            self.due_date = datetime.date(
+                self.period_year + (self.period_month == 12),
+                (self.period_month % 12) + 1,
+                min(config.declaration_day, calendar.monthrange(
+                    self.period_year + (self.period_month == 12),
+                    (self.period_month % 12) + 1
+                )[1])
+            )
+            
+            # Skip weekends
+            while self.due_date.weekday() >= 5:
+                self.due_date += timedelta(days=1)
+        
+        super().save(*args, **kwargs)
+
+class VATDeclarationDetail(BaseModel):
+    """Individual entries in VAT declaration"""
+    declaration = models.ForeignKey(
+        VATDeclaration,
+        on_delete=models.CASCADE,
+        related_name='details'
+    )
+    source_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('receipt', 'Receipt Payment'),
+            ('invoice_check', 'Invoice Check Payment'),
+            ('invoice_direct_debit', 'Invoice Direct Debit')
+        ]
+    )
+    source_id = models.UUIDField()
+    vat_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    is_deducted = models.BooleanField(default=False)
+    vat_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        help_text="VAT rate for this entry"
+    )
+    original_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        help_text="Original amount before credits"
+    )
+    credit_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Credit note amount"
+    )
+    
+    def __str__(self):
+        return f"VAT Detail {self.source_type} - {self.vat_amount}"
+
+    def clean(self):
+        super().clean()
+        if self.declaration.status != VATDeclaration.DRAFT:
+            raise ValidationError("Cannot modify details of a declared VAT declaration")
+        
+    def _store_receipt_details(self):
+        """Store VAT details for paid receipts"""
+        print("\n=== Storing Receipt VAT Details ===")
+        
+        period_start = datetime.date(self.period_year, self.period_month, 1)
+        period_end = datetime.date(
+            self.period_year + (self.period_month == 12),
+            (self.period_month % 12) + 1,
+            1
+        ) - timedelta(days=1)
+        
+        # Process CheckReceipts
+        check_receipts = CheckReceipt.objects.filter(
+            status='PAID',
+            paid_date__range=(period_start, period_end)
+        )
+        
+        for receipt in check_receipts:
+            vat_amount = receipt.amount / Decimal('6')
+            print(f"Check Receipt #{receipt.check_number}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=receipt.id,
+                vat_amount=vat_amount,
+                is_deducted=False
+            )
+        
+        # Process LCNs
+        lcns = LCN.objects.filter(
+            status='PAID',
+            paid_date__range=(period_start, period_end)
+        )
+        
+        for lcn in lcns:
+            vat_amount = lcn.amount / Decimal('6')
+            print(f"LCN #{lcn.lcn_number}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=lcn.id,
+                vat_amount=vat_amount,
+                is_deducted=False
+            )
+
+        # Process TransferReceipts
+        transfers = TransferReceipt.objects.filter(
+            operation_date__range=(period_start, period_end)
+        )
+        
+        for transfer in transfers:
+            vat_amount = transfer.amount / Decimal('6')
+            print(f"Transfer #{transfer.transfer_reference}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=transfer.id,
+                vat_amount=vat_amount,
+                is_deducted=False
+            )
+
+        # Process CashReceipts
+        cash_receipts = CashReceipt.objects.filter(
+            operation_date__range=(period_start, period_end)
+        )
+        
+        for receipt in cash_receipts:
+            vat_amount = receipt.amount / Decimal('6')
+            print(f"Cash Receipt #{receipt.reference_number}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='receipt',
+                source_id=receipt.id,
+                vat_amount=vat_amount,
+                is_deducted=False
+            )
+
+    def _store_payment_details(self):
+        """Store VAT details for invoice payments"""
+        print("\n=== Storing Payment VAT Details ===")
+        
+        period_start = datetime.date(self.period_year, self.period_month, 1)
+        period_end = datetime.date(
+            self.period_year + (self.period_month == 12),
+            (self.period_month % 12) + 1,
+            1
+        ) - timedelta(days=1)
+        
+        # Process Check payments
+        checks = Check.objects.filter(
+            Q(
+                paid_at__range=(period_start, period_end),
+                vat_declared=False
+            ) | Q(
+                vat_declared=False,
+                paid_at__lt=period_start
+            )
+        ).select_related('cause')
+        
+        for check in checks:
+            if not check.cause or check.cause.non_deductible_vat:
+                continue
+                
+            payment_percentage = (check.amount / check.cause.total_amount) * Decimal('100.00')
+            vat_amount = (
+                check.cause.total_tax_amount * 
+                (payment_percentage / Decimal('100.00')) *
+                #(check.cause.vat_deduction_rate / Decimal('100.00'))
+                Decimal('100.00') / Decimal('100.00')
+            )
+            
+            print(f"Check {check.position} for invoice {check.cause.ref}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='invoice_check',
+                source_id=check.id,
+                vat_amount=vat_amount,
+                is_deducted=True
+            )
+            
+            # Mark check as declared
+            check.vat_declared = True
+            check.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            check.save()
+
+        # Process DirectDebit payments
+        direct_debits = DirectDebit.objects.filter(
+            Q(
+                processed_date__range=(period_start, period_end),
+                vat_declared=False
+            ) | Q(
+                vat_declared=False,
+                processed_date__lt=period_start
+            )
+        ).select_related('invoice__invoice')
+        
+        for debit in direct_debits:
+            invoice = debit.invoice.invoice
+            if not invoice or invoice.non_deductible_vat:
+                continue
+                
+            payment_percentage = (debit.amount / invoice.total_amount) * Decimal('100.00')
+            vat_amount = (
+                invoice.total_tax_amount * 
+                (payment_percentage / Decimal('100.00')) *
+                (invoice.vat_deduction_rate / Decimal('100.00'))
+            )
+            
+            print(f"Direct Debit for invoice {invoice.ref}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='invoice_direct_debit',
+                source_id=debit.id,
+                vat_amount=vat_amount,
+                is_deducted=True
+            )
+            
+            # Mark direct debit as declared
+            debit.vat_declared = True
+            debit.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            debit.save()
+
+
+
+    def mark_as_paid(self, payment_date):
+        """Mark declaration as paid"""
+        print(f"\n=== Marking VAT Declaration {self.period_month}/{self.period_year} as Paid ===")
+        
+        if not self.is_processed:
+            raise ValidationError("Declaration must be processed before payment")
+            
+        if self.status != self.DECLARED:
+            raise ValidationError("Can only pay declared VAT declarations")
+        
+        if payment_date < self.due_date:
+            raise ValidationError("Payment date cannot be before due date")
+        
+        self.payment_date = payment_date
+        self.status = self.PAID
+        
+        # Mark forecast as processed if exists
+        if self.forecast:
+            self.forecast.is_processed = True
+            self.forecast.save()
+            print(f"Marked forecast {self.forecast.id} as processed")
+        
+        self.save()
+
+

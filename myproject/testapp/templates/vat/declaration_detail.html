@@ -1,0 +1,418 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+
+{% block title %}VAT Declaration Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    {% csrf_token %}
+   <!-- Header -->
+   <div class="d-flex justify-content-between align-items-center mb-4">
+       <div>
+           <h2>
+               <i class="fas fa-percent me-2"></i>
+               VAT Declaration {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
+           </h2>
+           <p class="text-muted mb-0">Due: {{ declaration.due_date|date:"Y-m-d" }}</p>
+       </div>
+       <div class="d-flex gap-2">
+           <a href="{% url 'vat-list' %}" class="btn btn-outline-secondary">
+               <i class="fas fa-arrow-left me-2"></i>Back
+           </a>
+           {% if declaration.status == 'draft' %}
+                <button class="btn btn-primary process-vat" data-declaration-id="{{ declaration.id }}">
+                    <i class="fas fa-cogs me-2"></i>Process
+                </button>
+                {% if declaration.total_invoiced_vat > 0 or declaration.total_deducted_vat > 0 %}
+                    <button class="btn btn-success declare-vat" data-declaration-id="{{ declaration.id }}">
+                        <i class="fas fa-check me-2"></i>Declare
+                    </button>
+                {% endif %}
+           {% elif declaration.status == 'declared' %}
+               <button class="btn btn-success pay-vat" data-declaration-id="{{ declaration.id }}">
+                   <i class="fas fa-money-bill me-2"></i>Record Payment
+               </button>
+           {% endif %}
+       </div>
+   </div>
+
+   <!-- Summary Cards -->
+   <div class="row g-4 mb-4">
+       <div class="col-md-4">
+           <div class="card">
+               <div class="card-body">
+                   <h6 class="card-subtitle mb-2 text-muted">Invoiced VAT</h6>
+                   <h3 class="card-title text-primary">{{ declaration.total_invoiced_vat|format_balance }}</h3>
+                   <p class="card-text mb-0">
+                       From {{ receipt_details.count }} receipts
+                   </p>
+               </div>
+           </div>
+       </div>
+       <div class="col-md-4">
+           <div class="card">
+               <div class="card-body">
+                   <h6 class="card-subtitle mb-2 text-muted">Deducted VAT</h6>
+                   <h3 class="card-title text-success">{{ declaration.total_deducted_vat|format_balance }}</h3>
+                   <p class="card-text mb-0">
+                       From {{ invoice_details.count }} payments
+                   </p>
+               </div>
+           </div>
+       </div>
+       <div class="col-md-4">
+           <div class="card">
+               <div class="card-body">
+                   <h6 class="card-subtitle mb-2 text-muted">Net VAT</h6>
+                   <h3 class="card-title {% if declaration.total_invoiced_vat > declaration.total_deducted_vat %}text-danger{% else %}text-success{% endif %}">
+                       {{ declaration.total_invoiced_vat|sub:declaration.total_deducted_vat|format_balance }}
+                   </h3>
+                   <p class="card-text mb-0">
+                       Due on {{ declaration.due_date|date:"Y-m-d" }}
+                   </p>
+               </div>
+           </div>
+       </div>
+   </div>
+
+   <!-- Receipts Section -->
+   <div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-receipt me-2"></i>
+            Receipts VAT ({{ receipt_details.count }})
+        </h5>
+        <span class="fs-5">{{ total_receipts|format_balance }}</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th>Entity</th>
+                        <th>Date</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">VAT Rate</th>
+                        <th class="text-end">VAT Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for detail in receipt_details %}
+                        <tr>
+                            <td>{{ detail.get_source_type_display }}</td>
+                            <td>{{ detail.source_reference }}</td>
+                            <td>{{ detail.source_entity }}</td>
+                            <td>{{ detail.source_date|date:"Y-m-d" }}</td>
+                            <td class="text-end">{{ detail.original_amount|format_balance }}</td>
+                            <td class="text-end">{{ detail.vat_rate }}%</td>
+                            <td class="text-end">{{ detail.vat_amount|format_balance }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">No receipt VAT entries</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    {% regroup receipt_details by vat_rate as rate_groups %}
+                    {% for rate_group in rate_groups %}
+                        <tr class="table-light">
+                            <th colspan="4" class="text-end">Total for {{ rate_group.grouper }}% VAT</th>
+                            <th class="text-end">{{ rate_group.list|sum_by:'original_amount'|format_balance }}</th>
+                            <th></th>
+                            <th class="text-end">{{ rate_group.list|sum_by:'vat_amount'|format_balance }}</th>
+                        </tr>
+                    {% endfor %}
+                    <tr class="table-primary">
+                        <th colspan="4" class="text-end">Grand Total</th>
+                        <th class="text-end">{{ receipt_details|sum_by:'original_amount'|format_balance }}</th>
+                        <th></th>
+                        <th class="text-end">{{ receipt_details|sum_by:'vat_amount'|format_balance }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+   <!-- Invoices Section -->
+   <div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="fas fa-file-invoice me-2"></i>
+            Deducted VAT ({{ invoice_details.count }})
+        </h5>
+        <span class="fs-5">{{ total_invoices|format_balance }}</span>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Reference</th>
+                        <th>Supplier</th>
+                        <th>Invoice</th>
+                        <th>Payment Date</th>
+                        <th class="text-end">Original</th>
+                        <th class="text-end">Credits</th>
+                        <th class="text-end">VAT Rate</th>
+                        <th class="text-end">VAT Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for detail in invoice_details %}
+                        <tr>
+                            <td>{{ detail.get_source_type_display }}</td>
+                            <td>{{ detail.source_reference }}</td>
+                            <td>{{ detail.source_supplier }}</td>
+                            <td>
+                                {% if detail.source_type == 'invoice_check' or detail.source_type == 'invoice_direct_debit' %}
+                                    {% if detail.source_invoice_id %}
+                                        <a href="{% url 'invoice-update' detail.source_invoice_id %}">
+                                            {{ detail.source_invoice_ref|default:'-' }}
+                                        </a>
+                                    {% else %}
+                                        -
+                                    {% endif %}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ detail.source_date|date:"Y-m-d" }}</td>
+                            <td class="text-end">{{ detail.original_amount|format_balance }}</td>
+                            <td class="text-end text-danger">
+                                {% if detail.credit_amount %}
+                                    -{{ detail.credit_amount|format_balance }}
+                                {% endif %}
+                            </td>
+                            <td class="text-end">{{ detail.vat_rate }}%</td>
+                            <td class="text-end">{{ detail.vat_amount|format_balance }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center">No invoice VAT entries</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    {% regroup invoice_details by vat_rate as rate_groups %}
+                    {% for rate_group in rate_groups %}
+                        <tr class="table-light">
+                            <th colspan="5" class="text-end">Total for {{ rate_group.grouper }}% VAT</th>
+                            <th class="text-end">{{ rate_group.list|sum_by:'original_amount'|format_balance }}</th>
+                            <th class="text-end text-danger">
+                                -{{ rate_group.list|sum_by:'credit_amount'|format_balance }}
+                            </th>
+                            <th></th>
+                            <th class="text-end">{{ rate_group.list|sum_by:'vat_amount'|format_balance }}</th>
+                        </tr>
+                    {% endfor %}
+                    <tr class="table-primary">
+                        <th colspan="5" class="text-end">Grand Total</th>
+                        <th class="text-end">{{ invoice_details|sum_by:'original_amount'|format_balance }}</th>
+                        <th class="text-end text-danger">
+                            -{{ invoice_details|sum_by:'credit_amount'|format_balance }}
+                        </th>
+                        <th></th>
+                        <th class="text-end">{{ invoice_details|sum_by:'vat_amount'|format_balance }}</th>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Back button handling
+    document.querySelector('.btn-back')?.addEventListener('click', () => {
+        window.location.href = "{% url 'vat-list' %}";
+    });
+    
+    // Process button
+    document.querySelector('.process-vat')?.addEventListener('click', function() {
+        processDeclaration(this.dataset.declarationId);
+    });
+    
+    // Declare button
+    document.querySelector('.declare-vat')?.addEventListener('click', function() {
+        declareVAT(this.dataset.declarationId);
+    });
+    
+    // Pay button
+    document.querySelector('.pay-vat')?.addEventListener('click', function() {
+        showPaymentModal(this.dataset.declarationId);
+    });
+    
+    // Payment recording
+    document.getElementById('recordPayment')?.addEventListener('click', recordPayment);
+});
+
+async function processDeclaration(declarationId) {
+    console.log(`Processing declaration ${declarationId}...`); // Debug log
+    
+    try {
+        const response = await fetch(`/testapp/vat/${declarationId}/process/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        console.log('Response received:', response.status); // Debug log
+        
+        const result = await response.json();
+        console.log('Result:', result); // Debug log
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            showToast('error', result.message || 'Failed to process declaration');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('error', 'Failed to process declaration');
+    }
+}
+
+async function declareVAT(declarationId) {
+    if (!confirm('Are you sure you want to declare this VAT? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/testapp/vat/${declarationId}/declare/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            showToast('error', result.message || 'Failed to declare VAT');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('error', 'Failed to declare VAT');
+    }
+}
+
+function showPaymentModal(declarationId) {
+    const modal = document.getElementById('paymentModal');
+    modal.dataset.declarationId = declarationId;
+    new bootstrap.Modal(modal).show();
+}
+
+async function recordPayment() {
+    const modal = document.getElementById('paymentModal');
+    const declarationId = modal.dataset.declarationId;
+    const form = document.getElementById('paymentForm');
+    const formData = new FormData(form);
+    
+    try {
+        const response = await fetch(`/testapp/vat/${declarationId}/pay/`, {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            bootstrap.Modal.getInstance(modal).hide();
+            location.reload();
+        } else {
+            showToast('error', result.message || 'Failed to record payment');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('error', 'Failed to record payment');
+    }
+}
+
+function showToast(type, message) {
+    const container = document.querySelector('.toast-container') || (() => {
+        const div = document.createElement('div');
+        div.className = 'toast-container';
+        document.body.appendChild(div);
+        return div;
+    })();
+    
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.innerHTML = `
+        <div class="toast-header bg-${type === 'error' ? 'danger' : 'success'} text-white">
+            <strong class="me-auto">${type === 'error' ? 'Error' : 'Success'}</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">${message}</div>
+    `;
+    
+    container.appendChild(toast);
+    new bootstrap.Toast(toast, { autohide: true, delay: 5000 }).show();
+}
+</script>
+
+<style>
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1060;
+}
+
+.toast {
+    min-width: 300px;
+    margin-bottom: 10px;
+}
+
+.table th {
+    background: #f8f9fa;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-light th {
+    background: #f8f9fa !important;
+}
+
+.table-primary th {
+    background: #0d6efd !important;
+    color: white;
+}
+
+.modal-content {
+    border: none;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.modal-header {
+    border-radius: 8px 8px 0 0;
+}
+
+.card {
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background: #f8f9fa;
+    border-bottom: none;
+}
+</style>
+{% endblock %}

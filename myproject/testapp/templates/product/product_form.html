@@ -3,38 +3,100 @@
 {% block title %}Product Form{% endblock %}
 
 {% block content %}
-<h1>{{ view.object.name|default:'Add New Product' }}</h1>
-<form method="post">
-    {% csrf_token %}
-    {% for field in form %}
-        {% if field.name == 'vat_rate' %}
-            <div class="form-group">
-                <label>{{ field.label }}</label>
-                <select name="{{ field.name }}" class="form-control auto-size-select">
-                    {% for choice in field.field.choices %}
-                        <option value="{{ choice.0 }}" {% if field.value|floatformat:2 == choice.0|floatformat:2 %}selected{% endif %}>
-                            {{ choice.1 }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-        {% else %}
-            <div class="form-group">
-                {{ field.label_tag }}
-                {{ field }}
-            </div>
-        {% endif %}
-    {% endfor %}
-    <button type="submit" class="btn btn-success">Save</button>
-    <a href="{% url 'product-list' %}" class="btn btn-secondary">Cancel</a>
-</form>
+<div class="container mt-5">
+    <div class="card shadow-lg animate__animated animate__fadeIn">
+        <div class="card-header bg-primary text-white">
+            <h2 class="card-title mb-0">{{ view.object.name|default:'Add New Product' }}</h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="needs-validation" novalidate>
+                {% csrf_token %}
+                {% for field in form %}
+                    <div class="mb-3">
+                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+                        {% if field.name == 'vat_rate' %}
+                            <select name="{{ field.name }}" class="form-select auto-size-select" required>
+                                {% for choice in field.field.choices %}
+                                    <option value="{{ choice.0 }}" {% if field.value|floatformat:2 == choice.0|floatformat:2 %}selected{% endif %}>
+                                        {{ choice.1 }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        {% else %}
+                            {{ field }}
+                        {% endif %}
+                        <div class="invalid-feedback">
+                            Please provide a valid {{ field.label }}.
+                        </div>
+                    </div>
+                {% endfor %}
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success btn-lg animate__animated animate__pulse animate__infinite">
+                        <i class="fas fa-save me-2"></i> Save
+                    </button>
+                    <a href="{% url 'product-list' %}" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-times me-2"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <style>
+    .animate__animated {
+        animation-duration: 1s;
+    }
+
+    .card {
+        border-radius: 15px;
+        overflow: hidden;
+    }
+
+    .card-header {
+        padding: 1.5rem;
+    }
+
+    .card-body {
+        padding: 2rem;
+    }
+
+    .form-control, .form-select {
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.25);
+    }
+
+    .btn-success {
+        background-color: #10b981;
+        border-color: #10b981;
+    }
+
+    .btn-success:hover {
+        background-color: #059669;
+        border-color: #059669;
+    }
+
+    .btn-secondary {
+        background-color: #6b7280;
+        border-color: #6b7280;
+    }
+
+    .btn-secondary:hover {
+        background-color: #4b5563;
+        border-color: #4b5563;
+    }
+
     .auto-size-select {
         display: inline-block;
-        min-width: 100px; /* Set a reasonable minimum width */
-        max-width: 100%; /* Ensure it doesn't exceed the container width */
-        width: auto; /* Automatically adjust to content */
+        min-width: 100px;
+        max-width: 100%;
+        width: auto;
     }
 </style>
 
@@ -42,7 +104,26 @@
     document.querySelectorAll('.auto-size-select').forEach(select => {
         select.style.width = `${select.scrollWidth}px`;
     });
+
+    // Example starter JavaScript for disabling form submissions if there are invalid fields
+    (function () {
+        'use strict'
+
+        // Fetch all the forms we want to apply custom Bootstrap validation styles to
+        var forms = document.querySelectorAll('.needs-validation')
+
+        // Loop over them and prevent submission
+        Array.prototype.slice.call(forms)
+            .forEach(function (form) {
+                form.addEventListener('submit', function (event) {
+                    if (!form.checkValidity()) {
+                        event.preventDefault()
+                        event.stopPropagation()
+                    }
+
+                    form.classList.add('was-validated')
+                }, false)
+            })
+    })()
 </script>
-
-
 {% endblock %}

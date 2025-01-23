@@ -1,6 +1,6 @@
 from django.urls import path, include
 
-from .views_users import initialize_user_profiles, user_management, user_activity, create_user
+from .views_users import initialize_user_profiles, user_management, user_activity, create_user, user_permissions
 
 from .views_auth import login_view, profile_view, logout_view
 from . import views
@@ -73,6 +73,12 @@ from .views_transfer import (
     CreateTransferView, DeleteTransferView
 )
 
+from .views_vat import (
+    VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
+    VATDeclarationProcessView, VATDeclarationDeclareView, VATDeclarationPayView, 
+    VATPendingDeclarationsView, VATForecastView
+)
+
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -86,6 +92,7 @@ urlpatterns = [
     path('users/', user_management, name='user-management'),
     path('users/activity/', user_activity, name='user-activity'),
     path('users/create/', create_user, name='create-user'),
+    path('users/<str:user_id>/permissions/', user_permissions, name='user-permissions'),
 
     # Suppliers URLs
     path('suppliers/', SupplierListView.as_view(), name='supplier-list'),  # List all suppliers
@@ -261,6 +268,7 @@ urlpatterns = [
     path('calendar/', CalendarView.as_view(), name='calendar'),
     path('calendar/forecasts/', CalendarForecastView.as_view(), name='calendar-forecasts'),
     path('calendar/supplier-forecasts/', SupplierForecastView.as_view(), name='supplier_forecasts'),
+    path('calendar/vat-forecasts/', VATForecastView.as_view(), name='vat-forecasts'),
 
     path('bank/pending-forecasts/<str:bank_id>/', PendingForecastsView.as_view(), name='pending_forecasts'),
 
@@ -271,6 +279,18 @@ urlpatterns = [
     path('bank/contracts/<uuid:contract_id>/payment-action/', 
         ContractPaymentActionView.as_view(), 
         name='contract-payment-action'),
-        
+
+    # VAT URLs
+    path('vat/', VATListView.as_view(), name='vat-list'),
+    path('vat/config/', VATConfigurationView.as_view(), name='vat-config'),
+    path('vat/create/', VATDeclarationCreateView.as_view(), name='vat-create'),
+    path('vat/<uuid:declaration_id>/', VATDeclarationDetailView.as_view(), name='vat-detail'),
+    path('vat/<uuid:declaration_id>/process/', VATDeclarationProcessView.as_view(), name='vat-process'),
+    path('vat/<uuid:declaration_id>/declare/', VATDeclarationDeclareView.as_view(), name='vat-declare'),
+    path('vat/<uuid:declaration_id>/pay/', VATDeclarationPayView.as_view(), name='vat-pay'),
+    path('vat/pending/', VATPendingDeclarationsView.as_view(), name='vat-pending'),
+    path('vat/forecast/', VATForecastView.as_view(), name='vat-forecast'),
+    path('vat/forecast/<int:year>/<int:month>/', VATForecastView.as_view(), name='vat-forecast-period'),
+            
 ]
 

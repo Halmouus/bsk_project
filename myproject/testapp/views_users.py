@@ -156,6 +156,60 @@ def api_permission_error(request, required_permission='can_manage_users'):
             'reason': f'You need {required_permission.replace("_", " ")} permissions to access this feature.'
         })
 
+
+@login_required
+@user_has_permission
+def user_permissions(request, user_id):
+    print(f"[UserManagement] Managing permissions for user {user_id}")
+    
+    try:
+        user_profile = get_object_or_404(UserProfile, user_id=user_id)
+        
+        if request.method == 'GET':
+            # Return current permissions
+            permissions = {
+                'can_manage_users': user_profile.role.can_manage_users,
+                'can_view_bank': user_profile.role.can_view_bank,
+                'can_manage_bank': user_profile.role.can_manage_bank,
+                'can_view_checks': user_profile.role.can_view_checks,
+                'can_manage_checks': user_profile.role.can_manage_checks,
+                'can_view_clients': user_profile.role.can_view_clients,
+                'can_manage_clients': user_profile.role.can_manage_clients,
+                'can_view_suppliers': user_profile.role.can_view_suppliers,
+                'can_manage_suppliers': user_profile.role.can_manage_suppliers
+            }
+            return JsonResponse({'permissions': permissions})
+            
+        elif request.method == 'POST':
+            # Update permissions
+            role = user_profile.role
+            role.can_manage_users = request.POST.get('can_manage_users') == 'on'
+            role.can_view_bank = request.POST.get('can_view_bank') == 'on'
+            role.can_manage_bank = request.POST.get('can_manage_bank') == 'on'
+            role.can_view_checks = request.POST.get('can_view_checks') == 'on'
+            role.can_manage_checks = request.POST.get('can_manage_checks') == 'on'
+            role.can_view_clients = request.POST.get('can_view_clients') == 'on'
+            role.can_manage_clients = request.POST.get('can_manage_clients') == 'on'
+            role.can_view_suppliers = request.POST.get('can_view_suppliers') == 'on'
+            role.can_manage_suppliers = request.POST.get('can_manage_suppliers') == 'on'
+            role.save()
+            
+            # Log activity
+            UserActivity.objects.create(
+                user=request.user,
+                action='updated_permissions',
+                target_model='UserProfile',
+                target_id=user_profile.id,
+                details=request.POST.dict()
+            )
+            
+            return JsonResponse({'status': 'success'})
+            
+    except Exception as e:
+        print(f"[UserManagement] Error managing permissions: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=400)
+    
+    
 @login_required
 def some_api_view(request):
     if not request.user.userprofile.role.can_manage_users:

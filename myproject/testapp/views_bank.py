@@ -22,6 +22,7 @@ class BankAccountListView(ListView):
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        print("\n=== Getting Bank Account List ===")
         
         # Apply filters if any
         bank = self.request.GET.get('bank')

@@ -2,12 +2,241 @@
 
 {% block title %}Supplier Form{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Custom CSS for smaller fields and better spacing */
+    .form-control-sm {
+        max-width: 300px; /* Adjust the width as needed */
+    }
+    .card {
+        margin-bottom: 1rem;
+    }
+    .card-header {
+        padding: 0.75rem 1.25rem;
+    }
+    .card-body {
+        padding: 1rem;
+    }
+    .form-label {
+        font-weight: 500;
+    }
+    .invalid-feedback {
+        font-size: 0.875rem;
+    }
+    .btn {
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>{{ view.object.pk|default:'Add New Supplier' }}</h1>
-<form method="post">
-    {% csrf_token %}
-    {{ form.as_p }}
-    <button type="submit" class="btn btn-success">Save</button>
-    <a href="{% url 'supplier-list' %}" class="btn btn-secondary">Cancel</a>
-</form>
+<div class="container mt-4">
+    <h1 class="mb-4">
+        {% if is_create_mode %}
+            Add New Supplier
+        {% else %}
+            Edit Supplier: {{ form.instance.name }}
+        {% endif %}
+    </h1>
+    <form method="post" id="supplierForm" novalidate enctype="multipart/form-data">
+        {% csrf_token %}
+
+        <!-- Section 1: Basic Information -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-info-circle"></i> Basic Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Name Field -->
+                <div class="mb-3">
+                    <label for="id_name" class="form-label">Name</label>
+                    <input type="text" class="form-control form-control-sm" id="id_name" name="name" value="{{ form.name.value|default:'' }}" required>
+                    <div class="invalid-feedback">Please provide a valid name.</div>
+                </div>
+
+                <!-- IF Code Field -->
+                <div class="mb-3">
+                    <label for="id_if_code" class="form-label">IF Code</label>
+                    <input type="text" class="form-control form-control-sm" id="id_if_code" name="if_code" value="{{ form.if_code.value|default:'' }}" required>
+                    <div class="invalid-feedback">Please provide a valid IF code.</div>
+                </div>
+
+                <!-- ICE Code Field -->
+                <div class="mb-3">
+                    <label for="id_ice_code" class="form-label">ICE Code</label>
+                    <input type="text" class="form-control form-control-sm" id="id_ice_code" name="ice_code" value="{{ form.ice_code.value|default:'' }}" required>
+                    <div class="invalid-feedback">ICE code must be exactly 15 digits.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 2: Registration Details -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-file-alt"></i> Registration Details
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- RC Code Field -->
+                <div class="mb-3">
+                    <label for="id_rc_code" class="form-label">RC Code</label>
+                    <input type="text" class="form-control form-control-sm" id="id_rc_code" name="rc_code" value="{{ form.rc_code.value|default:'' }}">
+                    <div class="invalid-feedback">Please provide a valid RC code.</div>
+                </div>
+
+                <!-- RC Center Field -->
+                <div class="mb-3">
+                    <label for="id_rc_center" class="form-label">RC Center</label>
+                    <input type="text" class="form-control form-control-sm" id="id_rc_center" name="rc_center" value="{{ form.rc_center.value|default:'' }}">
+                    <div class="invalid-feedback">Please provide a valid RC center.</div>
+                </div>
+
+                <!-- Accounting Code Field -->
+                <div class="mb-3">
+                    <label for="id_accounting_code" class="form-label">Accounting Code</label>
+                    <input type="text" class="form-control form-control-sm" id="id_accounting_code" name="accounting_code" value="{{ form.accounting_code.value|default:'' }}" required>
+                    <div class="invalid-feedback">Please provide a valid accounting code.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 3: Additional Information -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h5 class="card-title mb-0">
+                    <i class="fas fa-cogs"></i> Additional Information
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Is Energy Field -->
+                <div class="mb-3">
+                    <label for="id_is_energy" class="form-label">Is Energy?</label>
+                    <select class="form-select form-select-sm" id="id_is_energy" name="is_energy">
+                        <option value="True" {% if form.is_energy.value %}selected{% endif %}>Yes</option>
+                        <option value="False" {% if not form.is_energy.value %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+
+                <!-- Service Field -->
+                <div class="mb-3">
+                    <label for="id_service" class="form-label">Service</label>
+                    <input type="text" class="form-control form-control-sm" id="id_service" name="service" value="{{ form.service.value|default:'' }}">
+                    <div class="invalid-feedback">Please provide a valid service description.</div>
+                </div>
+
+                <!-- Delay Convention Field -->
+                <div class="mb-3">
+                    <label for="id_delay_convention" class="form-label">Delay Convention (Days)</label>
+                    <input type="number" class="form-control form-control-sm" id="id_delay_convention" name="delay_convention" value="{{ form.delay_convention.value|default:'' }}" required>
+                    <div class="invalid-feedback">Please provide a valid delay convention (0, 30, 60, 90, or 120).</div>
+                </div>
+
+                <!-- Is Regulated Field -->
+                <div class="mb-3">
+                    <label for="id_is_regulated" class="form-label">Is Regulated?</label>
+                    <select class="form-select form-select-sm" id="id_is_regulated" name="is_regulated">
+                        <option value="True" {% if form.is_regulated.value %}selected{% endif %}>Yes</option>
+                        <option value="False" {% if not form.is_regulated.value %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+
+                <!-- Regulation File Path Field -->
+                <div class="mb-3">
+                    <label for="id_regulation_file_path" class="form-label">Regulation File</label>
+                    <input type="file" class="form-control form-control-sm" id="id_regulation_file_path" name="regulation_file_path" value="{{ form.regulation_file_path.value|default:'' }}">
+                    <div class="invalid-feedback">Please upload a valid regulation file.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Save Button -->
+        <button type="submit" class="btn btn-primary" id="saveButton" disabled>
+            <i class="fas fa-save"></i> Save
+        </button>
+        <a href="{% url 'supplier-list' %}" class="btn btn-secondary">
+            <i class="fas fa-times"></i> Cancel
+        </a>
+    </form>
+</div>
+
+<!-- Include FontAwesome for Icons -->
+<script src="https://kit.fontawesome.com/your-fontawesome-kit.js" crossorigin="anonymous"></script>
+
+<!-- JavaScript for Real-Time Validation and Save Button Control -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const form = document.getElementById('supplierForm');
+        const saveButton = document.getElementById('saveButton');
+
+        // Function to check if all required fields are valid
+        function isFormValid() {
+            const requiredFields = form.querySelectorAll('input[required], select[required]');
+            let isValid = true;
+            requiredFields.forEach(field => {
+                if (!field.checkValidity()) {
+                    isValid = false;
+                }
+            });
+            return isValid;
+        }
+
+        // Function to update the save button state
+        function updateSaveButton() {
+            if (isFormValid()) {
+                saveButton.disabled = false;
+            } else {
+                saveButton.disabled = true;
+            }
+        }
+
+        // Add blur event listeners for real-time validation
+        const fields = [
+            'name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 
+            'accounting_code', 'service', 'delay_convention', 'regulation_file_path'
+        ];
+        fields.forEach(field => {
+            const input = document.getElementById(`id_${field}`);
+            input.addEventListener('blur', function () {
+                if (!input.checkValidity()) {
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                    input.classList.add('is-valid');
+                }
+                updateSaveButton();
+            });
+        });
+
+        // Custom validation for ICE Code (must be exactly 15 digits)
+        const iceCodeInput = document.getElementById('id_ice_code');
+        iceCodeInput.addEventListener('blur', function () {
+            if (iceCodeInput.value.length !== 15) {
+                iceCodeInput.classList.add('is-invalid');
+            } else {
+                iceCodeInput.classList.remove('is-invalid');
+                iceCodeInput.classList.add('is-valid');
+            }
+            updateSaveButton();
+        });
+
+        // Custom validation for Delay Convention (must be 0, 30, 60, 90, or 120)
+        const delayConventionInput = document.getElementById('id_delay_convention');
+        delayConventionInput.addEventListener('blur', function () {
+            const validValues = [0, 30, 60, 90, 120];
+            if (!validValues.includes(parseInt(delayConventionInput.value))) {
+                delayConventionInput.classList.add('is-invalid');
+            } else {
+                delayConventionInput.classList.remove('is-invalid');
+                delayConventionInput.classList.add('is-valid');
+            }
+            updateSaveButton();
+        });
+
+        // Initial check for save button state
+        updateSaveButton();
+    });
+</script>
 {% endblock %}

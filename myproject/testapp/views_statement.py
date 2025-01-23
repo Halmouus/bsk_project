@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, get_supplier_balance
+from .models import Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, VATDeclaration, get_supplier_balance
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -207,7 +207,7 @@ class CalendarView(View):
             'calendar': calendar_data,
             'bank_accounts': bank_accounts,
             'selected_banks': selected_bank_ids,
-            'pending_forecasts': pending_forecasts,  # Add this to context
+            'pending_forecasts': pending_forecasts,
             'year': year,
             'month': month
         }
@@ -245,7 +245,7 @@ class CalendarView(View):
                 date__lt=start_of_month,
                 date__gte=timezone.now().date(),
                 is_processed=False,
-                source_type__in=['supplier_check', 'contract_domiciliation']
+                source_type__in=['supplier_check', 'contract_domiciliation', 'vat_declaration']
             )
             
             # Calculate cumulative impacts from prior months
@@ -308,6 +308,20 @@ class CalendarView(View):
                         source_type__in=['supplier_check', 'contract_domiciliation']
                     )
 
+                    vat_declaration_forecasts = ForecastStatement.objects.filter(
+                        bank_account=bank,
+                        date=current_date,
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type="vat_declaration"
+                    )
+                    print(f"\n=== VAT Forecast Query for {current_date} ===")
+                    print(f"Bank: {bank.account_number}")
+                    print(f"SQL Query: {vat_declaration_forecasts.query}")
+                    print(f"Found forecasts: {vat_declaration_forecasts.count()}")
+                    for f in vat_declaration_forecasts:
+                        print(f"VAT forecast: credit={f.credit}, debit={f.debit}")
+
                     # Calculate receipt forecast impact for this day
                     day_receipt_impact = sum(
                         (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
@@ -320,9 +334,15 @@ class CalendarView(View):
                         for f in supplier_payment_forecasts
                     )
 
+                    # Calculate VAT declaration impact for this day
+                    day_vat_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in vat_declaration_forecasts
+                    )
+
                     # Update cumulative impacts
                     bank_forecasts[bank.id] += day_receipt_impact
-                    supplier_forecasts[bank.id] += day_payment_impact
+                    supplier_forecasts[bank.id] += day_payment_impact + day_vat_impact
 
                     # Calculate total forecasted balance
                     forecasted_balance = actual_balance + bank_forecasts[bank.id] + supplier_forecasts[bank.id]
@@ -363,8 +383,14 @@ class CalendarView(View):
                             'label': f.label,
                             'source_type': f.source_type
                         } for f in supplier_payment_forecasts] if supplier_payment_forecasts else [],
+                        'vat_payments': [{
+                            'amount': float(f.debit),
+                            'label': f.label,
+                            'source_type': "vat_declaration"
+                        } for f in vat_declaration_forecasts if f.debit] if vat_declaration_forecasts else [],
                         'has_forecasts': bool(expected_payments or discounted_receipts),
                         'has_payment_forecasts': supplier_payment_forecasts.exists(),
+                        'has_vat_forecasts': vat_declaration_forecasts.exists(),
                         'has_contract_forecasts': bool(supplier_payment_forecasts.filter(source_type='contract_domiciliation'))
                     })
 
@@ -440,6 +466,11 @@ class CalendarView(View):
                 if contract and contract.is_domiciled and not contract.domiciliation_suspended:
                     filtered_forecasts.append(forecast)
                     print(f"Added contract domiciliation forecast: {forecast.label}")
+            elif forecast.source_type == 'vat_declaration':
+                vat_declaration = VATDeclaration.objects.filter(id=forecast.source_id).first()
+                if vat_declaration and vat_declaration.status == 'declared':
+                    filtered_forecasts.append(forecast)
+                    print(f"Added VAT declaration forecast: {forecast.label}")
 
         expected = Decimal('0.00')
         discounted = Decimal('0.00')
@@ -451,7 +482,7 @@ class CalendarView(View):
             print(f"Source type: {forecast.source_type}")
             print(f"Source ID: {forecast.source_id}")
             
-            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation':
+            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation' or forecast.source_type == 'vat_declaration':
                 amount = forecast.debit or Decimal('0.00')
                 payments += amount
                 print(f"Added to payments total: {payments}")
@@ -747,6 +778,36 @@ class PendingForecastsView(View):
                     
                     forecasts_data.append(forecast_data)
 
+                elif forecast.source_type == 'vat_declaration':
+                    print("\n=== Processing VAT Declaration Forecast ===")
+                    try:
+                        declaration = VATDeclaration.objects.get(id=forecast.source_id)
+                        print(f"Declaration: {declaration.period_month}/{declaration.period_year}")
+                        
+                        forecast_data = {
+                            'type': 'VAT Payment',
+                            'payment_type': 'VAT Declaration',
+                            'number': forecast.reference,
+                            'status': declaration.status,
+                            'status_display': declaration.get_status_display(),
+                            'source_id': str(declaration.id),
+                            'bank': bank.get_bank_display(),
+                            'amount': float(forecast.debit or 0),
+                            'due_date': forecast.date.strftime('%Y-%m-%d'),
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                            'declaration': {
+                                'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                                'ref': forecast.reference,
+                                'invoiced_vat': float(declaration.total_invoiced_vat),
+                                'deducted_vat': float(declaration.total_deducted_vat)
+                            }
+                        }
+                        forecasts_data.append(forecast_data)
+                        print(f"Added VAT forecast: {forecast.debit}")
+                    except VATDeclaration.DoesNotExist:
+                        print(f"Declaration {forecast.source_id} not found")
+                        continue
+                    
                 # Get receipt first
                 receipt = None
                 if forecast.source_type == 'checkreceipt':
@@ -1005,3 +1066,4 @@ class ContractPaymentActionView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=400)
+        
