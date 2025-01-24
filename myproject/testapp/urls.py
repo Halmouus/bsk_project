@@ -74,7 +74,7 @@ from .views_transfer import (
 )
 
 from .views_vat import (
-    VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
+    VATDeductionDetailsView, VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
     VATDeclarationProcessView, VATDeclarationDeclareView, VATDeclarationPayView, 
     VATPendingDeclarationsView, VATForecastView
 )
@@ -291,6 +291,9 @@ urlpatterns = [
     path('vat/pending/', VATPendingDeclarationsView.as_view(), name='vat-pending'),
     path('vat/forecast/', VATForecastView.as_view(), name='vat-forecast'),
     path('vat/forecast/<int:year>/<int:month>/', VATForecastView.as_view(), name='vat-forecast-period'),
+    path('vat/<uuid:declaration_id>/deductions/', 
+        VATDeductionDetailsView.as_view(), 
+        name='vat-deduction-details'),  
             
 ]
 

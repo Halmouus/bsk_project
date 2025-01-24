@@ -303,6 +303,61 @@
                             </div>
                         </div>
                     </div>
+                    {% elif entry.type == 'VAT_PAYMENT' %}
+                    <div class="row">
+                        <!-- VAT Declaration Details -->
+                        <div class="col-md-6">
+                            <h6 class="mb-3">Declaration Details</h6>
+                            <div class="detail-item">
+                                <div class="detail-label">
+                                    <i class="fas fa-calendar me-2"></i>Period
+                                </div>
+                                <div class="detail-value">{{ entry.declaration.period }}</div>
+                            </div>
+                            <div class="detail-item mt-3">
+                                <div class="detail-label">
+                                    <i class="fas fa-calendar-check me-2"></i>Payment Details
+                                </div>
+                                <div class="detail-value">
+                                    <div class="mb-2">Due: {{ entry.declaration.due_date }}</div>
+                                    <div>Paid: {{ entry.declaration.payment_date }}</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- VAT Amounts -->
+                        <div class="col-md-6">
+                            <h6 class="mb-3">VAT Amounts</h6>
+                            <div class="detail-item">
+                                <div class="detail-label">
+                                    <i class="fas fa-plus me-2"></i>Invoiced VAT
+                                </div>
+                                <div class="detail-value text-success">
+                                    {{ entry.declaration.invoiced_vat|format_balance }}
+                                </div>
+                            </div>
+                            <div class="detail-item mt-3">
+                                <div class="detail-label">
+                                    <i class="fas fa-minus me-2"></i>Deducted VAT
+                                </div>
+                                <div class="detail-value text-danger">
+                                    {{ entry.declaration.deducted_vat|format_balance }}
+                                </div>
+                            </div>
+                            <div class="detail-item mt-3">
+                                <div class="detail-label">
+                                    <i class="fas fa-equals me-2"></i>Net VAT
+                                </div>
+                                <div class="detail-value {% if entry.debit %}text-danger{% else %}text-success{% endif %}">
+                                    {% if entry.debit %}
+                                        {{ entry.debit|format_balance }}
+                                    {% else %}
+                                        {{ entry.credit|format_balance }}
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                     <div class="row">
                         <div class="col-md-6">

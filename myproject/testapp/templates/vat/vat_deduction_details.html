@@ -1,0 +1,310 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+
+{% block title %}VAT Deduction Details{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2>
+                <i class="fas fa-percent me-2"></i>
+                VAT Deduction Details for {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
+            </h2>
+            <p class="text-muted mb-0">Due: {{ declaration.due_date|date:"Y-m-d" }}</p>
+        </div>
+        <div>
+            <a href="{% url 'vat-detail' declaration.id %}" class="btn btn-outline-secondary">
+                <i class="fas fa-arrow-left me-2"></i>Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters section -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="filterForm" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Supplier</label>
+                    <input type="text" class="form-control" id="supplierFilter" placeholder="Search supplier...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Invoice Reference</label>
+                    <input type="text" class="form-control" id="invoiceFilter" placeholder="Search reference...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fiscal Label</label>
+                    <input type="text" class="form-control" id="fiscalFilter" placeholder="Search fiscal label...">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">VAT Rate</label>
+                    <select class="form-control" id="vatRateFilter">
+                        <option value="">All</option>
+                        <option value="20">20</option>
+                        <option value="14">14</option>
+                        <option value="10">10</option>
+                        <option value="7">7</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Payment Type</label>
+                    <select class="form-control" id="paymentTypeFilter">
+                        <option value="">All</option>
+                        <option value="2">Check</option>
+                        <option value="3">Direct Debit</option>
+                        <option value="5">LCN</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Invoice Date Range</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control" id="invoiceStartDate" placeholder="From">
+                        <input type="date" class="form-control" id="invoiceEndDate" placeholder="To">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Payment Date Range</label>
+                    <div class="input-group">
+                        <input type="date" class="form-control" id="paymentStartDate" placeholder="From">
+                        <input type="date" class="form-control" id="paymentEndDate" placeholder="To">
+                    </div>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <div class="btn-group w-100">
+                        <button type="button" class="btn btn-secondary" id="resetFilters">
+                            <i class="fas fa-undo me-2"></i>Reset
+                        </button>
+                        <button type="button" class="btn btn-success" id="exportData">
+                            <i class="fas fa-download me-2"></i>Export
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table" id="deductionsTable">
+                    <thead>
+                        <tr>
+                            <th>Order</th>
+                            <th>Payment Date</th>
+                            <th>Payment Code</th>
+                            <th>Supplier</th>
+                            <th>IF Code</th>
+                            <th>ICE Code</th>
+                            <th>Invoice Date</th>
+                            <th>Invoice Ref</th>
+                            <th>VAT Rate</th>
+                            <th>Fiscal Label</th>
+                            <th class="text-end">Raw Amount</th>
+                            <th class="text-end">VAT Amount</th>
+                            <th class="text-end">Net Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for detail in details %}
+                            <tr {% if detail.is_credit_note %}class="table-danger"{% endif %}>
+                                <td>{{ detail.order }}</td>
+                                <td>{{ detail.payment_date|date:"Y-m-d" }}</td>
+                                <td>{{ detail.payment_code }}</td>
+                                <td>{{ detail.supplier_name }}</td>
+                                <td>{{ detail.if_code }}</td>
+                                <td>{{ detail.ice_code }}</td>
+                                <td>{{ detail.invoice_date|date:"Y-m-d" }}</td>
+                                <td>
+                                    <a href="{% url 'invoice-update' detail.invoice_id %}" target="_blank">
+                                        {{ detail.invoice_ref }}
+                                    </a>
+                                </td>
+                                <td>{{ detail.vat_rate }}</td>
+                                <td>{{ detail.fiscal_label }}</td>
+                                <td class="text-end">{{ detail.raw_amount|format_balance }}</td>
+                                <td class="text-end">{{ detail.vat_amount|format_balance }}</td>
+                                <td class="text-end">{{ detail.net_amount|format_balance }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="11" class="text-center">No deductions found</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-primary">
+                            <th colspan="10" class="text-end">Totals:</th>
+                            <th class="text-end">{{ total_raw|format_balance }}</th>
+                            <th class="text-end">{{ total_vat|format_balance }}</th>
+                            <th class="text-end">{{ total_net|format_balance }}</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .table th {
+        background: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+    
+    .table-danger td {
+        color: #dc3545;
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const filterForm = document.getElementById('filterForm');
+        const table = document.getElementById('deductionsTable');
+        const tbody = table.querySelector('tbody');
+    
+        // Initialize date pickers with default values
+        const today = new Date();
+        const thirtyDaysAgo = new Date(today);
+        thirtyDaysAgo.setDate(today.getDate() - 30);
+    
+        // Filter function
+        function filterTable() {
+            const filters = {
+                supplier: document.getElementById('supplierFilter').value.toLowerCase(),
+                invoice: document.getElementById('invoiceFilter').value.toLowerCase(),
+                fiscal: document.getElementById('fiscalFilter').value.toLowerCase(),
+                vatRate: document.getElementById('vatRateFilter').value,
+                paymentType: document.getElementById('paymentTypeFilter').value,
+                invoiceStartDate: document.getElementById('invoiceStartDate').value,
+                invoiceEndDate: document.getElementById('invoiceEndDate').value,
+                paymentStartDate: document.getElementById('paymentStartDate').value,
+                paymentEndDate: document.getElementById('paymentEndDate').value
+            };
+    
+            // Update totals
+            let filteredTotalRaw = 0;
+            let filteredTotalVat = 0;
+            let filteredTotalNet = 0;
+    
+            Array.from(tbody.rows).forEach(row => {
+                const cells = row.cells;
+                const values = {
+                    paymentDate: cells[1].textContent,
+                    paymentCode: cells[2].textContent,
+                    supplier: cells[3].textContent.toLowerCase(),
+                    invoice: cells[7].textContent.toLowerCase(),
+                    vatRate: cells[8].textContent.replace('%', ''),
+                    fiscal: cells[9].textContent.toLowerCase(),
+                    invoiceDate: cells[6].textContent,
+                    raw: parseFloat(cells[10].textContent.replace(/[^\d.-]/g, '')),
+                    vat: parseFloat(cells[11].textContent.replace(/[^\d.-]/g, '')),
+                    net: parseFloat(cells[12].textContent.replace(/[^\d.-]/g, ''))
+                };
+    
+                const matches = (
+                    (!filters.supplier || values.supplier.includes(filters.supplier)) &&
+                    (!filters.invoice || values.invoice.includes(filters.invoice)) &&
+                    (!filters.fiscal || values.fiscal.includes(filters.fiscal)) &&
+                    (!filters.vatRate || values.vatRate === filters.vatRate) &&
+                    (!filters.paymentType || values.paymentCode === filters.paymentType) &&
+                    (!filters.invoiceStartDate || values.invoiceDate >= filters.invoiceStartDate) &&
+                    (!filters.invoiceEndDate || values.invoiceDate <= filters.invoiceEndDate) &&
+                    (!filters.paymentStartDate || values.paymentDate >= filters.paymentStartDate) &&
+                    (!filters.paymentEndDate || values.paymentDate <= filters.paymentEndDate)
+                );
+    
+                row.style.display = matches ? '' : 'none';
+    
+                if (matches) {
+                    filteredTotalRaw += values.raw;
+                    filteredTotalVat += values.vat;
+                    filteredTotalNet += values.net;
+                }
+            });
+    
+            // Update footer totals
+            const tfoot = table.querySelector('tfoot');
+            if (tfoot) {
+                const cells = tfoot.rows[0].cells;
+                cells[8].textContent = formatNumber(filteredTotalRaw);
+                cells[9].textContent = formatNumber(filteredTotalVat);
+                cells[10].textContent = formatNumber(filteredTotalNet);
+            }
+        }
+    
+        // Format number helper
+        function formatNumber(num) {
+            return new Intl.NumberFormat('fr-MA', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }).format(num);
+        }
+    
+        // Add event listeners to all filter inputs
+        filterForm.querySelectorAll('input, select').forEach(element => {
+            element.addEventListener('input', filterTable);
+            element.addEventListener('change', filterTable);
+        });
+    
+        // Reset filters
+        document.getElementById('resetFilters').addEventListener('click', function() {
+            filterForm.reset();
+            filterTable();
+        });
+    
+        // Export function
+        document.getElementById('exportData').addEventListener('click', function() {
+            const visibleRows = Array.from(tbody.rows).filter(row => 
+                row.style.display !== 'none'
+            );
+    
+            const headers = [
+                'Order',
+                'Payment Date',
+                'Payment Code',
+                'Supplier',
+                'IF Code',
+                'ICE Code',
+                'Invoice Date',
+                'Invoice Ref',
+                'VAT Rate',
+                'Fiscal Label',
+                'Raw Amount',
+                'VAT Amount',
+                'Net Amount'
+            ];
+    
+            let csvContent = headers.join(',') + '\n';
+    
+            visibleRows.forEach(row => {
+                const values = Array.from(row.cells).map(cell => {
+                    // Remove commas and quotes from text
+                    let value = cell.textContent.trim().replace(/"/g, '""');
+                    if (value.includes(',')) {
+                        value = `"${value}"`;
+                    }
+                    return value;
+                });
+                csvContent += values.join(',') + '\n';
+            });
+    
+            // Create download link
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', `vat_deductions_${new Date().toISOString().slice(0,10)}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        });
+    
+        // Initialize filtering
+        filterTable();
+    });
+</script>   
+{% endblock %}

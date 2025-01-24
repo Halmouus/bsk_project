@@ -4001,7 +4001,6 @@ class AccountingEntry(models.Model):
         print("\n=== Getting VAT Accounting Entries ===")
         declarations = VATDeclaration.objects.filter(
             status=VATDeclaration.PAID,
-            payment_date__range=(start_date, end_date) if start_date and end_date else (None, None)
         ).select_related('forecast')
 
         print(f"Found {declarations.count()} paid declarations")
@@ -4092,32 +4091,33 @@ class AccountingEntry(models.Model):
             
             # Create entries for each VAT rate
             for rate, amount in by_rate.items():
-                entries.extend([
-                    {
-                        'date': period_end,
-                        'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
-                        'debit': amount,
-                        'credit': None,
-                        'account_code': config.deducted_vat_account,
-                        'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': config.journal,
-                        'source_type': 'vat_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': period_end,
-                        'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
-                        'debit': None,
-                        'credit': amount,
-                        'account_code': f"345{int(rate):02d}",  # VAT rate specific account
-                        'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': config.journal,
-                        'source_type': 'vat_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
+                if rate > 0:
+                    entries.extend([
+                        {
+                            'date': period_end,
+                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                            'debit': amount,
+                            'credit': None,
+                            'account_code': config.deducted_vat_account,
+                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                            'journal_code': config.journal,
+                            'source_type': 'vat_declaration',
+                            'source_id': declaration.id,
+                            'pair_index': len(entries) // 2
+                        },
+                        {
+                            'date': period_end,
+                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                            'debit': None,
+                            'credit': amount,
+                            'account_code': f"345{int(rate):02d}",  # VAT rate specific account
+                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                            'journal_code': config.journal,
+                            'source_type': 'vat_declaration',
+                            'source_id': declaration.id,
+                            'pair_index': len(entries) // 2
+                        }
+                    ])
 
         # Filter entries
         if start_date or end_date:

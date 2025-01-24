@@ -16,9 +16,13 @@
            <p class="text-muted mb-0">Due: {{ declaration.due_date|date:"Y-m-d" }}</p>
        </div>
        <div class="d-flex gap-2">
+        
            <a href="{% url 'vat-list' %}" class="btn btn-outline-secondary">
                <i class="fas fa-arrow-left me-2"></i>Back
            </a>
+           <a href="{% url 'vat-deduction-details' declaration.id %}" class="btn btn-outline-primary">
+                <i class="fas fa-list me-2"></i>View Deduction Details
+            </a>
            {% if declaration.status == 'draft' %}
                 <button class="btn btn-primary process-vat" data-declaration-id="{{ declaration.id }}">
                     <i class="fas fa-cogs me-2"></i>Process

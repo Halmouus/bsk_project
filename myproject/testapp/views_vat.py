@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import traceback
 from django.forms import ValidationError
 from django.views import View
@@ -8,9 +8,9 @@ from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils import timezone
 from decimal import Decimal
-from .models import ForecastStatement, VATConfiguration, VATDeclaration, BankAccount
+from .models import Check, DirectDebit, ForecastStatement, VATConfiguration, VATDeclaration, BankAccount
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Sum
 
 class VATListView(View):
     def get(self, request):
@@ -378,3 +378,178 @@ class VATForecastView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=400)
+        
+class VATDeductionDetailsView(View):
+    def get(self, request, declaration_id):
+        """Display detailed list of VAT deductions"""
+        print(f"\n=== VAT Deduction Details View {declaration_id} ===")
+        
+        declaration = get_object_or_404(VATDeclaration, id=declaration_id)
+        consolidated_details = {}  # Key will be (supplier_id, invoice_id, vat_rate)
+        
+        # Get all deduction details
+        deduction_details = declaration.details.exclude(
+            source_type='receipt'
+        ).select_related(
+            'declaration'
+        ).order_by('source_type', '-vat_amount')
+        
+        print(f"Found {deduction_details.count()} deduction details")
+        
+        total_raw = Decimal('0.00')
+        total_vat = Decimal('0.00')
+        total_net = Decimal('0.00')
+        
+        for detail in deduction_details:
+            print(f"\nProcessing detail: {detail.source_type} - {detail.source_id}")
+            print(f"VAT amount from detail: {detail.vat_amount}")
+            print(f"Original amount from detail: {detail.original_amount}")
+            
+            payment = None
+            if detail.source_type == 'invoice_check':
+                payment = Check.objects.select_related(
+                    'cause', 'beneficiary'
+                ).get(id=detail.source_id)
+                payment_code = '2'
+                payment_date = payment.paid_at
+                invoice = payment.cause
+                supplier = payment.beneficiary
+                payment_amount = payment.amount
+                
+            elif detail.source_type == 'invoice_direct_debit':
+                payment = DirectDebit.objects.select_related(
+                    'invoice__invoice', 'contract__supplier'
+                ).get(id=detail.source_id)
+                payment_code = '3'
+                payment_date = payment.processed_date
+                invoice = payment.invoice.invoice
+                supplier = payment.contract.supplier
+                payment_amount = payment.amount
+            
+            if payment:
+                print(f"Payment found: {payment.__class__.__name__} {payment.id}")
+                print(f"Payment amount: {payment_amount}")
+                
+                # Get all VAT details for this payment
+                vat_details = invoice.calculate_payment_vat(payment_amount)
+                print(f"VAT details: {vat_details}")
+                
+                # Process each VAT rate
+                for rate, amounts in vat_details.items():
+                    if rate == detail.vat_rate:  # Only process matching VAT rate
+                        key = (supplier.id, invoice.id, rate)
+                        
+                        if key not in consolidated_details:
+                            # Check if invoice is fully paid in this period
+                            period_start = declaration.due_date - timedelta(days=30)
+                            period_end = declaration.due_date
+                            
+                            print(f"\nChecking payments in period {period_start} to {period_end}")
+                            
+                            # Sum all types of payments
+                            checks_total = invoice.check_allocations.filter(
+                                payment__paid_at__range=(period_start, period_end)
+                            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+                            
+                            direct_debits_total = DirectDebit.objects.filter(
+                                invoice__invoice=invoice,
+                                processed_date__range=(period_start, period_end)
+                            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+                            
+                            total_paid = checks_total + direct_debits_total
+                            print(f"Total paid in period: {total_paid}")
+                            print(f"Amount available: {invoice.amount_available_for_payment}")
+                            
+                            is_fully_paid = total_paid >= invoice.amount_available_for_payment
+                            
+                            # Get fiscal labels for this VAT rate
+                            fiscal_labels = set(
+                                product.product.fiscal_label 
+                                for product in invoice.products.filter(
+                                    vat_rate=rate
+                                ).select_related('product')
+                            )
+                            
+                            consolidated_details[key] = {
+                                'payment_date': payment_date,
+                                'payment_code': payment_code,
+                                'supplier_name': supplier.name,
+                                'if_code': supplier.if_code,
+                                'ice_code': supplier.ice_code,
+                                'invoice_date': invoice.date,
+                                'invoice_ref': invoice.ref,
+                                'invoice_id': invoice.id,
+                                'vat_rate': rate,
+                                'fiscal_labels': fiscal_labels,
+                                'raw_amount': amounts['amount'],
+                                'vat_amount': amounts['vat'],
+                                'net_amount': amounts['amount'] + amounts['vat'],
+                                'is_credit_note': False,
+                                'order': 1 if is_fully_paid else 2
+                            }
+                            print(f"Created new consolidated entry:")
+                            print(f"Raw amount: {amounts['amount']}")
+                            print(f"VAT amount: {amounts['vat']}")
+                            
+                        else:
+                            # Update amounts for existing entry
+                            consolidated_details[key]['raw_amount'] += amounts['amount']
+                            consolidated_details[key]['vat_amount'] += amounts['vat']
+                            consolidated_details[key]['net_amount'] += amounts['amount'] + amounts['vat']
+                            
+                            # Update payment date if this one is more recent
+                            if payment_date > consolidated_details[key]['payment_date']:
+                                consolidated_details[key]['payment_date'] = payment_date
+                                
+                            print(f"Updated existing entry:")
+                            print(f"New raw amount: {consolidated_details[key]['raw_amount']}")
+                            print(f"New VAT amount: {consolidated_details[key]['vat_amount']}")
+                
+                # Handle credit notes
+                if detail.credit_amount > 0:
+                    key = (supplier.id, invoice.id, detail.vat_rate)
+                    credit_key = (key[0], key[1], key[2], 'credit')
+                    
+                    if key in consolidated_details:
+                        consolidated_details[credit_key] = consolidated_details[key].copy()
+                        credit_vat = detail.credit_amount * (detail.vat_rate / Decimal('100.00'))
+                        
+                        consolidated_details[credit_key].update({
+                            'raw_amount': -detail.credit_amount,
+                            'vat_amount': -credit_vat,
+                            'net_amount': -(detail.credit_amount + credit_vat),
+                            'is_credit_note': True
+                        })
+                        print(f"Added credit note entry:")
+                        print(f"Raw amount: {-detail.credit_amount}")
+                        print(f"VAT amount: {-credit_vat}")
+        
+        # Convert consolidated details to list and calculate totals
+        details = []
+        for detail in consolidated_details.values():
+            # Join fiscal labels with separator
+            detail['fiscal_label'] = ' - '.join(sorted(detail['fiscal_labels']))
+            del detail['fiscal_labels']
+            
+            details.append(detail)
+            total_raw += detail['raw_amount']
+            total_vat += detail['vat_amount']
+            total_net += detail['net_amount']
+
+        # Sort by order first, then by supplier name and invoice ref
+        details.sort(key=lambda x: (x['order'], x['supplier_name'], x['invoice_ref']))
+        
+        print(f"\nFinal totals:")
+        print(f"Raw: {total_raw}")
+        print(f"VAT: {total_vat}")
+        print(f"Net: {total_net}")
+        
+        context = {
+            'declaration': declaration,
+            'details': details,
+            'total_raw': total_raw,
+            'total_vat': total_vat,
+            'total_net': total_net
+        }
+        
+        return render(request, 'vat/vat_deduction_details.html', context)
