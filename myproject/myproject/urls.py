@@ -17,9 +17,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.shortcuts import redirect
+from django.conf import settings
+from django.conf.urls.static import static
 from testapp.views_auth import login_view, logout_view, profile_view
-
-handler403 = 'testapp.views.custom_403'
+from testapp.views import change_language
+from django.conf.urls.i18n import i18n_patterns
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -27,4 +29,5 @@ urlpatterns = [
     path('testapp/', include('testapp.urls')),
     path('profile/', profile_view, name='profile'),
     path('logout/', logout_view, name='logout'),
-]
+    path('change_language/', change_language, name='change_language'),
+] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

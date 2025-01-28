@@ -1,8 +1,10 @@
 import calendar
+import os
+import uuid
 from django.db import models, transaction
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator
+from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator, FileExtensionValidator
 from .base import BaseModel
 from datetime import timedelta, datetime
 import datetime
@@ -19,7 +21,8 @@ from operator import itemgetter
 import traceback
 from dateutil.relativedelta import relativedelta
 from django.db.models.functions import Coalesce
-from django.db.models import Sum, Manager
+from django.db.models import Sum, Manager, Max
+from django.utils.translation import gettext_lazy as _
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +40,41 @@ MOROCCAN_BANKS = [
     ('ABM', 'Arab Bank Maroc'),
     ('CTB', 'Citibank Maghreb')
 ]
+
+INVOICE_TYPES = [
+    ('ENERGY', 'Energy'),
+    ('INSURANCE', 'Insurance'),
+    ('LEASING', 'Leasing'),
+    ('UTILITIES', 'Water/Electricity'),
+    ('TELECOM', 'Phone/Internet'),
+    ('RENT', 'Rent'),
+    ('SERVICE', 'Services'),
+    ('OTHER', 'Other')
+]
+
+INVOICE_STATUS = [
+    ('ORIGINAL', 'Original'),
+    ('COPY', 'Copy')
+]
+
+def get_upload_path(instance, filename):
+    # Get current year
+    year = timezone.now().year
+    # Get model type (delivery/reception)
+    model_type = instance.__class__.__name__.lower()
+    # Clean filename
+    ext = filename.split('.')[-1]
+    new_name = f"{model_type}_{uuid.uuid4().hex[:8]}.{ext}"
+    # Important: Files must be saved under media directory
+    return f"documents/{model_type}/{year}/{new_name}"
+
+def validate_file_size(value):
+    """
+    Validate file size (5MB limit)
+    """
+    filesize = value.size
+    if filesize > 5 * 1024 * 1024:  # 5MB limit
+        raise ValidationError(_("The maximum file size that can be uploaded is 5MB"))
 
 class item(BaseModel):
     name = models.CharField(max_length=100)
@@ -111,8 +149,8 @@ class Profile(BaseModel):
 
 class Supplier(BaseModel):
 
-    numeric_validator = RegexValidator(r'^[0-9]*$', 'Only numeric characters are allowed.')
-    alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', 'Only alphanumeric characters are allowed.')
+    numeric_validator = RegexValidator(r'^[0-9]*$', _('Only numeric characters are allowed.'))
+    alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', _('Only alphanumeric characters are allowed.'))
 
     name = models.CharField(max_length=100, unique=True, validators=[alphanumeric_validator])
     if_code = models.CharField(max_length=25, unique=True, validators=[numeric_validator])
@@ -128,22 +166,22 @@ class Supplier(BaseModel):
     delay_check = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],
-        help_text="Number of days to delay check payment forecasts after due date"
+        help_text=_("Number of days to delay check payment forecasts after due date")
     )
     delay_lcn = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],
-        help_text="Number of days to delay LCN payment forecasts after due date"
+        help_text=_("Number of days to delay LCN payment forecasts after due date")
     )
 
     def clean(self):
         super().clean()
         # Ensure IF code is numeric
         if not self.if_code.isdigit():
-            raise ValidationError("IF code must be numeric.")
+            raise ValidationError(_("IF code must be numeric."))
         # Ensure ICE code has exactly 15 characters
         if len(self.ice_code) != 15:
-            raise ValidationError("ICE code must contain exactly 15 characters.")
+            raise ValidationError(_("ICE code must contain exactly 15 characters."))
     
     class Meta:
         constraints = [
@@ -209,12 +247,12 @@ class Product(BaseModel):
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, choices=[
     (0.00, '0%'), (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
 ])
-    expense_code = models.CharField(max_length=25, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
+    expense_code = models.CharField(max_length=25, validators=[RegexValidator(r'^[0-9]{5,}$', _('Expense code must be numeric and at least 5 characters long.'))])
     is_energy = models.BooleanField(default=False)
     fiscal_label = models.CharField(max_length=255, blank=False)
     non_deductible_vat = models.BooleanField(
         default=False,
-        help_text="If true, VAT from this product cannot be deducted"
+        help_text=_("If true, VAT from this product cannot be deducted")
     )
 
     class Meta:
@@ -222,6 +260,85 @@ class Product(BaseModel):
         ]
     def __str__(self):
         return self.name
+
+class DocumentBase(BaseModel):
+    """
+    Base model for documents with common fields and functionality
+    """
+    ref = models.CharField(max_length=50)
+    date = models.DateField()
+    supplier = models.ForeignKey(
+        'Supplier', 
+        on_delete=models.PROTECT,
+        related_name='%(class)s_notes',
+        null=True  # TEMPORARY
+    )
+    amount = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2, 
+        null=True, 
+        blank=True
+    )
+    document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True,
+        blank=True
+    )
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        abstract = True
+
+    def __str__(self):
+        return f"{self.get_document_type()} {self.ref} ({self.date})"
+
+    def get_document_type(self):
+        return self.__class__.__name__
+
+    @property
+    def document_url(self):
+        return self.document.url if self.document else None
+
+    @property
+    def filename(self):
+        return os.path.basename(self.document.name) if self.document else None
+
+    def clean(self):
+        super().clean()
+        if self.document and not self.document.name.lower().endswith('.pdf'):
+            raise ValidationError(_("Only PDF files are allowed."))
+
+class DeliveryNote(DocumentBase):
+    """Bon de livraison"""
+    class Meta:
+        ordering = ['-date', 'ref']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ref'],
+                name='unique_delivery_note_ref'
+            )
+        ]
+
+    def get_document_type(self):
+        return "BL"
+
+class ReceptionNote(DocumentBase):
+    """Bon de réception"""
+    class Meta:
+        ordering = ['-date', 'ref']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['ref'],
+                name='unique_reception_note_ref'
+            )
+        ]
+
+    def get_document_type(self):
+        return "BR"
 
 class Invoice(BaseModel):
     INVOICE_TYPE_CHOICES = [
@@ -237,6 +354,37 @@ class Invoice(BaseModel):
     payment_due_date = models.DateField(null=True, blank=True)
     exported_at = models.DateTimeField(null=True, blank=True)
     export_history = models.ManyToManyField('ExportRecord', blank=True, related_name='invoices')
+    invoice_type = models.CharField(
+        max_length=20,
+        choices=INVOICE_TYPES,
+        default='OTHER'
+    )
+    doc_status = models.CharField(
+        max_length=10,
+        choices=INVOICE_STATUS,
+        default='ORIGINAL'
+    )
+    special_index = models.IntegerField(null=True, blank=True)
+    document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True,
+        blank=True
+    )
+    delivery_notes = models.ManyToManyField(
+        DeliveryNote,
+        blank=True,
+        related_name='invoices'
+    )
+    reception_notes = models.ManyToManyField(
+        ReceptionNote,
+        blank=True,
+        related_name='invoices'
+    )
+
 
     PAYMENT_STATUS_CHOICES = [
         ('not_paid', 'Not Paid'),
@@ -265,12 +413,12 @@ class Invoice(BaseModel):
             MinValueValidator(Decimal('0.00')),
             MaxValueValidator(Decimal('100.00'))
         ],
-        help_text="Percentage of VAT that can be deducted"
+        help_text=_("Percentage of VAT that can be deducted")
     )
 
     non_deductible_vat = models.BooleanField(
         default=False,
-        help_text="If true, VAT from this invoice cannot be deducted"
+        help_text=_("If true, VAT from this invoice cannot be deducted")
     )
 
     original_invoice = models.ForeignKey(
@@ -282,6 +430,15 @@ class Invoice(BaseModel):
     )
 
     def save(self, *args, **kwargs):
+        if not self.special_index:
+            # Get the last index for this type this year
+            year = self.date.year
+            last_index = Invoice.objects.filter(
+                invoice_type=self.invoice_type,
+                date__year=year
+            ).aggregate(Max('special_index'))['special_index__max'] or 0
+            self.special_index = last_index + 1
+
         if self.type == 'invoice':  # Only calculate payment_due_date for regular invoices
             if not self.payment_due_date:
                 self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
@@ -289,6 +446,11 @@ class Invoice(BaseModel):
             self.payment_due_date = None
 
         super().save(*args, **kwargs)
+    
+    @property
+    def archive_index(self):
+        """Returns the formatted archive index"""
+        return f"{self.special_index}-{self.date.strftime('%y')}"
 
     class Meta:
         constraints = [
@@ -377,13 +539,65 @@ class Invoice(BaseModel):
     def clean(self):
         """Custom clean method to validate credit notes"""
         super().clean()
+        if self.pk:  # Only check if invoice exists
+            delivery_refs = self.delivery_notes.values_list('ref', flat=True)
+            if len(delivery_refs) != len(set(delivery_refs)):
+                raise ValidationError(_("Duplicate delivery notes are not allowed"))
+            
+            reception_refs = self.reception_notes.values_list('ref', flat=True)
+            if len(reception_refs) != len(set(reception_refs)):
+                raise ValidationError("Duplicate reception notes are not allowed")
+            
         if self.type == 'credit_note':
             if not self.original_invoice:
-                raise ValidationError("Credit note must reference an original invoice")
+                raise ValidationError(_("Credit note must reference an original invoice"))
             if self.original_invoice.type != 'invoice':
-                raise ValidationError("Cannot create credit note for another credit note")
+                raise ValidationError(_("Cannot create credit note for another credit note"))
             if self.supplier != self.original_invoice.supplier:
-                raise ValidationError("Credit note must have same supplier as original invoice")
+                raise ValidationError(_("Credit note must have same supplier as original invoice"))
+    
+    @property
+    def has_documents(self):
+        """Check if invoice has any documents attached"""
+        return bool(
+            self.document or 
+            self.delivery_notes.filter(document__isnull=False).exists() or
+            self.reception_notes.filter(document__isnull=False).exists()
+        )
+
+    def get_all_documents(self):
+        """Get all related documents"""
+        documents = []
+        if self.document:
+            documents.append({
+                'type': 'Invoice',
+                'ref': self.ref,
+                'date': self.date,
+                'url': self.document.url,
+                'filename': os.path.basename(self.document.name)
+            })
+        
+        for note in self.delivery_notes.all():
+            if note.document:
+                documents.append({
+                    'type': 'BL',
+                    'ref': note.ref,
+                    'date': note.date,
+                    'url': note.document.url,
+                    'filename': note.filename
+                })
+        
+        for note in self.reception_notes.all():
+            if note.document:
+                documents.append({
+                    'type': 'BR',
+                    'ref': note.ref,
+                    'date': note.date,
+                    'url': note.document.url,
+                    'filename': note.filename
+                })
+        
+        return sorted(documents, key=lambda x: x['date'], reverse=True)
 
     def get_credited_quantities(self):
         """Get total credited quantities per product"""
@@ -892,21 +1106,21 @@ class BankAccount(BaseModel):
     account_number = models.CharField(
         max_length=30,
         validators=[
-            MinLengthValidator(10, 'Account number must be at least 10 characters'),
-            RegexValidator(r'^\d+$', 'Only numeric characters allowed')
+            MinLengthValidator(10, _('Account number must be at least 10 characters')),
+            RegexValidator(r'^\d+$', _('Only numeric characters allowed'))
         ]
     )
     accounting_number = models.CharField(
         max_length=10,
         validators=[
-            MinLengthValidator(5, 'Accounting number must be at least 5 characters'),
-            RegexValidator(r'^\d+$', 'Only numeric characters allowed')
+            MinLengthValidator(5, _('Accounting number must be at least 5 characters')),
+            RegexValidator(r'^\d+$', _('Only numeric characters allowed'))
         ]
     )
     journal_number = models.CharField(
         max_length=2,
         validators=[
-            RegexValidator(r'^\d{2}$', 'Must be exactly 2 digits')
+            RegexValidator(r'^\d{2}$', _('Must be exactly 2 digits'))
         ]
     )
     city = models.CharField(max_length=100)
@@ -915,7 +1129,7 @@ class BankAccount(BaseModel):
 
     is_current = models.BooleanField(
         default=False,
-        help_text="Determines if accounting operations are recorded on this account"
+        help_text=_("Determines if accounting operations are recorded on this account")
     )
     bank_overdraft = models.DecimalField(
         max_digits=15,
@@ -923,7 +1137,7 @@ class BankAccount(BaseModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Maximum allowed overdraft amount"
+        help_text=_("Maximum allowed overdraft amount")
     )
     overdraft_fee = models.DecimalField(
         max_digits=5,
@@ -931,11 +1145,11 @@ class BankAccount(BaseModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Fee applied for overdraft usage"
+        help_text=_("Fee applied for overdraft usage")
     )
     has_check_discount_line = models.BooleanField(
         default=False,
-        help_text="Indicates if this account can discount checks"
+        help_text=_("Indicates if this account can discount checks")
     )
     check_discount_line_amount = models.DecimalField(
         max_digits=15,
@@ -943,11 +1157,11 @@ class BankAccount(BaseModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Maximum amount available for check discounting"
+        help_text=_("Maximum amount available for check discounting")
     )
     has_lcn_discount_line = models.BooleanField(
         default=False,
-        help_text="Indicates if this account can discount LCNs"
+        help_text=_("Indicates if this account can discount LCNs")
     )
     lcn_discount_line_amount = models.DecimalField(
         max_digits=15,
@@ -955,7 +1169,7 @@ class BankAccount(BaseModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Maximum amount available for LCN discounting"
+        help_text=_("Maximum amount available for LCN discounting")
     )
     stamp_fee_per_receipt = models.DecimalField(
         max_digits=10,
@@ -963,7 +1177,7 @@ class BankAccount(BaseModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(Decimal('0.00'))],
-        help_text="Stamp fee charged per presented receipt"
+        help_text=_("Stamp fee charged per presented receipt")
     )
 
     def get_available_check_discount_line(self):
@@ -1011,11 +1225,11 @@ class BankAccount(BaseModel):
         super().clean()
         if self.has_check_discount_line and not self.check_discount_line_amount:
             raise ValidationError({
-                'check_discount_line_amount': 'Amount required when check discount line is enabled'
+                'check_discount_line_amount': _('Amount required when check discount line is enabled')
             })
         if self.has_lcn_discount_line and not self.lcn_discount_line_amount:
             raise ValidationError({
-                'lcn_discount_line_amount': 'Amount required when LCN discount line is enabled'
+                'lcn_discount_line_amount': _('Amount required when LCN discount line is enabled')
             })
 
     class Meta:
@@ -1050,7 +1264,7 @@ class Checker(BaseModel):
     num_pages = models.IntegerField(choices=PAGE_CHOICES)
     index = models.CharField(
         max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{1,3}$', 'Must be 1 to 3 uppercase letters.')]
+        validators=[RegexValidator(r'^[A-Z]{1,3}$', _('Must be 1 to 3 uppercase letters.'))]
     )
     starting_page = models.IntegerField(validators=[MinValueValidator(1)])
     final_page = models.IntegerField(blank=True)
@@ -1103,9 +1317,9 @@ class Checker(BaseModel):
     def clean(self):
         if self.bank_account:
             if not self.bank_account.is_active:
-                raise ValidationError("Cannot create checker for inactive bank account")
+                raise ValidationError(_("Cannot create checker for inactive bank account"))
             if self.bank_account.account_type != 'national':
-                raise ValidationError("Can only create checkers for national accounts")
+                raise ValidationError(_("Can only create checkers for national accounts"))
         super().clean()
 
     def save(self, *args, **kwargs):
@@ -1251,7 +1465,7 @@ class Check(BaseModel):
         validators=[
             RegexValidator(
                 r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
+                _('Period must be in MM-YYYY format')
             )
         ]
     )
@@ -1376,26 +1590,26 @@ class Check(BaseModel):
         
 
         if not self.is_supplier_payment and not self.cause:
-            raise ValidationError("Invoice is required for direct invoice payments")
+            raise ValidationError(_("Invoice is required for direct invoice payments"))
             
         if self.is_supplier_payment and self.cause:
-            raise ValidationError("Supplier payments cannot specify a direct cause")
+            raise ValidationError(_("Supplier payments cannot specify a direct cause"))
             
         if self.cause and self.cause.supplier != self.beneficiary:
-            raise ValidationError("Invoice supplier must match check beneficiary")
+            raise ValidationError(_("Invoice supplier must match check beneficiary"))
             
         # Validate amount for invoice payments
         if not self.is_supplier_payment and self.cause:
             if self.amount > self.cause.amount_available_for_payment:
-                raise ValidationError("Amount exceeds invoice's available amount")
+                raise ValidationError(_("Amount exceeds invoice's available amount"))
             
         if self.paid_at and not self.delivered_at:
-            raise ValidationError("Check cannot be marked as paid before delivery")
+            raise ValidationError(_("Check cannot be marked as paid before delivery"))
 
         # Validate supplier payment allocation before printing
         if self.status == 'printed' and self.is_supplier_payment:
             if self.get_available_amount() > 0:
-                raise ValidationError("Supplier payment must be fully allocated before printing")
+                raise ValidationError(_("Supplier payment must be fully allocated before printing"))
             
         # Only allow edits to specific fields after draft status
         if self.pk and self.status not in ['draft', 'pending']:
@@ -1406,7 +1620,7 @@ class Check(BaseModel):
                     changed_fields.append(field)
             
             if changed_fields:
-                raise ValidationError(f"Cannot modify {', '.join(changed_fields)} after check is printed")
+                raise ValidationError(_(f"Cannot modify {', '.join(changed_fields)} after check is printed"))
 
         
         super().clean()
@@ -1456,7 +1670,7 @@ class Check(BaseModel):
     def receive(self, notes=''):
         """Mark check as physically received"""
         if self.status not in ['delivered', 'rejected']:
-            raise ValidationError("Only delivered or rejected checks can be received")
+            raise ValidationError(_("Only delivered or rejected checks can be received"))
         
         self.received_at = timezone.now()
         self.received_notes = notes
@@ -1471,11 +1685,11 @@ class Check(BaseModel):
         """
         if not self.can_be_replaced:
             raise ValidationError(
-                "Cannot replace: Check must be rejected and received, with no existing replacement"
+                _("Cannot replace: Check must be rejected and received, with no existing replacement")
             )
 
         if not checker.is_active or checker.status == 'completed':
-            raise ValidationError("Selected checker is not available for new checks")
+            raise ValidationError(_("Selected checker is not available for new checks"))
 
         # Create new check with same base properties but new checker and details
         replacement = Check.objects.create(
@@ -1538,22 +1752,22 @@ class CheckAllocation(BaseModel):
     def clean(self):
         # Ensure allocation is for a supplier payment
         if not self.payment.is_supplier_payment:  
-            raise ValidationError("Can only allocate supplier payments")
+            raise ValidationError(_("Can only allocate supplier payments"))
             
         # Ensure invoice matches check's beneficiary
         if self.invoice.supplier != self.payment.beneficiary:  
-            raise ValidationError("Invoice must belong to check's beneficiary")
+            raise ValidationError(_("Invoice must belong to check's beneficiary"))
             
         # Ensure we don't exceed available amount
         available = self.payment.get_available_amount()  
         if self.amount > available:
             raise ValidationError(
-                f"Amount {self.amount} exceeds available amount {available}"
+                _(f"Amount {self.amount} exceeds available amount {available}")
             )
             
         # Ensure we don't exceed invoice's available amount
         if self.amount > self.invoice.amount_available_for_payment:
-            raise ValidationError("Amount exceeds invoice's available amount")
+            raise ValidationError(_("Amount exceeds invoice's available amount"))
 
 
 class Client(BaseModel):
@@ -1568,7 +1782,7 @@ class Client(BaseModel):
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z\s]*$',
-                message='Name can only contain letters and spaces'
+                message=_('Name can only contain letters and spaces')
             )
         ]
     )
@@ -1577,11 +1791,11 @@ class Client(BaseModel):
         max_length=10,
         unique=True,
         validators=[
-            MinLengthValidator(5, 'Client code must be at least 5 digits'),
-            MaxLengthValidator(10, 'Client code cannot exceed 10 digits'),
+            MinLengthValidator(5, _('Client code must be at least 5 digits')),
+            MaxLengthValidator(10, _('Client code cannot exceed 10 digits')),
             RegexValidator(
                 regex=r'^\d+$',
-                message='Client code must contain only digits'
+                message=_('Client code must contain only digits')
             )
         ],
         help_text='Enter a unique 5-10 digit code'
@@ -1596,7 +1810,7 @@ class Client(BaseModel):
                 code_length = len(self.client_code)
                 if code_length < 5 or code_length > 10:
                     raise ValidationError({
-                        'client_code': 'Client code must be between 5 and 10 digits'
+                        'client_code': _('Client code must be between 5 and 10 digits')
                     })
             except Exception as e:
                 logger.error(f"Validation error for client_code: {e}")
@@ -1670,9 +1884,9 @@ class Client(BaseModel):
                             presentation_entry = {
                                 'date': pres.presentation.date,
                                 'type': type_name,
-                                'description': f'{type_name} {number} {receipt.entity.name} presented for '
+                                'description': _('{type_name} {number} {receipt.entity.name} presented for '
                                             f'{"collection" if pres.presentation.presentation_type == "COLLECTION" else "discount"} '
-                                            f'on {pres.presentation.date.strftime("%Y-%m-%d")}',
+                                            f'on {pres.presentation.date.strftime("%Y-%m-%d")}'),
                                 'debit': None,
                                 'credit': receipt.amount,
                                 'actual_date': pres.presentation.date
@@ -1713,7 +1927,7 @@ class Client(BaseModel):
             transactions.insert(0, {
                 'date': current_date,
                 'type': 'BALANCE',
-                'description': 'Previous Balance',
+                'description': _('Previous Balance'),
                 'debit': max(previous_balance, 0),
                 'credit': abs(min(previous_balance, 0)),
                 'actual_date': current_date,
@@ -1760,10 +1974,10 @@ class Client(BaseModel):
                         presentation_entry = {
                             'date': pres.presentation.date,
                             'type': type_name,
-                            'description': f'{type_name} {number} {receipt.entity.name} '
+                            'description': _('{type_name} {number} {receipt.entity.name} '
                                         f'({("re" if is_representation else "")}presented for '
                                         f'{"collection" if pres.presentation.presentation_type == "COLLECTION" else "discount"} '
-                                        f'on {pres.presentation.date.strftime("%Y-%m-%d")})',
+                                        f'on {pres.presentation.date.strftime("%Y-%m-%d")})'),
                             'debit': None,
                             'credit': receipt.amount,
                             'actual_date': pres.presentation.date
@@ -1783,8 +1997,8 @@ class Client(BaseModel):
                         unpaid_entry = {
                             'date': history.business_date or history.timestamp.date(),  # Use business_date if available
                             'type': f'{type_name}_REVERSAL',
-                            'description': f'Reversal of {type_name} {receipt.get_receipt_number()} - '
-                                        f'{history.notes if history.notes else "Unpaid"}',
+                            'description': _('Reversal of {type_name} {receipt.get_receipt_number()} - '
+                                        f'{history.notes if history.notes else "Unpaid"}'),
                             'debit': history.new_value.get("amount", receipt.amount),
                             'credit': None,
                             'actual_date': history.business_date or history.timestamp.date()  # Also update actual_date
@@ -1803,7 +2017,7 @@ class Client(BaseModel):
                 transactions.append({
                     'date': receipt.operation_date,
                     'type': type_name,
-                    'description': f'{type_name} {receipt.reference_number if hasattr(receipt, "reference_number") else receipt.transfer_reference} {receipt.entity.name}',
+                    'description': _('{type_name} {receipt.reference_number if hasattr(receipt, "reference_number") else receipt.transfer_reference} {receipt.entity.name}'),
                     'debit': None,
                     'credit': receipt.amount,
                     'actual_date': receipt.operation_date

@@ -1,0 +1,10 @@
+# POTFILES.in
+[ignore]
+node_modules/*
+venv/*
+env/*
+*migrations*
+
+[include]
+testapp/*.py
+testapp/templates/*.html

@@ -5,6 +5,10 @@ from django.http import JsonResponse
 from .models import Entity, Client, CheckReceipt, LCN
 import json
 import logging
+from django.utils import translation
+from django.shortcuts import redirect
+from django.conf import settings
+from django.contrib import messages
 
 logger = logging.getLogger(__name__)
 
@@ -67,3 +71,13 @@ def custom_403(request, exception=None):
     return render(request, 'unauthorized.html', {
         'reason': 'You do not have permission to access this resource.',
     }, status=403)
+
+
+def change_language(request):
+    if request.method == 'POST':
+        language = request.POST.get('language')
+        if language:
+            translation.activate(language)
+            request.session['django_language'] = language
+            print(f"Language changed to: {language}")
+    return redirect(request.META.get('HTTP_REFERER', '/'))

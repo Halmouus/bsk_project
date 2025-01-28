@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.db import models
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import CheckAllocation, ContractInvoice, DirectDebit, ForecastStatement, Invoice, InvoiceProduct, Product, ExportRecord, Check, Supplier
+from .models import CheckAllocation, ContractInvoice, DeliveryNote, DirectDebit, ForecastStatement, Invoice, InvoiceProduct, Product, ExportRecord, Check, ReceptionNote, Supplier
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -775,3 +775,111 @@ class InvoiceAccountingSummaryView(View):
                 'net': float(invoice.net_amount)
             }
         })
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LinkDeliveryNoteView(View):
+    def post(self, request):
+        print("\n=== Linking Delivery Note ===")
+        try:
+            data = json.loads(request.body)
+            invoice = get_object_or_404(Invoice, id=data.get('invoice_id'))
+            note = get_object_or_404(DeliveryNote, id=data.get('note_id'))
+            
+            print(f"Invoice: {invoice.ref}")
+            print(f"Note: {note.ref}")
+
+            # Check if note is already linked to another invoice
+            if note.invoices.exists():
+                print("Note already linked to an invoice")
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'This delivery note is already linked to another invoice'
+                })
+
+            invoice.delivery_notes.add(note)
+            print("Successfully linked note to invoice")
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            print(f"Error linking note: {str(e)}")
+            return JsonResponse({
+                'success': False, 
+                'error': str(e)
+            })
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UnlinkDeliveryNoteView(View):
+    def post(self, request):
+        print("\n=== Unlinking Delivery Note ===")
+        try:
+            data = json.loads(request.body)
+            invoice = get_object_or_404(Invoice, id=data.get('invoice_id'))
+            note = get_object_or_404(DeliveryNote, id=data.get('note_id'))
+            
+            print(f"Invoice: {invoice.ref}")
+            print(f"Note: {note.ref}")
+
+            invoice.delivery_notes.remove(note)
+            print("Successfully unlinked note from invoice")
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            print(f"Error unlinking note: {str(e)}")
+            return JsonResponse({
+                'success': False, 
+                'error': str(e)
+            })
+
+@method_decorator(csrf_exempt, name='dispatch')
+class LinkReceptionNoteView(View):
+    def post(self, request):
+        print("\n=== Linking Reception Note ===")
+        try:
+            data = json.loads(request.body)
+            invoice = get_object_or_404(Invoice, id=data.get('invoice_id'))
+            note = get_object_or_404(ReceptionNote, id=data.get('note_id'))
+            
+            print(f"Invoice: {invoice.ref}")
+            print(f"Note: {note.ref}")
+
+            # Check if note is already linked to another invoice
+            if note.invoices.exists():
+                print("Note already linked to an invoice")
+                return JsonResponse({
+                    'success': False, 
+                    'error': 'This reception note is already linked to another invoice'
+                })
+
+            invoice.reception_notes.add(note)
+            print("Successfully linked note to invoice")
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            print(f"Error linking note: {str(e)}")
+            return JsonResponse({
+                'success': False, 
+                'error': str(e)
+            })
+
+@method_decorator(csrf_exempt, name='dispatch')
+class UnlinkReceptionNoteView(View):
+    def post(self, request):
+        print("\n=== Unlinking Reception Note ===")
+        try:
+            data = json.loads(request.body)
+            invoice = get_object_or_404(Invoice, id=data.get('invoice_id'))
+            note = get_object_or_404(ReceptionNote, id=data.get('note_id'))
+            
+            print(f"Invoice: {invoice.ref}")
+            print(f"Note: {note.ref}")
+
+            invoice.reception_notes.remove(note)
+            print("Successfully unlinked note from invoice")
+            return JsonResponse({'success': True})
+            
+        except Exception as e:
+            print(f"Error unlinking note: {str(e)}")
+            return JsonResponse({
+                'success': False, 
+                'error': str(e)
+            })

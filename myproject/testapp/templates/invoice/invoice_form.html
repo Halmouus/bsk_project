@@ -7,9 +7,51 @@
 
 {% block content %}
 <h1>{{ view.object.pk|default:'Add New Invoice' }}</h1>
-<form method="post">
+<form method="post" enctype="multipart/form-data">
     {% csrf_token %}
-    {{ form.as_p }}
+    <div class="row">
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="{{ form.ref.id_for_label }}">Reference</label>
+                {{ form.ref }}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.date.id_for_label }}">Date</label>
+                {{ form.date }}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.supplier.id_for_label }}">Supplier</label>
+                {{ form.supplier }}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group">
+                <label for="{{ form.invoice_type.id_for_label }}">Invoice Type</label>
+                {{ form.invoice_type }}
+                {% if view.object %}
+                    <small class="form-text text-muted">
+                        Archive Index: {{ view.object.archive_index }}
+                    </small>
+                {% endif %}
+            </div>
+            <div class="form-group">
+                <label for="{{ form.doc_status.id_for_label }}">Document Status</label>
+                {{ form.doc_status }}
+            </div>
+            <div class="form-group">
+                <label>Document (PDF)</label>
+                <input type="file" name="document" class="form-control" accept="application/pdf">
+                {% if invoice.document %}
+                    <div class="doc-info mb-2">
+                        <small class="text-muted">Current document:</small>
+                        <a href="{{ invoice.document.url }}" target="_blank" class="ml-2">
+                            <i class="fas fa-file-pdf"></i> View
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
     {{ products.management_form }}
 
     <div style="display: none;">
@@ -32,7 +74,15 @@
 
 <!-- Add Product Button after Invoice is saved -->
 {% if view.object.pk %}
-    <button type="button" id="add-product" class="btn btn-primary mt-4" data-toggle="modal" data-target="#productModal">Add Product</button>
+    <button type="button" id="add-product" class="btn btn-primary mt-4" data-toggle="modal" data-target="#productModal">
+        <i class="fas fa-plus-circle"></i> Add Product
+    </button>
+    <button type="button" class="btn btn-primary mt-4" data-toggle="modal" data-target="#deliveryNoteModal">
+        <i class="fas fa-truck"></i> Add Delivery Notes
+    </button>
+    <button type="button" class="btn btn-primary mt-4" data-toggle="modal" data-target="#receptionNoteModal">
+        <i class="fas fa-clipboard-check"></i> Add Reception Notes
+    </button>
 
     <!-- Table to show all products linked to the current invoice -->
     <h3 class="mt-4">Products in Invoice</h3>
@@ -137,6 +187,85 @@
             </tr>
         </tfoot>
     </table>
+    <!-- Delivery Notes Table -->
+    <h3 class="mt-4">Delivery Notes</h3>
+    <table class="table table-hover table-bordered mt-2">
+        <thead class="thead-dark">
+            <tr>
+                <th>Reference</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Document</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for note in view.object.delivery_notes.all %}
+            <tr>
+                <td>{{ note.ref }}</td>
+                <td>{{ note.date }}</td>
+                <td>{{ note.amount|default:'-' }}</td>
+                <td>
+                    {% if note.document %}
+                        <a href="{{ note.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                            <i class="fas fa-file-pdf"></i> View
+                        </a>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-danger btn-sm unlink-note" 
+                            data-type="delivery" data-id="{{ note.id }}">
+                        <i class="fas fa-unlink"></i> Unlink
+                    </button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">No delivery notes linked</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <!-- Reception Notes Table -->
+    <h3 class="mt-4">Reception Notes</h3>
+    <table class="table table-hover table-bordered mt-2">
+        <thead class="thead-dark">
+            <tr>
+                <th>Reference</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Document</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody> 
+            {% for note in view.object.reception_notes.all %}
+            <tr>
+                <td>{{ note.ref }}</td>
+                <td>{{ note.date }}</td>
+                <td>{{ note.amount|default:'-' }}</td>
+                <td>
+                    {% if note.document %}
+                        <a href="{{ note.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                            <i class="fas fa-file-pdf"></i> View
+                        </a>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-danger btn-sm unlink-note" 
+                            data-type="reception" data-id="{{ note.id }}">
+                        <i class="fas fa-unlink"></i> Unlink
+                    </button>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="5" class="text-center text-muted">No reception notes linked</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 {% else %}
     <div class="alert alert-warning mt-4">
         Save the invoice before adding products.
@@ -211,6 +340,91 @@
     </div>
 </div>
 
+<!-- Delivery Notes Modal -->
+<div class="modal fade" id="deliveryNoteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-truck"></i> Link Delivery Notes
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> Showing available notes for supplier: <strong>{{ view.object.supplier.name }}</strong>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover" id="available-delivery-notes">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Document</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Filled by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'delivery-note-list' %}" target="_blank" class="btn btn-outline-primary">
+                    <i class="fas fa-list"></i> Manage Delivery Notes
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Reception Notes Modal -->
+<div class="modal fade" id="receptionNoteModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-clipboard-check"></i> Link Reception Notes
+                </h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">    
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> Showing available notes for supplier: <strong>{{ view.object.supplier.name }}</strong>
+                </div>
+                <div class="mb-3">
+                    <input type="text" id="reception-note-search" class="form-control" placeholder="Search reception notes...">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover" id="available-reception-notes">
+                        <thead>
+                            <tr>
+                                <th>Reference</th>
+                                <th>Date</th>
+                                <th>Amount</th>
+                                <th>Document</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- Filled by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'reception-note-list' %}" target="_blank" class="btn btn-outline-primary">
+                    <i class="fas fa-list"></i> Manage Reception Notes
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     .ui-autocomplete {
         position: absolute;
@@ -236,6 +450,8 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
+        const deliveryNoteSearch = document.getElementById('delivery-note-search');
+        const receptionNoteSearch = document.getElementById('reception-note-search');   
         $('#productModal').on('hidden.bs.modal', function () {
         // Reset the form fields
         $('#add-product-form')[0].reset();
@@ -245,6 +461,134 @@
 
         // Remove error messages
         $('#add-product-form .invalid-feedback').remove();
+    });
+    
+    // Load available notes
+    function loadAvailableNotes(type) {
+        const tableBody = document.querySelector(`#available-${type}-notes tbody`);
+        const supplierId = '{{ view.object.supplier.id }}';
+        
+        console.log(`Loading ${type} notes for supplier ${supplierId}`);
+        
+        fetch(`/testapp/${type}-notes/available/?supplier_id=${supplierId}`)
+            .then(response => response.json())
+            .then(data => {
+                tableBody.innerHTML = '';
+                console.log(`Found ${data.length} available notes`);
+                
+                data.forEach(note => {
+                    const row = `
+                        <tr>
+                            <td>${note.ref}</td>
+                            <td>${note.date}</td>
+                            <td>${note.amount || '-'}</td>
+                            <td>
+                                ${note.document_url ? `
+                                    <a href="${note.document_url}" target="_blank" class="btn btn-sm btn-info">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                ` : '-'}
+                            </td>
+                            <td>
+                                <button class="btn btn-primary btn-sm link-note" 
+                                        data-type="${type}" 
+                                        data-id="${note.id}">
+                                    <i class="fas fa-link"></i> Link
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+
+                if (data.length === 0) {
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="5" class="text-center text-muted">
+                                No available ${type} notes found for this supplier
+                            </td>
+                        </tr>
+                    `;
+                }
+            })
+            .catch(error => {
+                console.error(`Error loading ${type} notes:`, error);
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="5" class="text-center text-danger">
+                            <i class="fas fa-exclamation-circle"></i> Failed to load notes
+                        </td>
+                    </tr>
+                `;
+            });
+    }
+
+    // Initial load
+    $('#deliveryNoteModal').on('show.bs.modal', () => loadAvailableNotes('delivery'));
+    $('#receptionNoteModal').on('show.bs.modal', () => loadAvailableNotes('reception'));
+
+    // Search functionality
+    deliveryNoteSearch?.addEventListener('input', () => loadAvailableNotes('delivery'));
+    receptionNoteSearch?.addEventListener('input', () => loadAvailableNotes('reception'));
+
+    // Link note handler
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.link-note')) {
+            const button = e.target.closest('.link-note');
+            const type = button.dataset.type;
+            const noteId = button.dataset.id;
+
+            fetch(`/testapp/invoices/link-${type}-note/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    invoice_id: '{{ view.object.id }}',
+                    note_id: noteId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
+    });
+
+    // Unlink note handler
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.unlink-note')) {
+            if (!confirm('Are you sure you want to unlink this note?')) return;
+
+            const button = e.target.closest('.unlink-note');
+            const type = button.dataset.type;
+            const noteId = button.dataset.id;
+
+            fetch(`/testapp/invoices/unlink-${type}-note/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    invoice_id: '{{ view.object.id }}',
+                    note_id: noteId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.error);
+                }
+            });
+        }
     });
 
         $(document).ready(function() {

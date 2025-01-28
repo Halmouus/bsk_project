@@ -1,6 +1,6 @@
 from django import forms
 from django.core.exceptions import ValidationError
-from .models import (Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, Supplier, TransferReceipt, 
+from .models import (DeliveryNote, Invoice, InvoiceProduct, Product, CheckReceipt, LCN, CashReceipt, ReceptionNote, Supplier, TransferReceipt, 
     Presentation, PresentationReceipt, MOROCCAN_BANKS)
 from django.forms.models import inlineformset_factory
 from decimal import Decimal
@@ -47,41 +47,98 @@ InvoiceProductFormset = inlineformset_factory(
 
 class InvoiceCreateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
-        print("INITIALIZING CREATE FORM")  # Debug print
+        print("INITIALIZING CREATE FORM")
         super().__init__(*args, **kwargs)
-        print(f"CREATE FORM fields: {self.fields}")  # Debug print
+        print(f"CREATE FORM fields: {self.fields}")
+
+        # Initialize document fields
+        self.fields['document'].widget.attrs.update({
+            'class': 'form-control',
+            'accept': 'application/pdf'
+        })
 
     class Meta:
         model = Invoice
-        fields = ['ref', 'date', 'supplier']
+        fields = [
+            'ref', 'date', 'supplier',
+            'invoice_type', 'doc_status',
+            'document'
+        ]
         widgets = { 
             'ref': forms.TextInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'supplier': forms.Select(attrs={'class': 'form-control'}),
+            # New widgets
+            'invoice_type': forms.Select(attrs={'class': 'form-control'}),
+            'doc_status': forms.Select(attrs={'class': 'form-control'}),
         }
 
 class InvoiceUpdateForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
-        print("INITIALIZING UPDATE FORM")  # Debug print
+        print("INITIALIZING UPDATE FORM")
         super().__init__(*args, **kwargs)
-        print(f"UPDATE FORM Before disable: {self.fields}")  # Debug print
+        print(f"UPDATE FORM Before disable: {self.fields}")
         self.fields['supplier'].disabled = True
-        print(f"UPDATE FORM After disable: {self.fields}")  # Debug print
+        print(f"UPDATE FORM After disable: {self.fields}")
 
     class Meta:
         model = Invoice
-        fields = ['ref', 'date', 'supplier']
+        fields = [
+            'ref', 'date', 'supplier',
+            'invoice_type', 'doc_status',
+            'document'
+        ]
         widgets = { 
             'ref': forms.TextInput(attrs={'class': 'form-control'}),
             'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'supplier': forms.Select(attrs={'class': 'form-control'}),
+            # New widgets
+            'invoice_type': forms.Select(attrs={'class': 'form-control'}),
+            'doc_status': forms.Select(attrs={'class': 'form-control'}),
         }
 
     def clean(self):
         cleaned_data = super().clean()
         cleaned_data['supplier'] = self.instance.supplier
         return cleaned_data
-        
+
+class DeliveryNoteForm(forms.ModelForm):
+    class Meta:
+        model = DeliveryNote
+        fields = ['ref', 'date', 'supplier', 'amount', 'document', 'notes']
+        widgets = {
+            'ref': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'supplier': forms.Select(attrs={'class': 'form-control'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['document'].widget.attrs.update({
+            'class': 'form-control',
+            'accept': 'application/pdf'
+        })
+
+class ReceptionNoteForm(forms.ModelForm):
+    class Meta:
+        model = ReceptionNote
+        fields = ['ref', 'date', 'supplier', 'amount', 'document', 'notes']
+        widgets = {
+            'ref': forms.TextInput(attrs={'class': 'form-control'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'supplier': forms.Select(attrs={'class': 'form-control'}),
+            'amount': forms.NumberInput(attrs={'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['document'].widget.attrs.update({
+            'class': 'form-control',
+            'accept': 'application/pdf'
+        })
 
 class ProductForm(forms.ModelForm):
     class Meta:

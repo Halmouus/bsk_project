@@ -1,0 +1,269 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-01-27 00:09+0100\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1);\n"
+#: testapp/models.py:77
+msgid "The maximum file size that can be uploaded is 5MB"
+msgstr "La taille maximale du fichier que vous pouvez uploader est de 5MB"
+
+#: testapp/models.py:152
+msgid "Only numeric characters are allowed."
+msgstr "Seuls les caractères numériques sont autorisés."
+
+#: testapp/models.py:153
+msgid "Only alphanumeric characters are allowed."
+msgstr "Seuls les caractères alphanumériques sont autorisés."
+
+#: testapp/models.py:169
+msgid "Number of days to delay check payment forecasts after due date"
+msgstr "Nombre de jours à retarder les prévisions de paiement des chèques après la date d'échéance"
+
+#: testapp/models.py:174
+msgid "Number of days to delay LCN payment forecasts after due date"
+msgstr "Nombre de jours à retarder les prévisions de paiement des LCN après la date d'échéance"
+
+#: testapp/models.py:181
+msgid "IF code must be numeric."
+msgstr "Le code IF doit être numérique."
+
+#: testapp/models.py:184
+msgid "ICE code must contain exactly 15 characters."
+msgstr "Le code ICE doit contenir exactement 15 caractères."
+
+#: testapp/models.py:250
+msgid "Expense code must be numeric and at least 5 characters long."
+msgstr "Le code de dépense doit être numérique et au moins 5 caractères long."
+
+#: testapp/models.py:255
+msgid "If true, VAT from this product cannot be deducted"
+msgstr "Si c'est vrai, la TVA de ce produit ne peut être déduite"
+
+#: testapp/models.py:313
+msgid "Only PDF files are allowed."
+msgstr "Seuls les fichiers PDF sont autorisés."
+
+#: testapp/models.py:416
+msgid "Percentage of VAT that can be deducted"
+msgstr "Pourcentage de TVA que l'on peut déduire"
+
+#: testapp/models.py:421
+msgid "If true, VAT from this invoice cannot be deducted"
+msgstr "Si c'est vrai, la TVA de cette facture ne peut être déduite"
+
+#: testapp/models.py:545
+msgid "Duplicate delivery notes are not allowed"
+msgstr "Les notes de livraison ne peuvent être dupliquées"
+
+#: testapp/models.py:553
+msgid "Credit note must reference an original invoice"
+msgstr "La note de crédit doit faire référence à une facture originale"
+
+#: testapp/models.py:555
+msgid "Cannot create credit note for another credit note"
+msgstr "On ne peut créer une note de crédit pour une autre note de crédit"
+
+#: testapp/models.py:557
+msgid "Credit note must have same supplier as original invoice"
+msgstr "La note de crédit doit avoir le même fournisseur que la facture originale"
+
+#: testapp/models.py:1109
+msgid "Account number must be at least 10 characters"
+msgstr "Le numéro de compte doit être au moins 10 caractères"
+
+#: testapp/models.py:1110 testapp/models.py:1117
+msgid "Only numeric characters allowed"
+msgstr "Seuls les caractères numériques sont autorisés"
+
+#: testapp/models.py:1116
+msgid "Accounting number must be at least 5 characters"
+msgstr "Le numéro de comptabilité doit être au moins 5 caractères"
+
+#: testapp/models.py:1123
+msgid "Must be exactly 2 digits"
+msgstr "Doit être exactement 2 chiffres"
+
+#: testapp/models.py:1132
+msgid "Determines if accounting operations are recorded on this account"
+msgstr "Détermine si les opérations comptables sont enregistrées sur ce compte"
+
+#: testapp/models.py:1140
+msgid "Maximum allowed overdraft amount"
+msgstr "Montant maximum autorisé pour le découvert"
+
+#: testapp/models.py:1148
+msgid "Fee applied for overdraft usage"
+msgstr "Frais appliqués pour le découvert   "
+
+#: testapp/models.py:1152
+msgid "Indicates if this account can discount checks"
+msgstr "Indique si ce compte peut accorder des remises sur les chèques"
+
+#: testapp/models.py:1160
+msgid "Maximum amount available for check discounting"
+msgstr "Montant maximum disponible pour les remises sur les chèques"
+
+#: testapp/models.py:1164
+msgid "Indicates if this account can discount LCNs"
+msgstr "Indique si ce compte peut accorder des remises sur les LCN"
+
+#: testapp/models.py:1172
+msgid "Maximum amount available for LCN discounting"
+msgstr "Montant maximum disponible pour les remises sur les LCN"
+
+#: testapp/models.py:1180
+msgid "Stamp fee charged per presented receipt"
+msgstr "Frais de timbre appliqués par chèque présenté"
+
+#: testapp/models.py:1228
+msgid "Amount required when check discount line is enabled"
+msgstr "Montant requis lorsque la ligne de remise sur les chèques est activée"
+
+#: testapp/models.py:1232
+msgid "Amount required when LCN discount line is enabled"
+msgstr "Montant requis lorsque la ligne de remise sur les LCN est activée"
+
+#: testapp/models.py:1267
+msgid "Must be 1 to 3 uppercase letters."
+msgstr "Doit être 1 à 3 lettres majuscules."
+
+#: testapp/models.py:1320
+msgid "Cannot create checker for inactive bank account"
+msgstr "On ne peut créer un checker pour un compte bancaire inactif"
+
+#: testapp/models.py:1322
+msgid "Can only create checkers for national accounts"
+msgstr "On ne peut créer des checkers que pour les comptes nationaux"
+
+#: testapp/models.py:1468
+msgid "Period must be in MM-YYYY format"
+msgstr "La période doit être au format MM-YYYY"
+
+#: testapp/models.py:1593
+msgid "Invoice is required for direct invoice payments"
+msgstr "La facture est requise pour les paiements directs par facture"
+
+#: testapp/models.py:1596
+msgid "Supplier payments cannot specify a direct cause"
+msgstr "Les paiements aux fournisseurs ne peuvent spécifier une cause directe"
+
+#: testapp/models.py:1599
+msgid "Invoice supplier must match check beneficiary"
+msgstr "Le fournisseur de la facture doit correspondre au bénéficiaire du chèque"
+
+#: testapp/models.py:1604 testapp/models.py:1770
+msgid "Amount exceeds invoice's available amount"
+msgstr "Le montant dépasse le montant disponible de la facture"
+
+#: testapp/models.py:1607
+msgid "Check cannot be marked as paid before delivery"
+msgstr "Le chèque ne peut être marqué comme payé avant la livraison"
+
+#: testapp/models.py:1612
+msgid "Supplier payment must be fully allocated before printing"
+msgstr "Le paiement au fournisseur doit être entièrement alloué avant la livraison"
+
+#: testapp/models.py:1623
+msgid "Cannot modify {', '.join(changed_fields)} after check is printed"
+msgstr "On ne peut modifier {', '.join(changed_fields)} après que le chèque ait été imprimé"
+
+#: testapp/models.py:1673
+msgid "Only delivered or rejected checks can be received"
+msgstr "Seuls les chèques livrés ou rejetés peuvent être reçus"
+
+#: testapp/models.py:1688
+msgid ""
+"Cannot replace: Check must be rejected and received, with no existing "
+"replacement"
+msgstr "On ne peut remplacer : Le chèque doit être rejeté et reçu, sans remplacement existant"
+
+#: testapp/models.py:1692
+msgid "Selected checker is not available for new checks"
+msgstr "Le checker sélectionné n'est pas disponible pour les nouveaux chèques"
+
+#: testapp/models.py:1755
+msgid "Can only allocate supplier payments"
+msgstr "On ne peut allouer des paiements aux fournisseurs"
+
+#: testapp/models.py:1759
+msgid "Invoice must belong to check's beneficiary"
+msgstr "La facture doit appartenir au bénéficiaire du chèque"
+
+#: testapp/models.py:1765
+#, python-brace-format
+msgid "Amount {self.amount} exceeds available amount {available}"
+msgstr "Le montant {self.amount} dépasse le montant disponible {available}"
+
+#: testapp/models.py:1785
+msgid "Name can only contain letters and spaces"
+msgstr "Le nom ne peut contenir que des lettres et des espaces"
+
+#: testapp/models.py:1794
+msgid "Client code must be at least 5 digits"
+msgstr "Le code client doit être au moins 5 chiffres"
+
+#: testapp/models.py:1795
+msgid "Client code cannot exceed 10 digits"
+msgstr "Le code client ne peut excéder 10 chiffres"
+
+#: testapp/models.py:1798
+msgid "Client code must contain only digits"
+msgstr "Le code client ne peut contenir que des chiffres"
+
+#: testapp/models.py:1813
+msgid "Client code must be between 5 and 10 digits"
+msgstr "Le code client doit être compris entre 5 et 10 chiffres "
+
+#: testapp/models.py:1887
+#, python-brace-format
+msgid "{type_name} {number} {receipt.entity.name} presented for "
+msgstr ""
+
+#: testapp/models.py:1930
+msgid "Previous Balance"
+msgstr "Solde précédent"
+
+#: testapp/models.py:1977
+#, python-brace-format
+msgid "{type_name} {number} {receipt.entity.name} "
+msgstr "{type_name} {number} {receipt.entity.name} "
+
+#: testapp/models.py:2000
+msgid "Reversal of {type_name} {receipt.get_receipt_number()} - "
+msgstr "Annulation de {type_name} {receipt.get_receipt_number()} - "
+
+#: testapp/models.py:2020
+msgid ""
+"{type_name} {receipt.reference_number if hasattr(receipt, \"reference_number"
+"\") else receipt.transfer_reference} {receipt.entity.name}"
+msgstr ""
+
+#: testapp/templates/profile.html:7
+msgid "Profile Page"
+msgstr "Page de profil"
+
+#: testapp/templates/profile.html:8
+msgid "First Name"
+msgstr "Prénom"
+
+#: testapp/templates/profile.html:9
+msgid "Last Name"
+msgstr "Nom"
+
+#: testapp/templates/profile.html:10
+msgid "Email"
+msgstr "Email"

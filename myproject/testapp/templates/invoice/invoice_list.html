@@ -219,6 +219,55 @@
                         </div>
                     </div>
 
+                    <!-- Invoice Type Filter -->
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <label>Invoice Type</label>
+                        <select class="form-control w-100" name="invoice_type">
+                            <option value="">All</option>
+                            <option value="ENERGY">Energy</option>
+                            <option value="INSURANCE">Insurance</option>
+                            <option value="LEASING">Leasing</option>
+                            <option value="UTILITIES">Water/Electricity</option>
+                            <option value="TELECOM">Phone/Internet</option>
+                            <option value="RENT">Rent</option>
+                            <option value="SERVICE">Services</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+
+                    <!-- Document Status -->
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <label>Document Status</label>
+                        <select class="form-control w-100" name="doc_status">
+                            <option value="">All</option>
+                            <option value="ORIGINAL">Original</option>
+                            <option value="COPY">Copy</option>
+                        </select>
+                    </div>
+
+                    <!-- Separate Delivery/Reception Note References -->
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <label>Delivery Note Reference</label>
+                        <input type="text" class="form-control" name="delivery_note_ref" placeholder="Search BL reference...">
+                    </div>
+
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <label>Reception Note Reference</label>
+                        <input type="text" class="form-control" name="reception_note_ref" placeholder="Search BR reference...">
+                    </div>
+
+                    <!-- Index Range -->
+                    <div class="col-md-6 col-lg-4 mb-3">
+                        <label>Archive Index</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" name="index_min" placeholder="From">
+                            <div class="input-group-prepend input-group-append">
+                                <span class="input-group-text">to</span>
+                            </div>
+                            <input type="number" class="form-control" name="index_max" placeholder="To">
+                        </div>
+                    </div>
+
                     <!-- Export Status Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Export Status</label>
@@ -321,15 +370,21 @@
         <thead>
             <tr>
                 <th>Export</th>
+                <th>Type</th>
+                <th>Index</th>
                 <th>Date</th>
                 <th>Reference</th>
                 <th>Supplier</th>
+                <th>Delivery Note</th>
+                <th>Reception Note</th>
                 <th>Fiscal Label</th>
                 <th>Raw Amount</th>
                 <th>Tax Rate (%)</th>
                 <th>Tax Amount</th>
                 <th>Total Amount (Incl. Tax)</th>
                 <th>Status</th>
+                <th>Document</th>
+                <th>Document Status</th>
                 <th>Actions</th>
                 <th>Details</th>
             </tr>
@@ -338,30 +393,54 @@
             {% for invoice in invoices %}
                 {% if invoice.type == 'invoice' %}
                     <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
-                        <td>
-                            {% if invoice.exported_at %}
-                                <span class="text-muted">
-                                    Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                                    <button type="button" 
-                                            class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                            data-invoice-id="{{ invoice.id }}">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                </span>
-                            {% else %}
-                                <input type="checkbox" 
-                                    name="invoice_ids" 
-                                    value="{{ invoice.id }}" 
-                                    class="export-checkbox"
-                                    {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
-                            {% endif %}
-                        </td>
+                                <td>
+                                    {% if invoice.exported_at %}
+                                        <span class="text-muted">
+                                            Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                                            <button type="button" 
+                                                    class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                                    data-invoice-id="{{ invoice.id }}">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </span>
+                                    {% else %}
+                                        <input type="checkbox" 
+                                            name="invoice_ids" 
+                                            value="{{ invoice.id }}" 
+                                            class="export-checkbox"
+                                            {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
+                                    {% endif %}
+                                </td>
+                                <td>{{ invoice.get_invoice_type_display }}</td>
+                                <td>{{ invoice.archive_index }}</td>
                                 <td>{{ invoice.date }}</td>
                                 <td>{{ invoice.ref }}</td>
                                 <td>
                                     <a href="{% url 'supplier-detail' invoice.supplier.pk %}" class="text-primary">
                                         {{ invoice.supplier.name }}
                                     </a>
+                                </td>
+                                <td>
+                                    {% if invoice.delivery_notes.exists %}
+                                        {% for note in invoice.delivery_notes.all %}
+                                            <a href="{{ note.document.url }}" target="_blank" class="mr-1">
+                                                {{ note.ref }}{% if not forloop.last %}, {% endif %}
+                                            </a>
+                                        {% endfor %}
+                                    {% else %}
+                                        <i class="fas fa-exclamation-triangle text-warning" title="No delivery notes attached"></i>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if invoice.reception_notes.exists %}
+                                        {% for note in invoice.reception_notes.all %}
+                                            <a href="{{ note.document.url }}" target="_blank" class="mr-1">
+                                                {{ note.ref }}{% if not forloop.last %}, {% endif %}
+                                            </a>
+                                        {% endfor %}
+                                    {% else %}
+                                        <i class="fas fa-exclamation-triangle text-warning" title="No reception notes attached"></i>
+                                    {% endif %}
                                 </td>
                                 <td>{{ invoice.fiscal_label }}</td>
                                 <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
@@ -413,6 +492,16 @@
                                             {% endif %}
                                         </span>
                                     {% endif %}
+                                </td>
+                                <td>
+                                    {% if invoice.document %}
+                                        <a href="{{ invoice.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                                            <i class="fas fa-file-pdf"></i>
+                                        </a>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {{ invoice.doc_status }}
                                 </td>
                                 <td>
                                     {% if not invoice.payment_status == 'paid' %}

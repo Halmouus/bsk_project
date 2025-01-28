@@ -15,9 +15,15 @@ from .views_product import (
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
-    InvoicePaymentDetailsView, InvoiceAccountingSummaryView
+    InvoicePaymentDetailsView, InvoiceAccountingSummaryView, LinkDeliveryNoteView, UnlinkDeliveryNoteView,
+    LinkReceptionNoteView, UnlinkReceptionNoteView
 )
 
+from .views_notes import (
+    DeliveryNoteListView, DeliveryNoteCreateView, DeliveryNoteUpdateView, DeliveryNoteDeleteView,
+    AvailableDeliveryNotesView, ReceptionNoteListView, ReceptionNoteCreateView, ReceptionNoteUpdateView,
+    ReceptionNoteDeleteView, AvailableReceptionNotesView
+)
 
 from .views_contract import (
     ContractListView, ContractFilterView, ContractCreateView, ContractSuspendDomiciliationView,
@@ -79,6 +85,9 @@ from .views_vat import (
     VATPendingDeclarationsView, VATForecastView
 )
 
+from django.conf import settings
+from django.conf.urls.static import static
+
 
 urlpatterns = [
     path('', views.home, name='home'),
@@ -86,6 +95,9 @@ urlpatterns = [
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
     path('profile/', profile_view, name='profile'),
+
+    
+    path('change_language/', views.change_language, name='change_language'),
 
     # User Management URLs
     path('users/initialize/', initialize_user_profiles, name='initialize-user-profiles'),
@@ -129,6 +141,24 @@ urlpatterns = [
     path('invoices/create-credit-note/', 
          CreateCreditNoteView.as_view(), 
          name='create-credit-note'),
+    path('invoices/link-delivery-note/', LinkDeliveryNoteView.as_view(), name='link-delivery-note'),
+    path('invoices/unlink-delivery-note/', UnlinkDeliveryNoteView.as_view(), name='unlink-delivery-note'),
+    path('invoices/link-reception-note/', LinkReceptionNoteView.as_view(), name='link-reception-note'),
+    path('invoices/unlink-reception-note/', UnlinkReceptionNoteView.as_view(), name='unlink-reception-note'),
+    
+    # Add these new URL patterns
+    path('delivery-notes/', DeliveryNoteListView.as_view(), name='delivery-note-list'),
+    path('delivery-notes/create/', DeliveryNoteCreateView.as_view(), name='delivery-note-create'),
+    path('delivery-notes/<uuid:pk>/edit/', DeliveryNoteUpdateView.as_view(), name='delivery-note-edit'),
+    path('delivery-notes/<uuid:pk>/delete/', DeliveryNoteDeleteView.as_view(), name='delivery-note-delete'),
+    path('delivery-notes/available/', AvailableDeliveryNotesView.as_view(), name='available-delivery-notes'),
+    
+
+    path('reception-notes/', ReceptionNoteListView.as_view(), name='reception-note-list'),
+    path('reception-notes/create/', ReceptionNoteCreateView.as_view(), name='reception-note-create'),
+    path('reception-notes/<uuid:pk>/edit/', ReceptionNoteUpdateView.as_view(), name='reception-note-edit'),
+    path('reception-notes/<uuid:pk>/delete/', ReceptionNoteDeleteView.as_view(), name='reception-note-delete'),
+    path('reception-notes/available/', AvailableReceptionNotesView.as_view(), name='available-reception-notes'),
 
     # Contracts URLs
     path('contracts/', ContractListView.as_view(), name='contract-list'),
@@ -296,4 +326,3 @@ urlpatterns = [
         name='vat-deduction-details'),  
             
 ]
-

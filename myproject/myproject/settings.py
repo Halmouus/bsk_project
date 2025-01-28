@@ -30,6 +30,11 @@ SECRET_KEY = 'django-insecure-o&g&fyebijm#od*5^kky-hr-c!dp+1i4qvp5&v^w=n+1nc=5hp
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+LANGUAGES = [
+    ('en', 'English'),
+    ('fr', 'French'),
+]
+
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
@@ -46,6 +51,9 @@ CSRF_TRUSTED_ORIGINS = [
 LOGIN_REDIRECT_URL = '/profile/'
 LOGOUT_REDIRECT_URL = '/'
 
+LOCALE_PATHS = [
+    BASE_DIR / 'locale',
+]
 
 # Application definition
 
@@ -63,6 +71,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.middleware.locale.LocaleMiddleware',
     'django.middleware.common.CommonMiddleware',
     #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
@@ -72,6 +81,18 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'myproject.urls'
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
+REQUIRED_DIRS = [
+    os.path.join(MEDIA_ROOT, 'documents'),
+    os.path.join(MEDIA_ROOT, 'documents/deliverynote'),
+    os.path.join(MEDIA_ROOT, 'documents/receptionnote'),
+]
+
+for directory in REQUIRED_DIRS:
+    os.makedirs(directory, exist_ok=True)
 
 TEMPLATES = [
     {
@@ -149,7 +170,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'en'
 
 TIME_ZONE = 'UTC'
 

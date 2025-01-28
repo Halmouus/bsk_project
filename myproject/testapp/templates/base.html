@@ -1,4 +1,7 @@
 {% load static %}
+{% load i18n %}
+{% load custom_tags %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -257,6 +260,9 @@
 </head>
 <body>
     <!-- Sidebar -->
+    <div class="language-switcher">
+        {% language_switcher %}
+    </div>
     {% if user.is_authenticated %}
     <nav id="sidebar">
         <div class="d-flex flex-column h-100">
@@ -300,6 +306,14 @@
                         <a class="nav-link {% if 'product' in request.path %}active{% endif %}" 
                         href="{% url 'product-list' %}">
                             <i class="fas fa-box-open me-2"></i> Products
+                        </a>
+                        <a class="nav-link {% if 'delivery-note' in request.path %}active{% endif %}" 
+                        href="{% url 'delivery-note-list' %}">
+                            <i class="fas fa-truck me-2"></i> Delivery Notes
+                        </a>
+                        <a class="nav-link {% if 'reception-note' in request.path %}active{% endif %}" 
+                        href="{% url 'reception-note-list' %}">
+                            <i class="fas fa-clipboard-check me-2"></i> Reception Notes
                         </a>
                         <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" 
                         href="{% url 'invoice-list' %}">
@@ -409,12 +423,13 @@
     </nav>
 
     <!-- Topbar -->
-    <nav id="topbar" class="px-4 d-flex align-items-center">
+    <nav id="topbar" class="px-4 d-flex align-items-center justify-content-between">
         <button id="sidebar-toggle" class="btn btn-link">
             <i class="fas fa-bars"></i>
         </button>
-        <div class="ms-auto d-flex align-items-center">
-            <!-- Display User Name or Username -->
+        
+        <div class="d-flex align-items-center">
+            <!-- User info first -->
             <span class="me-3 text-dark">
                 <i class="fas fa-user-circle me-2"></i>
                 {% if user.is_authenticated %}
@@ -424,8 +439,8 @@
                 {% endif %}
             </span>
 
-            <!-- Notifications Dropdown -->
-            <div class="dropdown">
+            <!-- Notifications -->
+            <div class="dropdown me-3">
                 <button class="btn btn-link dropdown-toggle" type="button" data-bs-toggle="dropdown">
                     <i class="fas fa-bell"></i>
                     <span class="badge bg-danger">3</span>
@@ -437,8 +452,13 @@
                     <li><a class="dropdown-item" href="#">Check due today</a></li>
                 </ul>
             </div>
+
+            <!-- Language Switcher at the very end -->
+            <div class="language-switcher">
+                {% language_switcher %}
+            </div>
         </div>
-</nav>
+    </nav>
 
     <!-- Main Content -->
     <main id="main-content" class="p-4">
