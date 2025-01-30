@@ -2,7 +2,7 @@ from django.urls import reverse_lazy
 from django.db import models
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import CheckAllocation, ContractInvoice, DeliveryNote, DirectDebit, ForecastStatement, Invoice, InvoiceProduct, Product, ExportRecord, Check, ReceptionNote, Supplier
+from .models import INVOICE_STATUS, INVOICE_TYPES, CheckAllocation, ContractInvoice, DeliveryNote, DirectDebit, ForecastStatement, Invoice, InvoiceProduct, Product, ExportRecord, Check, ReceptionNote, Supplier
 from .forms import InvoiceCreateForm, InvoiceUpdateForm  # Import the custom form here
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
@@ -63,226 +63,292 @@ class InvoiceListView(ListView):
     context_object_name = 'invoices'
 
     def get_queryset(self):
-        queryset = Invoice.objects.all().select_related('supplier').prefetch_related('products')
+        print("\n=== Getting Invoice Queryset ===")
+        print("GET Parameters:", self.request.GET)
 
-        # Debug prints
-        print("Request GET params:", self.request.GET)
+        # Start with base queryset
+        queryset = Invoice.objects.select_related(
+            'supplier'
+        ).prefetch_related(
+            'products',
+            'delivery_notes',
+            'reception_notes',
+            'credit_notes'
+        )
 
-        # Date Range Filter
-        date_from = self.request.GET.get('date_from')
-        date_to = self.request.GET.get('date_to')
+        filters = {}
         try:
+            # Date Range Filter
+            date_from = self.request.GET.get('date_from')
+            date_to = self.request.GET.get('date_to')
             if date_from:
-                queryset = queryset.filter(date__gte=date_from)
+                print(f"Adding date_from filter: {date_from}")
+                filters['date__gte'] = date_from
             if date_to:
-                queryset = queryset.filter(date__lte=date_to)
-        except Exception as e:
-            print(f"Error filtering by date range: {e}")
+                print(f"Adding date_to filter: {date_to}")
+                filters['date__lte'] = date_to
 
-        # Amount Range Filter
-        amount_min = self.request.GET.get('amount_min')
-        amount_max = self.request.GET.get('amount_max')
-        try:
-            if amount_min or amount_max:
-                invoices = list(queryset)  # Evaluate queryset into a list for manual filtering
-                filtered_invoices = []
+            # Amount Range Filter
+            amount_min = self.request.GET.get('amount_min')
+            amount_max = self.request.GET.get('amount_max')
+            if amount_min:
+                print(f"Adding min_amount filter: {amount_min}")
+                filters['total_amount__gte'] = amount_min
+            if amount_max:
+                print(f"Adding max_amount filter: {amount_max}")
+                filters['total_amount__lte'] = amount_max
 
-                amount_min = Decimal(amount_min if amount_min else '0')
-                amount_max = Decimal(amount_max if amount_max else '999999999')
+            # Supplier Filter
+            supplier_id = self.request.GET.get('supplier_id')
+            supplier_text = self.request.GET.get('supplier')
+            if supplier_id:
+                queryset = queryset.filter(supplier_id=supplier_id)
+            elif supplier_text:
+                queryset = queryset.filter(supplier__name__icontains=supplier_text)
 
-                for invoice in invoices:
-                    net_amount = invoice.net_amount  # Assume net_amount is a computed property
-                    if amount_min <= net_amount <= amount_max:
-                        filtered_invoices.append(invoice.id)
-
-                queryset = queryset.filter(id__in=filtered_invoices)
-        except Exception as e:
-            print(f"Error filtering by amount range: {e}")
-
-        # Supplier Filter
-        supplier = self.request.GET.get('supplier')
-        try:
-            if supplier:
-                queryset = queryset.filter(supplier_id=supplier)
-        except Exception as e:
-            print(f"Error filtering by supplier: {e}")
-
-        # Payment Status Filter
-        payment_status = self.request.GET.get('payment_status')
-        try:
+            # Payment Status Filter
+            payment_status = self.request.GET.get('payment_status')
             if payment_status:
-                queryset = queryset.filter(payment_status=payment_status)
-        except Exception as e:
-            print(f"Error filtering by payment status: {e}")
+                print(f"Adding payment status filter: {payment_status}")
+                filters['payment_status'] = payment_status
 
-        # Export Status Filter
-        export_status = self.request.GET.get('export_status')
-        try:
-            if export_status == 'exported':
-                queryset = queryset.filter(exported_at__isnull=False)
-            elif export_status == 'not_exported':
-                queryset = queryset.filter(exported_at__isnull=True)
-        except Exception as e:
-            print(f"Error filtering by export status: {e}")
+            # Invoice Type Filter
+            invoice_type = self.request.GET.get('invoice_type')
+            if invoice_type:
+                print(f"Adding invoice type filter: {invoice_type}")
+                filters['invoice_type'] = invoice_type
 
-        # Product Filter
-        product_id = self.request.GET.get('product')
-        try:
+            # Document Status Filter
+            doc_status = self.request.GET.get('doc_status')
+            if doc_status:
+                print(f"Adding document status filter: {doc_status}")
+                filters['doc_status'] = doc_status
+
+            # Export Status Filter
+            export_status = self.request.GET.get('export_status')
+            if export_status:
+                print(f"Adding export status filter: {export_status}")
+                if export_status == 'exported':
+                    filters['exported_at__isnull'] = False
+                elif export_status == 'not_exported':
+                    filters['exported_at__isnull'] = True
+
+            # Product Filter
+            product_id = self.request.GET.get('product_id')
+            product_text = self.request.GET.get('product')
             if product_id:
                 queryset = queryset.filter(products__product_id=product_id)
-        except Exception as e:
-            print(f"Error filtering by product: {e}")
+            elif product_text:
+                queryset = queryset.filter(products__product__name__icontains=product_text)
+                
+            # Credit Note Status Filter
+            credit_note_status = self.request.GET.get('credit_note_status')
+            if credit_note_status:
+                print(f"Adding credit note status filter: {credit_note_status}")
+                if credit_note_status == 'has_credit_notes':
+                    filters['credit_notes__isnull'] = False
+                elif credit_note_status == 'no_credit_notes':
+                    filters['credit_notes__isnull'] = True
+                elif credit_note_status == 'partially_credited':
+                    filters.update({
+                        'credit_notes__isnull': False,
+                        'payment_status__in': ['not_paid', 'partially_paid']
+                    })
 
-        # Payment Status Filters
-        try:
-            has_pending_checks = self.request.GET.get('has_pending_checks')
-            if has_pending_checks:
-                queryset = queryset.filter(check__status='pending').distinct()
-
-            has_delivered_unpaid = self.request.GET.get('has_delivered_unpaid')
-            if has_delivered_unpaid:
-                queryset = queryset.filter(check__status='delivered').exclude(check__status='paid').distinct()
-        except Exception as e:
-            print(f"Error filtering by payment status checks: {e}")
-
-        # Energy Filter
-        is_energy = self.request.GET.get('is_energy')
-        try:
-            if is_energy:
-                queryset = queryset.filter(supplier__is_energy=True)
-        except Exception as e:
-            print(f"Error filtering by energy suppliers: {e}")
-
-        # Credit Note Status
-        credit_note_status = self.request.GET.get('credit_note_status')
-        try:
-            if credit_note_status == 'has_credit_notes':
-                queryset = queryset.filter(credit_notes__isnull=False).distinct()
-            elif credit_note_status == 'no_credit_notes':
-                queryset = queryset.filter(credit_notes__isnull=True)
-            elif credit_note_status == 'partially_credited':
-                queryset = queryset.filter(
-                    credit_notes__isnull=False,
-                    payment_status__in=['not_paid', 'partially_paid']
-                ).distinct()
-        except Exception as e:
-            print(f"Error filtering by credit note status: {e}")
-
-        # Due Date Range
-        due_date_from = self.request.GET.get('due_date_from')
-        due_date_to = self.request.GET.get('due_date_to')
-        try:
+            # Due Date Range Filter
+            due_date_from = self.request.GET.get('due_date_from')
+            due_date_to = self.request.GET.get('due_date_to')
             if due_date_from:
-                queryset = queryset.filter(payment_due_date__gte=due_date_from)
+                print(f"Adding due_date_from filter: {due_date_from}")
+                filters['payment_due_date__gte'] = due_date_from
             if due_date_to:
-                queryset = queryset.filter(payment_due_date__lte=due_date_to)
-        except Exception as e:
-            print(f"Error filtering by due date range: {e}")
+                print(f"Adding due_date_to filter: {due_date_to}")
+                filters['payment_due_date__lte'] = due_date_to
 
-        # Overdue Filter
-        is_overdue = self.request.GET.get('is_overdue')
-        try:
-            if is_overdue:
-                today = timezone.now().date()
-                queryset = queryset.filter(
-                    payment_due_date__lt=today,
-                    payment_status__in=['not_paid', 'partially_paid']
-                )
-        except Exception as e:
-            print(f"Error filtering by overdue invoices: {e}")
+            # Delivery Note Reference Filter
+            delivery_note_ref = self.request.GET.get('delivery_note_ref')
+            if delivery_note_ref:
+                print(f"Adding delivery note filter: {delivery_note_ref}")
+                filters['delivery_notes__ref__icontains'] = delivery_note_ref
 
-        # Print final queryset SQL for debugging
-        try:
-            print("Final query SQL:", queryset.query)
+            # Reception Note Reference Filter
+            reception_note_ref = self.request.GET.get('reception_note_ref')
+            if reception_note_ref:
+                print(f"Adding reception note filter: {reception_note_ref}")
+                filters['reception_notes__ref__icontains'] = reception_note_ref
+
+            # Archive Index Range Filter
+            index_min = self.request.GET.get('index_min')
+            index_max = self.request.GET.get('index_max')
+            if index_min:
+                print(f"Adding min index filter: {index_min}")
+                filters['special_index__gte'] = index_min
+            if index_max:
+                print(f"Adding max index filter: {index_max}")
+                filters['special_index__lte'] = index_max
+
+            # Overdue Filter
+            if self.request.GET.get('is_overdue'):
+                print("Adding overdue filter")
+                filters.update({
+                    'payment_due_date__lt': timezone.now().date(),
+                    'payment_status__in': ['not_paid', 'partially_paid']
+                })
+
+            # Energy Supplier Filter
+            if self.request.GET.get('is_energy'):
+                print("Adding energy supplier filter")
+                filters['supplier__is_energy'] = True
+
+            # Apply all filters
+            print("\nApplying filters:", filters)
+            queryset = queryset.filter(**filters)
+
+            # Handle special cases that need distinct()
+            if any(key in filters for key in ['credit_notes__isnull', 'delivery_notes__ref__icontains', 'reception_notes__ref__icontains']):
+                queryset = queryset.distinct()
+
         except Exception as e:
-            print(f"Error printing final query SQL: {e}")
+            print(f"Error applying filters: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+        print(f"\nFinal query: {queryset.query}")
+        total_count = queryset.count()
+        print(f"Total results: {total_count}")
 
         return queryset.order_by('-date')
 
-
     def get_context_data(self, **kwargs):
+        print("\n=== Getting Context Data ===")
         context = super().get_context_data(**kwargs)
         
-        # Add filter counts
+        # Track active filters for display
         active_filters = {}
         
-        # Date Range
-        if self.request.GET.get('date_from') or self.request.GET.get('date_to'):
-            date_range = []
-            if self.request.GET.get('date_from'):
-                date_range.append(f"From: {self.request.GET.get('date_from')}")
-            if self.request.GET.get('date_to'):
-                date_range.append(f"To: {self.request.GET.get('date_to')}")
-            active_filters['date_range'] = ' - '.join(date_range)
+        try:
+            # Supplier Filter
+            supplier_id = self.request.GET.get('supplier')
+            if supplier_id:
+                try:
+                    supplier = Supplier.objects.get(id=supplier_id)
+                    active_filters['Supplier'] = supplier.name
+                    context['initial_supplier'] = {
+                        'id': supplier_id,
+                        'text': supplier.name
+                    }
+                    print(f"Added supplier filter: {supplier.name}")
+                except Supplier.DoesNotExist:
+                    print(f"Supplier not found: {supplier_id}")
 
-        # Supplier
-        supplier_id = self.request.GET.get('supplier')
-        if supplier_id:
-            try:
-                supplier = Supplier.objects.get(id=supplier_id)
-                active_filters['supplier'] = supplier.name
-            except Supplier.DoesNotExist:
-                pass
+            # Date Range
+            if self.request.GET.get('date_from') or self.request.GET.get('date_to'):
+                date_range = []
+                if self.request.GET.get('date_from'):
+                    date_range.append(f"From {self.request.GET.get('date_from')}")
+                if self.request.GET.get('date_to'):
+                    date_range.append(f"To {self.request.GET.get('date_to')}")
+                active_filters['Date'] = ' - '.join(date_range)
 
-        # Payment Status
-        payment_status = self.request.GET.get('payment_status')
-        if payment_status:
-            status_display = {
-                'not_paid': 'Not Paid',
-                'partially_paid': 'Partially Paid',
-                'paid': 'Paid'
-            }
-            active_filters['payment_status'] = status_display.get(payment_status)
+            # Amount Range
+            if self.request.GET.get('amount_min') or self.request.GET.get('amount_max'):
+                amount_range = []
+                if self.request.GET.get('amount_min'):
+                    amount_range.append(f"Min {self.request.GET.get('amount_min')}")
+                if self.request.GET.get('amount_max'):
+                    amount_range.append(f"Max {self.request.GET.get('amount_max')}")
+                active_filters['Amount'] = ' - '.join(amount_range)
 
-        # Amount Range
-        if self.request.GET.get('amount_min') or self.request.GET.get('amount_max'):
-            amount_range = []
-            if self.request.GET.get('amount_min'):
-                amount_range.append(f"Min: {self.request.GET.get('amount_min')}")
-            if self.request.GET.get('amount_max'):
-                amount_range.append(f"Max: {self.request.GET.get('amount_max')}")
-            active_filters['amount_range'] = ' - '.join(amount_range)
+            # Payment Status
+            payment_status = self.request.GET.get('payment_status')
+            if payment_status:
+                status_display = dict(Invoice.PAYMENT_STATUS_CHOICES).get(payment_status)
+                if status_display:
+                    active_filters['Payment Status'] = status_display
 
-        # Export Status
-        export_status = self.request.GET.get('export_status')
-        if export_status:
-            active_filters['export_status'] = 'Exported' if export_status == 'exported' else 'Not Exported'
+            # Export Status
+            export_status = self.request.GET.get('export_status')
+            if export_status:
+                active_filters['Export Status'] = 'Exported' if export_status == 'exported' else 'Not Exported'
 
-        # Document Type
-        document_type = self.request.GET.get('document_type')
-        if document_type:
-            active_filters['document_type'] = 'Invoice' if document_type == 'invoice' else 'Credit Note'
+            # Invoice Type
+            invoice_type = self.request.GET.get('invoice_type')
+            if invoice_type:
+                type_display = dict(INVOICE_TYPES).get(invoice_type)
+                if type_display:
+                    active_filters['Type'] = type_display
 
-        context['active_filters'] = active_filters
-        context['total_results'] = self.get_queryset().count()
-        
-        # Add initial supplier data for the filter if selected
-        if supplier_id:
-            try:
-                supplier = Supplier.objects.get(id=supplier_id)
-                context['initial_supplier'] = {
-                    'id': supplier_id,
-                    'text': supplier.name
-                }
-            except Supplier.DoesNotExist:
-                pass
+            # Document Status
+            doc_status = self.request.GET.get('doc_status')
+            if doc_status:
+                status_display = dict(INVOICE_STATUS).get(doc_status)
+                if status_display:
+                    active_filters['Document Status'] = status_display
+
+            # Other boolean filters
+            if self.request.GET.get('is_overdue'):
+                active_filters['Status'] = 'Overdue'
+            if self.request.GET.get('is_energy'):
+                active_filters['Supplier Type'] = 'Energy'
+
+            print("\nActive Filters:", active_filters)
+            context['active_filters'] = active_filters
+            context['total_results'] = self.get_queryset().count()
+
+        except Exception as e:
+            print(f"Error preparing context: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
         return context
 
     def render_to_response(self, context, **response_kwargs):
         """Handle both HTML and AJAX responses"""
-        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-            return JsonResponse({
-                'html': render_to_string(
-                    'invoice/partials/invoice_table.html',
-                    context,
-                    request=self.request
-                ),
-                'total_results': context['total_results'],
-                'active_filters': context['active_filters']
-            })
-        return super().render_to_response(context, **response_kwargs)
+        print("\n=== Rendering Response ===")
+        is_ajax = self.request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        print(f"Request is AJAX: {is_ajax}")
+        
+        if is_ajax:
+            try:
+                filtered_invoices = self.get_queryset()  # Get filtered queryset
+                print(f"Filtered invoices count: {filtered_invoices.count()}")
+                print("First invoice:", filtered_invoices.first())  # Debug
 
+                rendered_html = render_to_string(
+                    'invoice/partials/invoice_table.html',
+                    {
+                        'invoices': filtered_invoices,
+                        'request': self.request,
+                        'INVOICE_TYPES': INVOICE_TYPES,
+                        'INVOICE_STATUS': INVOICE_STATUS,
+                    },
+                    request=self.request
+                )
+                # Add this debug line
+                print("Template context:", {
+                    'invoices_count': filtered_invoices.count(),
+                    'first_invoice_ref': filtered_invoices.first().ref if filtered_invoices.exists() else None,
+                    'has_INVOICE_TYPES': 'INVOICE_TYPES' in locals(),
+                    'has_INVOICE_STATUS': 'INVOICE_STATUS' in locals()
+                })
+
+
+
+                print("Length of rendered HTML:", len(rendered_html))
+
+                data = {
+                    'html': rendered_html,
+                    'total_results': filtered_invoices.count(),
+                    'active_filters': context.get('active_filters', {})
+                }
+                return JsonResponse(data)
+                
+            except Exception as e:
+                print(f"Error preparing AJAX response: {str(e)}")
+                return JsonResponse({'error': str(e)}, status=500)
+
+        return super().render_to_response(context, **response_kwargs)
+    
 # Create a new Invoice
 class InvoiceCreateView(SuccessMessageMixin, CreateView):
     model = Invoice

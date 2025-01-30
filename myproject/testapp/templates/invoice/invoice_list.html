@@ -4,157 +4,6 @@
 {% block title %}Invoice List{% endblock %}
 
 {% block content %}
-<script>
-    console.log("Script block loaded");
-    
-    document.addEventListener('DOMContentLoaded', function() {
-        console.log("DOM loaded");
-    
-        // Initialize supplier autocomplete
-        $('#supplier-filter').autocomplete({
-            source: "{% url 'supplier-autocomplete' %}",
-            minLength: 0,
-            select: function(event, ui) {
-                $(this).val(ui.item.label);
-                $('#supplier-filter-id').val(ui.item.value);
-                return false;
-            }
-        });
-
-        // Filter functionality
-        const applyButton = document.getElementById('apply-filters');
-        if (applyButton) {
-            applyButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                // Debug: Log all form elements
-                const form = document.getElementById('filter-form');
-                console.log("All form elements:", form.elements);
-                console.log("Apply button clicked");
-
-                // Get all form values including checkboxes and select2
-                const filters = {};
-                
-                // Get standard form inputs
-                const formData = new FormData(document.getElementById('filter-form'));
-                
-                // Debug log
-                console.log("Form data before processing:", Object.fromEntries(formData));
-
-                // Process each form element
-                $('#filter-form').find('input').each(function() {
-                    const input = $(this);
-                    const name = input.attr('name');
-                    
-                    if (!name) return; // Skip if no name attribute
-
-                    if (input.is(':checkbox')) {
-                        // Only add checked checkboxes
-                        if (input.is(':checked')) {
-                            filters[name] = input.val();
-                        }
-                    } else if (name === 'supplier') {
-                        // Use the hidden supplier_id field instead of the display name
-                        const supplierId = $('#supplier-filter-id').val();
-                        if (supplierId) {
-                            filters['supplier'] = supplierId;
-                        }
-                    } else if (name === 'product') {
-                        // Use the hidden product_id field instead of the display name
-                        const productId = $('#product-filter-id').val();
-                        if (productId) {
-                            filters['product'] = productId;
-                        }
-                    } else {
-                        // Handle regular inputs
-                        const value = input.val();
-                        if (value) {
-                            filters[name] = value;
-                        }
-                    }
-                });
-
-                // Debug logs
-                console.log("Final filters object:", filters);
-                
-                // Apply filters
-                const searchParams = new URLSearchParams(filters);
-                window.location.search = searchParams.toString();
-            });
-        } else {
-            console.error("Apply button not found");
-        }
-        
-        // Reset filters
-        const resetButton = document.getElementById('reset-filters');
-        if (resetButton) {
-            resetButton.addEventListener('click', function(e) {
-                e.preventDefault();
-                console.log("Reset clicked");
-                
-                // Reset form
-                document.getElementById('filter-form').reset();
-                
-                // Reset supplier filter
-                $('#supplier-filter, #supplier-filter-id').val('');
-                
-                // Uncheck all checkboxes
-                $('input[type="checkbox"]').prop('checked', false);
-                
-                // Clear URL parameters and reload
-                window.history.pushState({}, '', `${window.location.pathname}?${urlParams.toString()}`);
-            });
-        }
-        const filterPanel = document.querySelector('.filter-panel');
-        // Initialize filters from URL parameters
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.toString() !== '') {
-    filterPanel.style.display = 'block'; // Force display of the panel
-}
-        for (let [key, value] of urlParams.entries()) {
-            const input = document.querySelector(`[name="${key}"]`);
-            if (input) {
-                if (input.type === 'checkbox') {
-                    input.checked = value === '1';
-                } else {
-                    input.value = value;
-                }
-            }
-        }
-
-        // Debug log for URL parameters
-        console.log("URL parameters:", Object.fromEntries(urlParams));
-    
-        // Show/hide filter panel
-        $('#toggle-filters').click(function(e) {
-            $('.filter-panel').slideToggle();
-            $(this).find('i').toggleClass('fa-filter fa-filter-slash');
-        });
-
-        const tableRows = document.querySelectorAll('.table-hover tbody tr');
-
-        tableRows.forEach(row => {
-            row.addEventListener('click', function () {
-                // Remove 'active-row' from all rows
-                tableRows.forEach(r => r.classList.remove('active-row'));
-
-                // Add 'active-row' to the clicked row
-                this.classList.add('active-row');
-            });
-        });
-
-        const rowButtons = document.querySelectorAll('td .btn');
-        rowButtons.forEach(button => {
-            button.addEventListener('click', function () {
-                const row = this.closest('tr');
-                row.classList.add('active-row');
-                setTimeout(() => {
-                    row.classList.remove('active-row');
-                }, 1000); // Highlight row for 1 second
-            });
-        });
-    });
-</script>
-    
 <h1>Invoice List</h1>
 
 <div class="filter-section mb-4">
@@ -192,8 +41,18 @@
                     <!-- Supplier Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Supplier</label>
-                        <input type="text" class="form-control" id="supplier-filter" name="supplier" placeholder="Search supplier...">
-                        <input type="hidden" id="supplier-filter-id" name="supplier_id">
+                        <div class="input-group">
+                            <input type="text" class="form-control" 
+                                id="supplier-filter" name="supplier"
+                                placeholder="Search by name...">
+                            <input type="hidden" id="supplier-filter-id" name="supplier_id">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="$('#supplier-filter, #supplier-filter-id').val(''); FilterSystem.applyFilters()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Payment Status Filter -->
@@ -291,8 +150,18 @@
                     <!-- Product Filter -->
                     <div class="col-md-6 col-lg-4 mb-3">
                         <label>Product</label>
-                        <input type="text" class="form-control" id="product-filter" name="product" placeholder="Search product...">
-                        <input type="hidden" id="product-filter-id" name="product_id">
+                        <div class="input-group">
+                            <input type="text" class="form-control" 
+                                id="product-filter" name="product"
+                                placeholder="Search by name...">
+                            <input type="hidden" id="product-filter-id" name="product_id">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="$('#product-filter, #product-filter-id').val(''); FilterSystem.applyFilters()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
                     </div>
 
                     <!-- Payment Status Checks -->
@@ -917,271 +786,81 @@
 
 
 <!-- JavaScript time!!! -->
+
 <script>
+// Utility functions for formatting and common operations
+const Utils = {
+    formatMoney: function(amount) {
+        console.log('Formatting amount:', amount);
+        return new Intl.NumberFormat('fr-FR', {
+            style: 'currency',
+            currency: 'MAD',
+            minimumFractionDigits: 2
+        }).format(amount);
+    },
 
-    // 1. Utility Functions - These are used throughout the code
-    const Utils = {
-        formatMoney: function(amount) {
-            return new Intl.NumberFormat('fr-FR', {
-                style: 'currency',
-                currency: 'MAD',
-                minimumFractionDigits: 2
-            }).format(amount);
-        },
-        
-        
-                
-        formatStatus: function(status) {
-            return status.charAt(0).toUpperCase() + status.slice(1);
-        }
-    };
+    formatDate: function(date) {
+        if (!date) return '-';
+        return new Date(date).toLocaleDateString('fr-FR');
+    },
 
-    // 2. Modal Handlers - All modal-related functions
-    const ModalHandlers = {
-        // Invoice Details Modal
-        loadInvoiceDetails: function(invoiceId) {
-            $.ajax({
-                url: "{% url 'invoice-details' %}",
-                data: { 'invoice_id': invoiceId },
-                success: function(data) {
-                    $('#invoice-details-table').empty();
-                    data.products.forEach(product => {
-                        $('#invoice-details-table').append(`
-                            <tr>
-                                <td>${product.name}</td>
-                                <td>${product.unit_price}</td>
-                                <td>${product.quantity}</td>
-                                <td>${product.vat_rate}</td>
-                                <td>${product.reduction_rate}</td>
-                                <td>${product.raw_price}</td>
-                            </tr>
-                        `);
-                    });
-                    
-                    $('#vat-summary').empty();
-                    data.vat_subtotals.forEach(vatSubtotal => {
-                        $('#vat-summary').append(
-                            `<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`
-                        );
-                    });
-                    
-                    $('#total-amount-summary').html(`
-                        <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
-                        <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
-                        <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
-                    `);
-                }
-            });
-        },
+    getStatusBadge: function(status, type = 'default') {
+        console.log('Getting status badge for:', status, type);
+        const badges = {
+            'pending': ['secondary', 'clock'],
+            'delivered': ['warning', 'truck'],
+            'paid': ['success', 'check-circle'],
+            'rejected': ['danger', 'times-circle'],
+            'cancelled': ['dark', 'ban'],
+            'partially_paid': ['warning', 'exclamation-circle'],
+            'not_paid': ['danger', 'times-circle']
+        };
 
-        getProgressBarClass: function(percentage) {
-            if (percentage >= 100) return 'bg-success';
-            if (percentage > 50) return 'bg-warning';
-            return 'bg-danger';
-        },
-        
-        getStatusBadge: function(status) {
-            const badges = {
-                'pending': ['secondary', 'clock'],
-                'delivered': ['warning', 'truck'],
-                'paid': ['success', 'check-circle'],
-                'rejected': ['danger', 'times-circle'],
-                'cancelled': ['dark', 'ban']
-            };
-
-            const [color, icon] = badges[status] || ['secondary', 'question-circle'];
-            
-            return `
-                <span class="badge badge-${color}">
+        const [color, icon] = badges[status] || ['secondary', 'question-circle'];
+        return `<span class="badge badge-${color}">
                     <i class="fas fa-${icon} mr-1"></i>
-                    ${status.charAt(0).toUpperCase() + status.slice(1)}
-                </span>
-            `;
-        },
+                    ${status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ')}
+                </span>`;
+    }
+};
 
-        loadPaymentDetails: function(invoiceId) {
-            console.log("\n=== Loading Payment Details ===");
-            console.log("Invoice ID:", invoiceId);
-            
-            $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
-                console.log("Received payment data:", data);
-                const details = data.payment_details;  // Add this line
-                console.log("Payment details:", details);  // Debug log
+// Modal Handlers for all invoice-related modals
+const ModalHandlers = {
+    loadInvoiceDetails: function(invoiceId) {
+        $.ajax({
+            url: "{% url 'invoice-details' %}",
+            data: { 'invoice_id': invoiceId },
+            success: function(data) {
+                $('#invoice-details-table').empty();
+                data.products.forEach(product => {
+                    $('#invoice-details-table').append(`
+                        <tr>
+                            <td>${product.name}</td>
+                            <td>${product.unit_price}</td>
+                            <td>${product.quantity}</td>
+                            <td>${product.vat_rate}</td>
+                            <td>${product.reduction_rate}</td>
+                            <td>${product.raw_price}</td>
+                        </tr>
+                    `);
+                });
                 
-                // Update summary cards with animations
-                const updateAmount = (elementId, amount) => {
-                    console.log(`Updating ${elementId} with amount:`, amount);
-                    const element = $(`#${elementId}`);
-                    element.fadeOut(200, function() {
-                        $(this).text(Utils.formatMoney(amount)).fadeIn(200);
-                    });
-                };
-
-                updateAmount('amount-due', details.total_amount);
-                updateAmount('amount-paid', details.paid_amount);
-                updateAmount('amount-to-issue', details.amount_to_issue);
-                updateAmount('pending-amount', details.pending_amount);
-                updateAmount('delivered-amount', details.delivered_amount);
-                updateAmount('remaining-amount', details.remaining_to_pay);
-
-                // Update progress bar
-                const progressBar = $('#payment-progress');
-                const percentage = details.payment_percentage;
-                console.log("Payment percentage:", percentage);
-                
-                progressBar
-                    .css('width', '0%')
-                    .removeClass('bg-success bg-warning bg-danger')
-                    .addClass(this.getProgressBarClass(percentage))
-                    .animate(
-                        { width: `${percentage}%` }, 
-                        800, 
-                        function() {
-                            $(this).text(`${(details.payment_percentage || 0).toFixed(1)}%`);
-                        }
+                $('#vat-summary').empty();
+                data.vat_subtotals.forEach(vatSubtotal => {
+                    $('#vat-summary').append(
+                        `<p><strong>Subtotal for VAT ${vatSubtotal.vat_rate}:</strong> ${vatSubtotal.subtotal}</p>`
                     );
-
-                console.log("Updating checks table with:", data.checks);
-                this.updateChecksTable(data.checks);
+                });
                 
-                $('#paymentDetailsModal').modal('show');
-            }.bind(this)).fail(function(error) {
-                console.error("Error loading payment details:", error);
-                alert('Failed to load payment details');
-            });
-        },
-
-        updateChecksTable: function(checks) {
-            const tbody = $('#payment-checks-tbody');
-            tbody.empty();
-
-            if (!checks || checks.length === 0) {
-                tbody.append(`
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-4">
-                            <i class="fas fa-info-circle"></i> No checks issued yet
-                        </td>
-                    </tr>
+                $('#total-amount-summary').html(`
+                    <strong>Total Raw Amount:</strong> ${data.total_raw_amount}<br>
+                    <strong>Total VAT Amount:</strong> ${data.total_vat}<br>
+                    <strong>Total Amount (Including Tax):</strong> ${data.total_amount}
                 `);
-                return;
             }
-
-            checks.forEach(check => {
-        const row = document.createElement('tr');
-        
-        // Common status badge
-        const statusBadge = ModalHandlers.getStatusBadge(check.status);
-        
-        // Different display for direct vs allocated vs direct debit payments
-        if (check.type === 'direct_debit') {
-            row.innerHTML = `
-                <td>
-                    <i class="fas fa-university text-muted mr-2"></i>
-                    ${check.reference}
-                    <br>
-                    <span class="badge badge-info">${check.payment_type}</span>
-                </td>
-                <td class="text-right font-weight-bold">
-                    ${Utils.formatMoney(check.amount)}
-                </td>
-                <td>${check.created_at}</td>
-                <td>-</td>
-                <td>${check.paid_at || '-'}</td>
-                <td>
-                    ${check.status === 'processed' ? `
-                        <span class="badge badge-success">
-                            <i class="fas fa-check me-1"></i>
-                            Processed
-                        </span>
-                    ` : `
-                        <span class="badge badge-${check.status === 'rejected' ? 'danger' : 'warning'}">
-                            <i class="fas fa-${check.status === 'rejected' ? 'times' : 'clock'} me-1"></i>
-                            ${check.status.charAt(0).toUpperCase() + check.status.slice(1)}
-                        </span>
-                    `}
-                    <br>
-                    <small class="text-muted">
-                        ${check.bank} - ${check.account}
-                    </small>
-                </td>
-            `;
-        } else if (check.type === 'direct') {
-            row.innerHTML = `
-                <td>
-                    <i class="fas fa-money-check-alt text-muted mr-2"></i>
-                    ${check.reference}
-                    <br>
-                    <span class="badge badge-info">${check.payment_type}</span>
-                </td>
-                <td class="text-right font-weight-bold">
-                    ${Utils.formatMoney(check.amount)}
-                </td>
-                <td>${check.created_at}</td>
-                <td>${check.delivered_at || '-'}</td>
-                <td>${check.paid_at || '-'}</td>
-                <td>${statusBadge}</td>
-            `;
-        } else { // allocation
-            row.innerHTML = `
-                <td>
-                    <i class="fas fa-money-check-alt text-muted mr-2"></i>
-                    ${check.reference}
-                    <span class="badge badge-info ml-2">Allocation</span>
-                    <span class="badge badge-info">${check.payment_type}</span>
-                    <br>
-                    <small class="text-muted">
-                        (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
-                    </small>
-                </td>
-                <td class="text-right font-weight-bold">
-                    ${Utils.formatMoney(check.allocated_amount)}
-                </td>
-                <td>${check.created_at}</td>
-                <td>${check.delivered_at || '-'}</td>
-                <td>${check.paid_at || '-'}</td>
-                <td>${statusBadge}</td>
-            `;
-        }
-        
-        tbody.append(row);
-    });
-},
-
-        
-
-        showAccountingSummary: function(invoiceId) {
-            $.ajax({
-                url: `/testapp/invoices/${invoiceId}/accounting-summary/`,
-                method: 'GET',
-                success: function(data) {
-                    // Populate the modal
-                    $('#originalEntries').empty();
-                    data.original_entries.forEach(entry => {
-                        $('#originalEntries').append(ModalHandlers.createAccountingRow(entry));
-                    });
-
-                    if (data.credit_note_entries.length > 0) {
-                        $('#creditNotesSection').removeClass('d-none');
-                        $('#creditNoteEntries').empty();
-                        data.credit_note_entries.forEach(entry => {
-                            $('#creditNoteEntries').append(ModalHandlers.createAccountingRow(entry));
-                        });
-                    } else {
-                        $('#creditNotesSection').addClass('d-none');
-                    }
-
-                    $('#originalTotal').text(Utils.formatMoney(data.totals.original));
-                    $('#creditTotal').text(Utils.formatMoney(data.totals.credit_notes));
-                    $('#netTotal').text(Utils.formatMoney(data.totals.net));
-
-                    $('#accountingSummaryModal').modal('show');
-                },
-                error: function(xhr) {
-                    alert('Failed to load accounting summary: ' + xhr.responseText);
-                }
-            });
-        },
-
+        });
+    },
+    
         createAccountingRow: function(entry) {
             return `
                 <tr>
@@ -1194,214 +873,771 @@
                     <td>${entry.journal}</td>
                 </tr>
             `;
-        }
-
-    };
-
-    // 3. Credit Note Handlers
-    const CreditNoteHandlers = {
-        // Store the initial net amount for calculations
-        initialNetAmount: 0,
-
-        initializeQuantityHandlers: function() {
-            $('.credit-quantity').on('input', function() {
-                const quantity = parseFloat($(this).val()) || 0;
-                const available = parseFloat($(this).data('available'));
-                
-                if (quantity > available) {
-                    $(this).val(available);
-                    return;
-                }
-                
-                CreditNoteHandlers.updateSubtotalsAndTotal();
-            });
         },
 
-        updateNetBalance: function(creditAmount) {
-            $('#net-balance-details').html(`
-                <p><strong>Original Amount:</strong> ${Utils.formatMoney(this.initialNetAmount)}</p>
-                <p><strong>Credit Amount:</strong> ${Utils.formatMoney(creditAmount)}</p>
-                <p class="font-weight-bold">Net Balance: ${Utils.formatMoney(this.initialNetAmount - creditAmount)}</p>
-            `);
-        },
-
-        updateSubtotalsAndTotal: function() {
-            let total = 0;
-            $('.credit-quantity').each(function() {
-                const quantity = parseFloat($(this).val()) || 0;
-                const unitPrice = parseFloat($(this).data('unit-price'));
-                const subtotal = quantity * unitPrice;
-                
-                $(this).closest('tr').find('.subtotal').text(Utils.formatMoney(subtotal));
-                total += subtotal;
+showAccountingSummary: function(invoiceId) {
+    $.ajax({
+        url: `/testapp/invoices/${invoiceId}/accounting-summary/`,
+        method: 'GET',
+        success: function(data) {
+            // Populate the modal
+            $('#originalEntries').empty();
+            data.original_entries.forEach(entry => {
+                $('#originalEntries').append(ModalHandlers.createAccountingRow(entry));  // Note: Using ModalHandlers explicitly
             });
 
-            $('#total-credit-amount').text(Utils.formatMoney(total));
-            this.updateNetBalance(total);
-        },
-
-        saveCreditNote: function() {
-            if (!$('#credit-note-ref').val()) {
-                alert('Please enter a credit note reference');
-                return;
+            if (data.credit_note_entries.length > 0) {
+                $('#creditNotesSection').removeClass('d-none');
+                $('#creditNoteEntries').empty();
+                data.credit_note_entries.forEach(entry => {
+                    $('#creditNoteEntries').append(ModalHandlers.createAccountingRow(entry));  // Note: Using ModalHandlers explicitly
+                });
+            } else {
+                $('#creditNotesSection').addClass('d-none');
             }
 
-            const products = [];
-            $('.credit-quantity').each(function() {
-                const quantity = parseFloat($(this).val()) || 0;
-                if (quantity > 0) {
-                    products.push({
-                        product_id: $(this).data('product-id'),
-                        quantity: quantity
-                    });
-                }
-            });
-            
-            if (products.length === 0) {
-                alert('Please select at least one product to credit');
-                return;
-            }
+            $('#originalTotal').text(Utils.formatMoney(data.totals.original));
+            $('#creditTotal').text(Utils.formatMoney(data.totals.credit_notes));
+            $('#netTotal').text(Utils.formatMoney(data.totals.net));
 
-            $.ajax({
-                url: '/testapp/invoices/create-credit-note/',
-                method: 'POST',
-                data: JSON.stringify({
-                    original_invoice_id: $('#original-invoice-id').val(),
-                    ref: $('#credit-note-ref').val(),
-                    date: $('#credit-note-date').val(),
-                    products: products
-                }),
-                contentType: 'application/json',
-                success: function(response) {
-                    location.reload();
-                },
-                error: function(xhr) {
-                    alert('Error creating credit note: ' + xhr.responseText);
-                }
-            });
+            $('#accountingSummaryModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('Failed to load accounting summary: ' + xhr.responseText);
         }
-    };
+    });
+},
 
-    // 4. Filter Handlers
-    const FilterHandlers = {
-        updateActiveFilters: function() {
-            const activeFilters = [];
-            const filterLabels = {
-                date_from: 'From',
-                date_to: 'To',
-                supplier: 'Supplier',
-                payment_status: 'Payment Status',
-                amount_min: 'Min Amount',
-                amount_max: 'Max Amount',
-                export_status: 'Export Status',
-                document_type: 'Document Type'
+    loadPaymentDetails: function(invoiceId) {
+        console.log('Loading payment details for:', invoiceId);
+        
+        $.get(`/testapp/invoices/${invoiceId}/payment-details/`, function(data) {
+            console.log('Received payment data:', data);
+            const details = data.payment_details;
+
+            // Update summary cards with animations
+            const updateAmount = (elementId, amount) => {
+                console.log(`Updating ${elementId} with amount:`, amount);
+                $(`#${elementId}`).fadeOut(200, function() {
+                    $(this).text(Utils.formatMoney(amount)).fadeIn(200);
+                });
             };
 
-            // Build URL parameters
-            const urlParams = new URLSearchParams();
+            updateAmount('amount-due', details.total_amount);
+            updateAmount('amount-paid', details.paid_amount);
+            updateAmount('amount-to-issue', details.amount_to_issue);
+            updateAmount('pending-amount', details.pending_amount);
+            updateAmount('delivered-amount', details.delivered_amount);
+            updateAmount('remaining-amount', details.remaining_to_pay);
+
+            // Update progress bar
+            const percentage = details.payment_percentage;
+            const progressBar = $('#payment-progress');
+            const getProgressClass = (pct) => {
+                if (pct >= 100) return 'bg-success';
+                if (pct > 50) return 'bg-warning';
+                return 'bg-danger';
+            };
+
+            progressBar
+                .css('width', '0%')
+                .removeClass('bg-success bg-warning bg-danger')
+                .addClass(getProgressClass(percentage))
+                .animate(
+                    { width: `${percentage}%` }, 
+                    800, 
+                    function() {
+                        $(this).text(`${percentage.toFixed(1)}%`);
+                    }
+                );
+
+            // Update checks table
+            this.updateChecksTable(data.checks);
             
-            $('#filter-form').serializeArray().forEach(function(item) {
-                if (item.value) {
-                    urlParams.append(item.name, item.value);
-                    activeFilters.push({
-                        name: filterLabels[item.name],
-                        value: item.value,
-                        param: item.name
-                    });
-                }
-            });
+            $('#paymentDetailsModal').modal('show');
+        }.bind(this)).fail(function(error) {
+            console.error('Error loading payment details:', error);
+            alert('Failed to load payment details');
+        });
+    },
 
+    updateChecksTable: function(checks) {
+        console.log('Updating checks table with:', checks);
+        const tbody = $('#payment-checks-tbody');
+        tbody.empty();
 
-
-            // Update filter count badge
-            const filterCount = activeFilters.length;
-            const countBadge = $('.active-filters-count');
-            if (filterCount > 0) {
-                countBadge.text(filterCount).show();
-            } else {
-                countBadge.hide();
-            }
-
-            // Update filter tags
-            const tagsHtml = activeFilters.map(filter => `
-                <span class="badge badge-info mr-2">
-                    ${filter.name}: ${filter.value}
-                    <button type="button" class="close ml-1" 
-                            data-param="${filter.param}" 
-                            aria-label="Remove filter">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
-                </span>
-            `).join('');
-
-            $('.active-filters-tags').html(tagsHtml);
-        },
-
-        applyFilters: function() {
-            const filters = {};
-            const formData = $('#filter-form').serializeArray();
-            console.log("Form data being submitted:", formData); // Debug log
-
-            $('#filter-form').serializeArray().forEach(function(item) {
-                if (item.value) {
-                    filters[item.name] = item.value;
-                }
-            });
-
-            console.log("Final filters object:", filters); // Debug log
-            window.location.search = new URLSearchParams(filters).toString();
-        },
-
-        resetFilters: function() {
-            $('#filter-form')[0].reset();
-            $('#supplier-filter, #supplier-filter-id').val('');
-            window.location.search = '';
-        }
-    };
-
-    
-    document.addEventListener('DOMContentLoaded', function () {
-
-    // Initialize Modal Events
-
- // Accounting summary button handler
- $(document).on('click', '.accounting-summary-btn', function() {
-        const invoiceId = $(this).data('invoice-id');
-        if (!invoiceId) {
-            alert('Invoice ID is missing.');
+        if (!checks || checks.length === 0) {
+            tbody.append(`
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="fas fa-info-circle"></i> No payments recorded
+                    </td>
+                </tr>
+            `);
             return;
         }
-        ModalHandlers.showAccountingSummary(invoiceId);
-    });
 
-    // Credit note toggle handler
-    $('.toggle-credit-notes').on('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+        checks.forEach(check => {
+            const row = document.createElement('tr');
+            
+            // Handle different payment types
+            if (check.type === 'direct_debit') {
+                this.appendDirectDebitRow(row, check);
+            } else if (check.type === 'direct') {
+                this.appendDirectPaymentRow(row, check);
+            } else {
+                this.appendAllocationRow(row, check);
+            }
+            
+            tbody.append(row);
+        });
+    },
+
+    appendDirectDebitRow: function(row, check) {
+        row.innerHTML = `
+            <td>
+                <i class="fas fa-university text-muted mr-2"></i>
+                ${check.reference}
+                <br>
+                <span class="badge badge-info">Direct Debit</span>
+            </td>
+            <td class="text-right font-weight-bold">
+                ${Utils.formatMoney(check.amount)}
+            </td>
+            <td>${Utils.formatDate(check.created_at)}</td>
+            <td>-</td>
+            <td>${Utils.formatDate(check.paid_at)}</td>
+            <td>
+                ${check.status === 'processed' ? 
+                    Utils.getStatusBadge('paid') : 
+                    Utils.getStatusBadge(check.status)}
+                <br>
+                <small class="text-muted">
+                    ${check.bank} - ${check.account}
+                </small>
+            </td>
+        `;
+    },
+
+    appendDirectPaymentRow: function(row, check) {
+        row.innerHTML = `
+            <td>
+                <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                ${check.reference}
+                <br>
+                <span class="badge badge-info">${check.payment_type}</span>
+            </td>
+            <td class="text-right font-weight-bold">
+                ${Utils.formatMoney(check.amount)}
+            </td>
+            <td>${Utils.formatDate(check.created_at)}</td>
+            <td>${Utils.formatDate(check.delivered_at)}</td>
+            <td>${Utils.formatDate(check.paid_at)}</td>
+            <td>${Utils.getStatusBadge(check.status)}</td>
+        `;
+    },
+
+    appendAllocationRow: function(row, check) {
+        row.innerHTML = `
+            <td>
+                <i class="fas fa-money-check-alt text-muted mr-2"></i>
+                ${check.reference}
+                <span class="badge badge-info ml-2">Allocation</span>
+                <span class="badge badge-info">${check.payment_type}</span>
+                <br>
+                <small class="text-muted">
+                    (${Utils.formatMoney(check.allocated_amount)} of ${Utils.formatMoney(check.total_amount)})
+                </small>
+            </td>
+            <td class="text-right font-weight-bold">
+                ${Utils.formatMoney(check.allocated_amount)}
+            </td>
+            <td>${Utils.formatDate(check.created_at)}</td>
+            <td>${Utils.formatDate(check.delivered_at)}</td>
+            <td>${Utils.formatDate(check.paid_at)}</td>
+            <td>${Utils.getStatusBadge(check.status)}</td>
+        `;
+    }
+};
+
+// Add this right after ModalHandlers object, inside the same script tag
+
+// Filter System - Handles all filter-related functionality
+const FilterSystem = {
+    debounceTimer: null,
+    isLoading: false,
+
+    init() {
+        console.log('Initializing filter system');
+        this.initializeSupplierAutocomplete();
+        this.initializeProductAutocomplete();
+        this.initializeFilterInputs();
+        this.initializeFilterToggle();
+        this.initializeFromURL();
+        this.updateFilterCount();
+    },
+
+    initializeSupplierAutocomplete() {
+        const supplierInput = $('#supplier-filter');
+        const supplierIdInput = $('#supplier-filter-id');
+
+        supplierInput.autocomplete({
+            source: "{% url 'supplier-autocomplete' %}",
+            minLength: 2,
+            select: (event, ui) => {
+                supplierInput.val(ui.item.label);  // Show name in visible field
+                supplierIdInput.val(ui.item.value); // Store ID in hidden field
+                this.applyFilters();
+                return false;
+            }
+        });
+
+        // Clear hidden ID if user edits the text
+        supplierInput.on('input', () => {
+            if (supplierInput.val() !== supplierInput.data('last-selected')) {
+                supplierIdInput.val('');
+            }
+        });
+    },
+
+    initializeProductAutocomplete() {
+        const productInput = $('#product-filter');
+        const productIdInput = $('#product-filter-id');
+
+        productInput.autocomplete({
+            source: "{% url 'product-autocomplete' %}",
+            minLength: 2,
+            select: (event, ui) => {
+                productInput.val(ui.item.label);  // Show product name
+                productIdInput.val(ui.item.value); // Store ID
+                this.applyFilters();
+                return false;
+            }
+        });
+
+        productInput.on('input', () => {
+            if (productInput.val() !== productInput.data('last-selected')) {
+                productIdInput.val('');
+            }
+        });
+    },
+
+
+    initializeFilterInputs() {
+        console.log('Setting up filter input handlers');
+
+        $('#supplier-filter, #product-filter').on('keyup', () => {
+            this.debounceFilters();
+        });
         
-        const invoiceId = $(this).data('invoice');
-        const icon = $(this).find('i');
-        const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+        // Date inputs
+        $('input[type="date"]').on('change', () => {
+            console.log('Date filter changed');
+            this.debounceFilters();
+        });
+
+        // Number inputs
+        $('input[type="number"]').on('input', () => {
+            console.log('Number filter changed');
+            this.debounceFilters();
+        });
+
+        // Select inputs
+        $('select').on('change', () => {
+            console.log('Select filter changed');
+            this.applyFilters();
+        });
+
+        // Checkbox inputs
+        $('#filter-form input[type="checkbox"]').on('change', () => {
+            console.log('Filter checkbox changed');
+            this.applyFilters();
+        });
+
+        // Reset button
+        $('#reset-filters').on('click', (e) => {
+            e.preventDefault();
+            console.log('Resetting filters');
+            this.resetFilters();
+        });
+    },
+
+    initializeFilterToggle() {
+        console.log('Setting up filter toggle');
+        $('#toggle-filters').on('click', () => {
+            $('.filter-panel').slideToggle();
+            $('#toggle-filters i').toggleClass('fa-filter fa-filter-slash');
+        });
+    },
+
+    debounceFilters() {
+        console.log('Debouncing filter update');
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.applyFilters(), 300);
+    },
+
+    async applyFilters() {
+        if (this.isLoading) {
+            console.log('Filter update already in progress, skipping');
+            return;
+        }
+
+        console.log('Applying filters');
+        this.isLoading = true;
+        this.showLoading();
+
+        try {
+            const formData = new FormData($('#filter-form')[0]);
+            const params = new URLSearchParams(formData);
+            
+            console.log('Filter parameters:', Object.fromEntries(params));
+
+            const response = await fetch(`${window.location.pathname}?${params.toString()}`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const data = await response.json();
+            console.log('Raw response data:', data);
+            console.log('HTML content length:', data.html?.length);
+            console.log('First 100 chars of HTML:', data.html?.substring(0, 100));
+
+            const wrapper = document.getElementById('invoice-table-wrapper');
+            console.log('Found wrapper:', !!wrapper);
+            
+            wrapper.innerHTML = data.html;
+            console.log('After innerHTML update. New content length:', wrapper.innerHTML.length);
+
+            ExportSystem.init();
+
+            this.updateActiveFilters(data.active_filters);
+            this.updateResultCount(data.total_results);
+
+        } catch (error) {
+            console.error('Filter update failed:', error);
+            this.showError(error);
+        } finally {
+            this.isLoading = false;
+            this.hideLoading();
+        }
+    },
+
+    showLoading() {
+        const wrapper = $('#invoice-table-wrapper');
+        wrapper.css('opacity', '0.6').css('pointer-events', 'none');
         
-        creditNotesRow.toggleClass('d-none');
-        icon.toggleClass('fa-receipt fa-times-circle');
-    });
+        if (!$('#loading-spinner').length) {
+            wrapper.before(`
+                <div id="loading-spinner" class="text-center my-3">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                </div>
+            `);
+        }
+    },
 
-    // Make sure toggle works for dynamically loaded content
-    $(document).on('click', '.toggle-credit-notes', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
+    hideLoading() {
+        $('#invoice-table-wrapper').css('opacity', '').css('pointer-events', '');
+        $('#loading-spinner').remove();
+    },
+
+    showError(error) {
+        const alert = $(`
+            <div class="alert alert-danger alert-dismissible fade show mt-3">
+                <strong>Error updating results:</strong> ${error.message}
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+            </div>
+        `);
+        $('#invoice-table-wrapper').before(alert);
+        setTimeout(() => alert.alert('close'), 5000);
+    },
+
+    updateActiveFilters(filters) {
+        console.log('Updating active filters:', filters);
+        const container = $('.active-filters');
         
-        const invoiceId = $(this).data('invoice');
-        const icon = $(this).find('i');
-        const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+        const badges = Object.entries(filters).map(([key, value]) => `
+            <span class="badge badge-info mr-2">
+                ${key}: ${value}
+                <button type="button" class="close ml-1" data-filter="${key}">&times;</button>
+            </span>
+        `).join('');
+
+        container.html(badges);
+        this.updateFilterCount();
+    },
+
+    updateFilterCount() {
+        const count = $('.active-filters .badge').length;
+        const badge = $('.active-filters-count');
         
-        creditNotesRow.toggleClass('d-none');
-        icon.toggleClass('fa-receipt fa-times-circle');
-    });
+        badge.text(count);
+        badge.toggle(count > 0);
+    },
 
+    updateResultCount(count) {
+        $('.results-count').text(`${count} invoice${count !== 1 ? 's' : ''} found`);
+    },
 
+    initializeFromURL() {
+        console.log('Initializing filters from URL');
+        const params = new URLSearchParams(window.location.search);
 
+        if (params.toString()) {
+            $('.filter-panel').show();
+        }
+
+        // Handle supplier
+        const supplierId = params.get('supplier');
+        if (supplierId) {
+            fetch(`{% url 'supplier-autocomplete' %}?id=${supplierId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.length > 0) {
+                        const supplier = data[0];
+                        $('#supplier-filter').val(supplier.label);
+                        $('#supplier-filter-id').val(supplier.value);
+                    }
+                });
+        }
+
+        // Restore other values
+        params.forEach((value, key) => {
+            const element = $(`[name="${key}"]`);
+            if (element.length) {
+                if (element.attr('type') === 'checkbox') {
+                    element.prop('checked', value === '1');
+                } else {
+                    element.val(value);
+                }
+            }
+        });
+    },
+
+    reset() {
+        console.log('\n=== Resetting all filters ===');
+        
+        // Reset form
+        const form = document.getElementById('filter-form');
+        form.reset();
+        
+        // Clear supplier autocomplete
+        $('#supplier-filter, #supplier-filter-id').val('');
+        
+        // Clear URL parameters
+        window.location.search = '';  // This forces a page reload with clean URL
+        
+        console.log('Filters reset complete');
+    },
+
+    resetFilters() {
+        console.log('\n=== Resetting all filters ===');
+        
+        // Reset form
+        const form = document.getElementById('filter-form');
+        form.reset();
+        
+        // Clear supplier autocomplete
+        $('#supplier-filter, #supplier-filter-id').val('');
+        
+        // Clear URL parameters
+        window.location.search = '';  // This forces a page reload with clean URL
+        
+        console.log('Filters reset complete');
+    }
+};
+
+// Credit Note Handling System
+const CreditNoteSystem = {
+    initialNetAmount: 0,
+
+    init() {
+        console.log('Initializing credit note system');
+        this.initializeModalHandlers();
+        this.initializeSaveButton();
+    },
+
+    initializeModalHandlers() {
+        $('#creditNoteModal').on('show.bs.modal', (event) => {
+            console.log('Opening credit note modal');
+            const invoiceId = $(event.relatedTarget).data('invoice-id');
+            if (!invoiceId) {
+                console.error('No invoice ID provided');
+                return;
+            }
+
+            this.loadCreditNoteDetails(invoiceId);
+        });
+    },
+
+    initializeSaveButton() {
+        $('#save-credit-note').on('click', () => {
+            console.log('Attempting to save credit note');
+            this.saveCreditNote();
+        });
+    },
+
+    async loadCreditNoteDetails(invoiceId) {
+        console.log('Loading credit note details for invoice:', invoiceId);
+        try {
+            $('#original-invoice-id').val(invoiceId);
+            $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
+
+            const response = await fetch(`/testapp/invoices/${invoiceId}/credit-note-details/`);
+            if (!response.ok) throw new Error('Failed to load credit note details');
+            
+            const data = await response.json();
+            console.log('Received credit note details:', data);
+
+            this.initialNetAmount = data.invoice.total_amount - data.invoice.credited_amount;
+            this.updateInvoiceDetails(data.invoice);
+            this.populateProductsTable(data.products);
+            this.updateNetBalance(0);
+
+        } catch (error) {
+            console.error('Error loading credit note details:', error);
+            alert('Failed to load credit note details');
+            $('#creditNoteModal').modal('hide');
+        }
+    },
+
+    updateInvoiceDetails(invoice) {
+        $('#original-invoice-details').html(`
+            <p><strong>Reference:</strong> ${invoice.ref}</p>
+            <p><strong>Date:</strong> ${invoice.date}</p>
+            <p data-amount="${invoice.total_amount}">
+                <strong>Total Amount:</strong> ${Utils.formatMoney(invoice.total_amount)}
+            </p>
+            <p><strong>Already Credited:</strong> ${Utils.formatMoney(invoice.credited_amount)}</p>
+        `);
+    },
+
+    populateProductsTable(products) {
+        console.log('Populating products table:', products);
+        const tbody = $('#products-table tbody').empty();
+        
+        products.forEach(product => {
+            const row = `
+                <tr>
+                    <td>${product.name}</td>
+                    <td class="text-right">${product.original_quantity}</td>
+                    <td class="text-right">${product.credited_quantity}</td>
+                    <td class="text-right">${product.available_quantity}</td>
+                    <td>
+                        <input type="number" 
+                               class="form-control form-control-sm credit-quantity"
+                               data-product-id="${product.id}"
+                               data-unit-price="${product.unit_price}"
+                               data-available="${product.available_quantity}"
+                               min="0" 
+                               max="${product.available_quantity}" 
+                               value="0">
+                    </td>
+                    <td class="text-right">${Utils.formatMoney(product.unit_price)}</td>
+                    <td class="text-right subtotal">0.00</td>
+                </tr>
+            `;
+            tbody.append(row);
+        });
+
+        this.initializeQuantityHandlers();
+    },
+
+    initializeQuantityHandlers() {
+        $('.credit-quantity').on('input', (e) => {
+            const input = $(e.target);
+            const quantity = parseFloat(input.val()) || 0;
+            const available = parseFloat(input.data('available'));
+            
+            if (quantity > available) {
+                input.val(available);
+            }
+            
+            this.updateTotals();
+        });
+    },
+
+    updateTotals() {
+        console.log('Updating credit note totals');
+        let total = 0;
+        
+        $('.credit-quantity').each(function() {
+            const quantity = parseFloat($(this).val()) || 0;
+            const unitPrice = parseFloat($(this).data('unit-price'));
+            const subtotal = quantity * unitPrice;
+            
+            $(this).closest('tr').find('.subtotal').text(Utils.formatMoney(subtotal));
+            total += subtotal;
+        });
+
+        $('#total-credit-amount').text(Utils.formatMoney(total));
+        this.updateNetBalance(total);
+    },
+
+    updateNetBalance(creditAmount) {
+        $('#net-balance-details').html(`
+            <p><strong>Original Amount:</strong> ${Utils.formatMoney(this.initialNetAmount)}</p>
+            <p><strong>Credit Amount:</strong> ${Utils.formatMoney(creditAmount)}</p>
+            <p class="font-weight-bold">
+                Net Balance: ${Utils.formatMoney(this.initialNetAmount - creditAmount)}
+            </p>
+        `);
+    },
+
+    async saveCreditNote() {
+        console.log('Saving credit note');
+        const reference = $('#credit-note-ref').val();
+        
+        if (!reference) {
+            alert('Please enter a credit note reference');
+            return;
+        }
+
+        const products = [];
+        $('.credit-quantity').each(function() {
+            const quantity = parseFloat($(this).val()) || 0;
+            if (quantity > 0) {
+                products.push({
+                    product_id: $(this).data('product-id'),
+                    quantity: quantity
+                });
+            }
+        });
+
+        if (products.length === 0) {
+            alert('Please select at least one product to credit');
+            return;
+        }
+
+        try {
+            const response = await fetch('/testapp/invoices/create-credit-note/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': '{{ csrf_token }}'
+                },
+                body: JSON.stringify({
+                    original_invoice_id: $('#original-invoice-id').val(),
+                    ref: reference,
+                    date: $('#credit-note-date').val(),
+                    products: products
+                })
+            });
+
+            if (!response.ok) throw new Error('Failed to create credit note');
+            
+            console.log('Credit note created successfully');
+            location.reload();
+            
+        } catch (error) {
+            console.error('Error creating credit note:', error);
+            alert('Failed to create credit note: ' + error.message);
+        }
+    }
+};
+
+// Export functionality
+const ExportSystem = {
+    init() {
+        console.log('Initializing export system');
+        this.initializeCheckboxes();
+        this.initializeExportButton();
+        this.initializeUnexportButtons();
+    },
+
+    initializeCheckboxes() {
+        const checkboxes = document.querySelectorAll('.export-checkbox');
+        const exportButton = document.getElementById('export-selected');
+
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('click', () => {
+                const checkedBoxes = document.querySelectorAll('.export-checkbox:checked');
+                exportButton.disabled = checkedBoxes.length === 0;
+                console.log('Checked invoices:', checkedBoxes.length);
+            });
+        });
+    },
+
+    initializeExportButton() {
+        $('#export-selected').on('click', async () => {
+            console.log('Starting export process');
+            const selectedIds = [...document.querySelectorAll('.export-checkbox:checked')]
+                .map(cb => cb.value);
+
+            if (selectedIds.length === 0) return;
+
+            try {
+                const response = await fetch('{% url "export-invoices" %}', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    },
+                    body: JSON.stringify({invoice_ids: selectedIds})
+                });
+
+                if (!response.ok) throw new Error('Export failed');
+
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `accounting_export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.xlsx`;
+                document.body.appendChild(a);
+                a.click();
+                window.URL.revokeObjectURL(url);
+                
+                console.log('Export completed successfully');
+                location.reload();
+
+            } catch (error) {
+                console.error('Export failed:', error);
+                alert('Failed to export invoices: ' + error.message);
+            }
+        });
+    },
+
+    initializeUnexportButtons() {
+        $('.unexport-btn').on('click', async function() {
+            const invoiceId = $(this).data('invoice-id');
+            console.log('Attempting to unexport invoice:', invoiceId);
+            
+            if (!confirm('Are you sure you want to unexport this invoice?')) return;
+
+            try {
+                const response = await fetch(`/testapp/invoices/${invoiceId}/unexport/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': '{{ csrf_token }}'
+                    }
+                });
+
+                if (!response.ok) throw new Error('Unexport failed');
+                
+                console.log('Invoice unexported successfully');
+                location.reload();
+
+            } catch (error) {
+                console.error('Unexport failed:', error);
+                alert('Failed to unexport invoice: ' + error.message);
+            }
+        });
+    }
+};
+
+// Initialize everything when DOM is ready
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing invoice management system');
+
+    // Initialize all subsystems
+    FilterSystem.init();
+    CreditNoteSystem.init();
+    ExportSystem.init();
+
+    // Initialize modal triggers
     $('#invoiceDetailsModal').on('show.bs.modal', function(event) {
         const invoiceId = $(event.relatedTarget).data('invoice');
         ModalHandlers.loadInvoiceDetails(invoiceId);
@@ -1412,257 +1648,17 @@
         ModalHandlers.loadPaymentDetails(invoiceId);
     });
 
-    // Initialize Credit Note Events
-    $('#creditNoteModal').on('show.bs.modal', function(event) {
-        const invoiceId = $(event.relatedTarget).data('invoice-id');
+    // Initialize accounting summary buttons
+    $(document).on('click', '.accounting-summary-btn', function() {
+        const invoiceId = $(this).data('invoice-id');
         if (!invoiceId) {
-            console.error('No Invoice ID found!');
+            alert('Invoice ID is missing.');
             return;
         }
-
-        $('#original-invoice-id').val(invoiceId);
-        $('#credit-note-date').val(new Date().toISOString().split('T')[0]);
-
-        $.ajax({
-            url: `/testapp/invoices/${invoiceId}/credit-note-details/`,
-            method: 'GET',
-            success: function(data) {
-                // Store initial net amount
-                CreditNoteHandlers.initialNetAmount = data.invoice.total_amount - data.invoice.credited_amount;
-                
-                // Update UI
-                $('#original-invoice-details').html(`
-                    <p><strong>Reference:</strong> ${data.invoice.ref}</p>
-                    <p><strong>Date:</strong> ${data.invoice.date}</p>
-                    <p data-amount="${data.invoice.total_amount}">
-                        <strong>Total Amount:</strong> ${Utils.formatMoney(data.invoice.total_amount)}
-                    </p>
-                    <p><strong>Already Credited:</strong> ${Utils.formatMoney(data.invoice.credited_amount)}</p>
-                `);
-
-                CreditNoteHandlers.updateNetBalance(0);
-
-                // Populate products table
-                const tbody = $('#products-table tbody').empty();
-                data.products.forEach(product => {
-                    tbody.append(`
-                        <tr>
-                            <td>${product.name}</td>
-                            <td class="text-right">${product.original_quantity}</td>
-                            <td class="text-right">${product.credited_quantity}</td>
-                            <td class="text-right">${product.available_quantity}</td>
-                            <td>
-                                <input type="number" class="form-control form-control-sm credit-quantity"
-                                    data-product-id="${product.id}"
-                                    data-unit-price="${product.unit_price}"
-                                    data-available="${product.available_quantity}"
-                                    min="0" max="${product.available_quantity}" value="0">
-                            </td>
-                            <td class="text-right">${Utils.formatMoney(product.unit_price)}</td>
-                            <td class="text-right subtotal">0.00</td>
-                        </tr>
-                    `);
-                });
-
-                CreditNoteHandlers.initializeQuantityHandlers();
-            }
-        });
+        ModalHandlers.showAccountingSummary(invoiceId);
     });
 
-    $('#save-credit-note').on('click', function() {
-        console.log("Save button clicked"); // Debug log
-        CreditNoteHandlers.saveCreditNote();
-    });
-
-    // Export functionality
-    const checkboxes = document.querySelectorAll('.export-checkbox');
-    const exportButton = document.getElementById('export-selected');
-
-    checkboxes.forEach(function(checkbox) {
-        checkbox.addEventListener('click', function() {
-            const checkedBoxes = document.querySelectorAll('.export-checkbox:checked');
-            exportButton.disabled = checkedBoxes.length === 0;
-            console.log('Checked boxes:', checkedBoxes.length);
-        });
-    });
-
-    exportButton.addEventListener('click', function() {
-        const selectedIds = [...checkboxes]
-            .filter(cb => cb.checked)
-            .map(cb => cb.value);
-
-        if (selectedIds.length === 0) return;
-
-        fetch('{% url "export-invoices" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': '{{ csrf_token }}'  // Add CSRF token
-            },
-            body: JSON.stringify({invoice_ids: selectedIds})
-        })
-        .then(response => {
-            if (response.ok) return response.blob();
-            throw new Error('Export failed');
-        })
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `accounting_export_${new Date().toISOString().slice(0,19).replace(/[:-]/g, '')}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-            location.reload();
-        })
-        .catch(error => {
-            alert('Failed to export invoices: ' + error.message);
-        });
-    });
-
-    // Unexport functionality
-    const unexportButtons = document.querySelectorAll('.unexport-btn');
-    unexportButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const invoiceId = this.dataset.invoiceId;
-            
-            if (!confirm('Are you sure you want to unexport this invoice?')) return;
-
-            fetch(`/testapp/invoices/${invoiceId}/unexport/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': '{{ csrf_token }}'  // Add CSRF token
-                }
-            })
-            .then(response => {
-                if (!response.ok) throw new Error('Unexport failed');
-                location.reload();
-            })
-            .catch(error => {
-                alert('Failed to unexport invoice: ' + error.message);
-            });
-        });
-    });
-
-    // Initialize Filter Events  
-
-    const InvoiceFilters = {
-    init() {
-        $('#apply-filters').on('click', (e) => {
-            e.preventDefault();
-            this.applyFilters();
-        });
-
-        $('#reset-filters').on('click', (e) => {
-            e.preventDefault();
-            this.resetFilters();
-        });
-
-        this.initAutocomplete();
-        this.initializeFromURL();
-    },
-
-    async applyFilters() {
-        const formData = new FormData($('#filter-form')[0]);
-        const queryString = new URLSearchParams(formData).toString();
-        
-        try {
-            const response = await fetch(`${window.location.pathname}?${queryString}`, {
-                headers: { 'X-Requested-With': 'XMLHttpRequest' }
-            });
-            
-            const data = await response.json();
-            $('#invoice-table-wrapper').html(data.html);
-            history.pushState({}, '', `?${queryString}`);
-            this.updateActiveFilters();
-            
-        } catch (error) {
-            console.error('Error:', error);
-        }
-    },
-
-    resetFilters() {
-        $('#filter-form')[0].reset();
-        $('#supplier-filter, #supplier-filter-id').val('');
-        history.pushState({}, '', window.location.pathname);
-        this.applyFilters();
-    },
-
-    initAutocomplete() {
-        // Initialize supplier autocomplete
-        $('#supplier-filter').autocomplete({
-            source: "{% url 'supplier-autocomplete' %}",
-            minLength: 0,
-            select: function(event, ui) {
-                $(this).val(ui.item.label);
-                $('#supplier-filter-id').val(ui.item.value);
-                return false;
-            }
-        });
-
-        // Initialize product filter
-        $('#product-filter').autocomplete({
-            source: "{% url 'product-autocomplete' %}",
-            minLength: 0,
-            select: function(event, ui) {
-                $(this).val(ui.item.label);
-                $('#product-filter-id').val(ui.item.value);
-                return false;
-            }
-        });
-    },
-
-    initializeFromURL() {
-        // Initialize supplier filter
-        const supplierValue = new URLSearchParams(window.location.search).get('supplier');
-        if (supplierValue) {
-            fetch(`{% url 'supplier-autocomplete' %}?id=${supplierValue}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.length > 0) {
-                        const selectedOption = data[0];
-                        $('#supplier-filter').val(selectedOption.label);
-                        $('#supplier-filter-id').val(selectedOption.value);
-                    }
-                })
-                .catch(error => console.error('Failed to restore supplier:', error));
-        }
-
-        // Initialize product filter
-        const productValue = new URLSearchParams(window.location.search).get('product');
-        if (productValue) {
-            fetch(`{% url 'product-autocomplete' %}?id=${productValue}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.length > 0) {
-                        const selectedOption = data[0];
-                        $('#product-filter').val(selectedOption.label);
-                        $('#product-filter-id').val(selectedOption.value);
-                    }
-                })
-                .catch(error => console.error('Failed to restore product:', error));
-        }
-    },
-
-    updateActiveFilters() {
-        const activeCount = $('#filter-form').serializeArray().filter(item => item.value).length;
-        const badge = $('.active-filters-count');
-        activeCount > 0 ? badge.show().text(activeCount) : badge.hide();
-    }
-};
-
-// Initialize filters
-InvoiceFilters.init();
-
-
-    
-    
-    // Initialize autocomplete for existing forms
-    document.querySelectorAll('.product-form').forEach(addAutocomplete);
-    
+    console.log('Invoice management system initialized');
 });
-       
 </script>
-
 {% endblock %}

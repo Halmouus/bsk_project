@@ -1,9 +1,10 @@
 <!-- templates/invoice/partials/invoice_table.html -->
+{% load humanize %}
 <table class="table mt-4 table-hover">
     <thead>
         <tr>
             <th>Export</th>
-            <th>Invoice Type</th>
+            <th>Type</th>
             <th>Index</th>
             <th>Date</th>
             <th>Reference</th>
@@ -24,17 +25,224 @@
     </thead>
     <tbody>
         {% for invoice in invoices %}
-            <!-- Your existing invoice row template here -->
-        {% empty %}
-            <tr>
-                <td colspan="12" class="text-center">
-                    <div class="p-4">
-                        <i class="fas fa-search fa-2x text-muted mb-3"></i>
-                        <p class="mb-0">No invoices found matching your filters</p>
-                        <button class="btn btn-link" id="reset-filters">Clear all filters</button>
-                    </div>
-                </td>
-            </tr>
+            {% if invoice.type == 'invoice' %}
+                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
+                            <td>
+                                {% if invoice.exported_at %}
+                                    <span class="text-muted">
+                                        Exported {{ invoice.exported_at|date:"d-m-Y" }}
+                                        <button type="button" 
+                                                class="btn btn-warning btn-sm unexport-btn ml-2" 
+                                                data-invoice-id="{{ invoice.id }}">
+                                            <i class="fas fa-undo"></i>
+                                        </button>
+                                    </span>
+                                {% else %}
+                                    <input type="checkbox" 
+                                        name="invoice_ids" 
+                                        value="{{ invoice.id }}" 
+                                        class="export-checkbox"
+                                        {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
+                                {% endif %}
+                            </td>
+                            <td>{{ invoice.get_invoice_type_display }}</td>
+                            <td>{{ invoice.archive_index }}</td>
+                            <td>{{ invoice.date }}</td>
+                            <td>{{ invoice.ref }}</td>
+                            <td>
+                                <a href="{% url 'supplier-detail' invoice.supplier.pk %}" class="text-primary">
+                                    {{ invoice.supplier.name }}
+                                </a>
+                            </td>
+                            <td>
+                                {% if invoice.delivery_notes.exists %}
+                                    {% for note in invoice.delivery_notes.all %}
+                                        <a href="{{ note.document.url }}" target="_blank" class="mr-1">
+                                            {{ note.ref }}{% if not forloop.last %}, {% endif %}
+                                        </a>
+                                    {% endfor %}
+                                {% else %}
+                                    <i class="fas fa-exclamation-triangle text-warning" title="No delivery notes attached"></i>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invoice.reception_notes.exists %}
+                                    {% for note in invoice.reception_notes.all %}
+                                        <a href="{{ note.document.url }}" target="_blank" class="mr-1">
+                                            {{ note.ref }}{% if not forloop.last %}, {% endif %}
+                                        </a>
+                                    {% endfor %}
+                                {% else %}
+                                    <i class="fas fa-exclamation-triangle text-warning" title="No reception notes attached"></i>
+                                {% endif %}
+                            </td>
+                            <td>{{ invoice.fiscal_label }}</td>
+                            <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
+                            <td>
+                                {% with invoice.products.all|length as product_count %}
+                                    {% for product in invoice.products.all %}
+                                        {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
+                                    {% endfor %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                {% if invoice.total_tax_amount %}
+                                    {{ invoice.total_tax_amount|floatformat:2|intcomma }}
+                                {% else %}
+                                    <strong>Tax Missing</strong>
+                                {% endif %}
+                            </td>                
+                            <td class="text-right">
+                                {{ invoice.total_amount|floatformat:2|intcomma }}
+                                {% if invoice.credit_notes.exists %}
+                                    <br>
+                                    <small class="text-muted">
+                                        Net: {{ invoice.net_amount|floatformat:2|intcomma }}
+                                    </small>
+                                    <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
+                                            data-invoice="{{ invoice.id }}">
+                                        <i class="fas fa-receipt"></i>
+                                    </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invoice.payment_status == 'paid' %}
+                                    <span class="badge badge-success">
+                                        <i class="fas fa-lock"></i> Paid
+                                    </span>
+                                {% else %}
+                                    {% if invoice.credit_notes.exists %}
+                                        <span class="badge badge-info">
+                                            Partially Credited
+                                            <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
+                                        </span>
+                                    {% endif %}
+                                    <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
+                                        {% if invoice.payment_status == 'partially_paid' %}
+                                            Partially Paid 
+                                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
+                                        {% else %}
+                                            Not Paid
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invoice.document %}
+                                    <a href="{{ invoice.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </a>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {{ invoice.doc_status }}
+                            </td>
+                            <td>
+                                {% if not invoice.payment_status == 'paid' %}
+                                    <a href="{% url 'invoice-update' invoice.pk %}" 
+                                        class="btn btn-warning btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </a>
+                                    <a href="{% url 'invoice-delete' invoice.pk %}" 
+                                        class="btn btn-danger btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
+                                        <i class="fas fa-trash-alt"></i> Delete
+                                    </a>
+                                    <button class="btn btn-outline-info btn-sm rounded-pill shadow-sm" 
+                                            data-toggle="modal" 
+                                            data-target="#creditNoteModal" 
+                                            data-invoice-id="{{ invoice.id }}"
+                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                        <i class="fas fa-receipt"></i> Credit Note
+                                    </button>
+                                {% else %}
+                                    <button class="btn btn-secondary" disabled>
+                                        <i class="fas fa-lock"></i> Paid
+                                    </button>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
+                                <button class="btn btn-outline-success btn-sm rounded-pill shadow-sm"                             
+                                        data-toggle="modal" 
+                                        data-target="#paymentDetailsModal"
+                                        data-invoice="{{ invoice.pk }}">
+                                        <i class="fas fa-money-check-alt"></i> Payment Details
+                                </button>
+                                <button class="btn btn-secondary btn-sm rounded-pill shadow-sm accounting-summary-btn"  
+                                        data-invoice-id="{{ invoice.id }}" 
+                                        title="Show Accounting Summary">
+                                    <i class="fas fa-book"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </tr>
+                {% if invoice.credit_notes.exists %}
+                    <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
+                        <td colspan="12">
+                            <div class="ml-4">
+                                <h6 class="mb-3">
+                                    <i class="fas fa-receipt"></i> 
+                                    Credit Notes for Invoice {{ invoice.ref }}
+                                </h6>
+                                <table class="table table-sm">
+                                    <thead class="thead-light">
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Reference</th>
+                                            <th>Products</th>
+                                            <th class="text-right">Amount</th>
+                                            <th>Status</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for credit_note in invoice.credit_notes.all %}
+                                            <tr>
+                                                <td>{{ credit_note.date|date:"Y-m-d" }}</td>
+                                                <td>{{ credit_note.ref }}</td>
+                                                <td>
+                                                    {% for product in credit_note.products.all %}
+                                                        {{ product.product.name }} ({{ product.quantity }})
+                                                        {% if not forloop.last %}, {% endif %}
+                                                    {% endfor %}
+                                                </td>
+                                                <td class="text-right text-danger">
+                                                    -{{ credit_note.total_amount|floatformat:2|intcomma }}
+                                                </td>
+                                                <td>
+                                                    <span class="badge badge-info">
+                                                        <i class="fas fa-receipt"></i> Credit Note
+                                                    </span>
+                                                    {% if credit_note.exported_at %}
+                                                        <span class="badge badge-secondary">
+                                                            <i class="fas fa-file-export"></i> Exported
+                                                        </span>
+                                                    {% endif %}
+                                                </td>
+                                                <td>
+                                                    <button class="btn btn-outline-primary btn-sm rounded-pill shadow-sm"
+                                                            data-toggle="modal" 
+                                                            data-target="#invoiceDetailsModal" 
+                                                            data-invoice="{{ credit_note.id }}">
+                                                        <i class="fas fa-info-circle"></i> Details
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        {% endfor %}
+                                        <tr class="font-weight-bold">
+                                            <td colspan="3" class="text-right">Net Balance:</td>
+                                            <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
+                                            <td colspan="2"></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+
+            {% endif %}
+
         {% endfor %}
     </tbody>
 </table>

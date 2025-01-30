@@ -2,14 +2,64 @@
 {% block title %}Delivery Notes{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1>Delivery Notes</h1>
-    <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#addNoteModal">
-        <i class="fas fa-plus"></i> Add New
+    <h1 class="h3 mb-0">
+        <i class="fas fa-clipboard-list text-primary mr-2"></i>
+        Delivery Notes
+    </h1>
+    <button type="button" class="btn btn-primary d-flex align-items-center" data-toggle="modal" data-target="#addNoteModal">
+        <i class="fas fa-plus-circle mr-2"></i>
+        Add New Note
     </button>
 </div>
 
-<div class="table-responsive">
-    <table class="table table-hover">
+<!-- Filter Section -->
+<div class="filter-card card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <label class="filter-label">
+                    <i class="fas fa-search filter-icon"></i>
+                    Reference
+                </label>
+                <input type="text" class="form-control custom-input" id="ref-filter" placeholder="Search by reference...">
+            </div>
+            <div class="col-md-3">
+                <label class="filter-label">
+                    <i class="fas fa-building filter-icon"></i>
+                    Supplier
+                </label>
+                <input type="text" class="form-control custom-input" id="supplier-filter" placeholder="Search by supplier...">
+            </div>
+            <div class="col-md-4">
+                <label class="filter-label">
+                    <i class="fas fa-calendar filter-icon"></i>
+                    Date Range
+                </label>
+                <div class="date-range-group">
+                    <input type="date" class="form-control custom-input" id="date-from-filter">
+                    <span class="date-range-separator">to</span>
+                    <input type="date" class="form-control custom-input" id="date-to-filter">
+                </div>
+            </div>
+            <div class="col-md-2">
+                <label class="filter-label">
+                    <i class="fas fa-link filter-icon"></i>
+                    Status
+                </label>
+                <select class="form-control custom-input" id="linked-filter">
+                    <option value="">All</option>
+                    <option value="yes">Linked</option>
+                    <option value="no">Unlinked</option>
+                </select>
+            </div>
+        </div>
+    </div>
+    <div class="loader" id="filter-loader"></div>
+</div>
+
+<!-- Table Section -->
+<div class="notes-table table-responsive">
+    <table class="table mb-0">
         <thead>
             <tr>
                 <th>Date</th>
@@ -30,36 +80,45 @@
                 <td>{{ note.amount|default:'-' }}</td>
                 <td>
                     {% if note.document %}
-                        <a href="{{ note.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                        <button class="btn btn-action btn-view" onclick="window.open('{{ note.document.url }}', '_blank')">
                             <i class="fas fa-file-pdf"></i>
-                        </a>
+                        </button>
                     {% endif %}
                 </td>
                 <td>
                     {% if note.invoices.exists %}
-                        <a href="{% url 'invoice-update' note.invoices.first.id %}">
+                        <span class="badge-linked">
+                            <i class="fas fa-link mr-1"></i>
                             {{ note.invoices.first.ref }}
-                        </a>
+                        </span>
                     {% else %}
-                        <span class="badge badge-secondary">Not Linked</span>
+                        <span class="badge-unlinked">
+                            <i class="fas fa-unlink mr-1"></i>
+                            Not Linked
+                        </span>
                     {% endif %}
                 </td>
                 <td>
-                    <button class="btn btn-warning btn-sm edit-note" 
-                            data-id="{{ note.id }}"
-                            data-toggle="modal" 
-                            data-target="#editNoteModal">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-danger btn-sm delete-note" 
-                            data-id="{{ note.id }}">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-action btn-edit edit-note mr-2" 
+                                data-id="{{ note.id }}"
+                                data-toggle="modal" 
+                                data-target="#editNoteModal">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-action btn-delete delete-note" 
+                                data-id="{{ note.id }}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </td>
             </tr>
             {% empty %}
             <tr>
-                <td colspan="6" class="text-center text-muted">No delivery notes found</td>
+                <td colspan="7" class="empty-state">
+                    <i class="fas fa-clipboard"></i>
+                    <p class="mb-0">No delivery notes found</p>
+                </td>
             </tr>
             {% endfor %}
         </tbody>
@@ -160,8 +219,299 @@
 
 {% endblock %}
 
+{% block styles %}
+<style>
+    /* Modern Card Design */
+    .filter-card {
+        background: #fff;
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+    }
+
+    .filter-card:hover {
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+
+    /* Filter Section */
+    .filter-label {
+        color: #5a5a5a;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .filter-icon {
+        color: #4a90e2;
+        font-size: 1rem;
+    }
+
+    /* Input Styling */
+    .custom-input {
+        border: 2px solid #e9ecef;
+        border-radius: 8px;
+        padding: 0.6rem 1rem;
+        transition: all 0.2s ease;
+    }
+
+    .custom-input:focus {
+        border-color: #4a90e2;
+        box-shadow: 0 0 0 0.2rem rgba(74, 144, 226, 0.1);
+    }
+
+    /* Table Design */
+    .notes-table {
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+    }
+
+    .notes-table thead th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #e9ecef;
+        color: #495057;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        padding: 1rem;
+    }
+
+    .notes-table tbody td {
+        padding: 1rem;
+        vertical-align: middle;
+        border-bottom: 1px solid #e9ecef;
+    }
+
+    .notes-table tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    /* Status Badges */
+    .badge-linked {
+        background-color: #28a745;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+
+    .badge-unlinked {
+        background-color: #6c757d;
+        color: white;
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        font-weight: 500;
+    }
+
+    /* Action Buttons */
+    .btn-action {
+        padding: 0.4rem 0.8rem;
+        border-radius: 6px;
+        transition: all 0.2s ease;
+    }
+
+    .btn-action:hover {
+        transform: translateY(-1px);
+    }
+
+    .btn-view {
+        background-color: #4a90e2;
+        color: white;
+        border: none;
+    }
+
+    .btn-edit {
+        background-color: #ffc107;
+        color: white;
+        border: none;
+    }
+
+    .btn-delete {
+        background-color: #dc3545;
+        color: white;
+        border: none;
+    }
+
+    /* Animation for filtering */
+    tbody tr {
+        transition: all 0.3s ease;
+    }
+
+    .no-results {
+        animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+
+    /* Date Range Input Group */
+    .date-range-group {
+        display: flex;
+        gap: 0.5rem;
+        align-items: center;
+    }
+
+    .date-range-group input {
+        flex: 1;
+    }
+
+    .date-range-separator {
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    /* Loader Animation */
+    .loader {
+        width: 100%;
+        height: 3px;
+        background-color: #f3f3f3;
+        position: relative;
+        overflow: hidden;
+        display: none;
+    }
+
+    .loader::after {
+        content: '';
+        position: absolute;
+        width: 40%;
+        height: 100%;
+        background-color: #4a90e2;
+        animation: loading 1s infinite ease-in-out;
+    }
+
+    @keyframes loading {
+        0% { left: -40%; }
+        100% { left: 100%; }
+    }
+
+    /* Empty State */
+    .empty-state {
+        text-align: center;
+        padding: 2rem;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: #dee2e6;
+    }
+</style>
+{% endblock %}
+
+
 {% block extra_js %}
 <script>
+    // Dynamic filtering
+let typingTimer;
+const TYPING_INTERVAL = 300; // ms
+
+function filterNotes() {
+    console.log("Filtering notes...");
+    const ref = $('#ref-filter').val().toLowerCase();
+    const supplier = $('#supplier-filter').val().toLowerCase();
+    const dateFrom = $('#date-from-filter').val();
+    const dateTo = $('#date-to-filter').val();
+    const linked = $('#linked-filter').val();
+
+    console.log(`Filters - Ref: ${ref}, Supplier: ${supplier}, DateFrom: ${dateFrom}, DateTo: ${dateTo}, Linked: ${linked}`);
+
+    $('tbody tr').each(function() {
+        const $row = $(this);
+        const rowRef = $row.find('td:eq(2)').text().toLowerCase();
+        const rowSupplier = $row.find('td:eq(1)').text().toLowerCase();
+        const rowDate = $row.find('td:eq(0)').text();
+        const isLinked = $row.find('td:eq(5) a').length > 0;
+
+        console.log(`Row - Ref: ${rowRef}, Supplier: ${rowSupplier}, Date: ${rowDate}, Linked: ${isLinked}`);
+
+        let show = true;
+
+        // Reference filter
+        if (ref && !rowRef.includes(ref)) {
+            show = false;
+        }
+
+        // Supplier filter
+        if (supplier && !rowSupplier.includes(supplier)) {
+            show = false;
+        }
+
+        // Date range filter
+        if (dateFrom && rowDate < dateFrom) {
+            show = false;
+        }
+        if (dateTo && rowDate > dateTo) {
+            show = false;
+        }
+
+        // Linked status filter
+        if (linked === 'yes' && !isLinked) {
+            show = false;
+        } else if (linked === 'no' && isLinked) {
+            show = false;
+        }
+
+        $row.toggle(show);
+    });
+
+    // Show/hide empty message
+    const visibleRows = $('tbody tr:visible').length;
+    console.log(`Visible rows: ${visibleRows}`);
+    
+    if (visibleRows === 0) {
+        if (!$('tbody tr.no-results').length) {
+            $('tbody').append('<tr class="no-results"><td colspan="7" class="text-center text-muted">No matching notes found</td></tr>');
+        } else {
+            $('.no-results').show();
+        }
+    } else {
+        $('.no-results').hide();
+    }
+    
+    setTimeout(() => {
+        const visibleRows = $('tbody tr:visible').length;
+        console.log(`Visible rows: ${visibleRows}`);
+        
+        if (visibleRows === 0) {
+            if (!$('tbody tr.no-results').length) {
+                const emptyMessage = `
+                <tr class="no-results">
+                    <td colspan="7" class="empty-state">
+                        <i class="fas fa-search"></i>
+                        <p class="mb-0">No matching notes found</p>
+                        </td>
+                        </tr>`;
+                $('tbody').append(emptyMessage);
+            } else {
+                $('.no-results').fadeIn(300);
+            }
+        } else {
+            $('.no-results').fadeOut(300);
+        }
+        hideLoader();
+    }, 300);
+    
+    // Event listeners for all filters
+    $('#ref-filter, #supplier-filter').on('keyup', function() {
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(filterNotes, TYPING_INTERVAL);
+    });
+
+    $('#date-from-filter, #date-to-filter, #linked-filter').on('change', function() {
+        showLoader();
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(filterNotes, 100);
+    });
+
+}
+
 const NoteSystem = {
     init() {
         this.modal = $('#addNoteModal');
@@ -384,6 +734,7 @@ $(document).ready(() => {
     console.log("[NoteSystem] Initializing...");
     NoteSystem.init();
     console.log("[NoteSystem] Initialization complete");
+    filterNotes();
 });
 </script>
 {% endblock %}
