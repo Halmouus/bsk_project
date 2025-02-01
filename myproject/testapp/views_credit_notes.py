@@ -1,3 +1,4 @@
+import traceback
 from django.views import View
 from django.http import JsonResponse
 from .models import Invoice, InvoiceProduct, Product
@@ -6,6 +7,7 @@ from django.utils import timezone
 import json
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.dateparse import parse_date
 
 
 class CreditNoteDetailsView(View):
@@ -46,6 +48,11 @@ class CreateCreditNoteView(View):
             original_invoice = get_object_or_404(Invoice, id=data['original_invoice_id'])
             print("Original Invoice:", original_invoice)
 
+            # Convert date string to date object
+            date = parse_date(data['date'])
+            if not date:
+                return JsonResponse({'error': 'Invalid date format'}, status=400)
+            
             # Check for duplicate reference
             if Invoice.objects.filter(ref=data['ref']).exists():
                 return JsonResponse(
@@ -53,13 +60,13 @@ class CreateCreditNoteView(View):
                     status=400
                 )
             
-            # Create credit note
+            # Create credit note with parsed date
             credit_note = Invoice.objects.create(
                 type='credit_note',
                 original_invoice=original_invoice,
                 supplier=original_invoice.supplier,
                 ref=data['ref'],
-                date=data['date'],
+                date=date,
                 status='draft'
             )
 
@@ -83,4 +90,6 @@ class CreateCreditNoteView(View):
             })
 
         except Exception as e:
+            print("Error creating credit note:", str(e))
+            print("Traceback:", traceback.format_exc())
             return JsonResponse({'error': str(e)}, status=400)

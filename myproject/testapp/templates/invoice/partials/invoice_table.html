@@ -1,248 +1,329 @@
 <!-- templates/invoice/partials/invoice_table.html -->
 {% load humanize %}
 <table class="table mt-4 table-hover">
-    <thead>
-        <tr>
-            <th>Export</th>
-            <th>Type</th>
-            <th>Index</th>
-            <th>Date</th>
-            <th>Reference</th>
-            <th>Supplier</th>
-            <th>Delivery Note</th>
-            <th>Reception Note</th>
-            <th>Fiscal Label</th>
-            <th>Raw Amount</th>
-            <th>Tax Rate (%)</th>
-            <th>Tax Amount</th>
-            <th>Total Amount (Incl. Tax)</th>
-            <th>Status</th>
-            <th>Document</th>
-            <th>Document Status</th>
-            <th>Actions</th>
-            <th>Details</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for invoice in invoices %}
-            {% if invoice.type == 'invoice' %}
+    <div class="table-header d-flex justify-content-between align-items-center bg-white p-3 border-bottom">
+        <div class="d-flex align-items-center">
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="select-all-invoices">
+                <label class="custom-control-label" for="select-all-invoices"></label>
+            </div>
+            <span class="ml-3 text-muted small">
+                <i class="fas fa-info-circle"></i> 
+                Showing {{ invoices|length }} invoice{{ invoices|length|pluralize }}
+            </span>
+        </div>
+        <div class="table-actions">
+            <div class="btn-group">
+                <button type="button" class="btn btn-light btn-sm dropdown-toggle" data-toggle="dropdown">
+                    <i class="fas fa-sort"></i> Sort
+                </button>
+                <div class="dropdown-menu dropdown-menu-right">
+                    <a class="dropdown-item" href="#" data-sort="date"><i class="fas fa-calendar-alt"></i> Date</a>
+                    <a class="dropdown-item" href="#" data-sort="amount"><i class="fas fa-dollar-sign"></i> Amount</a>
+                    <a class="dropdown-item" href="#" data-sort="status"><i class="fas fa-tasks"></i> Status</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <table class="table table-hover mb-0">
+        <thead class="bg-light">
+            <tr>
+                <th style="width: 40px" class="border-0"></th>
+                <th style="width: 100px" class="border-0">Type</th>
+                <th style="width: 80px" class="border-0">Index</th>
+                <th style="width: 100px" class="border-0">Date</th>
+                <th class="border-0">Reference</th>
+                <th class="border-0">Supplier</th>
+                <th class="text-center border-0">Documents</th>
+                <th class="text-right border-0">Amount</th>
+                <th style="width: 150px" class="text-center border-0">Status</th>
+                <th style="width: 100px" class="text-right border-0">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for invoice in invoices %}
+                {% if invoice.type == 'invoice' %}
                 <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
-                            <td>
-                                {% if invoice.exported_at %}
-                                    <span class="text-muted">
-                                        Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                                        <button type="button" 
-                                                class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                                data-invoice-id="{{ invoice.id }}">
-                                            <i class="fas fa-undo"></i>
-                                        </button>
-                                    </span>
-                                {% else %}
-                                    <input type="checkbox" 
-                                        name="invoice_ids" 
-                                        value="{{ invoice.id }}" 
-                                        class="export-checkbox"
-                                        {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
-                                {% endif %}
-                            </td>
-                            <td>{{ invoice.get_invoice_type_display }}</td>
-                            <td>{{ invoice.archive_index }}</td>
-                            <td>{{ invoice.date }}</td>
-                            <td>{{ invoice.ref }}</td>
-                            <td>
-                                <a href="{% url 'supplier-detail' invoice.supplier.pk %}" class="text-primary">
-                                    {{ invoice.supplier.name }}
+                    <!-- Selection -->
+                    <td class="align-middle">
+                        {% if not invoice.exported_at and invoice.payment_status != 'paid' %}
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input export-checkbox" 
+                                    id="invoice-{{ invoice.id }}"
+                                    value="{{ invoice.id }}"
+                                    data-amount="{{ invoice.total_amount }}">
+                                <label class="custom-control-label" for="invoice-{{ invoice.id }}"></label>
+                            </div>
+                        {% endif %}
+                    </td>
+
+                    <!-- Type -->
+                    <td class="align-middle">
+                        <div class="d-flex align-items-center">
+                            <span class="badge badge-pill badge-soft-{{ invoice.get_invoice_type_display|lower }}">
+                                {{ invoice.get_invoice_type_display }}
+                            </span>
+                            {% if invoice.supplier.is_energy %}
+                                <i class="fas fa-bolt text-warning ml-2" title="Energy Invoice"></i>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Index -->
+                    <td class="align-middle">
+                        <span class="text-monospace">{{ invoice.archive_index }}</span>
+                    </td>
+
+                    <!-- Date -->
+                    <td class="align-middle">
+                        {{ invoice.date|date:"d-m-Y" }}
+                    </td>
+
+                    <!-- Reference -->
+                    <td class="align-middle">
+                        <div class="d-flex align-items-center">
+                            <span class="font-weight-medium">{{ invoice.ref }}</span>
+                            {% if invoice.credit_notes.exists %}
+                                <button class="btn btn-link btn-sm p-0 ml-2 toggle-credit-notes" 
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Has Credit Notes">
+                                    <i class="fas fa-receipt text-info"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted d-block">{{ invoice.fiscal_label }}</small>
+                    </td>
+
+                    <!-- Supplier -->
+                    <td class="align-middle">
+                        <div class="supplier-info">
+                            <a href="{% url 'supplier-detail' invoice.supplier.pk %}" 
+                            class="text-decoration-none">
+                                {{ invoice.supplier.name }}
+                            </a>
+                            <small class="text-muted d-block">{{ invoice.supplier.fiscal_id }}</small>
+                        </div>
+                    </td>
+
+                    <!-- Documents -->
+                    <td class="align-middle text-center">
+                        <div class="btn-group btn-group-sm">
+                            {% if invoice.document %}
+                                <a href="{{ invoice.document.url }}" 
+                                target="_blank" 
+                                class="btn btn-link text-primary" 
+                                title="View Invoice">
+                                    <i class="fas fa-file-pdf"></i>
                                 </a>
-                            </td>
-                            <td>
-                                {% if invoice.delivery_notes.exists %}
-                                    {% for note in invoice.delivery_notes.all %}
-                                        <a href="{{ note.document.url }}" target="_blank" class="mr-1">
-                                            {{ note.ref }}{% if not forloop.last %}, {% endif %}
-                                        </a>
-                                    {% endfor %}
-                                {% else %}
-                                    <i class="fas fa-exclamation-triangle text-warning" title="No delivery notes attached"></i>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if invoice.reception_notes.exists %}
-                                    {% for note in invoice.reception_notes.all %}
-                                        <a href="{{ note.document.url }}" target="_blank" class="mr-1">
-                                            {{ note.ref }}{% if not forloop.last %}, {% endif %}
-                                        </a>
-                                    {% endfor %}
-                                {% else %}
-                                    <i class="fas fa-exclamation-triangle text-warning" title="No reception notes attached"></i>
-                                {% endif %}
-                            </td>
-                            <td>{{ invoice.fiscal_label }}</td>
-                            <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
-                            <td>
-                                {% with invoice.products.all|length as product_count %}
-                                    {% for product in invoice.products.all %}
-                                        {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
-                                    {% endfor %}
-                                {% endwith %}
-                            </td>
-                            <td>
-                                {% if invoice.total_tax_amount %}
-                                    {{ invoice.total_tax_amount|floatformat:2|intcomma }}
-                                {% else %}
-                                    <strong>Tax Missing</strong>
-                                {% endif %}
-                            </td>                
-                            <td class="text-right">
-                                {{ invoice.total_amount|floatformat:2|intcomma }}
-                                {% if invoice.credit_notes.exists %}
-                                    <br>
-                                    <small class="text-muted">
-                                        Net: {{ invoice.net_amount|floatformat:2|intcomma }}
-                                    </small>
-                                    <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
-                                            data-invoice="{{ invoice.id }}">
-                                        <i class="fas fa-receipt"></i>
-                                    </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if invoice.payment_status == 'paid' %}
-                                    <span class="badge badge-success">
-                                        <i class="fas fa-lock"></i> Paid
+                            {% endif %}
+                            
+                            {% if invoice.delivery_notes.exists %}
+                                <button type="button" 
+                                        class="btn btn-link text-info position-relative"
+                                        data-toggle="modal" 
+                                        data-target="#deliveryNotesModal"
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Delivery Notes">
+                                    <i class="fas fa-truck"></i>
+                                    <span class="badge badge-info badge-pill position-absolute" 
+                                        style="top: -5px; right: -5px; font-size: 0.65rem;">
+                                        {{ invoice.delivery_notes.count }}
                                     </span>
-                                {% else %}
-                                    {% if invoice.credit_notes.exists %}
-                                        <span class="badge badge-info">
-                                            Partially Credited
-                                            <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
-                                        </span>
-                                    {% endif %}
-                                    <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
-                                        {% if invoice.payment_status == 'partially_paid' %}
-                                            Partially Paid 
-                                            <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
-                                        {% else %}
-                                            Not Paid
-                                        {% endif %}
+                                </button>
+                            {% endif %}
+
+                            {% if invoice.reception_notes.exists %}
+                                <button type="button" 
+                                        class="btn btn-link text-success position-relative"
+                                        data-toggle="modal" 
+                                        data-target="#receptionNotesModal"
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Reception Notes">
+                                    <i class="fas fa-clipboard-check"></i>
+                                    <span class="badge badge-success badge-pill position-absolute" 
+                                        style="top: -5px; right: -5px; font-size: 0.65rem;">
+                                        {{ invoice.reception_notes.count }}
                                     </span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if invoice.document %}
-                                    <a href="{{ invoice.document.url }}" target="_blank" class="btn btn-sm btn-info">
-                                        <i class="fas fa-file-pdf"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Amount -->
+                    <td class="align-middle text-right">
+                        <span class="font-weight-bold">
+                            {{ invoice.total_amount|floatformat:2 }}
+                        </span>
+                        {% if invoice.credit_notes.exists %}
+                            <small class="text-muted d-block">
+                                Net: {{ invoice.net_amount|floatformat:2 }}
+                            </small>
+                        {% endif %}
+                    </td>
+
+                    <!-- Status -->
+                    <td class="align-middle text-center">
+                        <div class="invoice-status">
+                            {% if invoice.payment_status == 'paid' %}
+                                <span class="badge badge-success badge-pill px-3">
+                                    <i class="fas fa-check-circle mr-1"></i> Paid
+                                </span>
+                            {% elif invoice.payment_status == 'partially_paid' %}
+                                <span class="badge badge-warning badge-pill px-3">
+                                    Partially Paid
+                                    <div class="progress mt-1" style="height: 3px; width: 50px;">
+                                        <div class="progress-bar bg-warning" 
+                                            style="width: {{ invoice.payment_percentage }}%">
+                                        </div>
+                                    </div>
+                                </span>
+                            {% else %}
+                                <span class="badge badge-danger badge-pill px-3">
+                                    <i class="fas fa-times-circle mr-1"></i> Not Paid
+                                </span>
+                            {% endif %}
+
+                            {% if invoice.exported_at %}
+                                <span class="badge badge-secondary badge-pill px-3 mt-1 d-block">
+                                    Exported
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="align-middle text-right">
+                        <div class="dropdown">
+                            <button class="btn btn-link btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right">
+                                {% if not invoice.exported_at and invoice.payment_status != 'paid' %}
+                                    <a class="dropdown-item text-primary" href="{% url 'invoice-update' invoice.id %}">
+                                        <i class="fas fa-edit fa-fw"></i> Edit
                                     </a>
                                 {% endif %}
-                            </td>
-                            <td>
-                                {{ invoice.doc_status }}
-                            </td>
-                            <td>
-                                {% if not invoice.payment_status == 'paid' %}
-                                    <a href="{% url 'invoice-update' invoice.pk %}" 
-                                        class="btn btn-warning btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
-                                        <i class="fas fa-edit"></i> Edit
-                                    </a>
-                                    <a href="{% url 'invoice-delete' invoice.pk %}" 
-                                        class="btn btn-danger btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
-                                        <i class="fas fa-trash-alt"></i> Delete
-                                    </a>
-                                    <button class="btn btn-outline-info btn-sm rounded-pill shadow-sm" 
-                                            data-toggle="modal" 
-                                            data-target="#creditNoteModal" 
-                                            data-invoice-id="{{ invoice.id }}"
-                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
-                                        <i class="fas fa-receipt"></i> Credit Note
-                                    </button>
-                                {% else %}
-                                    <button class="btn btn-secondary" disabled>
-                                        <i class="fas fa-lock"></i> Paid
-                                    </button>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                                <button class="btn btn-outline-success btn-sm rounded-pill shadow-sm"                             
+
+                                <button class="dropdown-item" type="button"
+                                        data-toggle="modal" 
+                                        data-target="#invoiceDetailsModal"
+                                        data-invoice="{{ invoice.id }}">
+                                    <i class="fas fa-info-circle fa-fw"></i> Details
+                                </button>
+
+                                <button class="dropdown-item" type="button"
                                         data-toggle="modal" 
                                         data-target="#paymentDetailsModal"
-                                        data-invoice="{{ invoice.pk }}">
-                                        <i class="fas fa-money-check-alt"></i> Payment Details
+                                        data-invoice="{{ invoice.id }}">
+                                    <i class="fas fa-money-bill-wave fa-fw"></i> Payment Details
                                 </button>
-                                <button class="btn btn-secondary btn-sm rounded-pill shadow-sm accounting-summary-btn"  
-                                        data-invoice-id="{{ invoice.id }}" 
-                                        title="Show Accounting Summary">
-                                    <i class="fas fa-book"></i>
+
+                                <button class="dropdown-item accounting-summary-btn" type="button"
+                                        data-invoice-id="{{ invoice.id }}">
+                                    <i class="fas fa-calculator fa-fw"></i> Accounting
                                 </button>
-                            </td>
-                        </tr>
-                    </tr>
-                {% if invoice.credit_notes.exists %}
-                    <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
-                        <td colspan="12">
-                            <div class="ml-4">
-                                <h6 class="mb-3">
-                                    <i class="fas fa-receipt"></i> 
-                                    Credit Notes for Invoice {{ invoice.ref }}
-                                </h6>
-                                <table class="table table-sm">
-                                    <thead class="thead-light">
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Reference</th>
-                                            <th>Products</th>
-                                            <th class="text-right">Amount</th>
-                                            <th>Status</th>
-                                            <th>Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {% for credit_note in invoice.credit_notes.all %}
-                                            <tr>
-                                                <td>{{ credit_note.date|date:"Y-m-d" }}</td>
-                                                <td>{{ credit_note.ref }}</td>
-                                                <td>
-                                                    {% for product in credit_note.products.all %}
-                                                        {{ product.product.name }} ({{ product.quantity }})
-                                                        {% if not forloop.last %}, {% endif %}
-                                                    {% endfor %}
-                                                </td>
-                                                <td class="text-right text-danger">
-                                                    -{{ credit_note.total_amount|floatformat:2|intcomma }}
-                                                </td>
-                                                <td>
-                                                    <span class="badge badge-info">
-                                                        <i class="fas fa-receipt"></i> Credit Note
-                                                    </span>
-                                                    {% if credit_note.exported_at %}
-                                                        <span class="badge badge-secondary">
-                                                            <i class="fas fa-file-export"></i> Exported
-                                                        </span>
-                                                    {% endif %}
-                                                </td>
-                                                <td>
-                                                    <button class="btn btn-outline-primary btn-sm rounded-pill shadow-sm"
-                                                            data-toggle="modal" 
-                                                            data-target="#invoiceDetailsModal" 
-                                                            data-invoice="{{ credit_note.id }}">
-                                                        <i class="fas fa-info-circle"></i> Details
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        {% endfor %}
-                                        <tr class="font-weight-bold">
-                                            <td colspan="3" class="text-right">Net Balance:</td>
-                                            <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
-                                            <td colspan="2"></td>
-                                        </tr>
-                                    </tbody>
-                                </table>
+
+                                {% if not invoice.exported_at %}
+                                    <button class="dropdown-item" type="button"
+                                            data-toggle="modal" 
+                                            data-target="#creditNoteModal"
+                                            data-invoice-id="{{ invoice.id }}"
+                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                        <i class="fas fa-reply fa-fw"></i> Credit Note
+                                    </button>
+                                {% endif %}
+
+                                {% if not invoice.exported_at and invoice.payment_status != 'paid' %}
+                                    <div class="dropdown-divider"></div>
+                                    <a class="dropdown-item text-danger" 
+                                    href="{% url 'invoice-delete' invoice.id %}"
+                                    onclick="return confirm('Are you sure you want to delete this invoice?')">
+                                        <i class="fas fa-trash fa-fw"></i> Delete
+                                    </a>
+                                {% endif %}
                             </div>
-                        </td>
-                    </tr>
+                        </div>
+                    </td>
+                </tr>
                 {% endif %}
 
+            <!-- Credit Notes Row -->
+            {% if invoice.credit_notes.exists %}
+            <tr class="credit-notes-row" data-parent="{{ invoice.id }}" style="display: none;">
+                <td colspan="10" class="border-0">
+                    <div class="credit-notes-container">
+                        <h6>
+                            <i class="fas fa-receipt text-info"></i> 
+                            Credit Notes for Invoice {{ invoice.ref }}
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Reference</th>
+                                        <th>Products</th>
+                                        <th class="text-right">Amount</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for credit_note in invoice.credit_notes.all %}
+                                    <tr>
+                                        <td>{{ credit_note.date|date:"d-m-Y" }}</td>
+                                        <td>{{ credit_note.ref }}</td>
+                                        <td>
+                                            {% for product in credit_note.products.all %}
+                                                {{ product.product.name }} ({{ product.quantity }})
+                                                {% if not forloop.last %}, {% endif %}
+                                            {% endfor %}
+                                        </td>
+                                        <td class="text-right text-danger">
+                                            -{{ credit_note.total_amount|floatformat:2 }}
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-info badge-pill">
+                                                <i class="fas fa-receipt"></i> Credit Note
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-link btn-sm p-0"
+                                                    data-toggle="modal" 
+                                                    data-target="#invoiceDetailsModal" 
+                                                    data-invoice="{{ credit_note.id }}">
+                                                <i class="fas fa-info-circle"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="font-weight-bold">
+                                        <td colspan="3" class="text-right border-0">Net Balance:</td>
+                                        <td class="text-right border-0">
+                                            {{ invoice.net_amount|floatformat:2 }}
+                                        </td>
+                                        <td colspan="2" class="border-0"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </td>
+            </tr>
             {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
 
-        {% endfor %}
-    </tbody>
-</table>
+    <!-- No Results Message -->
+    {% if not invoices %}
+    <div class="text-center py-5">
+        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No invoices found matching your criteria</h5>
+        <button class="btn btn-link" id="clear-filters">Clear all filters</button>
+    </div>
+    {% endif %}
+</div>

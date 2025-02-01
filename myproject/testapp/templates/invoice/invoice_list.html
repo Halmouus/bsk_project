@@ -4,552 +4,657 @@
 {% block title %}Invoice List{% endblock %}
 
 {% block content %}
-<h1>Invoice List</h1>
+<div class="invoice-management">
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="h3 mb-0 text-gray-800">
+                <i class="fas fa-file-invoice text-primary"></i> Invoice Management
+            </h1>
+            <div class="header-actions">
+                <a href="{% url 'invoice-create' %}" class="btn btn-primary btn-sm shadow-sm">
+                    <i class="fas fa-plus-circle"></i> New Invoice
+                </a>
+                <button class="btn btn-outline-secondary btn-sm shadow-sm ml-2" id="toggle-filters">
+                    <i class="fas fa-filter"></i> Filters
+                    <span class="badge badge-primary badge-pill ml-1 active-filters-count" style="display:none">0</span>
+                </button>
+                <button class="btn btn-success btn-sm shadow-sm ml-2" id="export-selected" disabled>
+                    <i class="fas fa-file-export"></i> Export Selected
+                </button>
+            </div>
+        </div>
 
-<div class="filter-section mb-4">
-    <a href="{% url 'invoice-create' %}" class="btn btn-primary btn-lg shadow-sm rounded-pill">
-        <i class="fas fa-plus-circle"></i> Add New Invoice
-    </a>
-    <!-- Filter Toggle Button -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <button class="btn btn-outline-secondary shadow-sm rounded-pill" id="toggle-filters">
-            <i class="fas fa-filter"></i> Filters
-            <span class="badge badge-primary ml-2 active-filters-count" style="display:none">0</span>
-        </button>
-        <div class="active-filters">
-            <span class="results-count"></span>
+        <!-- Active Filters Display -->
+        <div class="active-filters mt-3" style="min-height: 38px;">
+            {% for key, value in active_filters.items %}
+                {% if key == 'supplier_id' %}
+                    <span class="badge badge-soft-primary mr-2 py-2 px-3">
+                        Supplier: {{ value }}
+                        <button type="button" class="close ml-2" data-filter="{{ key }}">&times;</button>
+                    </span>
+                {% elif key == 'date_from' or key == 'date_to' %}
+                    <span class="badge badge-soft-primary mr-2 py-2 px-3">
+                        Date: {{ value }}
+                        <button type="button" class="close ml-2" data-filter="{{ key }}">&times;</button>
+                    </span>
+                {% else %}
+                    <span class="badge badge-soft-primary mr-2 py-2 px-3">
+                        {{ key|title }}: {{ value }}
+                        <button type="button" class="close ml-2" data-filter="{{ key }}">&times;</button>
+                    </span>
+                {% endif %}
+            {% endfor %}
         </div>
     </div>
 
     <!-- Filter Panel -->
-    <div class="filter-panel card" {% if not active_filters %}style="display:none"{% endif %}>
+    <div class="filter-panel card shadow-sm mb-4" {% if not active_filters %}style="display:none"{% endif %}>
         <div class="card-body">
-            <form id="filter-form">
-                <div class="row">                    
-                    <!-- Date Range Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Date Range</label>
-                        <div class="input-group">
-                            <input type="date" class="form-control" name="date_from" id="date-from">
-                            <div class="input-group-prepend input-group-append">
-                                <span class="input-group-text">to</span>
-                            </div>
-                            <input type="date" class="form-control" name="date_to" id="date-to">
-                        </div>
-                    </div>
-
-                    <!-- Supplier Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Supplier</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" 
-                                id="supplier-filter" name="supplier"
-                                placeholder="Search by name...">
-                            <input type="hidden" id="supplier-filter-id" name="supplier_id">
-                            <div class="input-group-append">
-                                <button class="btn btn-outline-secondary" type="button"
-                                        onclick="$('#supplier-filter, #supplier-filter-id').val(''); FilterSystem.applyFilters()">
-                                    <i class="fas fa-times"></i>
-                                </button>
+            <form id="filter-form" class="needs-validation" novalidate>
+                <!-- Basic Filters Section -->
+                <div class="filter-section mb-4">
+                    <h6 class="filter-section-title mb-3">
+                        <i class="fas fa-search text-primary"></i> Basic Filters
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Date Range</label>
+                                <div class="input-group">
+                                    <input type="date" class="form-control form-control-sm" name="date_from" 
+                                           value="{{ request.GET.date_from }}">
+                                    <div class="input-group-prepend input-group-append">
+                                        <span class="input-group-text">to</span>
+                                    </div>
+                                    <input type="date" class="form-control form-control-sm" name="date_to" 
+                                           value="{{ request.GET.date_to }}">
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <!-- Payment Status Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Payment Status</label>
-                        <select class="form-control w-100" name="payment_status" id="payment-status">
-                            <option value="">All</option>
-                            <option value="not_paid">Not Paid</option>
-                            <option value="partially_paid">Partially Paid</option>
-                            <option value="paid">Paid</option>
-                        </select>
-                    </div>
-
-                    <!-- Amount Range Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Amount Range</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" name="amount_min" id="amount-min" placeholder="Min">
-                            <div class="input-group-prepend input-group-append">
-                                <span class="input-group-text">to</span>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Supplier</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" 
+                                        id="supplier-filter" name="supplier"
+                                        placeholder="Search by name...">
+                                    <input type="hidden" id="supplier-filter-id" name="supplier_id">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button"
+                                                onclick="$('#supplier-filter, #supplier-filter-id').val(''); FilterSystem.applyFilters()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <input type="number" class="form-control" name="amount_max" id="amount-max" placeholder="Max">
                         </div>
-                    </div>
-
-                    <!-- Invoice Type Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Invoice Type</label>
-                        <select class="form-control w-100" name="invoice_type">
-                            <option value="">All</option>
-                            <option value="ENERGY">Energy</option>
-                            <option value="INSURANCE">Insurance</option>
-                            <option value="LEASING">Leasing</option>
-                            <option value="UTILITIES">Water/Electricity</option>
-                            <option value="TELECOM">Phone/Internet</option>
-                            <option value="RENT">Rent</option>
-                            <option value="SERVICE">Services</option>
-                            <option value="OTHER">Other</option>
-                        </select>
-                    </div>
-
-                    <!-- Document Status -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Document Status</label>
-                        <select class="form-control w-100" name="doc_status">
-                            <option value="">All</option>
-                            <option value="ORIGINAL">Original</option>
-                            <option value="COPY">Copy</option>
-                        </select>
-                    </div>
-
-                    <!-- Separate Delivery/Reception Note References -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Delivery Note Reference</label>
-                        <input type="text" class="form-control" name="delivery_note_ref" placeholder="Search BL reference...">
-                    </div>
-
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Reception Note Reference</label>
-                        <input type="text" class="form-control" name="reception_note_ref" placeholder="Search BR reference...">
-                    </div>
-
-                    <!-- Index Range -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Archive Index</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" name="index_min" placeholder="From">
-                            <div class="input-group-prepend input-group-append">
-                                <span class="input-group-text">to</span>
-                            </div>
-                            <input type="number" class="form-control" name="index_max" placeholder="To">
-                        </div>
-                    </div>
-
-                    <!-- Export Status Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Export Status</label>
-                        <select class="form-control w-100" name="export_status" id="export-status">
-                            <option value="">All</option>
-                            <option value="exported">Exported</option>
-                            <option value="not_exported">Not Exported</option>
-                        </select>
-                    </div>
-
-                    <!-- Document Type Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Document Type</label>
-                        <select class="form-control w-100" name="document_type" id="document-type">
-                            <option value="">All</option>
-                            <option value="invoice">Invoice</option>
-                            <option value="credit_note">Credit Note</option>
-                        </select>
-                    </div>
-
-                    <!-- Product Filter -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Product</label>
-                        <div class="input-group">
-                            <input type="text" class="form-control" 
-                                id="product-filter" name="product"
-                                placeholder="Search by name...">
-                            <input type="hidden" id="product-filter-id" name="product_id">
-                            <div class="input-group-append">
-                                <button class="btn btn-outline-secondary" type="button"
-                                        onclick="$('#product-filter, #product-filter-id').val(''); FilterSystem.applyFilters()">
-                                    <i class="fas fa-times"></i>
-                                </button>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Amount Range</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control form-control-sm" name="amount_min" 
+                                           placeholder="Min" step="0.01" value="{{ request.GET.amount_min }}">
+                                    <div class="input-group-prepend input-group-append">
+                                        <span class="input-group-text">to</span>
+                                    </div>
+                                    <input type="number" class="form-control form-control-sm" name="amount_max" 
+                                           placeholder="Max" step="0.01" value="{{ request.GET.amount_max }}">
+                                </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Payment Status Checks -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Payment Checks</label>
-                        <div class="form-group">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="pending-checks" name="has_pending_checks" value="1">
-                                <label class="custom-control-label" for="pending-checks">Has Pending Checks</label>
+                <!-- Status Filters Section -->
+                <div class="filter-section mb-4">
+                    <h6 class="filter-section-title mb-3">
+                        <i class="fas fa-tasks text-primary"></i> Status Filters
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Payment Status</label>
+                                <select class="form-control form-control-sm" name="payment_status">
+                                    <option value="">All</option>
+                                    <option value="not_paid" {% if request.GET.payment_status == 'not_paid' %}selected{% endif %}>
+                                        Not Paid
+                                    </option>
+                                    <option value="partially_paid" {% if request.GET.payment_status == 'partially_paid' %}selected{% endif %}>
+                                        Partially Paid
+                                    </option>
+                                    <option value="paid" {% if request.GET.payment_status == 'paid' %}selected{% endif %}>
+                                        Paid
+                                    </option>
+                                </select>
                             </div>
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="delivered-unpaid" name="has_delivered_unpaid" value="1">
-                                <label class="custom-control-label" for="delivered-unpaid">Delivered But Unpaid</label>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Export Status</label>
+                                <select class="form-control form-control-sm" name="export_status">
+                                    <option value="">All</option>
+                                    <option value="exported" {% if request.GET.export_status == 'exported' %}selected{% endif %}>
+                                        Exported
+                                    </option>
+                                    <option value="not_exported" {% if request.GET.export_status == 'not_exported' %}selected{% endif %}>
+                                        Not Exported
+                                    </option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Document Status</label>
+                                <select class="form-control w-100" name="doc_status">
+                                    <option value="">All</option>
+                                    <option value="ORIGINAL">Original</option>
+                                    <option value="COPY">Copy</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Invoice Type</label>
+                                <select class="form-control w-100" name="invoice_type">
+                                    <option value="">All</option>
+                                    <option value="ENERGY">Energy</option>
+                                    <option value="INSURANCE">Insurance</option>
+                                    <option value="LEASING">Leasing</option>
+                                    <option value="UTILITIES">Water/Electricity</option>
+                                    <option value="TELECOM">Phone/Internet</option>
+                                    <option value="RENT">Rent</option>
+                                    <option value="SERVICE">Services</option>
+                                    <option value="OTHER">Other</option>
+                                </select>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Other Filters -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Additional Filters</label>
-                        <div class="form-group">
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="is-energy" name="is_energy" value="1">
-                                <label class="custom-control-label" for="is-energy">Energy Supplier</label>
+                <!-- Additional Filters Section -->
+                <div class="filter-section">
+                    <h6 class="filter-section-title mb-3">
+                        <i class="fas fa-sliders-h text-primary"></i> Additional Filters
+                    </h6>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Product</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" 
+                                        id="product-filter" name="product"
+                                        placeholder="Search by name...">
+                                    <input type="hidden" id="product-filter-id" name="product_id">
+                                    <div class="input-group-append">
+                                        <button class="btn btn-outline-secondary" type="button"
+                                                onclick="$('#product-filter, #product-filter-id').val(''); FilterSystem.applyFilters()">
+                                            <i class="fas fa-times"></i>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-                            <div class="custom-control custom-checkbox">
-                                <input type="checkbox" class="custom-control-input" id="is-overdue" name="is_overdue" value="1">
-                                <label class="custom-control-label" for="is-overdue">Overdue Invoices</label>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Special Flags</label>
+                                <div class="custom-control custom-checkbox">
+                                    <input type="checkbox" class="custom-control-input" id="is-overdue" 
+                                           name="is_overdue" value="1" {% if request.GET.is_overdue %}checked{% endif %}>
+                                    <label class="custom-control-label small" for="is-overdue">Overdue Invoices</label>
+                                </div>
+                                <div class="custom-control custom-checkbox mt-2">
+                                    <input type="checkbox" class="custom-control-input" id="is-energy" 
+                                           name="is_energy" value="1" {% if request.GET.is_energy %}checked{% endif %}>
+                                    <label class="custom-control-label small" for="is-energy">Energy Supplier</label>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Add this to the filter form in invoice_list.html -->
+                        <div class="col-md-6 col-lg-4 mb-3">
+                            <label>Credit Note Status</label>
+                            <select class="form-control" name="credit_note_status">
+                                <option value="">All</option>
+                                <option value="has_credit_notes" {% if request.GET.credit_note_status == 'has_credit_notes' %}selected{% endif %}>
+                                    Has Credit Notes
+                                </option>
+                                <option value="no_credit_notes" {% if request.GET.credit_note_status == 'no_credit_notes' %}selected{% endif %}>
+                                    No Credit Notes
+                                </option>
+                                <option value="partially_credited" {% if request.GET.credit_note_status == 'partially_credited' %}selected{% endif %}>
+                                    Partially Credited
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label class="small font-weight-bold">Document References</label>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control form-control-sm" 
+                                               name="delivery_note_ref" placeholder="Delivery Note Ref..."
+                                               value="{{ request.GET.delivery_note_ref }}">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <input type="text" class="form-control form-control-sm" 
+                                               name="reception_note_ref" placeholder="Reception Note Ref..."
+                                               value="{{ request.GET.reception_note_ref }}">
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    <!-- Credit Note Status -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Credit Note Status</label>
-                        <select class="form-control w-100" name="credit_note_status">
-                            <option value="">All</option>
-                            <option value="has_credit_notes">Has Credit Notes</option>
-                            <option value="no_credit_notes">No Credit Notes</option>
-                            <option value="partially_credited">Partially Credited</option>
-                        </select>
-                    </div>
-
-                    <!-- Due Date Range -->
-                    <div class="col-md-6 col-lg-4 mb-3">
-                        <label>Due Date Range</label>
-                        <div class="input-group">
-                            <input type="date" class="form-control" name="due_date_from">
-                            <div class="input-group-prepend input-group-append">
-                                <span class="input-group-text">to</span>
-                            </div>
-                            <input type="date" class="form-control" name="due_date_to">
-                        </div>
-                    </div>
-
-                    <!-- Filter Buttons -->
-                    <div class="d-flex justify-content-end mt-3">
-                        <button type="button" id="reset-filters" class="btn btn-outline-danger rounded-pill mr-2">
-                            <i class="fas fa-times-circle"></i> Reset
-                        </button>
-                        <button type="button" id="apply-filters" class="btn btn-primary rounded-pill">
-                            <i class="fas fa-check-circle"></i> Apply Filters
-                        </button>
-                    </div>
-
+                <!-- Filter Actions -->
+                <div class="filter-actions mt-4 text-right">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="reset-filters">
+                        <i class="fas fa-undo"></i> Reset
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm ml-2">
+                        <i class="fas fa-check"></i> Apply Filters
+                    </button>
                 </div>
             </form>
         </div>
     </div>
-</div>
 
 
-<div class="table-responsive" id="invoice-table-wrapper">
-    <table class="table mt-4 table-hover">
-        <thead>
+<!-- Table Section -->
+<div class="table-responsive shadow-sm rounded" id="invoice-table-wrapper">
+    <div class="table-header d-flex justify-content-between align-items-center bg-white p-3 border-bottom">
+        <div class="d-flex align-items-center">
+            <div class="custom-control custom-checkbox">
+                <input type="checkbox" class="custom-control-input" id="select-all-invoices">
+                <label class="custom-control-label" for="select-all-invoices"></label>
+            </div>
+            <span class="ml-3 text-muted small">
+                <i class="fas fa-info-circle"></i> 
+                Showing {{ invoices|length }} invoice{{ invoices|length|pluralize }}
+            </span>
+        </div>
+        <div class="table-actions">
+            <div class="btn-group">
+                <button type="button" class="btn btn-light btn-sm dropdown-toggle" data-toggle="dropdown">
+                    <i class="fas fa-sort"></i> Sort
+                </button>
+                <div class="dropdown-menu dropdown-menu-right">
+                    <a class="dropdown-item" href="#" data-sort="date"><i class="fas fa-calendar-alt"></i> Date</a>
+                    <a class="dropdown-item" href="#" data-sort="amount"><i class="fas fa-dollar-sign"></i> Amount</a>
+                    <a class="dropdown-item" href="#" data-sort="status"><i class="fas fa-tasks"></i> Status</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <table class="table table-hover mb-0">
+        <thead class="bg-light">
             <tr>
-                <th>Export</th>
-                <th>Type</th>
-                <th>Index</th>
-                <th>Date</th>
-                <th>Reference</th>
-                <th>Supplier</th>
-                <th>Delivery Note</th>
-                <th>Reception Note</th>
-                <th>Fiscal Label</th>
-                <th>Raw Amount</th>
-                <th>Tax Rate (%)</th>
-                <th>Tax Amount</th>
-                <th>Total Amount (Incl. Tax)</th>
-                <th>Status</th>
-                <th>Document</th>
-                <th>Document Status</th>
-                <th>Actions</th>
-                <th>Details</th>
+                <th style="width: 40px" class="border-0"></th>
+                <th style="width: 100px" class="border-0">Type</th>
+                <th style="width: 80px" class="border-0">Index</th>
+                <th style="width: 100px" class="border-0">Date</th>
+                <th class="border-0">Reference</th>
+                <th class="border-0">Supplier</th>
+                <th class="text-center border-0">Documents</th>
+                <th class="text-right border-0">Amount</th>
+                <th style="width: 150px" class="text-center border-0">Status</th>
+                <th style="width: 100px" class="text-right border-0">Actions</th>
             </tr>
         </thead>
         <tbody>
             {% for invoice in invoices %}
                 {% if invoice.type == 'invoice' %}
-                    <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
-                                <td>
-                                    {% if invoice.exported_at %}
-                                        <span class="text-muted">
-                                            Exported {{ invoice.exported_at|date:"d-m-Y" }}
-                                            <button type="button" 
-                                                    class="btn btn-warning btn-sm unexport-btn ml-2" 
-                                                    data-invoice-id="{{ invoice.id }}">
-                                                <i class="fas fa-undo"></i>
-                                            </button>
-                                        </span>
-                                    {% else %}
-                                        <input type="checkbox" 
-                                            name="invoice_ids" 
-                                            value="{{ invoice.id }}" 
-                                            class="export-checkbox"
-                                            {% if invoice.payment_status == 'paid' %}disabled{% endif %}>
-                                    {% endif %}
-                                </td>
-                                <td>{{ invoice.get_invoice_type_display }}</td>
-                                <td>{{ invoice.archive_index }}</td>
-                                <td>{{ invoice.date }}</td>
-                                <td>{{ invoice.ref }}</td>
-                                <td>
-                                    <a href="{% url 'supplier-detail' invoice.supplier.pk %}" class="text-primary">
-                                        {{ invoice.supplier.name }}
-                                    </a>
-                                </td>
-                                <td>
-                                    {% if invoice.delivery_notes.exists %}
-                                        {% for note in invoice.delivery_notes.all %}
-                                            <a href="{{ note.document.url }}" target="_blank" class="mr-1">
-                                                {{ note.ref }}{% if not forloop.last %}, {% endif %}
-                                            </a>
-                                        {% endfor %}
-                                    {% else %}
-                                        <i class="fas fa-exclamation-triangle text-warning" title="No delivery notes attached"></i>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if invoice.reception_notes.exists %}
-                                        {% for note in invoice.reception_notes.all %}
-                                            <a href="{{ note.document.url }}" target="_blank" class="mr-1">
-                                                {{ note.ref }}{% if not forloop.last %}, {% endif %}
-                                            </a>
-                                        {% endfor %}
-                                    {% else %}
-                                        <i class="fas fa-exclamation-triangle text-warning" title="No reception notes attached"></i>
-                                    {% endif %}
-                                </td>
-                                <td>{{ invoice.fiscal_label }}</td>
-                                <td>{{ invoice.raw_amount|floatformat:2|intcomma }}</td>
-                                <td>
-                                    {% with invoice.products.all|length as product_count %}
-                                        {% for product in invoice.products.all %}
-                                            {{ product.vat_rate }}{% if not forloop.last %}, {% endif %}
-                                        {% endfor %}
-                                    {% endwith %}
-                                </td>
-                                <td>
-                                    {% if invoice.total_tax_amount %}
-                                        {{ invoice.total_tax_amount|floatformat:2|intcomma }}
-                                    {% else %}
-                                        <strong>Tax Missing</strong>
-                                    {% endif %}
-                                </td>                
-                                <td class="text-right">
-                                    {{ invoice.total_amount|floatformat:2|intcomma }}
-                                    {% if invoice.credit_notes.exists %}
-                                        <br>
-                                        <small class="text-muted">
-                                            Net: {{ invoice.net_amount|floatformat:2|intcomma }}
-                                        </small>
-                                        <button class="btn btn-link btn-sm p-0 ml-1 toggle-credit-notes" 
-                                                data-invoice="{{ invoice.id }}">
-                                            <i class="fas fa-receipt"></i>
-                                        </button>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if invoice.payment_status == 'paid' %}
-                                        <span class="badge badge-success">
-                                            <i class="fas fa-lock"></i> Paid
-                                        </span>
-                                    {% else %}
-                                        {% if invoice.credit_notes.exists %}
-                                            <span class="badge badge-info">
-                                                Partially Credited
-                                                <small>({{ invoice.credit_notes.count }} note{{ invoice.credit_notes.count|pluralize }})</small>
-                                            </span>
-                                        {% endif %}
-                                        <span class="badge {% if invoice.payment_status == 'partially_paid' %}badge-warning{% else %}badge-danger{% endif %}">
-                                            {% if invoice.payment_status == 'partially_paid' %}
-                                                Partially Paid 
-                                                <small>({{ invoice.payments_summary.percentage_paid|floatformat:1 }}%)</small>
-                                            {% else %}
-                                                Not Paid
-                                            {% endif %}
-                                        </span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if invoice.document %}
-                                        <a href="{{ invoice.document.url }}" target="_blank" class="btn btn-sm btn-info">
-                                            <i class="fas fa-file-pdf"></i>
-                                        </a>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {{ invoice.doc_status }}
-                                </td>
-                                <td>
-                                    {% if not invoice.payment_status == 'paid' %}
-                                        <a href="{% url 'invoice-update' invoice.pk %}" 
-                                            class="btn btn-warning btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
-                                        <a href="{% url 'invoice-delete' invoice.pk %}" 
-                                            class="btn btn-danger btn-sm rounded-pill shadow-sm {% if invoice.exported_at %}disabled{% endif %}">
-                                            <i class="fas fa-trash-alt"></i> Delete
-                                        </a>
-                                        <button class="btn btn-outline-info btn-sm rounded-pill shadow-sm" 
-                                                data-toggle="modal" 
-                                                data-target="#creditNoteModal" 
-                                                data-invoice-id="{{ invoice.id }}"
-                                                {% if not invoice.can_be_credited %}disabled{% endif %}>
-                                            <i class="fas fa-receipt"></i> Credit Note
-                                        </button>
-                                    {% else %}
-                                        <button class="btn btn-secondary" disabled>
-                                            <i class="fas fa-lock"></i> Paid
-                                        </button>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    <button class="btn btn-info" data-toggle="modal" data-target="#invoiceDetailsModal" data-invoice="{{ invoice.pk }}">Details</button>
-                                    <button class="btn btn-outline-success btn-sm rounded-pill shadow-sm"                             
-                                            data-toggle="modal" 
-                                            data-target="#paymentDetailsModal"
-                                            data-invoice="{{ invoice.pk }}">
-                                            <i class="fas fa-money-check-alt"></i> Payment Details
-                                    </button>
-                                    <button class="btn btn-secondary btn-sm rounded-pill shadow-sm accounting-summary-btn"  
-                                            data-invoice-id="{{ invoice.id }}" 
-                                            title="Show Accounting Summary">
-                                        <i class="fas fa-book"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        </tr>
-                    {% if invoice.credit_notes.exists %}
-                        <tr class="credit-notes-row d-none bg-light" data-parent="{{ invoice.id }}">
-                            <td colspan="12">
-                                <div class="ml-4">
-                                    <h6 class="mb-3">
-                                        <i class="fas fa-receipt"></i> 
-                                        Credit Notes for Invoice {{ invoice.ref }}
-                                    </h6>
-                                    <table class="table table-sm">
-                                        <thead class="thead-light">
-                                            <tr>
-                                                <th>Date</th>
-                                                <th>Reference</th>
-                                                <th>Products</th>
-                                                <th class="text-right">Amount</th>
-                                                <th>Status</th>
-                                                <th>Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {% for credit_note in invoice.credit_notes.all %}
-                                                <tr>
-                                                    <td>{{ credit_note.date|date:"Y-m-d" }}</td>
-                                                    <td>{{ credit_note.ref }}</td>
-                                                    <td>
-                                                        {% for product in credit_note.products.all %}
-                                                            {{ product.product.name }} ({{ product.quantity }})
-                                                            {% if not forloop.last %}, {% endif %}
-                                                        {% endfor %}
-                                                    </td>
-                                                    <td class="text-right text-danger">
-                                                        -{{ credit_note.total_amount|floatformat:2|intcomma }}
-                                                    </td>
-                                                    <td>
-                                                        <span class="badge badge-info">
-                                                            <i class="fas fa-receipt"></i> Credit Note
-                                                        </span>
-                                                        {% if credit_note.exported_at %}
-                                                            <span class="badge badge-secondary">
-                                                                <i class="fas fa-file-export"></i> Exported
-                                                            </span>
-                                                        {% endif %}
-                                                    </td>
-                                                    <td>
-                                                        <button class="btn btn-outline-primary btn-sm rounded-pill shadow-sm"
-                                                                data-toggle="modal" 
-                                                                data-target="#invoiceDetailsModal" 
-                                                                data-invoice="{{ credit_note.id }}">
-                                                            <i class="fas fa-info-circle"></i> Details
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            {% endfor %}
-                                            <tr class="font-weight-bold">
-                                                <td colspan="3" class="text-right">Net Balance:</td>
-                                                <td class="text-right">{{ invoice.net_amount|floatformat:2|intcomma }}</td>
-                                                <td colspan="2"></td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </td>
-                        </tr>
-                    {% endif %}
+                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
+                    <!-- Selection -->
+                    <td class="align-middle">
+                        {% if invoice.exported_at %}
+                            <button type="button" 
+                                    class="btn btn-outline-warning btn-sm unexport-btn" 
+                                    data-invoice-id="{{ invoice.id }}"
+                                    title="Unexport Invoice">
+                                <i class="fas fa-undo"></i>
+                            </button>
+                        {% elif not invoice.payment_status == 'paid' %}
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input export-checkbox" 
+                                       id="invoice-{{ invoice.id }}"
+                                       value="{{ invoice.id }}"
+                                       data-amount="{{ invoice.total_amount }}">
+                                <label class="custom-control-label" for="invoice-{{ invoice.id }}"></label>
+                            </div>
+                        {% endif %}
+                    </td>
 
+                    <!-- Type -->
+                    <td class="align-middle">
+                        <div class="d-flex align-items-center">
+                            <span class="badge badge-pill badge-soft-{{ invoice.get_invoice_type_display|lower }}">
+                                {{ invoice.get_invoice_type_display }}
+                            </span>
+                            {% if invoice.supplier.is_energy %}
+                                <i class="fas fa-bolt text-warning ml-2" title="Energy Invoice"></i>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Index -->
+                    <td class="align-middle">
+                        <span class="text-monospace">{{ invoice.archive_index }}</span>
+                    </td>
+
+                    <!-- Date -->
+                    <td class="align-middle">
+                        {{ invoice.date|date:"d-m-Y" }}
+                    </td>
+
+                    <!-- Reference -->
+                    <td class="align-middle">
+                        <div class="d-flex align-items-center">
+                            <span class="font-weight-medium">{{ invoice.ref }}</span>
+                            {% if invoice.credit_notes.exists %}
+                                <button class="btn btn-link btn-sm p-0 ml-2 toggle-credit-notes" 
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Has Credit Notes">
+                                    <i class="fas fa-receipt text-info"></i>
+                                </button>
+                            {% endif %}
+                        </div>
+                        <small class="text-muted d-block">{{ invoice.fiscal_label }}</small>
+                    </td>
+
+                    <!-- Supplier -->
+                    <td class="align-middle">
+                        <div class="supplier-info">
+                            <a href="{% url 'supplier-detail' invoice.supplier.pk %}" 
+                            class="text-decoration-none">
+                                {{ invoice.supplier.name }}
+                            </a>
+                            <small class="text-muted d-block">{{ invoice.supplier.fiscal_id }}</small>
+                        </div>
+                    </td>
+
+                    <!-- Documents -->
+                    <td class="align-middle text-center">
+                        <div class="btn-group btn-group-sm">
+                            {% if invoice.document %}
+                                <a href="{{ invoice.document.url }}" 
+                                target="_blank" 
+                                class="btn btn-link text-primary" 
+                                title="View Invoice">
+                                    <i class="fas fa-file-pdf"></i>
+                                </a>
+                            {% endif %}
+                            
+                            {% if invoice.delivery_notes.exists %}
+                                <button type="button" 
+                                        class="btn btn-link text-info position-relative"
+                                        data-toggle="modal" 
+                                        data-target="#deliveryNotesModal"
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Delivery Notes">
+                                    <i class="fas fa-truck"></i>
+                                    <span class="badge badge-info badge-pill position-absolute" 
+                                        style="top: -5px; right: -5px; font-size: 0.65rem;">
+                                        {{ invoice.delivery_notes.count }}
+                                    </span>
+                                </button>
+                            {% endif %}
+
+                            {% if invoice.reception_notes.exists %}
+                                <button type="button" 
+                                        class="btn btn-link text-success position-relative"
+                                        data-toggle="modal" 
+                                        data-target="#receptionNotesModal"
+                                        data-invoice="{{ invoice.id }}" 
+                                        title="Reception Notes">
+                                    <i class="fas fa-clipboard-check"></i>
+                                    <span class="badge badge-success badge-pill position-absolute" 
+                                        style="top: -5px; right: -5px; font-size: 0.65rem;">
+                                        {{ invoice.reception_notes.count }}
+                                    </span>
+                                </button>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Amount -->
+                    <td class="align-middle text-right">
+                        <span class="font-weight-bold">
+                            {{ invoice.total_amount|floatformat:2 }}
+                        </span>
+                        {% if invoice.credit_notes.exists %}
+                            <small class="text-muted d-block">
+                                Net: {{ invoice.net_amount|floatformat:2 }}
+                            </small>
+                        {% endif %}
+                    </td>
+
+                    <!-- Status -->
+                    <td class="align-middle text-center">
+                        <div class="invoice-status">
+                            {% if invoice.payment_status == 'paid' %}
+                                <span class="badge badge-success badge-pill px-3">
+                                    <i class="fas fa-check-circle mr-1"></i> Paid
+                                </span>
+                            {% elif invoice.payment_status == 'partially_paid' %}
+                                <span class="badge badge-warning badge-pill px-3">
+                                    Partially Paid
+                                    <div class="progress mt-1" style="height: 3px; width: 50px;">
+                                        <div class="progress-bar bg-warning" 
+                                            style="width: {{ invoice.payment_percentage }}%">
+                                        </div>
+                                    </div>
+                                </span>
+                            {% else %}
+                                <span class="badge badge-danger badge-pill px-3">
+                                    <i class="fas fa-times-circle mr-1"></i> Not Paid
+                                </span>
+                            {% endif %}
+
+                            {% if invoice.exported_at %}
+                                <span class="badge badge-secondary badge-pill px-3 mt-1 d-block">
+                                    Exported
+                                </span>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <!-- Actions -->
+                    <td class="align-middle text-right">
+                        <div class="dropdown">
+                            <button class="btn btn-link btn-sm dropdown-toggle" type="button" data-toggle="dropdown">
+                                <i class="fas fa-ellipsis-v"></i>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-right">
+                                {% if not invoice.exported_at and invoice.payment_status != 'paid' %}
+                                    <a class="dropdown-item text-primary" href="{% url 'invoice-update' invoice.id %}">
+                                        <i class="fas fa-edit fa-fw"></i> Edit
+                                    </a>
+                                {% endif %}
+
+                                <button class="dropdown-item" type="button"
+                                        data-toggle="modal" 
+                                        data-target="#invoiceDetailsModal"
+                                        data-invoice="{{ invoice.id }}">
+                                    <i class="fas fa-info-circle fa-fw"></i> Details
+                                </button>
+
+                                <button class="dropdown-item" type="button"
+                                        data-toggle="modal" 
+                                        data-target="#paymentDetailsModal"
+                                        data-invoice="{{ invoice.id }}">
+                                    <i class="fas fa-money-bill-wave fa-fw"></i> Payment Details
+                                </button>
+
+                                <button class="dropdown-item accounting-summary-btn" type="button"
+                                        data-invoice-id="{{ invoice.id }}">
+                                    <i class="fas fa-calculator fa-fw"></i> Accounting
+                                </button>
+
+                                {% if not invoice.exported_at %}
+                                    <button class="dropdown-item" type="button"
+                                            data-toggle="modal" 
+                                            data-target="#creditNoteModal"
+                                            data-invoice-id="{{ invoice.id }}"
+                                            {% if not invoice.can_be_credited %}disabled{% endif %}>
+                                        <i class="fas fa-reply fa-fw"></i> Credit Note
+                                    </button>
+                                {% endif %}
+
+                                {% if not invoice.exported_at and invoice.payment_status != 'paid' %}
+                                    <div class="dropdown-divider"></div>
+                                    <a class="dropdown-item text-danger" 
+                                    href="{% url 'invoice-delete' invoice.id %}"
+                                    onclick="return confirm('Are you sure you want to delete this invoice?')">
+                                        <i class="fas fa-trash fa-fw"></i> Delete
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                </tr>
                 {% endif %}
 
+            <!-- Credit Notes Row -->
+            {% if invoice.credit_notes.exists %}
+            <tr class="credit-notes-row" data-parent="{{ invoice.id }}" style="display: none;">
+                <td colspan="10" class="border-0">
+                    <div class="credit-notes-container">
+                        <h6>
+                            <i class="fas fa-receipt text-info"></i> 
+                            Credit Notes for Invoice {{ invoice.ref }}
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Reference</th>
+                                        <th>Products</th>
+                                        <th class="text-right">Amount</th>
+                                        <th>Status</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for credit_note in invoice.credit_notes.all %}
+                                    <tr>
+                                        <td>{{ credit_note.date|date:"d-m-Y" }}</td>
+                                        <td>{{ credit_note.ref }}</td>
+                                        <td>
+                                            {% for product in credit_note.products.all %}
+                                                {{ product.product.name }} ({{ product.quantity }})
+                                                {% if not forloop.last %}, {% endif %}
+                                            {% endfor %}
+                                        </td>
+                                        <td class="text-right text-danger">
+                                            -{{ credit_note.total_amount|floatformat:2 }}
+                                        </td>
+                                        <td>
+                                            <span class="badge badge-info badge-pill">
+                                                <i class="fas fa-receipt"></i> Credit Note
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <button class="btn btn-link btn-sm p-0"
+                                                    data-toggle="modal" 
+                                                    data-target="#invoiceDetailsModal" 
+                                                    data-invoice="{{ credit_note.id }}">
+                                                <i class="fas fa-info-circle"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                                <tfoot>
+                                    <tr class="font-weight-bold">
+                                        <td colspan="3" class="text-right border-0">Net Balance:</td>
+                                        <td class="text-right border-0">
+                                            {{ invoice.net_amount|floatformat:2 }}
+                                        </td>
+                                        <td colspan="2" class="border-0"></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+            {% endif %}
             {% endfor %}
         </tbody>
     </table>
+
+    <!-- No Results Message -->
+    {% if not invoices %}
+    <div class="text-center py-5">
+        <i class="fas fa-search fa-3x text-muted mb-3"></i>
+        <h5 class="text-muted">No invoices found matching your criteria</h5>
+        <button class="btn btn-link" id="clear-filters">Clear all filters</button>
+    </div>
+    {% endif %}
 </div>
 
-<!-- Export Button -->
-<div class="d-flex justify-content-end mt-3">
-    <button type="button" 
-            id="export-selected" 
-            class="btn btn-success btn-lg rounded-pill shadow"
-            disabled>
-            <i class="fas fa-file-export"></i> Export Selected
-    </button>
-</div>
-
-<!-- Modal Template for Invoice Details -->
-<div class="modal fade" id="invoiceDetailsModal" tabindex="-1" role="dialog" aria-labelledby="invoiceDetailsModalLabel">
-    <div class="modal-dialog modal-lg" role="document"> <!-- Added modal-lg for larger modal -->
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="invoiceDetailsModalLabel">
-                    <i class="fas fa-info-circle"></i>Invoice Details
+<!-- Invoice Details Modal -->
+<div class="modal fade" id="invoiceDetailsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-info-circle"></i> Invoice Details
                 </h5>
-                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
             </div>
-            <div class="modal-body modal-scrollable-content">
-                <table class="table table-striped">
-                    <thead>
-                        <tr>
-                            <th>Product</th>
-                            <th>Unit Price</th>
-                            <th>Quantity</th>
-                            <th>VAT Rate</th>
-                            <th>Reduction Rate</th>
-                            <th>Raw Price</th>
-                        </tr>
-                    </thead>
-                    <tbody id="invoice-details-table">
-                        <!-- Filled by JavaScript -->
-                    </tbody>
-                </table>
-                <div id="vat-summary"></div>
-                <div id="total-amount-summary"></div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary btn-sm" data-dismiss="modal">
-                    <i class="fas fa-check"></i> Done
-                </button>
+            <div class="modal-body">
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="thead-light">
+                            <tr>
+                                <th>Product</th>
+                                <th>Unit Price</th>
+                                <th>Quantity</th>
+                                <th>VAT Rate</th>
+                                <th>Reduction Rate</th>
+                                <th>Raw Price</th>
+                            </tr>
+                        </thead>
+                        <tbody id="invoice-details-table">
+                            <!-- Filled by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- VAT Summary -->
+                <div id="vat-summary" class="mt-4">
+                    <!-- Filled by JavaScript -->
+                </div>
+
+                <!-- Totals Summary -->
+                <div id="total-amount-summary" class="mt-3 text-right font-weight-bold">
+                    <!-- Filled by JavaScript -->
+                </div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Payment Details Modal -->
-<div class="modal fade" id="paymentDetailsModal">
+<div class="modal fade" id="paymentDetailsModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-money-bill"></i> 
-                    Payment Details
-                    <small id="invoice-ref" class="text-muted"></small>
+                    <i class="fas fa-money-bill-wave"></i> Payment Details
+                    <small id="invoice-ref" class="text-white-50"></small>
                 </h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- Summary Cards -->
                 <div class="row mb-4">
                     <div class="col-md-3">
-                        <div class="card shadow-sm">
+                        <div class="card border-0 shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount Due</h6>
                                 <h4 id="amount-due" class="card-title mb-0 text-primary"></h4>
@@ -557,7 +662,7 @@
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <div class="card shadow-sm">
+                        <div class="card border-0 shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount Paid</h6>
                                 <h4 id="amount-paid" class="card-title mb-0 text-success"></h4>
@@ -565,7 +670,7 @@
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <div class="card shadow-sm">
+                        <div class="card border-0 shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Amount to Issue</h6>
                                 <h4 id="amount-to-issue" class="card-title mb-0 text-info"></h4>
@@ -573,7 +678,7 @@
                         </div>
                     </div>
                     <div class="col-md-3">
-                        <div class="card shadow-sm">
+                        <div class="card border-0 shadow-sm">
                             <div class="card-body">
                                 <h6 class="card-subtitle mb-2 text-muted">Remaining</h6>
                                 <h4 id="remaining-amount" class="card-title mb-0 text-warning"></h4>
@@ -591,19 +696,19 @@
                 <div class="row mb-4">
                     <div class="col-md-6">
                         <div class="d-flex justify-content-between align-items-center mb-2">
-                            <span>Pending Payments:</span>
+                            <span class="text-muted">Pending Payments:</span>
                             <h5 id="pending-amount" class="mb-0"></h5>
                         </div>
                         <div class="d-flex justify-content-between align-items-center">
-                            <span>Delivered Payments:</span>
+                            <span class="text-muted">Delivered Payments:</span>
                             <h5 id="delivered-amount" class="mb-0"></h5>
                         </div>
                     </div>
                 </div>
 
-                <!-- Checks Table -->
+                <!-- Payments Table -->
                 <div class="table-responsive">
-                    <table class="table table-hover">
+                    <table class="table table-hover border">
                         <thead class="thead-light">
                             <tr>
                                 <th>Reference</th>
@@ -614,7 +719,9 @@
                                 <th>Status</th>
                             </tr>
                         </thead>
-                        <tbody id="payment-checks-tbody"></tbody>
+                        <tbody id="payment-checks-tbody">
+                            <!-- Filled by JavaScript -->
+                        </tbody>
                     </table>
                 </div>
             </div>
@@ -625,8 +732,8 @@
 <!-- Credit Note Modal -->
 <div class="modal fade" id="creditNoteModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-info text-white">
                 <h5 class="modal-title">
                     <i class="fas fa-receipt"></i> Create Credit Note
                 </h5>
@@ -636,25 +743,29 @@
                 <!-- Credit Note Info -->
                 <div class="row mb-4">
                     <div class="col-md-6">
-                        <label for="credit-note-ref">Credit Note Reference *</label>
-                        <input type="text" id="credit-note-ref" class="form-control" required>
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Credit Note Reference *</label>
+                            <input type="text" id="credit-note-ref" class="form-control" required>
+                        </div>
                     </div>
                     <div class="col-md-6">
-                        <label for="credit-note-date">Date *</label>
-                        <input type="date" id="credit-note-date" class="form-control" required>
+                        <div class="form-group">
+                            <label class="small font-weight-bold">Date *</label>
+                            <input type="date" id="credit-note-date" class="form-control" required>
+                        </div>
                     </div>
                 </div>
 
                 <!-- Original Invoice Info -->
-                <div class="card mb-4">
+                <div class="card bg-light border-0 mb-4">
                     <div class="card-body">
                         <div class="row">
                             <div class="col-md-6">
-                                <h6>Original Invoice</h6>
+                                <h6 class="text-primary mb-3">Original Invoice</h6>
                                 <div id="original-invoice-details"></div>
                             </div>
                             <div class="col-md-6">
-                                <h6>Net Balance After Credit</h6>
+                                <h6 class="text-primary mb-3">Net Balance After Credit</h6>
                                 <div id="net-balance-details"></div>
                             </div>
                         </div>
@@ -664,29 +775,31 @@
                 <!-- Products Selection -->
                 <form id="credit-note-form">
                     <input type="hidden" id="original-invoice-id">
-                    <table class="table" id="products-table">
-                        <thead>
-                            <tr>
-                                <th>Product</th>
-                                <th>Original Qty</th>
-                                <th>Already Credited</th>
-                                <th>Available</th>
-                                <th>Credit Qty</th>
-                                <th>Unit Price</th>
-                                <th>Subtotal</th>
-                            </tr>
-                        </thead>
-                        <tbody></tbody>
-                        <tfoot>
-                            <tr>
-                                <th colspan="6" class="text-right">Total Credit Amount:</th>
-                                <th class="text-right" id="total-credit-amount">0.00</th>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    <div class="table-responsive">
+                        <table class="table table-bordered" id="products-table">
+                            <thead class="thead-light">
+                                <tr>
+                                    <th>Product</th>
+                                    <th>Original Qty</th>
+                                    <th>Already Credited</th>
+                                    <th>Available</th>
+                                    <th>Credit Qty</th>
+                                    <th>Unit Price</th>
+                                    <th>Subtotal</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                            <tfoot>
+                                <tr>
+                                    <th colspan="6" class="text-right">Total Credit Amount:</th>
+                                    <th class="text-right" id="total-credit-amount">0.00</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
                 </form>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">
                     <i class="fas fa-times"></i> Cancel
                 </button>
@@ -701,78 +814,82 @@
 <!-- Accounting Summary Modal -->
 <div class="modal fade" id="accountingSummaryModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
                     <i class="fas fa-book"></i> Accounting Summary
                 </h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-0">
                 <div class="accordion" id="accountingEntries">
                     <!-- Original Invoice Section -->
-                    <div class="card">
-                        <div class="card-header bg-primary text-white">
+                    <div class="card border-0">
+                        <div class="card-header bg-light">
                             <h6 class="mb-0">Original Invoice Entries</h6>
                         </div>
                         <div class="card-body p-0">
-                            <table class="table table-striped mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Account</th>
-                                        <th>Label</th>
-                                        <th class="text-right">Debit</th>
-                                        <th class="text-right">Credit</th>
-                                        <th>Reference</th>
-                                        <th>Journal</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="originalEntries"></tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="table table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Account</th>
+                                            <th>Label</th>
+                                            <th class="text-right">Debit</th>
+                                            <th class="text-right">Credit</th>
+                                            <th>Reference</th>
+                                            <th>Journal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="originalEntries"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Credit Notes Section (shown only if exists) -->
-                    <div id="creditNotesSection" class="card mt-3 d-none">
-                        <div class="card-header bg-info text-white">
+                    <!-- Credit Notes Section -->
+                    <div id="creditNotesSection" class="card border-0 mt-3 d-none">
+                        <div class="card-header bg-light">
                             <h6 class="mb-0">Credit Note Entries</h6>
                         </div>
                         <div class="card-body p-0">
-                            <table class="table table-striped mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Date</th>
-                                        <th>Account</th>
-                                        <th>Label</th>
-                                        <th class="text-right">Debit</th>
-                                        <th class="text-right">Credit</th>
-                                        <th>Reference</th>
-                                        <th>Journal</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="creditNoteEntries"></tbody>
-                            </table>
+                            <div class="table-responsive">
+                                <table class="table table-striped mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Date</th>
+                                            <th>Account</th>
+                                            <th>Label</th>
+                                            <th class="text-right">Debit</th>
+                                            <th class="text-right">Credit</th>
+                                            <th>Reference</th>
+                                            <th>Journal</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="creditNoteEntries"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Net Effect Section -->
-                    <div class="card mt-3">
+                    <div class="card border-0 mt-3">
                         <div class="card-header bg-success text-white">
                             <h6 class="mb-0">Net Effect</h6>
                         </div>
                         <div class="card-body">
                             <div class="row">
                                 <div class="col-md-4">
-                                    <h6>Original Amount</h6>
+                                    <h6 class="text-muted mb-2">Original Amount</h6>
                                     <p id="originalTotal" class="h4"></p>
                                 </div>
                                 <div class="col-md-4">
-                                    <h6>Credit Notes</h6>
+                                    <h6 class="text-muted mb-2">Credit Notes</h6>
                                     <p id="creditTotal" class="h4 text-danger"></p>
                                 </div>
                                 <div class="col-md-4">
-                                    <h6>Net Amount</h6>
+                                    <h6 class="text-muted mb-2">Net Amount</h6>
                                     <p id="netTotal" class="h4 font-weight-bold"></p>
                                 </div>
                             </div>
@@ -784,7 +901,416 @@
     </div>
 </div>
 
+<style>
+    /* Invoice Management Styles */
+    .invoice-management {
+        background-color: #fff;
+        border-radius: 0.35rem;
+        padding: 1.5rem;
+    }
 
+    /* Header Styles */
+    .page-header {
+        border-bottom: 1px solid #e3e6f0;
+        padding-bottom: 1rem;
+    }
+
+    .header-actions .btn {
+        border-radius: 50rem;
+        padding: 0.375rem 1rem;
+    }
+
+    /* Badge Styles */
+    .badge-soft-primary {
+        color: #4e73df;
+        background-color: #eaecf4;
+        border: 1px solid #d1d3e2;
+        font-weight: 500;
+    }
+
+    .badge .close {
+        font-size: 0.875rem;
+        padding: 0.25rem;
+        margin-left: 0.5rem;
+        color: currentColor;
+        text-shadow: none;
+        opacity: 0.75;
+    }
+
+    .badge .close:hover {
+        opacity: 1;
+    }
+
+    /* Filter Panel Styles */
+    .filter-panel {
+        border: none;
+        background-color: #f8f9fc;
+        border-radius: 0.35rem;
+    }
+
+    .filter-section {
+        background-color: #fff;
+        border-radius: 0.25rem;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    }
+
+    .filter-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .filter-section-title {
+        color: #4e73df;
+        font-size: 0.875rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    /* Form Control Styles */
+    .form-control-sm {
+        border-radius: 0.2rem;
+    }
+
+    .input-group-text {
+        background-color: #f8f9fc;
+        border-color: #d1d3e2;
+        color: #6e707e;
+    }
+
+    .custom-control-label {
+        color: #6e707e;
+    }
+
+    /* Button Styles */
+    .btn-sm {
+        font-size: 0.875rem;
+    }
+
+    .filter-actions .btn {
+        min-width: 100px;
+        border-radius: 50rem;
+    }
+
+    /* Table Styles */
+    .table-responsive {
+        background: white;
+    }
+
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table td, .table th {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+
+    /* Badge Styles */
+    .badge-pill {
+        padding: 0.5em 1em;
+        font-weight: 500;
+    }
+
+    .badge-soft-energy { background-color: #fdf6b2; color: #8a6d3b; }
+    .badge-soft-insurance { background-color: #e3f8e5; color: #3c763d; }
+    .badge-soft-leasing { background-color: #e8eafd; color: #4e73df; }
+    /* Continue Table Styles */
+    .badge-soft-utilities { background-color: #e3f2fd; color: #0d47a1; }
+    .badge-soft-telecom { background-color: #f3e5f5; color: #6a1b9a; }
+    .badge-soft-rent { background-color: #fff3e0; color: #e65100; }
+    .badge-soft-service { background-color: #e8f5e9; color: #1b5e20; }
+    .badge-soft-other { background-color: #f5f5f5; color: #616161; }
+
+    /* Status Badges */
+    .invoice-status .badge {
+        font-size: 0.75rem;
+        font-weight: 500;
+        line-height: 1.5;
+    }
+
+    .invoice-status .progress {
+        margin: 0 auto;
+    }
+
+    /* Action Buttons */
+    .btn-group-sm > .btn-link {
+        color: #6e707e;
+        padding: 0.25rem 0.5rem;
+        font-size: 0.875rem;
+    }
+
+    .btn-group-sm > .btn-link:hover {
+        color: #4e73df;
+        text-decoration: none;
+        background-color: #f8f9fc;
+    }
+
+    /* Dropdown Menu */
+    .dropdown-menu {
+        padding: 0.5rem 0;
+        margin: 0.125rem 0 0;
+        font-size: 0.875rem;
+        border: 0;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.175);
+    }
+
+    .dropdown-item {
+        padding: 0.5rem 1.5rem;
+        font-weight: 400;
+    }
+
+    .dropdown-item i {
+        width: 1rem;
+        margin-right: 0.5rem;
+        text-align: center;
+    }
+
+    .dropdown-item:hover {
+        background-color: #f8f9fc;
+    }
+
+    .dropdown-item.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    /* Credit Notes Section */
+    .credit-notes-container {
+        background-color: #f8f9fc;
+        border-radius: 0.35rem;
+    }
+
+    .credit-notes-container h6 {
+        color: #4e73df;
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    .credit-notes-container .table {
+        background-color: white;
+        border-radius: 0.25rem;
+    }
+
+    .credit-notes-container .table th {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-top: 0;
+    }
+
+    /* Document Badges */
+    .btn-group .position-relative .badge {
+        font-size: 0.65rem;
+        padding: 0.2rem 0.4rem;
+        min-width: 1.2rem;
+    }
+
+    /* Table Header Actions */
+    .table-header {
+        border-bottom: 2px solid #e3e6f0;
+    }
+
+    .table-header .custom-checkbox {
+        margin-bottom: 0;
+    }
+
+    /* Amount Column */
+    .amount-column {
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* Supplier Info */
+    .supplier-info a {
+        color: #4e73df;
+        font-weight: 500;
+    }
+
+    .supplier-info a:hover {
+        color: #2e59d9;
+        text-decoration: none;
+    }
+
+    /* Responsive Table */
+    @media (max-width: 768px) {
+        .table-responsive {
+            border-radius: 0;
+        }
+        
+        .table td, .table th {
+            padding: 0.75rem;
+        }
+        
+        .dropdown-menu {
+            position: fixed !important;
+            top: auto !important;
+            right: 1rem !important;
+            bottom: 1rem;
+            left: 1rem !important;
+            transform: none !important;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+    }
+
+    /* Animation for Credit Notes Row */
+    .credit-notes-row {
+        transition: all 0.3s ease-in-out;
+    }
+
+    .credit-notes-row:not(.d-none) {
+        animation: fadeIn 0.3s ease-in-out;
+    }
+
+    @keyframes fadeIn {
+        from {
+            opacity: 0;
+            transform: translateY(-10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    /* Modal Styles */
+.modal-content {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    padding: 1rem 1.5rem;
+}
+
+.modal-header .close {
+    padding: 1rem;
+    margin: -1rem -1rem -1rem auto;
+    opacity: 0.75;
+}
+
+.modal-header .close:hover {
+    opacity: 1;
+}
+
+.modal-title {
+    font-size: 1.1rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+/* Form Styles in Modals */
+.modal .form-control {
+    border-radius: 0.25rem;
+}
+
+.modal label {
+    margin-bottom: 0.5rem;
+}
+
+/* Table Styles in Modals */
+.modal .table {
+    margin-bottom: 0;
+}
+
+.modal .table th {
+    font-weight: 600;
+    background-color: #f8f9fc;
+}
+
+.modal .table td, 
+.modal .table th {
+    padding: 0.75rem 1rem;
+}
+
+/* Card Styles in Modals */
+.modal .card {
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+}
+
+.modal .card-title {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+/* Progress Bar in Payment Modal */
+.modal .progress {
+    background-color: #eaecf4;
+    border-radius: 1rem;
+    overflow: hidden;
+}
+
+.modal .progress-bar {
+    border-radius: 1rem;
+    transition: width 0.6s ease;
+}
+
+/* Net Effect Section */
+.modal #netTotal {
+    color: #4e73df;
+}
+
+.modal #creditTotal {
+    color: #e74a3b;
+}
+
+/* Animation for Modal */
+.modal.fade .modal-dialog {
+    transform: scale(0.95);
+    transition: transform 0.2s ease-out;
+}
+
+.modal.show .modal-dialog {
+    transform: none;
+}
+
+.credit-notes-row {
+    background-color: #f8f9fc !important;
+    display: none;
+}
+
+.credit-notes-container {
+    padding: 1rem;
+    margin: -0.25rem; /* Compensate for table cell padding */
+}
+
+.credit-notes-container h6 {
+    color: #4e73df;
+    font-size: 0.875rem;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+.credit-notes-container .table {
+    background-color: white;
+    border-radius: 0.25rem;
+    margin-bottom: 0;
+}
+
+.credit-notes-container .table th {
+    border-top: 0;
+    font-size: 0.8125rem;
+    color: #6e707e;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.toggle-credit-notes {
+    transition: transform 0.2s;
+}
+
+.toggle-credit-notes:hover {
+    transform: scale(1.1);
+}
+
+.toggle-credit-notes i.fa-times-circle {
+    color: #e74a3b;
+}
+</style>
 <!-- JavaScript time!!! -->
 
 <script>
@@ -1160,6 +1686,7 @@ const FilterSystem = {
             console.log('Resetting filters');
             this.resetFilters();
         });
+
     },
 
     initializeFilterToggle() {
@@ -1545,6 +2072,7 @@ const ExportSystem = {
         this.initializeCheckboxes();
         this.initializeExportButton();
         this.initializeUnexportButtons();
+        this.initializeSelectAll();
     },
 
     initializeCheckboxes() {
@@ -1557,6 +2085,33 @@ const ExportSystem = {
                 exportButton.disabled = checkedBoxes.length === 0;
                 console.log('Checked invoices:', checkedBoxes.length);
             });
+        });
+    },
+
+    initializeSelectAll() {
+        console.log('Initializing select all');
+        const selectAll = document.getElementById('select-all-invoices');
+        if (!selectAll) {
+            console.error('Select all checkbox not found');
+            return;
+        }
+
+        selectAll.addEventListener('change', function() {
+            const isChecked = this.checked;
+            console.log('Select all changed:', isChecked);
+            
+            const checkboxes = document.querySelectorAll('.export-checkbox:not(:disabled)');
+            console.log('Found checkboxes:', checkboxes.length);
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = isChecked;
+            });
+            
+            // Update export button state
+            const exportButton = document.getElementById('export-selected');
+            if (exportButton) {
+                exportButton.disabled = !isChecked;
+            }
         });
     },
 
@@ -1659,6 +2214,59 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     console.log('Invoice management system initialized');
+});
+
+$(document).on('click', '.toggle-credit-notes', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    console.log('Credit note toggle clicked');
+    const invoiceId = $(this).data('invoice');
+    const icon = $(this).find('i');
+    const creditNotesRow = $(`.credit-notes-row[data-parent="${invoiceId}"]`);
+    
+    console.log('Toggle details for invoice:', invoiceId);
+    console.log('Found credit notes row:', creditNotesRow.length);
+    
+    // Toggle with animation
+    creditNotesRow.slideToggle({
+        duration: 300,
+        start: function() {
+            $(this).css('display', 'table-row');
+        }
+    });
+    
+    // Toggle icon
+    icon.toggleClass('fa-receipt fa-times-circle');
+});
+
+$('#select-all-invoices').on('change', function() {
+    console.log('Select all toggled');
+    const isChecked = $(this).prop('checked');
+    $('.invoice-select:not(:disabled)').prop('checked', isChecked);
+    
+    // Update export button state
+    const checkedCount = $('.invoice-select:checked').length;
+    console.log('Checked invoices:', checkedCount);
+    $('#export-selected').prop('disabled', checkedCount === 0);
+});
+
+
+$(document).ready(function() {
+    // Direct click handler for the clear-filters button
+    $(document).on('click', '#clear-filters', function(e) {
+        e.preventDefault();
+        console.log('Clear filters button clicked!');
+        
+        // Reset form
+        $('#filter-form')[0].reset();
+        
+        // Clear supplier and product autocomplete fields
+        $('#supplier-filter, #supplier-filter-id, #product-filter, #product-filter-id').val('');
+        
+        // Clear URL parameters and reload page
+        window.location.search = '';
+    });
 });
 </script>
 {% endblock %}
