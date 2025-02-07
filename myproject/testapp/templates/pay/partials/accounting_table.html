@@ -1,0 +1,66 @@
+{% load accounting_filters %}
+{% for entry in entries %}
+    <tr class="{% if entry.details %}row-expandable{% endif %}">
+        <td>{{ entry.date|date:"Y-m-d" }}</td>
+        <td>
+            {% if entry.details %}
+                <span class="expand-icon me-2">
+                    <i class="fas fa-chevron-down"></i>
+                </span>
+            {% endif %}
+            {{ entry.label }}
+        </td>
+        <td class="text-end text-danger">
+            {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}
+        </td>
+        <td class="text-end text-success">
+            {% if entry.credit %}{{ entry.credit|format_balance }}{% endif %}
+        </td>
+        <td>{{ entry.account_code }}</td>
+        <td>{{ entry.reference }}</td>
+        <td>
+            {% if entry.source_type == 'pay_declaration' %}
+                <button class="btn btn-sm btn-info view-declaration"
+                        data-id="{{ entry.source_id }}">
+                    <i class="fas fa-eye"></i>
+                </button>
+            {% endif %}
+        </td>
+    </tr>
+    {% if entry.details %}
+        <tr class="details-row d-none">
+            <td colspan="7">
+                <div class="card border-0">
+                    <div class="card-body">
+                        <h6 class="card-subtitle mb-3 text-muted">Entry Details</h6>
+                        {% if entry.source_type == 'pay_declaration' %}
+                            <div class="row g-3">
+                                <div class="col-md-4">
+                                    <strong>Period:</strong><br>
+                                    {{ entry.details.period }}
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Payment Date:</strong><br>
+                                    {{ entry.details.payment_date }}
+                                </div>
+                                <div class="col-md-4">
+                                    <strong>Due Date:</strong><br>
+                                    {{ entry.details.due_date }}
+                                </div>
+                            </div>
+                            <div class="mt-3">
+                                <strong>Items:</strong> {{ entry.details.items_count }}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+    {% endif %}
+{% empty %}
+    <tr>
+        <td colspan="7" class="text-center text-muted">
+            No entries found for this period
+        </td>
+    </tr>
+{% endfor %}

@@ -1,83 +1,94 @@
 {% load custom_filters %}
 {% load permission_tags %}
-<!-- checkers_table.html -->
 {% for checker in checkers %}
-<tr>
-   <td>
-       <span class="font-monospace">{{ checker.code }}</span>
-   </td>
-   <td>
-       <div class="d-flex align-items-center">
-           <span class="bank-logo {{ checker.bank_account.bank|lower }}"></span>
-           <span class="ml-2">
-               {{ checker.bank_account.bank }} [{{ checker.bank_account.account_number }}]
-           </span>
-       </div>
-   </td>
-   <td>{{ checker.get_type_display }}</td>
-   <td>
-       [{{ checker.index }}] {{ checker.starting_page }} - {{ checker.final_page }}
-        <small class="text-muted">
-            <div class="progress-container" style="display: flex; align-items: center; gap: 10px;">
-                <div class="progress" style="height: 20px; width: 100px;"title="Remaining checkers: {{ checker.remaining_pages }}">
-                    <div 
-                        class="progress-bar {% if checker.remaining_percentage < 20 %}bg-danger{% elif checker.remaining_percentage < 50 %}bg-warning{% else %}bg-success{% endif %}" 
-                        role="progressbar" 
-                        style="width: {{ checker.remaining_percentage }}%;" 
-                        aria-valuenow="{{ checker.remaining_percentage }}" 
-                        aria-valuemin="0" 
-                        aria-valuemax="100">
-                        {{ checker.remaining_ratio }}
-                    </div>
-                </div>
-                {% if checker.remaining_percentage < 25  %}
-                    <span class="exclamation" title="Low remaining pages!">⚠️</span>
-                {% endif %}
+<div class="checker-card">
+    <div class="checker-card-header">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <span class="checker-code">{{ checker.code }}</span>
+            <span class="checker-type badge {% if checker.type == 'CHQ' %}bg-primary{% else %}bg-info{% endif %} text-white">
+                {{ checker.get_type_display }}
+            </span>
+        </div>
+        <div class="bank-info d-flex align-items-center gap-2">
+            <span class="bank-logo {{ checker.bank_account.bank|lower }}"></span>
+            <span class="bank-name">{{ checker.bank_account.get_bank_display }}</span>
+        </div>
+    </div>
+            
+    <div class="checker-card-body">
+        <div class="range-info mb-3">
+            <div class="d-flex justify-content-between text-muted mb-1">
+                <small>Range</small>
+                <small>{{ checker.starting_page }} - {{ checker.final_page }}</small>
             </div>
-        </small>
-    </td>
-
-
-    <td>
-        <div class="position-info" data-checker-id="{{ checker.id }}">
-            <span class="position-display">{{ checker.index }}{{ checker.current_position }}</span>
-            <div class="progress" style="height: 4px;">
-                <div class="progress-bar" role="progressbar" 
-                     style="width: {{ checker.get_progress_percentage }}%">
+            <div class="progress" style="height: 8px;">
+                <div class="progress-bar progress-bar-striped progress-bar-animated 
+                            {% if checker.remaining_percentage < 20 %}bg-danger
+                            {% elif checker.remaining_percentage < 50 %}bg-warning
+                            {% else %}bg-success{% endif %}"
+                     role="progressbar" 
+                     style="width: {{ checker.remaining_percentage }}%">
                 </div>
+            </div>
+            <div class="d-flex justify-content-between mt-1">
+                <small class="text-muted">{{ checker.remaining_ratio }} pages remaining</small>
+                <small class="text-muted">{{ checker.remaining_percentage }}%</small>
             </div>
         </div>
-    </td>
-   <td>
-       {% with status=checker.get_status %}
-           <span class="badge badge-{{ status.color }}">
-               {{ status.label }}
-           </span>
-       {% endwith %}
-   </td>
-   <td>{{ checker.created_at|date:"d/m/Y" }}</td>
-   <td class="actions">
-    {% if checker.status != 'completed' and checker.is_active and request.user.userprofile.role.can_manage_checks %}
-        <div class="btn-group">
-            <button class="btn btn-sm btn-info view-signatures" data-checker="{{ checker.id }}"
-                data-start="{{ checker.starting_page }}" 
-                data-end="{{ checker.final_page }}">
+
+        <div class="position-info mb-3" data-checker-id="{{ checker.id }}">
+            <div class="d-flex justify-content-between text-muted mb-1">
+                <small>Current Position</small>
+                <small class="position-display">{{ checker.index }}{{ checker.current_position }}</small>
+            </div>
+        </div>
+
+        <div class="checker-status">
+            {% with status=checker.get_status %}
+            <span class="status-badge status-{{ status.color }}">
+                {{ status.label }}
+            </span>
+            {% endwith %}
+        </div>
+    </div>
+
+    <div class="checker-card-footer">
+        {% if checker.status != 'completed' and checker.is_active and request.user.userprofile.role.can_manage_checks %}
+        <div class="btn-group w-100">
+            <button class="btn btn-sm btn-outline-info view-signatures" 
+                    data-checker="{{ checker.id }}"
+                    data-start="{{ checker.starting_page }}" 
+                    data-end="{{ checker.final_page }}">
                 <i class="fas fa-signature"></i>
+                <span>Signatures</span>
             </button>
-            <button class="btn btn-sm btn-success add-payment" 
-                data-checker="{{ checker.id }}" 
-                data-start="{{ checker.starting_page }}"
-                data-end="{{ checker.final_page }}"
-                data-position="{{ checker.current_position }}"
-                data-bank="{{ checker.bank_account.bank }}" 
-                data-type="{{ checker.type }}">
-                <i class="fas fa-money-check-alt"></i> Add Payment
+            <button class="btn btn-sm btn-outline-primary add-payment" 
+                    data-checker="{{ checker.id }}" 
+                    data-start="{{ checker.starting_page }}"
+                    data-end="{{ checker.final_page }}"
+                    data-position="{{ checker.current_position }}"
+                    data-bank="{{ checker.bank_account.bank }}" 
+                    data-type="{{ checker.type }}">
+                <i class="fas fa-money-check-alt"></i>
+                <span>Add Payment</span>
             </button>
         </div>
-    {% endif %}
-</td>
-</tr>
+        {% endif %}
+    </div>
+</div>
+{% empty %}
+<div class="empty-state">
+    <div class="empty-state-icon">
+        <i class="fas fa-search"></i>
+    </div>
+    <h3>No checkers found</h3>
+    <p class="text-muted">Try adjusting your search or filter criteria</p>
+    <button class="btn btn-outline-primary" id="reset-filters">
+        <i class="fas fa-undo me-2"></i>Reset Filters
+    </button>
+</div>
 {% endfor %}
+
 
 <!-- Updated Payment Modal -->
 <div class="modal fade" id="paymentModal">

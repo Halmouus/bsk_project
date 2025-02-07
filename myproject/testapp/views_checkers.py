@@ -5,13 +5,13 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from .decorators import require_permission
-from .models import CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit
+from .models import BankCheckTemplate, CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 import json
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.db.models import Q
@@ -385,7 +385,7 @@ class CheckCreateView(View):
                 cause=cause,
                 amount_due=cause.total_amount if cause else 0,
                 payment_due=data.get('payment_due'),
-                amount=data['amount'],
+                amount=Decimal(str(data['amount'])),
                 observation=data.get('observation', ''),
                 signatures=initial_signatures
             )
@@ -984,3 +984,59 @@ class CheckDetailView(View):
             return JsonResponse(data)
         except Check.DoesNotExist:
             return JsonResponse({"error": "Check not found"}, status=404)
+        
+class CheckPrintView(View):
+    template_name = 'checker/check_print.html'
+
+    def get(self, request, check_id):
+        check = get_object_or_404(Check, pk=check_id)
+        
+        defaults = {
+            'date': {'x': 350, 'y': 20, 'visible': True},
+            'creation_date': {'x': 350, 'y': 40, 'visible': True},
+            'amount': {'x': 350, 'y': 60, 'visible': True},
+            'amount_text': {'x': 30, 'y': 100, 'visible': True},
+            'beneficiary': {'x': 30, 'y': 60, 'visible': True},
+            'invoice_ref': {'x': 30, 'y': 120, 'visible': True},
+            'observation': {'x': 30, 'y': 140, 'visible': True}
+        }
+        
+        # Get or create template
+        template, created = BankCheckTemplate.objects.get_or_create(
+            bank=check.checker.bank_account.bank,
+            check_type=check.checker.type,
+            defaults={'template_data': defaults}
+        )
+        
+        # Update template_data if missing fields
+        if not created:
+            template_data = template.template_data
+            has_changes = False
+            for field, config in defaults.items():
+                if field not in template_data:
+                    template_data[field] = config
+                    has_changes = True
+            
+            if has_changes:
+                template.template_data = template_data
+                template.save()
+
+        context = {
+            'check': check,
+            'template': template.template_data
+        }
+        return render(request, self.template_name, context)
+
+    def post(self, request, check_id):
+        """Save template positions"""
+        data = json.loads(request.body)
+        check = get_object_or_404(Check, pk=check_id)
+        
+        template = BankCheckTemplate.objects.get(
+            bank=check.checker.bank_account.bank,
+            check_type=check.checker.type
+        )
+        template.template_data = data['template']  # Changed from 'positions' to 'template'
+        template.save()
+        
+        return JsonResponse({'status': 'success'})

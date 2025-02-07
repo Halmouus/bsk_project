@@ -1,0 +1,316 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+{% block title %}Print Check{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <div class="print-layout">
+        <!-- Control Panel -->
+        <div class="control-panel no-print">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="mb-4">Print Settings</h5>
+                    
+                    <div class="fields-control">
+                        {% for field, config in template.items %}
+                        <div class="field-row mb-4">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <label class="form-label mb-0">{{ field|title }}</label>
+                                <div class="form-check form-switch">
+                                    <input class="form-check-input visibility-toggle" 
+                                           type="checkbox"
+                                           data-field="{{ field }}"
+                                           checked>
+                                </div>
+                            </div>
+                            <div class="position-sliders">
+                                <div class="position-slider mb-2">
+                                    <label>Vertical Position</label>
+                                    <input type="range" 
+                                           class="form-range position-input" 
+                                           data-field="{{ field }}" 
+                                           data-axis="y"
+                                           min="0"
+                                           max="400"
+                                           value="{{ config.y }}">
+                                    <input type="number" 
+                                           class="form-control position-number" 
+                                           data-field="{{ field }}" 
+                                           data-axis="y"
+                                           value="{{ config.y }}">
+                                </div>
+                                <div class="position-slider">
+                                    <label>Horizontal Position</label>
+                                    <input type="range" 
+                                           class="form-range position-input" 
+                                           data-field="{{ field }}" 
+                                           data-axis="x"
+                                           min="0"
+                                           max="600"
+                                           value="{{ config.x }}">
+                                    <input type="number" 
+                                           class="form-control position-number" 
+                                           data-field="{{ field }}" 
+                                           data-axis="x"
+                                           value="{{ config.x }}">
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="d-flex justify-content-between mt-4">
+                        <button class="btn btn-primary" id="save-positions">
+                            <i class="fas fa-save me-2"></i>
+                            Save Template
+                        </button>
+                        <button class="btn btn-success" id="trigger-print">
+                            <i class="fas fa-print me-2"></i>
+                            Print Check
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Check Preview -->
+        <div class="check-preview">
+            <div id="printArea">
+                <div class="check-canvas">
+                    {% for field, config in template.items %}
+                    <div class="check-field" id="field-{{ field }}"
+                         style="top: {{ config.y }}px; left: {{ config.x }}px;">
+                        <div class="field-value">
+                            {% if field == 'date' %}
+                                {{ check.payment_due|date:"d/m/Y" }}
+                            {% elif field == 'creation_date' %}
+                                {{ check.creation_date|date:"d/m/Y"|default:"-" }}  
+                            {% elif field == 'amount' %}
+                                {{ check.amount }}
+                            {% elif field == 'amount_text' %}
+                                {{ check.amount|amount_to_words }}
+                            {% elif field == 'beneficiary' %}
+                                {{ check.beneficiary.name }}
+                            {% elif field == 'invoice_ref' %}
+                                {{ check.cause.ref|default:'-' }}
+                            {% elif field == 'observation' %}
+                                {{ check.observation }}
+                            {% endif %}
+                        </div>
+                        <label class="field-label no-print">{{ field|title }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    @page {
+        margin: 0;
+        size: auto;
+    }
+    body * {
+        visibility: hidden;
+    }
+    #printArea, #printArea * {
+        visibility: visible;
+    }
+    #printArea {
+        position: fixed;
+        left: 0;
+        top: 0;
+    }
+    .field-label {
+        display: none !important;
+    }
+    .check-field {
+        background: none !important;
+        border: none !important;
+    }
+}
+
+.print-layout {
+    display: flex;
+    gap: 2rem;
+    min-height: 100vh;
+    padding: 2rem;
+    background: #f1f5f9;
+}
+
+.control-panel {
+    width: 400px;
+    flex-shrink: 0;
+}
+
+.check-preview {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+}
+
+.check-canvas {
+    position: relative;
+    width: 600px;
+    height: 400px;
+    margin: 50px auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    transform: rotate(90deg);
+    transform-origin: center center;
+}
+
+.check-field {
+    position: absolute;
+    min-width: 100px;
+    padding: 0.5rem;
+    background: rgba(59, 130, 246, 0.05);
+    border: 1px dashed rgba(59, 130, 246, 0.3);
+    border-radius: 4px;
+}
+
+.field-label {
+    position: absolute;
+    top: -20px;
+    left: 0;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+.field-value {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.field-row {
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 1rem;
+}
+
+.position-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.position-slider {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.position-slider label {
+    min-width: 120px;
+    font-size: 0.875rem;
+    color: #64748b;
+}
+
+.position-slider .form-range {
+    flex: 1;
+}
+
+.position-slider .position-number {
+    width: 80px;
+}
+
+.form-check-input:checked {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+}
+
+/* Better range input styling */
+.form-range {
+    height: 1.5rem;
+    padding: 0;
+    background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+    background: #3b82f6;
+}
+
+.form-range::-webkit-slider-runnable-track {
+    background: #e2e8f0;
+    height: 0.5rem;
+    border-radius: 1rem;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Position update handling
+    const updateFieldPosition = (field, axis, value) => {
+        const fieldElement = document.getElementById(`field-${field}`);
+        fieldElement.style[axis === 'x' ? 'left' : 'top'] = `${value}px`;
+        
+        // Update both slider and number input
+        document.querySelectorAll(`[data-field="${field}"][data-axis="${axis}"]`)
+            .forEach(input => input.value = value);
+    };
+
+    // Handle both slider and number input changes
+    document.querySelectorAll('.position-input, .position-number').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const field = e.target.dataset.field;
+            const axis = e.target.dataset.axis;
+            updateFieldPosition(field, axis, e.target.value);
+        });
+    });
+
+    // Visibility toggles
+    document.querySelectorAll('.visibility-toggle').forEach(toggle => {
+        toggle.addEventListener('change', (e) => {
+            const field = e.target.dataset.field;
+            const fieldElement = document.getElementById(`field-${field}`);
+            fieldElement.style.display = e.target.checked ? 'block' : 'none';
+        });
+    });
+
+    // Save template
+    document.getElementById('save-positions').addEventListener('click', async () => {
+        const template = {};
+        document.querySelectorAll('.field-row').forEach(row => {
+            const field = row.querySelector('.visibility-toggle').dataset.field;
+            const xInput = row.querySelector('[data-axis="x"].position-number');
+            const yInput = row.querySelector('[data-axis="y"].position-number');
+            const visible = row.querySelector('.visibility-toggle').checked;
+            
+            template[field] = {
+                x: parseInt(xInput.value),
+                y: parseInt(yInput.value),
+                visible: visible
+            };
+        });
+
+        try {
+            const response = await fetch(window.location.pathname, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: JSON.stringify({ template })
+            });
+
+            if (!response.ok) throw new Error('Failed to save template');
+            alert('Template saved successfully!');
+        } catch (error) {
+            console.error('Error saving template:', error);
+            alert('Failed to save template');
+        }
+    });
+
+    // Print handling
+    document.getElementById('trigger-print').addEventListener('click', () => {
+        window.print();
+    });
+});
+</script>
+{% endblock %}

@@ -10,6 +10,10 @@
 
     <!--favicon-->
     <link rel="icon" type="image/x-icon" href="{% static 'images/favicon.ico' %}">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
     <title>{% block title %}BSK Management{% endblock %}</title>
     
    <!-- CSS -->
@@ -29,12 +33,19 @@
             --sidebar-width: 250px;
             --topbar-height: 60px;
             --transition-speed: 0.3s;
+            --bg-color: #f0f2f5;
         }
 
         body {
             min-height: 100vh;
-            background-color: #f8fafc;
-            padding-top: var(--topbar-height)
+            background-color: var(--bg-color);
+            background-image: 
+                linear-gradient(var(--bg-color) 2px, transparent 2px),
+                linear-gradient(90deg, var(--bg-color) 2px, rgba(0, 0, 0, 0.01) 2px);
+            background-size: 40px 40px;
+            background-position: -2px -2px;
+            padding-top: var(--topbar-height);
+            font-family: 'Poppins', system-ui, -apple-system, sans-serif;
         }
 
         /* Sidebar Styling */
@@ -95,6 +106,37 @@
 
         .nav-item-parent > .nav-link[aria-expanded="true"]::after {
             transform: rotate(180deg);
+        }
+
+        .nav-section {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-section:last-child {
+            border-bottom: none;
+        }
+
+        .nav-section-header {
+            padding: 0.5rem 1rem;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.5);
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .nav-section .nav-link {
+            padding-left: 2rem;  /* Indent section items */
+        }
+
+        .nav-section .nav-link.active {
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 0;
+        }
+
+        .nav-section .nav-link:hover {
+            background-color: rgba(255, 255, 255, 0.05);
         }
 
         .collapse {
@@ -367,26 +409,55 @@
                         <span><i class="fas fa-money-bill-wave me-2"></i> Financial Management</span>
                     </a>
                     <div class="collapse nav-dropdown" id="financialSubmenu">
-                        <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" 
-                        href="{% url 'bank-account-list' %}">
-                            <i class="fas fa-university me-2"></i> Bank Accounts
-                        </a>
-                        <a class="nav-link" href="{% url 'calendar' %}">
-                            <i class="fas fa-calendar-alt"></i>
-                            <span>Payment Calendar</span>
-                        </a>
-                        <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" 
-                        href="{% url 'check-list' %}">
-                            <i class="fas fa-money-check me-2"></i> Checks
-                        </a>
-                        <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" 
-                        href="{% url 'checker-list' %}">
-                            <i class="fas fa-user-shield me-2"></i> Checkers
-                        </a>
-                        <a class="nav-link {% if 'vat' in request.path %}active{% endif %}" 
-                        href="{% url 'vat-list' %}">
-                            <i class="fas fa-file-invoice-dollar me-2"></i> VAT
-                        </a>
+                        <!-- Bank & Payments Section -->
+                        <div class="nav-section">
+                            <div class="nav-section-header">Banking & Payments</div>
+                            <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" 
+                            href="{% url 'bank-account-list' %}">
+                                <i class="fas fa-university me-2"></i> Bank Accounts
+                            </a>
+                            <a class="nav-link" href="{% url 'calendar' %}">
+                                <i class="fas fa-calendar-alt me-2"></i> Payment Calendar
+                            </a>
+                            <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" 
+                            href="{% url 'check-list' %}">
+                                <i class="fas fa-money-check me-2"></i> Checks
+                            </a>
+                            <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" 
+                            href="{% url 'checker-list' %}">
+                                <i class="fas fa-user-shield me-2"></i> Checkers
+                            </a>
+                        </div>
+
+                        <!-- Pay Management Section -->
+                        <div class="nav-section">
+                            <div class="nav-section-header">Pay Management</div>
+                            <a class="nav-link {% if request.path == '/testapp/pay/' %}active{% endif %}" 
+                            href="{% url 'pay-list' %}">
+                                <i class="fas fa-home me-2"></i> Dashboard
+                            </a>
+                            <a class="nav-link {% if 'pay/items' in request.path %}active{% endif %}" 
+                            href="{% url 'pay-item-list' %}">
+                                <i class="fas fa-list me-2"></i> Pay Items
+                            </a>
+                            <a class="nav-link {% if 'pay/declarations' in request.path %}active{% endif %}" 
+                            href="{% url 'pay-declaration-list' %}">
+                                <i class="fas fa-file-invoice me-2"></i> Declarations
+                            </a>
+                            <a class="nav-link {% if 'pay/accounting' in request.path %}active{% endif %}" 
+                            href="{% url 'pay-accounting' %}">
+                                <i class="fas fa-calculator me-2"></i> Accounting
+                            </a>
+                        </div>
+
+                        <!-- Tax Management Section -->
+                        <div class="nav-section">
+                            <div class="nav-section-header">Tax Management</div>
+                            <a class="nav-link {% if 'vat' in request.path %}active{% endif %}" 
+                            href="{% url 'vat-list' %}">
+                                <i class="fas fa-file-invoice-dollar me-2"></i> VAT
+                            </a>
+                        </div>
                     </div>
                 </li>
 

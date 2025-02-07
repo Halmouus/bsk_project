@@ -1,0 +1,36 @@
+{% load accounting_filters %}
+
+{% for declaration in declarations %}
+    <tr>
+        <td>{{ declaration.period_month }}/{{ declaration.period_year }}</td>
+        <td>{{ declaration.due_date|date:"Y-m-d" }}</td>
+        <td class="text-end">{{ declaration.total_amount|format_balance }}</td>
+        <td>
+            <span class="badge 
+                {% if declaration.status == 'paid' %}bg-success
+                {% elif declaration.status == 'declared' %}bg-warning
+                {% elif declaration.status == 'rejected' %}bg-danger
+                {% else %}bg-secondary{% endif %}">
+                {{ declaration.get_status_display }}
+            </span>
+        </td>
+        <td>
+            <div class="btn-group">
+                <a href="{% url 'pay-declaration-detail' declaration.id %}" 
+                   class="btn btn-sm btn-info">
+                    <i class="fas fa-eye"></i>
+                </a>
+                {% if declaration.status == 'draft' %}
+                    <a href="{% url 'pay-declaration-edit' declaration.id %}"
+                       class="btn btn-sm btn-primary">
+                        <i class="fas fa-edit"></i>
+                    </a>
+                {% endif %}
+            </div>
+        </td>
+    </tr>
+{% empty %}
+    <tr>
+        <td colspan="5" class="text-center text-muted">No declarations found</td>
+    </tr>
+{% endfor %}

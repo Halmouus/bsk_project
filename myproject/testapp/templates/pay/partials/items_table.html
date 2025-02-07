@@ -1,0 +1,42 @@
+{% load accounting_filters %}
+
+{% for item in items %}
+    <tr>
+        <td>{{ item.description }}</td>
+        <td>{{ item.account_code }}</td>
+        <td>
+            <span class="badge {% if item.is_debit %}bg-danger{% else %}bg-success{% endif %}">
+                {% if item.is_debit %}Debit{% else %}Credit{% endif %}
+            </span>
+        </td>
+        <td class="text-end">{{ item.default_amount|format_balance }}</td>
+        <td>
+            <span class="badge {% if item.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                {% if item.is_active %}Active{% else %}Inactive{% endif %}
+            </span>
+        </td>
+        <td>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-primary edit-item"
+                        data-id="{{ item.id }}"
+                        data-description="{{ item.description }}"
+                        data-account="{{ item.account_code }}"
+                        data-amount="{{ item.default_amount }}"
+                        data-debit="{{ item.is_debit|yesno:'true,false' }}"
+                        data-active="{{ item.is_active|yesno:'true,false' }}">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="btn btn-sm btn-danger delete-item"
+                        data-id="{{ item.id }}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </td>
+    </tr>
+{% empty %}
+    <tr>
+        <td colspan="6" class="text-center text-muted">
+            No items found
+        </td>
+    </tr>
+{% endfor %}

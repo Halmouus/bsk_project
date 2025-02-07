@@ -1,55 +1,63 @@
-<!-- templates/checker/partials/allocation_modal.html -->
 <div class="modal fade" id="allocationModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Allocate Check Payment</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <i class="fas fa-money-bill-wave text-success"></i>
+                    Allocate Check Payment
+                </h5>
+                <button type="button" class="btn-close" data-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <!-- Payment Summary Cards -->
-                <div class="row mb-4">
-                    <div class="col-md-4">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Check Amount</h6>
-                                <h4 id="check-total" class="mb-0">-</h4>
-                            </div>
+                <!-- Summary Cards -->
+                <div class="summary-grid mb-4">
+                    <div class="summary-card">
+                        <div class="summary-icon">
+                            <i class="fas fa-calculator text-primary"></i>
+                        </div>
+                        <div class="summary-content">
+                            <label>Check Amount</label>
+                            <h4 id="check-total" class="mb-0">-</h4>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Allocated</h6>
-                                <h4 id="allocated-amount" class="mb-0">-</h4>
-                            </div>
+                    <div class="summary-card">
+                        <div class="summary-icon">
+                            <i class="fas fa-chart-pie text-warning"></i>
+                        </div>
+                        <div class="summary-content">
+                            <label>Allocated</label>
+                            <h4 id="allocated-amount" class="mb-0">-</h4>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="text-muted">Available</h6>
-                                <h4 id="available-amount" class="mb-0 text-success">-</h4>
-                            </div>
+                    <div class="summary-card">
+                        <div class="summary-icon">
+                            <i class="fas fa-wallet text-success"></i>
+                        </div>
+                        <div class="summary-content">
+                            <label>Available</label>
+                            <h4 id="available-amount" class="mb-0">-</h4>
                         </div>
                     </div>
                 </div>
 
                 <!-- Current Allocations -->
-                <div class="mb-4">
-                    <h6>Current Allocations</h6>
+                <div class="card allocation-table mb-4">
+                    <div class="card-header bg-transparent">
+                        <h6 class="mb-0">Current Allocations</h6>
+                    </div>
                     <div class="table-responsive">
-                        <table class="table table-sm" id="allocations-table">
+                        <table class="table table-hover mb-0" id="allocations-table">
                             <thead>
                                 <tr>
                                     <th>Invoice</th>
-                                    <th class="text-right">Amount</th>
-                                    <th></th>
+                                    <th class="text-end">Amount</th>
+                                    <th class="text-center" style="width: 100px">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr class="no-allocations">
-                                    <td colspan="3" class="text-center text-muted">
+                                    <td colspan="3" class="text-center text-muted py-4">
+                                        <i class="fas fa-inbox mb-2 d-block"></i>
                                         No allocations yet
                                     </td>
                                 </tr>
@@ -59,39 +67,244 @@
                 </div>
 
                 <!-- New Allocation Form -->
-                <form id="allocation-form" class="border rounded p-3">
-                    <h6>Add New Allocation</h6>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Invoice</label>
-                                <select class="form-control" id="invoice-select" required>
-                                    <option value="">Select invoice...</option>
-                                </select>
-                                <small class="text-muted">
-                                    Shows available amount in parentheses
-                                </small>
-                            </div>
+                <form id="allocation-form" class="allocation-form">
+                    <div class="card">
+                        <div class="card-header bg-transparent">
+                            <h6 class="mb-0">Add New Allocation</h6>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-group">
-                                <label>Amount</label>
-                                <input type="number" class="form-control" id="allocation-amount"
-                                       step="0.01" required>
-                                <div class="invalid-feedback">
-                                    Amount cannot exceed available amount
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-7">
+                                    <div class="form-group">
+                                        <label class="form-label">Invoice</label>
+                                        <select class="form-control" id="invoice-select" required>
+                                            <option value="">Select invoice...</option>
+                                        </select>
+                                        <small class="text-muted">
+                                            Available amount shown in parentheses
+                                        </small>
+                                    </div>
+                                </div>
+                                <div class="col-md-5">
+                                    <div class="form-group">
+                                        <label class="form-label">Amount</label>
+                                        <input type="number" class="form-control" id="allocation-amount"
+                                               step="0.01" required>
+                                        <div class="invalid-feedback">
+                                            Amount cannot exceed available amount
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
+                        <div class="card-footer bg-transparent text-end border-0">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-plus me-2"></i>
+                                Add Allocation
+                            </button>
+                        </div>
                     </div>
-                    <button type="submit" class="btn btn-primary">
-                        Add Allocation
-                    </button>
                 </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+    /* Modal Base Styles */
+    .modal-content {
+        border: none;
+        border-radius: 16px;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    }
+    
+    /* Summary Grid */
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    
+    .summary-card {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        transition: transform 0.2s;
+    }
+    
+    .summary-card:hover {
+        transform: translateY(-2px);
+    }
+    
+    .summary-icon {
+        width: 48px;
+        height: 48px;
+        border-radius: 12px;
+        background: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.25rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .summary-content {
+        flex: 1;
+    }
+    
+    .summary-content label {
+        font-size: 0.875rem;
+        color: #718096;
+        margin: 0;
+    }
+    
+    /* Info Grid */
+    .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+    }
+    
+    .info-card {
+        background: #f8fafc;
+        border-radius: 12px;
+        padding: 1.25rem;
+    }
+    
+    .info-card label {
+        font-size: 0.875rem;
+        color: #718096;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    
+    /* Allocation Table */
+    .allocation-table {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .allocation-table .table {
+        margin: 0;
+    }
+    
+    .allocation-table th {
+        background: #f8fafc;
+        border-bottom: 2px solid #e2e8f0;
+        padding: 1rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #4a5568;
+    }
+    
+    .allocation-table td {
+        padding: 1rem;
+        vertical-align: middle;
+    }
+    
+    /* Form Styling */
+    .allocation-form .card {
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+    
+    .form-control {
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        padding: 0.625rem 1rem;
+    }
+    
+    .form-control:focus {
+        border-color: #4299e1;
+        box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+    }
+    
+    /* Signature Badges */
+    .signature-badges {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        min-height: 32px;
+        padding: 0.5rem;
+        background: #f8fafc;
+        border-radius: 8px;
+    }
+    
+    .badge {
+        padding: 0.375rem 0.75rem;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.875rem;
+    }
+    
+    /* Buttons */
+    .btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 8px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-primary {
+        background: #4299e1;
+        border: none;
+    }
+    
+    .btn-primary:hover {
+        background: #3182ce;
+    }
+    
+    .btn-light {
+        background: #f7fafc;
+        border: 1px solid #e2e8f0;
+    }
+    
+    .btn-light:hover {
+        background: #edf2f7;
+    }
+    
+    /* Action Icons */
+    .delete-allocation {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    
+    /* Animations */
+    @keyframes fadeIn {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .modal.show .modal-content {
+        animation: fadeIn 0.3s ease-out;
+    }
+    
+    /* Responsive Adjustments */
+    @media (max-width: 768px) {
+        .summary-grid,
+        .info-grid {
+            grid-template-columns: 1fr;
+        }
+        
+        .modal-dialog {
+            margin: 0.5rem;
+        }
+        
+        .btn {
+            padding: 0.5rem 1rem;
+        }
+    }
+</style>

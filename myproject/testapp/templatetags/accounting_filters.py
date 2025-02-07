@@ -2,6 +2,8 @@ from django import template
 from django.template.defaultfilters import floatformat
 from decimal import InvalidOperation, Decimal
 
+from testapp.utils import number_to_french_words
+
 
 register = template.Library()
 
@@ -111,3 +113,20 @@ def sum_by(queryset, field):
     if not queryset:
         return Decimal('0.00')
     return sum(Decimal(str(getattr(item, field, 0) or 0)) for item in queryset)
+
+@register.filter(name='add_class')
+def add_class(field, css_class):
+    """Adds CSS class to form field"""
+    return field.as_widget(attrs={'class': css_class})
+
+@register.filter
+def subtract(value, arg):
+    try:
+        return Decimal(str(value)) - Decimal(str(arg))
+    except (TypeError, ValueError):
+        return value    
+
+
+@register.filter
+def amount_to_words(value):
+    return number_to_french_words(float(value))

@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator, RegexValidator, MinLengthValidator, MaxLengthValidator, FileExtensionValidator
 from .base import BaseModel
-from datetime import timedelta, datetime
+from datetime import timedelta
 import datetime
 import random
 import string
@@ -510,7 +510,24 @@ class Invoice(BaseModel):
     @property
     def total_amount(self):
         """Calculate the total amount of the invoice including tax."""
-        return self.raw_amount + self.total_tax_amount
+        from decimal import Decimal
+        try:
+            raw = sum(
+                [
+                    (item.quantity * item.unit_price * (1 - item.reduction_rate / 100))
+                    for item in self.products.all()
+                ]
+            )
+            tax = sum(
+                [
+                    (item.quantity * item.unit_price * (1 - item.reduction_rate / 100) * item.vat_rate / 100)
+                    for item in self.products.all()
+                ]
+            )
+            return Decimal(str(raw + tax))
+        except Exception as e:
+            print(f"Error calculating total_amount: {e}")
+            return Decimal('0')
     
     @property
     def net_amount(self):
@@ -1518,8 +1535,16 @@ class Check(BaseModel):
                 self.position = self.checker.current_position
                 
             if not self.amount_due:
-                print(f"Setting amount_due from cause: {self.cause.total_amount}")
-                self.amount_due = self.cause.total_amount
+                print(f"Setting amount_due from cause: {self.cause.total_amount if self.cause else 0}")
+                if self.cause:
+                    try:
+                        self.amount_due = float(self.cause.total_amount)
+                        print(f"Amount due set to: {self.amount_due}")
+                    except (ValueError, TypeError) as e:
+                        print(f"Error converting amount_due: {e}")
+                        self.amount_due = 0
+                else:
+                    self.amount_due = 0
         
         print(f"Final signatures before save: {getattr(self, 'signatures', [])}")
         super().save(*args, **kwargs)
@@ -1536,8 +1561,18 @@ class Check(BaseModel):
             self.checker.current_position = int(self.position) + 1
             self.checker.save()
 
-        # If this is a supplier payment (we'll update it later for non suppliers)
         if self.payment_due:
+            print(f"[Check Save] Initial payment_due: {self.payment_due} (type: {type(self.payment_due)})")
+            
+            # Ensure payment_due is a date object
+            if isinstance(self.payment_due, str):
+                try:
+                    self.payment_due = datetime.datetime.strptime(self.payment_due, '%Y-%m-%d').date()
+                    print(f"[Check Save] Converted payment_due to date: {self.payment_due}")
+                except ValueError as e:
+                    print(f"[Check Save] Error converting payment_due date: {e}")
+                    return super().save(*args, **kwargs)
+
             # Delete existing forecast if any
             ForecastStatement.objects.filter(
                 source_type='supplier_check',
@@ -1552,26 +1587,37 @@ class Check(BaseModel):
                 
                 # Add supplier delay based on checker type
                 delay = self.beneficiary.delay_lcn if self.checker.type == 'LCN' else self.beneficiary.delay_check
-                print(f"Using delay of {delay} days based on checker type {self.checker.type}")
+                print(f"[Check Save] Using delay of {delay} days based on checker type {self.checker.type}")
                 
                 current_date = forecast_date
-                while delay > 0 or current_date.weekday() >= 5:
-                    current_date += timedelta(days=1)
-                    if current_date.weekday() < 5:  # Only count business days
-                        delay -= 1
-                        
-                print(f"Creating forecast for date: {current_date}")
+                print(f"[Check Save] Starting date calculation from: {current_date} (type: {type(current_date)})")
                 
-                # Create forecast
-                ForecastStatement.objects.create(
-                    bank_account=self.checker.bank_account,
-                    date=current_date,
-                    label=f"Expected payment to {self.beneficiary.name}",
-                    debit=self.amount,
-                    reference=f"Payment #{self.position}",
-                    source_type='supplier_check',
-                    source_id=self.id
-                )
+                try:
+                    while delay > 0 or current_date.weekday() >= 5:
+                        current_date += timedelta(days=1)
+                        print(f"[Check Save] Checking date: {current_date} (weekday: {current_date.weekday()})")
+                        if current_date.weekday() < 5:  # Only count business days
+                            delay -= 1
+                            print(f"[Check Save] Business day found, remaining delay: {delay}")
+                            
+                    print(f"[Check Save] Final forecast date: {current_date}")
+                    
+                    # Create forecast
+                    ForecastStatement.objects.create(
+                        bank_account=self.checker.bank_account,
+                        date=current_date,
+                        label=f"Expected payment to {self.beneficiary.name}",
+                        debit=self.amount,
+                        reference=f"Payment #{self.position}",
+                        source_type='supplier_check',
+                        source_id=self.id
+                    )
+                    print(f"[Check Save] Forecast created successfully")
+                    
+                except Exception as e:
+                    print(f"[Check Save] Error during forecast creation: {str(e)}")
+                    # Don't let forecast errors prevent check creation
+                    pass
         
         print("=== Check Save Method Completed ===\n")
 
@@ -1768,6 +1814,14 @@ class CheckAllocation(BaseModel):
         # Ensure we don't exceed invoice's available amount
         if self.amount > self.invoice.amount_available_for_payment:
             raise ValidationError(_("Amount exceeds invoice's available amount"))
+
+class BankCheckTemplate(BaseModel):
+    bank = models.CharField(max_length=4, choices=MOROCCAN_BANKS)
+    check_type = models.CharField(max_length=3, choices=[('CHQ', 'Cheque'), ('LCN', 'LCN')])
+    template_data = models.JSONField(default=dict)  # Stores positions for each field
+
+    class Meta:
+        unique_together = ['bank', 'check_type']
 
 
 class Client(BaseModel):
@@ -3658,6 +3712,41 @@ class BankStatement(models.Model):
                 })
         else:
             print("No VAT configuration found or bank account mismatch")
+        
+        # pay declarations
+        pay_declarations = PayDeclaration.objects.filter(
+            status=PayDeclaration.STATUS_PAID,
+            direct_debit__isnull=False,
+            direct_debit__bank_account=bank_account
+        )
+
+        if start_date:
+            pay_declarations = pay_declarations.filter(payment_date__gte=start_date)
+        if end_date:
+            pay_declarations = pay_declarations.filter(payment_date__lte=end_date)
+
+        print(f"\nProcessing pay declarations: {pay_declarations.count()}")
+
+        for declaration in pay_declarations:
+            entries.append({
+                'date': declaration.payment_date,
+                'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
+                'type': 'PAY_DECLARATION',
+                'debit': declaration.total_amount,
+                'credit': None,
+                'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                'source_type': 'pay_declaration',
+                'source_id': declaration.id,
+                'can_delete': False,
+                'can_transfer': False,
+                'is_transferred': False,
+                'details': {
+                    'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                    'items_count': declaration.items.count(),
+                    'payment_date': declaration.payment_date.strftime('%Y-%m-%d'),
+                    'due_date': declaration.due_date.strftime('%Y-%m-%d')
+                }
+            })
             
         initial_balance = Decimal('0.00')
         if start_date:
@@ -4210,7 +4299,45 @@ class AccountingEntry(models.Model):
             except Exception as e:
                 print(f"Error creating accounting entries: {str(e)}")
                 continue
+        
+        # Pay declarations
+        pay_declarations = PayDeclaration.objects.filter(
+            status=PayDeclaration.STATUS_PAID
+        )
 
+        if start_date:
+            pay_declarations = pay_declarations.filter(payment_date__gte=start_date)
+        if end_date:
+            pay_declarations = pay_declarations.filter(payment_date__lte=end_date)
+
+        print(f"\nProcessing pay declarations: {pay_declarations.count()}")
+
+        for declaration in pay_declarations:
+            # Group by account code
+            account_groups = {}
+            for item in declaration.items.all():
+                if item.account_code not in account_groups:
+                    account_groups[item.account_code] = []
+                account_groups[item.account_code].append(item)
+
+            # Create entries for each account
+            for account_code, items in account_groups.items():
+                total = sum(
+                    item.amount if item.is_debit else -item.amount 
+                    for item in items
+                )
+                if total != 0:
+                    entries.append({
+                        'date': declaration.payment_date,
+                        'label': f"Pay {declaration.period_month:02d}/{declaration.period_year}",
+                        'debit': abs(total) if total > 0 else None,
+                        'credit': abs(total) if total < 0 else None,
+                        'account_code': account_code,
+                        'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                        'journal_code': '07',
+                        'source_type': 'pay_declaration',
+                        'source_id': declaration.id
+                    })
 
         print("\n=== Getting VAT Accounting Entries ===")
         declarations = VATDeclaration.objects.filter(
@@ -4349,6 +4476,56 @@ class AccountingEntry(models.Model):
         # Sort entries keeping pairs together
         entries.sort(key=lambda x: (x['date'], x['pair_index']), reverse=True)
         
+        return entries
+    
+    @classmethod
+    def get_entries_for_journal(cls, journal_code, start_date=None, end_date=None):
+        print(f"\n=== Getting entries for journal {journal_code} ===")
+        print(f"Date range: {start_date} - {end_date}")
+        
+        entries = []
+        declarations = PayDeclaration.objects.filter(
+            status=PayDeclaration.STATUS_PAID,
+            items__isnull=False
+        ).distinct()
+
+        if start_date:
+            declarations = declarations.filter(payment_date__gte=start_date)
+        if end_date:
+            declarations = declarations.filter(payment_date__lte=end_date)
+
+        print(f"Found {declarations.count()} paid declarations")
+
+        for declaration in declarations:
+            # Group by account code
+            account_groups = {}
+            for item in declaration.items.all():
+                key = (item.account_code, item.is_debit)
+                if key not in account_groups:
+                    account_groups[key] = Decimal('0.00')
+                account_groups[key] += item.amount
+
+            # Create entries for each account group
+            for (account_code, is_debit), amount in account_groups.items():
+                entries.append({
+                    'date': declaration.payment_date,
+                    'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
+                    'debit': amount if is_debit else None,
+                    'credit': amount if not is_debit else None,
+                    'account_code': account_code,
+                    'journal_code': journal_code,
+                    'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                    'source_type': 'pay_declaration',
+                    'source_id': declaration.id,
+                    'details': {
+                        'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                        'items_count': declaration.items.count(),
+                        'payment_date': declaration.payment_date.strftime('%Y-%m-% d'),
+                        'due_date': declaration.due_date.strftime('%Y-%m-% d')
+                    }
+                })
+
+        print(f"Generated {len(entries)} accounting entries")
         return entries
 
 class InterBankTransfer(BaseModel):
@@ -6217,3 +6394,291 @@ class VATDeclarationDetail(BaseModel):
         self.save()
 
 
+class PayConfiguration(BaseModel):
+    """Global configuration for pay/salary management"""
+    print("\n=== PayConfiguration Model ===")
+    
+    PERIOD_MONTHLY = 'monthly'
+    PERIOD_CHOICES = [
+        (PERIOD_MONTHLY, 'Monthly'),
+    ]
+    
+    generation_day = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month to generate declaration (1-28)"
+    )
+    periodicity = models.CharField(
+        max_length=20, 
+        choices=PERIOD_CHOICES,
+        default=PERIOD_MONTHLY
+    )
+    account_code = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ],
+        help_text="Main account code for pay operations"
+    )
+    domiciliation_bank = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='pay_declarations'
+    )
+    journal_code = models.CharField(
+        max_length=2,
+        default='07',
+        validators=[
+            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+        ]
+    )
+    
+    def clean(self):
+        super().clean()
+        if self.pk and PayConfiguration.objects.exclude(pk=self.pk).exists():
+            raise ValidationError("Only one pay configuration can exist")
+            
+    def save(self, *args, **kwargs):
+        print("\n=== Saving PayConfiguration ===")
+        print(f"Generation day: {self.generation_day}")
+        print(f"Bank: {self.domiciliation_bank}")
+        
+        if not self.pk and PayConfiguration.objects.exists():
+            raise ValidationError("Only one pay configuration can exist")
+            
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_config(cls):
+        """Get or create pay configuration"""
+        config = PayConfiguration.objects.first()
+        if not config:
+            raise ValidationError("Pay Configuration must be set up")
+        return config
+
+    def get_next_generation_date(self, from_date=None):
+        """Calculate next declaration generation date"""
+        print(f"\n=== Getting next generation date from {from_date} ===")
+        if not from_date:
+            from_date = timezone.now().date()
+
+        # Start with the generation day in current month
+        next_date = from_date.replace(day=min(self.generation_day, 28))
+        
+        # If we've passed this month's generation day, move to next month
+        if from_date.day > self.generation_day:
+            next_date = next_date + relativedelta(months=1)
+            
+        print(f"Next generation date: {next_date}")
+        return next_date
+
+    def __str__(self):
+        return f"Pay Configuration (Generation Day: {self.generation_day})"
+
+class PayItem(BaseModel):
+    """Template for pay declaration items"""
+    print("\n=== PayItem Model ===")
+    
+    description = models.CharField(max_length=255)
+    account_code = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ]
+    )
+    default_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    is_debit = models.BooleanField(
+        default=True,
+        help_text="If True, amount is recorded as debit; if False, as credit"
+    )
+    is_active = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"{self.description} ({self.account_code})"
+
+    class Meta:
+        ordering = ['description']
+
+class PayDeclaration(BaseModel):
+    """Monthly pay declaration"""
+    print("\n=== PayDeclaration Model ===")
+    
+    STATUS_DRAFT = 'draft'
+    STATUS_DECLARED = 'declared'
+    STATUS_PAID = 'paid'
+    STATUS_REJECTED = 'rejected'
+    
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_DECLARED, 'Declared'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_REJECTED, 'Rejected')
+    ]
+    
+    period_month = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+    period_year = models.IntegerField()
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_DRAFT
+    )
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    payment_date = models.DateField(null=True, blank=True)
+    due_date = models.DateField()
+    forecast = models.OneToOneField(
+        'ForecastStatement',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pay_declaration'
+    )
+    paid_by_check = models.BooleanField(
+        default=False,
+        help_text="If True, paid by check instead of direct debit"
+    )
+    payment_check = models.ForeignKey(
+        'Check',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='pay_declarations'
+    )
+    direct_debit = models.OneToOneField(
+        'DirectDebit',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='pay_declaration'
+    )
+    rejection_reason = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True
+    )
+
+    def clean(self):
+        super().clean()
+        # Ensure payment method consistency
+        if self.paid_by_check and self.direct_debit:
+            raise ValidationError("Declaration cannot have both check and direct debit")
+        if self.paid_by_check and not self.check and self.status == self.STATUS_PAID:
+            raise ValidationError("Check payment requires check reference")
+            
+    def save(self, *args, **kwargs):
+        print(f"\n=== Saving PayDeclaration for {self.period_month}/{self.period_year} ===")
+        print(f"Status: {self.status}")
+        print(f"Total: {self.total_amount}")
+        
+        # Calculate due date on first save
+        if not self.pk and not self.due_date:
+            config = PayConfiguration.get_config()
+            # Set to generation day of this period
+            self.due_date = date(
+                self.period_year,  
+                self.period_month,
+                min(config.generation_day, calendar.monthrange(
+                    self.period_year, self.period_month
+                )[1])
+            )
+            
+            # Skip weekends
+            while self.due_date.weekday() >= 5:
+                self.due_date += timedelta(days=1)
+                
+            print(f"Calculated due date: {self.due_date}")
+            
+        super().save(*args, **kwargs)
+
+    def mark_as_paid(self, payment_date):
+        """Mark declaration as paid and handle related records"""
+        print(f"\n=== Marking declaration {self.period_month}/{self.period_year} as paid ===")
+        print(f"Payment date: {payment_date}")
+        
+        if self.status == self.STATUS_PAID:
+            return
+            
+        self.payment_date = payment_date
+        self.status = self.STATUS_PAID
+        
+        # Mark forecast as processed
+        if self.forecast:
+            self.forecast.is_processed = True
+            self.forecast.save()
+            print(f"Marked forecast {self.forecast.id} as processed")
+            
+        self.save()
+        
+    def mark_as_rejected(self, rejection_date, reason):
+        """Mark declaration as rejected"""
+        print(f"\n=== Marking declaration {self.period_month}/{self.period_year} as rejected ===")
+        print(f"Rejection date: {rejection_date}")
+        print(f"Reason: {reason}")
+        
+        if self.status == self.STATUS_REJECTED:
+            return
+            
+        self.status = self.STATUS_REJECTED
+        self.rejection_reason = reason
+        
+        if self.forecast:
+            self.forecast.is_processed = False
+            self.forecast.save()
+            print(f"Unmarked forecast {self.forecast.id}")
+            
+        self.save()
+
+    def __str__(self):
+        return f"Pay Declaration {self.period_month}/{self.period_year}"
+
+    class Meta:
+        ordering = ['-period_year', '-period_month']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['period_month', 'period_year'],
+                name='unique_pay_period'
+            )
+        ]
+
+class PayDeclarationItem(BaseModel):
+    """Individual items in a pay declaration"""
+    print("\n=== PayDeclarationItem Model ===")
+    
+    declaration = models.ForeignKey(
+        PayDeclaration,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    description = models.CharField(max_length=255)
+    account_code = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ]
+    )
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    is_debit = models.BooleanField(default=True)
+    template_item = models.ForeignKey(
+        PayItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='declaration_items'
+    )
+    
+    def clean(self):
+        super().clean()
+        # If declaration is paid, total mustn't change
+        if (self.declaration.status == PayDeclaration.STATUS_PAID and 
+            self.pk and self.amount != self.__class__.objects.get(pk=self.pk).amount):
+            raise ValidationError("Cannot modify amounts of paid declaration")
+
+    def __str__(self):
+        return f"{self.description} ({self.amount})"
+
+    class Meta:
+        ordering = ['description']

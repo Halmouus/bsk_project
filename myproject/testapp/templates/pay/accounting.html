@@ -1,0 +1,269 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+{% block title %}Pay Accounting{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-calculator me-2"></i>Pay Accounting</h2>
+        
+        <!-- Filter Form -->
+        <div class="d-flex gap-2">
+            <form class="form-inline" id="accountingFilterForm">
+                <div class="input-group">
+                    <input type="date" class="form-control" name="start_date" id="startDate">
+                    <input type="date" class="form-control" name="end_date" id="endDate">
+                    <button type="submit" class="btn btn-primary">Apply</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row g-4 mb-4">
+        <!-- Total Debit -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-arrow-up me-2"></i>Total Debit
+                    </h6>
+                    <div class="mt-3">
+                        <h3 class="mb-0 text-danger" id="totalDebit">
+                            {{ total_debit|format_balance }}
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Credit -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-arrow-down me-2"></i>Total Credit
+                    </h6>
+                    <div class="mt-3">
+                        <h3 class="mb-0 text-success" id="totalCredit">
+                            {{ total_credit|format_balance }}
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Balance -->
+        <div class="col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="card-subtitle mb-2 text-muted">
+                        <i class="fas fa-balance-scale me-2"></i>Balance
+                    </h6>
+                    <div class="mt-3">
+                        <h3 class="mb-0" id="totalBalance">
+                            {% with balance=total_credit|subtract:total_debit %}
+                                <span class="{% if balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ balance|format_balance }}
+                                </span>
+                            {% endwith %}
+                        </h3>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounting Table -->
+    <div class="card">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Label</th>
+                            <th class="text-end">Debit</th>
+                            <th class="text-end">Credit</th>
+                            <th>Account</th>
+                            <th>Reference</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="accountingTableBody">
+                        {% include 'pay/partials/accounting_table.html' %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Declaration Modal -->
+<div class="modal fade" id="declarationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Declaration Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <!-- Will be populated via AJAX -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        border: none;
+        transition: transform 0.2s ease;
+    }
+
+    .card:hover {
+        transform: translateY(-2px);
+    }
+
+    .table {
+        margin-bottom: 0;
+    }
+
+    .table th {
+        border-top: none;
+        font-weight: 600;
+        color: #4a5568;
+    }
+
+    .table td {
+        vertical-align: middle;
+    }
+
+    .badge {
+        font-weight: 500;
+        padding: 0.5em 0.75em;
+    }
+
+    .row-expandable {
+        cursor: pointer;
+    }
+
+    .row-expandable:hover {
+        background-color: rgba(0,0,0,.02);
+    }
+
+    .details-row {
+        background-color: #f8f9fa;
+    }
+
+    .details-row td {
+        padding: 1.5rem !important;
+    }
+</style>
+
+<script>
+$(document).ready(function() {
+    // Set default dates to current month
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+    $('#startDate').val(firstDay.toISOString().split('T')[0]);
+    $('#endDate').val(lastDay.toISOString().split('T')[0]);
+
+    // Filter form handling
+    $('#accountingFilterForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const startDate = $('#startDate').val();
+        const endDate = $('#endDate').val();
+        
+        if ((startDate && !endDate) || (!startDate && endDate)) {
+            showToast('error', 'Please select both dates or neither');
+            return;
+        }
+        
+        if (startDate && endDate && startDate > endDate) {
+            showToast('error', 'Start date must be before end date');
+            return;
+        }
+
+        $.get('/testapp/pay/accounting/', {
+            start_date: startDate,
+            end_date: endDate
+        })
+        .done(function(response) {
+            $('#accountingTableBody').html(response.html);
+            updateTotals(response.totals);
+        })
+        .fail(function(xhr) {
+            showToast('error', 'Failed to load accounting data');
+        });
+    });
+
+    // View declaration details
+    $(document).on('click', '.view-declaration', function() {
+        const declarationId = $(this).data('id');
+        
+        $.get(`/testapp/pay/declarations/${declarationId}/`)
+            .done(function(response) {
+                $('#declarationModal .modal-body').html(response.html);
+                $('#declarationModal').modal('show');
+            })
+            .fail(function(xhr) {
+                showToast('error', 'Failed to load declaration details');
+            });
+    });
+
+    // Handle expandable rows
+    $(document).on('click', '.row-expandable', function() {
+        const row = $(this);
+        const detailsRow = row.next('.details-row');
+        
+        if (detailsRow.length) {
+            detailsRow.toggleClass('d-none');
+            row.find('.expand-icon i').toggleClass('fa-chevron-down fa-chevron-up');
+        }
+    });
+
+    function updateTotals(totals) {
+        if (totals) {
+            $('#totalDebit').text(formatBalance(totals.debit));
+            $('#totalCredit').text(formatBalance(totals.credit));
+            const balance = totals.credit - totals.debit;
+            $('#totalBalance').html(`
+                <span class="${balance >= 0 ? 'text-success' : 'text-danger'}">
+                    ${formatBalance(balance)}
+                </span>
+            `);
+        }
+    }
+
+    function formatBalance(value) {
+        return new Intl.NumberFormat('en-US', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(value);
+    }
+
+    function showToast(type, message) {
+        const toast = `
+            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+                <div class="toast-header bg-${type === 'success' ? 'success' : 'danger'} text-white">
+                    <strong class="me-auto">Notification</strong>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+        
+        const container = $('<div class="toast-container position-fixed top-0 end-0 p-3"></div>')
+            .append(toast)
+            .appendTo('body');
+            
+        $('.toast').toast('show').on('hidden.bs.toast', () => container.remove());
+    }
+});
+</script>
+{% endblock %}

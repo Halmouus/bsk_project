@@ -3,39 +3,86 @@
 {% block title %}Supplier List{% endblock %}
 
 {% block content %}
-<h1>Supplier List</h1>
-<a href="{% url 'supplier-create' %}" class="btn btn-primary">Add New Supplier</a>
-<table class="table mt-4">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>IF Code</th>
-            <th>ICE Code</th>
-            <th>RC Code</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for supplier in suppliers %}
-            <tr>
-                <td>
-                    <a href="{% url 'supplier-detail' supplier.pk %}" class="text-primary">
-                        {{ supplier.name }}
-                    </a>
-                </td>
-                <td>{{ supplier.if_code }}</td>
-                <td>{{ supplier.ice_code }}</td>
-                <td>{{ supplier.rc_code }}</td>
-                <td>
-                    <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning">Edit</a>
-                    <a href="{% url 'supplier-delete' supplier.pk %}" class="btn btn-danger">Delete</a>
-                </td>
-            </tr>
-        {% empty %}
-            <tr>
-                <td colspan="5">No suppliers found.</td>
-            </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<div class="container mt-5">
+    <h1 class="mb-4 animate__animated animate__fadeInDown">Supplier List</h1>
+    <a href="{% url 'supplier-create' %}" class="btn btn-primary mb-4 animate__animated animate__fadeIn">
+        <i class="fas fa-plus me-2"></i> Add New Supplier
+    </a>
+    <div class="table-responsive">
+        <table class="table table-hover table-striped animate__animated animate__fadeInUp">
+            <thead class="table-dark">
+                <tr>
+                    <th>Name</th>
+                    <th>IF Code</th>
+                    <th>ICE Code</th>
+                    <th>RC Code</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for supplier in suppliers %}
+                    <tr class="animate__animated animate__fadeIn">
+                        <td>
+                            <a href="{% url 'supplier-detail' supplier.pk %}" class="text-decoration-none text-primary fw-semibold">
+                                {{ supplier.name }}
+                            </a>
+                        </td>
+                        <td>{{ supplier.if_code|default:"-" }}</td>
+                        <td>{{ supplier.ice_code|default:"-" }}</td>
+                        <td>{{ supplier.rc_code|default:"-" }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning btn-sm">
+                                <i class="fas fa-edit"></i> Edit
+                            </a>
+                            <a href="{% url 'supplier-delete' supplier.pk %}" class="btn btn-danger btn-sm">
+                                <i class="fas fa-trash"></i> Delete
+                            </a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted">No suppliers found.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<style>
+    .animate__animated {
+        animation-duration: 0.5s;
+    }
+
+    .table-hover tbody tr:hover {
+        transform: scale(1.02);
+        transition: transform 0.2s ease;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+        cursor: pointer;
+    }
+
+    .btn-warning {
+        background-color: #f59e0b;
+        border-color: #f59e0b;
+    }
+
+    .btn-warning:hover {
+        background-color: #d97706;
+        border-color: #d97706;
+    }
+
+    .btn-danger {
+        background-color: #ef4444;
+        border-color: #ef4444;
+    }
+
+    .btn-danger:hover {
+        background-color: #dc2626;
+        border-color: #dc2626;
+    }
+
+    .table-striped tbody tr:nth-of-type(odd) {
+        background-color: rgba(241, 245, 249, 0.3);
+    }
+</style>
 {% endblock %}

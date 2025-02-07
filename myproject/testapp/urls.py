@@ -32,7 +32,7 @@ from .views_contract import (
 )
 
 from .views_checkers import (
-    CheckAllocationView, CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
+    CheckAllocationView, CheckPrintView, CheckerListView, CheckerCreateView, CheckerDetailsView, CheckCreateView, CheckListView, CheckStatusView,
     invoice_autocomplete, supplier_autocomplete, CheckerDeleteView, CheckUpdateView, CheckCancelView, CheckActionView,
     CheckerFilterView, CheckFilterView, CheckDetailView, AvailableCheckersView, CheckerSignatureView, CheckerPositionStatusView
 )
@@ -83,6 +83,12 @@ from .views_vat import (
     VATDeductionDetailsView, VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
     VATDeclarationProcessView, VATDeclarationDeclareView, VATDeclarationPayView, 
     VATPendingDeclarationsView, VATForecastView
+)
+
+from .views_pay import (
+    PayConfigurationView, PayDeclarationDeclareView, PayDeclarationDeleteView, PayDeclarationItemCreateView, PayDeclarationItemDeleteView, PayDeclarationUpdateView, PayItemDeleteView, PayListView, PayItemListView, PayItemCreateView, PayItemUpdateView,
+    PayDeclarationListView, PayDeclarationCreateView, PayDeclarationDetailView, PayAccountingView, PayAccountingView,
+    PayDeclarationItemUpdateView, PayAccountingView, PayAccountingView, PayAccountingView, PayPendingDeclarationsView
 )
 
 from django.conf import settings
@@ -202,6 +208,7 @@ urlpatterns = [
     path('checks/<uuid:pk>/allocations/<uuid:allocation_id>/', 
          CheckAllocationView.as_view(), 
          name='delete-allocation'),
+    path('checks/<uuid:check_id>/print/', CheckPrintView.as_view(), name='check-print'),
 
     # Bank URLs
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
@@ -324,5 +331,23 @@ urlpatterns = [
     path('vat/<uuid:declaration_id>/deductions/', 
         VATDeductionDetailsView.as_view(), 
         name='vat-deduction-details'),  
-            
+
+    # Pay URLs    
+    path('pay/config/', PayConfigurationView.as_view(), name='pay-config'),
+    path('pay/', PayListView.as_view(), name='pay-list'),
+    path('pay/items/', PayItemListView.as_view(), name='pay-item-list'),
+    path('pay/items/create/', PayItemCreateView.as_view(), name='pay-item-create'),
+    path('pay/items/<uuid:pk>/edit/', PayItemUpdateView.as_view(), name='pay-item-edit'),
+    path('pay/items/<uuid:pk>/delete/', PayItemDeleteView.as_view(), name='pay-item-delete'),
+    path('pay/declarations/', PayDeclarationListView.as_view(), name='pay-declaration-list'),
+    path('pay/declarations/create/', PayDeclarationCreateView.as_view(), name='pay-declaration-create'),
+    path('pay/declarations/<uuid:pk>/', PayDeclarationDetailView.as_view(), name='pay-declaration-detail'),
+    path('pay/declarations/<uuid:pk>/edit/', PayDeclarationUpdateView.as_view(), name='pay-declaration-edit'),
+    path('pay/declarations/<uuid:pk>/delete/', PayDeclarationDeleteView.as_view(), name='pay-declaration-delete'),
+    path('pay/accounting/', PayAccountingView.as_view(), name='pay-accounting'),
+    path('pay/declarations/<uuid:pk>/items/create/', PayDeclarationItemCreateView.as_view(), name='pay-declaration-item-create'),
+    path('pay/declarations/<uuid:pk>/items/<uuid:item_pk>/edit/', PayDeclarationItemUpdateView.as_view(), name='pay-declaration-item-edit'),
+    path('pay/declarations/<uuid:pk>/items/<uuid:item_pk>/delete/', PayDeclarationItemDeleteView.as_view(), name='pay-declaration-item-delete'),
+    path('pay/pending/', PayPendingDeclarationsView.as_view(), name='pay-pending'),
+    path('pay/declarations/<uuid:pk>/declare/', PayDeclarationDeclareView.as_view(), name='pay-declaration-declare'),
 ]

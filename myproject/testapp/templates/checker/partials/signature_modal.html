@@ -1,9 +1,12 @@
 <div class="modal fade" id="signatureModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Checker Signatures</h5>
-                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title d-flex align-items-center gap-2">
+                    <i class="fas fa-signature text-primary"></i>
+                    Checker Signatures
+                </h5>
+                <button type="button" class="btn-close" data-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-info d-none" id="signature-loading">
@@ -26,9 +29,59 @@
                     </table>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            <div class="modal-footer border-0 pt-0">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Close</button>
             </div>
         </div>
     </div>
 </div>
+
+<style>
+/* Modal Styles */
+.summary-card {
+    background: #f8fafc;
+    border-radius: 12px;
+    padding: 1.25rem;
+}
+
+.modal-content {
+    border: none;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+}
+
+.modal-header {
+    padding: 1.5rem 1.5rem 0.75rem;
+}
+
+.btn-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #718096;
+    opacity: 0.5;
+    transition: opacity 0.2s;
+}
+
+.btn-close:hover {
+    opacity: 1;
+}
+
+/* Form Controls */
+.form-control {
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 0.625rem 1rem;
+}
+
+.form-control:focus {
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+}
+
+.form-label {
+    font-size: 0.875rem;
+    color: #4a5568;
+    margin-bottom: 0.5rem;
+}
+</style>

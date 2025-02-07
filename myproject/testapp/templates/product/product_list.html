@@ -15,16 +15,16 @@
                     <th>Name</th>
                     <th>VAT Rate</th>
                     <th>Expense Code</th>
-                    <th>Actions</th>
+                    <th class="text-end">Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for product in products %}
                     <tr class="animate__animated animate__fadeIn">
-                        <td>{{ product.name }}</td>
-                        <td>{{ product.vat_rate }}</td>
-                        <td>{{ product.expense_code }}</td>
-                        <td>
+                        <td class="fw-semibold">{{ product.name }}</td>
+                        <td>{{ product.vat_rate }}%</td>
+                        <td>{{ product.expense_code|default:"-" }}</td>
+                        <td class="text-end">
                             <a href="{% url 'product-update' product.pk %}" class="btn btn-warning btn-sm">
                                 <i class="fas fa-edit"></i> Edit
                             </a>
@@ -35,7 +35,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="4" class="text-center">No products found.</td>
+                        <td colspan="4" class="text-center text-muted">No products found.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -45,13 +45,13 @@
 
 <style>
     .animate__animated {
-        animation-duration: 1s;
+        animation-duration: 0.5s;
     }
 
     .table-hover tbody tr:hover {
-        transform: scale(1.02);
+        transform: translateX(8px);
         transition: transform 0.3s ease;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
     }
 
     .btn-warning {
@@ -75,11 +75,7 @@
     }
 
     .table-striped tbody tr:nth-of-type(odd) {
-        background-color: rgba(37, 99, 235, 0.05);
-    }
-
-    .table-striped tbody tr:nth-of-type(even) {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: rgba(241, 245, 249, 0.3);
     }
 </style>
 {% endblock %}
