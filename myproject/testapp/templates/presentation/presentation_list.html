@@ -36,6 +36,7 @@
                     <th class="text-right" style="min-width: 120px;">Total Amount</th>
                     <th>Receipt Count</th>
                     <th>Status</th>
+                    <th>Document</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -61,6 +62,18 @@
                         <span class="badge badge-{{ presentation.status|status_badge }}">
                             {{ presentation.get_status_display }}
                         </span>
+                    </td>
+                    <td>
+                        {% if presentation.document %}
+                            <button type="button" class="btn btn-sm btn-info view-pdf" 
+                                    data-url="{{ presentation.document.url }}" 
+                                    data-title="Presentation #{{ presentation.id }}"
+                                    title="View Document">
+                                <i class="fas fa-file-pdf"></i>
+                            </button>
+                        {% else %}
+                            -
+                        {% endif %}
                     </td>
                     <td>
                         <div class="btn-group">
@@ -247,7 +260,61 @@
     </div>
 </div>
 
+<!-- PDF Viewer Modal -->
+<div class="modal fade" id="pdfViewerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Document Viewer</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="embed-responsive" style="padding-bottom: 100%;">
+                    <iframe class="embed-responsive-item" id="pdfFrame"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" id="downloadPdf" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
+
+<style>
+    #pdfViewerModal .modal-dialog {
+        max-width: 90%;
+        height: 90vh;
+        margin: 1.75rem auto;
+    }
+
+    #pdfViewerModal .modal-content {
+        height: 100%;
+    }
+
+    #pdfViewerModal .modal-body {
+        height: calc(100% - 120px);  /* Adjust for header/footer */
+        padding: 0;
+        overflow: hidden;
+    }
+
+    #pdfViewerModal .embed-responsive {
+        height: 100%;
+        padding: 0 !important;
+    }
+
+    #pdfViewerModal iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
+    }
+</style>
 
 {% block extra_js %}
 <script>
@@ -260,14 +327,37 @@ var bankAccountsList = [
         }{% if not forloop.last %},{% endif %}
     {% endfor %}
 ];
+
+// PDF Viewer handling
+$(document).on('click', '.view-pdf', function(e) {
+    e.preventDefault();
+    const url = $(this).data('url');
+    const title = $(this).data('title');
+    
+    // Update modal
+    $('#pdfViewerModal .modal-title').text(title);
+    $('#pdfFrame').attr('src', url);
+    $('#downloadPdf').attr('href', url);
+    
+    // Show modal
+    $('#pdfViewerModal').modal('show');
+});
+
+// Clear iframe when modal closes to prevent memory issues
+$('#pdfViewerModal').on('hidden.bs.modal', function() {
+    $('#pdfFrame').attr('src', '');
+});
+
 function showError(error) {
     console.error(error);
     alert('An error occurred: ' + error);
 }
+
 function showSuccess(message) {
     console.log(message);
     alert('Succes!: ' + message);
 }
+
 $(document).on('change', '.receipt-status', function() {
     const $select = $(this);
     const $paymentDate = $select.siblings('.payment-date');
@@ -279,6 +369,7 @@ $(document).on('change', '.receipt-status', function() {
         $paymentDate.hide();
     }
 });
+
 const PresentationManager = {
     currentStep: 1,
     totalSteps: 3,

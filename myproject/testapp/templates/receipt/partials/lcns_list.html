@@ -67,6 +67,15 @@
         {% endif %}
     </td>
     <td>
+        {% if lcn.document %}
+            <a href="{{ lcn.document.url }}" target="_blank" class="btn btn-sm btn-info" title="View Document">
+                <i class="fas fa-file-pdf"></i>
+            </a>
+        {% else %}
+            -
+        {% endif %}
+    </td>
+    <td>
         <div class="btn-group">
             <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')">
                 <i class="fas fa-history"></i>

@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.db import transaction
 import json
 
-from .models import BankAccount, Contract, ContractProduct, DirectDebit, ForecastStatement, Supplier, Product, ContractInvoice
+from .models import INVOICE_TYPES, BankAccount, Contract, ContractProduct, DirectDebit, ForecastStatement, Supplier, Product, ContractInvoice
 
 class ContractListView(ListView):
     model = Contract
@@ -37,6 +37,12 @@ class ContractListView(ListView):
             queryset = queryset.filter(reference__icontains=search)
 
         return queryset.select_related('supplier')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['invoice_types'] = INVOICE_TYPES
+        context['bank_accounts'] = BankAccount.objects.filter(is_active=True)
+        return context
 
 class ContractFilterView(View):
     def get(self, request):
@@ -72,6 +78,24 @@ class ContractCreateView(View):
             
             with transaction.atomic():
                 domiciliation_bank = None
+                # For loan contracts, get bank's supplier
+                if data.get('is_loan'):
+                    print("Creating loan contract")
+                    bank = BankAccount.objects.get(id=data['bank_id'])
+                    supplier = bank.create_supplier()
+                    if not supplier:
+                        raise ValidationError(_("Bank account must have IF/ICE codes set"))
+                    data['supplier_id'] = supplier.id
+                    
+                    # Force domiciliation to loaning bank
+                    data['generation_day'] = data['payment_day']
+                    data['is_domiciled'] = True
+                    data['domiciliation_bank'] = data['bank_id']
+                    data['domiciliation_day'] = data['payment_day']
+                
+                if not data.get('generation_day') and not data.get('is_loan'):
+                    raise ValidationError("Generation day is required for regular contracts")
+            
                 if data.get('is_domiciled'):
                     domiciliation_bank = BankAccount.objects.get(id=data['domiciliation_bank'])
                     print(f"Found domiciliation bank: {domiciliation_bank}")
@@ -86,7 +110,8 @@ class ContractCreateView(View):
                     generation_day=data['generation_day'],
                     is_domiciled=data.get('is_domiciled', False),       
                     domiciliation_bank_id=data.get('domiciliation_bank'),
-                    domiciliation_day=data.get('domiciliation_day')
+                    domiciliation_day=data.get('domiciliation_day'),
+                    invoice_type='LOAN' if data.get('is_loan') else data.get('invoice_type', 'OTHER')
                 )
                 
                 # Track total contract amount (WITH VAT)
@@ -97,7 +122,14 @@ class ContractCreateView(View):
                     # Get product for VAT rate
                     product = Product.objects.get(id=product_data['product_id'])
                     quantity = Decimal(str(product_data['quantity']))
-                    unit_price = Decimal(str(product_data['unit_price'].replace(',', '.')))
+                    
+                    # Handle unit price that could be string or number
+                    unit_price_raw = product_data['unit_price']
+                    if isinstance(unit_price_raw, str):
+                        unit_price = Decimal(unit_price_raw.replace(',', '.'))
+                    else:
+                        unit_price = Decimal(str(unit_price_raw))
+                        
                     reduction_rate = Decimal(str(product_data.get('reduction_rate', '0')))
 
                     # Calculate amount with VAT included
@@ -117,7 +149,7 @@ class ContractCreateView(View):
                         contract=contract,
                         product_id=product_data['product_id'],
                         quantity=product_data['quantity'],
-                        unit_price=Decimal(product_data['unit_price'].replace(',', '.')),
+                        unit_price=unit_price,
                         reduction_rate=product_data.get('reduction_rate', 0)
                     )
 
@@ -149,37 +181,86 @@ class ContractCreateView(View):
 
 class ContractUpdateView(View):
     def get(self, request, pk):
-        contract = get_object_or_404(Contract, pk=pk)
-        products = [{
-            'id': str(p.id),
-            'product_id': str(p.product_id),
-            'product_name': p.product.name,
-            'quantity': str(p.quantity),
-            'unit_price': str(p.unit_price),
-            'reduction_rate': str(p.reduction_rate)
-        } for p in contract.products.all()]
-        
-        return JsonResponse({
-            'id': str(contract.id),
-            'reference': contract.reference,
-            'supplier_id': str(contract.supplier_id),
-            'supplier_name': contract.supplier.name,
-            'start_date': contract.start_date.isoformat(),
-            'end_date': contract.end_date.isoformat() if contract.end_date else None,
-            'is_indefinite': contract.is_indefinite,
-            'periodicity': contract.periodicity,
-            'generation_day': contract.generation_day,
-            'status': contract.status,
-            'products': products
-        })
+        try:
+            contract = get_object_or_404(Contract, pk=pk)
+            
+            print(f"\n=== Loading Contract {contract.id} ===")
+            print(f"Invoice type: {contract.invoice_type}")
+            print(f"Is domiciled: {contract.is_domiciled}")
+            print(f"Has forecasts: {ForecastStatement.objects.filter(source_type='contract_domiciliation', source_id=contract.id).exists()}")
+            
+            # Check if contract has any forecasts - if yes, domiciliation is locked
+            has_forecasts = ForecastStatement.objects.filter(
+                source_type='contract_domiciliation',
+                source_id=contract.id
+            ).exists()
+
+            response_data = {
+                'id': str(contract.id),
+                'reference': contract.reference,
+                'supplier_id': str(contract.supplier_id),
+                'supplier_name': contract.supplier.name,
+                'start_date': contract.start_date.isoformat(),
+                'end_date': contract.end_date.isoformat() if contract.end_date else None,
+                'is_indefinite': contract.is_indefinite,
+                'periodicity': contract.periodicity,
+                'generation_day': contract.generation_day,
+                'invoice_type': contract.invoice_type,
+                'status': contract.status,
+                'products': [{
+                    'id': str(p.id),
+                    'product_id': str(p.product_id),
+                    'product_name': p.product.name,
+                    'quantity': str(p.quantity),
+                    'unit_price': str(p.unit_price),
+                    'reduction_rate': str(p.reduction_rate)
+                } for p in contract.products.all()],
+                # Domiciliation details with locking info
+                'is_domiciled': contract.is_domiciled,
+                'domiciliation_locked': has_forecasts or contract.status != 'draft',  # Lock if has forecasts or not draft
+                'domiciliation_bank': str(contract.domiciliation_bank_id) if contract.domiciliation_bank else None,
+                'domiciliation_bank_name': contract.domiciliation_bank.get_bank_display() if contract.domiciliation_bank else None,
+                'domiciliation_day': contract.domiciliation_day,
+                'domiciliation_suspended': contract.domiciliation_suspended,
+                'domiciliation_suspension_date': contract.domiciliation_suspension_date.isoformat() if contract.domiciliation_suspension_date else None,
+                'domiciliation_suspension_reason': contract.domiciliation_suspension_reason,
+                'is_loan': contract.invoice_type == 'LOAN'
+            }
+
+            print("Response data:", response_data)
+            return JsonResponse(response_data)
+            
+        except Exception as e:
+            print(f"Error loading contract: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error', 
+                'message': str(e)
+            }, status=400)
 
     def post(self, request, pk):
         try:
             contract = get_object_or_404(Contract, pk=pk)
             data = json.loads(request.body)
             
+            print(f"\n=== Updating Contract {contract.id} ===")
+            print(f"Current status: {contract.status}")
+            print(f"Has forecasts: {ForecastStatement.objects.filter(source_type='contract_domiciliation', source_id=contract.id).exists()}")
+            
             with transaction.atomic():
-                # Update contract fields
+                # If contract has forecasts, don't allow domiciliation changes
+                has_forecasts = ForecastStatement.objects.filter(
+                    source_type='contract_domiciliation',
+                    source_id=contract.id
+                ).exists()
+                
+                if has_forecasts or contract.status != 'draft':
+                    print("Contract has forecasts or is not draft - preserving domiciliation settings")
+                    data['is_domiciled'] = contract.is_domiciled
+                    data['domiciliation_bank'] = contract.domiciliation_bank_id
+                    data['domiciliation_day'] = contract.domiciliation_day
+                
+                # Rest of the update code remains same
                 contract.reference = data['reference']
                 contract.supplier_id = data['supplier_id']
                 contract.start_date = data['start_date']
@@ -187,6 +268,15 @@ class ContractUpdateView(View):
                 contract.is_indefinite = data.get('is_indefinite', False)
                 contract.periodicity = data['periodicity']
                 contract.generation_day = data['generation_day']
+                contract.invoice_type = data.get('invoice_type', 'OTHER')
+                
+                # Handle domiciliation only if not locked
+                if not has_forecasts and contract.status == 'draft':
+                    contract.is_domiciled = data.get('is_domiciled', False)
+                    if contract.is_domiciled:
+                        contract.domiciliation_bank_id = data.get('domiciliation_bank')
+                        contract.domiciliation_day = data.get('domiciliation_day')
+                
                 contract.save()
                 
                 # Update products
@@ -206,6 +296,8 @@ class ContractUpdateView(View):
                 })
                 
         except Exception as e:
+            print(f"Error updating contract: {str(e)}")
+            print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)

@@ -9,30 +9,36 @@ class Command(BaseCommand):
     help = 'Creates test negotiable receipts (checks and LCNs)'
 
     def handle(self, *args, **kwargs):
+        print("\n=== Creating Test Receipts ===")
+        
         # Get or create test client and entity
-        client, _ = Client.objects.get_or_create(
+        client, created = Client.objects.get_or_create(
             name="Test Client",
             defaults={
                 'client_code': '34200'
             }
         )
-        entity, _ = Entity.objects.get_or_create(
+        print(f"Client {'created' if created else 'found'}: {client.name}")
+        
+        entity, created = Entity.objects.get_or_create(
             name="Test Entity",
             defaults={
-                'ice_code': '123456789012345',  # 15 digits
-                'accounting_code': '34200'  # Must start with '34'
+                'ice_code': '123456789012345',
+                'accounting_code': '34200'
             }
         )
+        print(f"Entity {'created' if created else 'found'}: {entity.name}")
         
-        # Get first bank account or create one
+        # Get first bank account
         bank_account = BankAccount.objects.first()
         if not bank_account:
             self.stdout.write("Please create at least one bank account first")
             return
+        print(f"Using bank account: {bank_account}")
 
-        # Create 10 checks
+        # Create checks using model's methods
         for i in range(30):
-            check = CheckReceipt.objects.create(
+            check = CheckReceipt(
                 client=client,
                 entity=entity,
                 check_number=f"TEST{i+1:06d}",
@@ -40,13 +46,15 @@ class Command(BaseCommand):
                 due_date=timezone.now().date() + timedelta(days=random.randint(1, 30)),
                 issuing_bank='ATW',
                 bank_account=bank_account,
-                status='PORTFOLIO'
+                status='PORTFOLIO',
+                operation_date=timezone.now().date()
             )
+            check.save()
             self.stdout.write(f"Created check: {check.check_number}")
 
-        # Create 10 LCNs
+        # Create LCNs using model's methods
         for i in range(20):
-            lcn = LCN.objects.create(
+            lcn = LCN(
                 client=client,
                 entity=entity,
                 lcn_number=f"LCN{i+1:06d}",
@@ -54,6 +62,8 @@ class Command(BaseCommand):
                 due_date=timezone.now().date() + timedelta(days=random.randint(1, 30)),
                 issuing_bank='ATW',
                 bank_account=bank_account,
-                status='PORTFOLIO'
+                status='PORTFOLIO',
+                operation_date=timezone.now().date()
             )
+            lcn.save()
             self.stdout.write(f"Created LCN: {lcn.lcn_number}")

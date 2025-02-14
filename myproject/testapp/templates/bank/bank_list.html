@@ -163,6 +163,18 @@
                                         <input type="text" class="form-control" id="accountNumber" required>
                                     </div>
                                 </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>IF Code</label>
+                                        <input type="text" class="form-control" id="ifCode">
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-group">
+                                        <label>ICE Code</label>
+                                        <input type="text" class="form-control" id="iceCode">
+                                    </div>
+                                </div>
                             </div>
                             <div class="row">
                                 <div class="col-md-4">
@@ -355,6 +367,8 @@ const BankAccountManager = {
             accounting_number: $('#accountingNumber').val(),
             journal_number: $('#journalNumber').val(),
             city: $('#city').val(),
+            if_code: $('#ifCode').val() || null,
+            ice_code: $('#iceCode').val() || null,
             account_type: $('#accountType').val(),
             is_active: $('#isActive').prop('checked'),
             is_current: $('#isCurrent').prop('checked'),
@@ -438,6 +452,8 @@ function editBankAccount(id) {
             $('#accountingNumber').val(data.accounting_number);
             $('#journalNumber').val(data.journal_number);
             $('#city').val(data.city);
+            $('#ifCode').val(data.if_code);
+            $('#iceCode').val(data.ice_code);
             $('#accountType').val(data.account_type);
             $('#isActive').prop('checked', data.is_active);
             $('#isCurrent').prop('checked', data.is_current);

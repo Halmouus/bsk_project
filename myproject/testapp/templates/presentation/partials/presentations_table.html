@@ -24,6 +24,15 @@
         </span>
     </td>
     <td>
+        {% if presentation.document %}
+            <a href="{{ presentation.document.url }}" target="_blank" class="btn btn-sm btn-info" title="View Document">
+                <i class="fas fa-file-pdf"></i>
+            </a>
+        {% else %}
+            -
+        {% endif %}
+    </td>
+    <td>
         <div class="btn-group">
             <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')">
                 <i class="fas fa-eye"></i>
@@ -41,6 +50,6 @@
 </tr>
 {% empty %}
 <tr>
-    <td colspan="8" class="text-center">No presentations found</td>
+    <td colspan="9" class="text-center">No presentations found</td>
 </tr>
 {% endfor %}

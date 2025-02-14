@@ -461,7 +461,36 @@
                     </div>
                 </li>
 
-            
+                <!-- Production Management Section -->
+                <li class="nav-item nav-item-parent">
+                    <a class="nav-link {% if 'production' in request.path %}active{% endif %}" 
+                    data-toggle="collapse" 
+                    href="#productionSubmenu" 
+                    role="button" 
+                    aria-expanded="false" 
+                    aria-controls="productionSubmenu">
+                        <span><i class="fas fa-industry me-2"></i> Production Management</span>
+                    </a>
+                    <div class="collapse nav-dropdown" id="productionSubmenu">
+                        <div class="nav-section">
+                            <!-- Dashboard -->
+
+                            <!-- Brick Management -->
+                            <a class="nav-link {% if request.resolver_match.url_name == 'brick-type-list' %}active{% endif %}" 
+                            href="{% url 'brick-type-list' %}">
+                                <i class="fas fa-cube me-2"></i> Brick Management
+                            </a>
+
+                            <!-- Energy Management -->
+
+                            <!-- Production Records -->
+
+                            <!-- Loading Records -->
+
+                            <!-- Reports -->
+                        </div>
+                    </div>
+                </li>
 
             <!-- Bottom Section -->
             <div class="mt-auto p-3">

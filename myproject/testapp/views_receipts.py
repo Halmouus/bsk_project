@@ -1,3 +1,4 @@
+import os
 from django.views import View
 from django.views.generic import ListView
 from django.shortcuts import render, redirect, get_object_or_404
@@ -124,7 +125,8 @@ class ReceiptCreateView(View):
                 'amount': data['amount'],
                 'client_year': data['client_year'],
                 'client_month': data['client_month'],
-                'notes': data.get('notes', '')
+                'notes': data.get('notes', ''),
+                'document': request.FILES.get('document', None)
             }
 
             # Create receipt first
@@ -164,6 +166,12 @@ class ReceiptCreateView(View):
                     'message': 'Invalid receipt type'
                 }, status=400)
 
+            # Handle document separately if present
+            if 'document' in request.FILES:
+                print(f"Setting document for receipt {receipt.id}")
+                receipt.set_document(request.FILES['document'])
+                receipt.save()
+
             # Then handle compensations
             compensations = json.loads(request.POST.get('compensations', '[]'))
             if compensations:
@@ -200,6 +208,19 @@ class ReceiptUpdateView(View):
         print("\n=== Starting ReceiptUpdateView.get ===")
         print(f"Receipt type: {receipt_type}")
         print(f"Receipt ID: {pk}")
+
+        print(f"Request POST data: {request.POST}")
+        print(f"Request FILES data: {request.FILES}")
+        print(f"Request content type: {request.content_type}") 
+
+        if 'document' in request.FILES:
+            print("Document found in request.FILES:")
+            doc = request.FILES['document']
+            print(f"- Name: {doc.name}")
+            print(f"- Size: {doc.size}")
+            print(f"- Content type: {doc.content_type}")
+        else:
+            print("No document found in request.FILES")
         
         model_map = {
             'check': CheckReceipt,
@@ -313,6 +334,16 @@ class ReceiptUpdateView(View):
             receipt.client_year = data['client_year']
             receipt.client_month = data['client_month']
             receipt.notes = data.get('notes', '')
+
+            # Handle file upload if present
+            if 'document' in request.FILES:
+                print(f"New document received: {request.FILES['document'].name}")
+                # Delete old document if exists
+                if receipt.document:
+                    if os.path.exists(receipt.document.path):
+                        os.remove(receipt.document.path)
+                        print(f"Deleted old document: {receipt.document.path}")
+                receipt.document = request.FILES['document']
 
             # Update type-specific fields
             if receipt_type in ['check', 'lcn']:

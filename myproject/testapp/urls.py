@@ -1,5 +1,6 @@
 from django.urls import path, include
 
+
 from .views_users import initialize_user_profiles, user_management, user_activity, create_user, user_permissions
 
 from .views_auth import login_view, profile_view, logout_view
@@ -66,7 +67,7 @@ from .views_entity import (
     list_entities, create_entity, update_entity, delete_entity
 )
 from .views_presentation import (
-    PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
+    PresentationDocumentDeleteView, PresentationDocumentUploadView, PresentationListView, PresentationCreateView, PresentationUpdateView, PresentationDeleteView,
     PresentationDetailView, AvailableReceiptsView, DiscountInfoView, PresentationFilterView
 )
 
@@ -90,13 +91,11 @@ from .views_pay import (
     PayDeclarationListView, PayDeclarationCreateView, PayDeclarationDetailView, PayAccountingView, PayAccountingView,
     PayDeclarationItemUpdateView, PayAccountingView, PayAccountingView, PayAccountingView, PayPendingDeclarationsView
 )
+from . import views_production
 
-from django.conf import settings
-from django.conf.urls.static import static
 
 
 urlpatterns = [
-    path('', views.home, name='home'),
     path('', views.home, name='home'),
     path('login/', login_view, name='login'),
     path('logout/', logout_view, name='logout'),
@@ -300,6 +299,12 @@ urlpatterns = [
     path('presentations/discount-info/<uuid:bank_account_id>/', 
         DiscountInfoView.as_view(), name='presentation-discount-info'),
     path('presentations/filter/', PresentationFilterView.as_view(), name='presentation-filter'),
+    path('presentations/<uuid:pk>/upload-document/', 
+        PresentationDocumentUploadView.as_view(), 
+        name='presentation-upload-document'),
+    path('presentations/<uuid:pk>/delete-document/', 
+        PresentationDocumentDeleteView.as_view(), 
+        name='presentation-delete-document'),
 
     # Calendar URLs
     path('calendar/', CalendarView.as_view(), name='calendar'),
@@ -350,4 +355,11 @@ urlpatterns = [
     path('pay/declarations/<uuid:pk>/items/<uuid:item_pk>/delete/', PayDeclarationItemDeleteView.as_view(), name='pay-declaration-item-delete'),
     path('pay/pending/', PayPendingDeclarationsView.as_view(), name='pay-pending'),
     path('pay/declarations/<uuid:pk>/declare/', PayDeclarationDeclareView.as_view(), name='pay-declaration-declare'),
+
+
+    # Brick Management URLs
+    path('production/brick-types/', views_production.BrickTypeListView.as_view(), name='brick-type-list'),
+    path('production/brick-types/create/', views_production.BrickTypeCreateView.as_view(), name='brick-type-create'),
+    path('production/brick-types/<uuid:pk>/update/', views_production.BrickTypeUpdateView.as_view(), name='brick-type-update'),
+    path('production/brick-types/<uuid:pk>/delete/', views_production.BrickTypeDeleteView.as_view(), name='brick-type-delete'),
 ]

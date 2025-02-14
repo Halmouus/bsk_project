@@ -72,6 +72,8 @@ class BankAccountCreateView(View):
                 accounting_number=data['accounting_number'],
                 journal_number=data['journal_number'],
                 city=data['city'],
+                if_code=data['if_code'],
+                ice_code=data['ice_code'],
                 account_type=data['account_type'],
                 is_active=data.get('is_active', True),
                 is_current=data.get('is_current', False),
@@ -106,6 +108,8 @@ class BankAccountUpdateView(View):
             'accounting_number': account.accounting_number,
             'journal_number': account.journal_number,
             'city': account.city,
+            'if_code': account.if_code,
+            'ice_code': account.ice_code,
             'account_type': account.account_type,
             'is_active': account.is_active,
             'is_current': account.is_current,
@@ -142,6 +146,8 @@ class BankAccountUpdateView(View):
             account.accounting_number = data['accounting_number']
             account.journal_number = data['journal_number']
             account.city = data['city']
+            account.if_code = data['if_code']
+            account.ice_code = data['ice_code']
             account.account_type = data['account_type']
             account.is_active = data.get('is_active', True)
             account.is_current = data.get('is_current', False)

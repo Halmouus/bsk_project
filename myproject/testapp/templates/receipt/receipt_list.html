@@ -73,6 +73,7 @@
                             <th>Bank Issued To</th>
                             <th>Presentation</th>
                             <th>Status</th>
+                            <th>Document</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -146,6 +147,18 @@
                                 {% endif %}
                             </td>
                             <td>
+                                {% if check.document %}
+                                    <button type="button" class="btn btn-sm btn-info view-pdf" 
+                                            data-url="{{ check.document.url }}" 
+                                            data-title="Check #{{ check.check_number }}"
+                                            title="View Document">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </button>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
                                 <div class="btn-group">
                                     <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')">
                                         <i class="fas fa-history"></i>
@@ -190,6 +203,7 @@
                             <th>Bank Issued To</th>
                             <th>Presentation</th>
                             <th>Status</th>
+                            <th>Document</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -259,6 +273,18 @@
                                         {{ comp_status.total_compensated|format_balance }}/{{ lcn.amount|format_balance }}
                                     </small>
                                     {% endwith %}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if lcn.document %}
+                                    <button type="button" class="btn btn-sm btn-info view-pdf" 
+                                            data-url="{{ lcn.document.url }}" 
+                                            data-title="LCN #{{ lcn.lcn_number }}"
+                                            title="View Document">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </button>
+                                {% else %}
+                                    -
                                 {% endif %}
                             </td>
                             <td>
@@ -423,6 +449,31 @@
     </div>
 </div>
 
+<!-- PDF Viewer Modal -->
+<div class="modal fade" id="pdfViewerModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Document Viewer</h5>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="embed-responsive" style="padding-bottom: 100%;">
+                    <iframe class="embed-responsive-item" id="pdfFrame"></iframe>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" id="downloadPdf" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                    <i class="fas fa-times"></i> Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     /* Status Badge Colors */
     .badge-portfolio { background-color: #6c757d; }
@@ -473,6 +524,33 @@
     }
     .compensation-progress .progress-bar {
         background-color: #ffc107;
+    }
+
+    #pdfViewerModal .modal-dialog {
+        max-width: 90%;
+        height: 90vh;
+        margin: 1.75rem auto;
+    }
+
+    #pdfViewerModal .modal-content {
+        height: 100%;
+    }
+
+    #pdfViewerModal .modal-body {
+        height: calc(100% - 120px);  /* Adjust for header/footer */
+        padding: 0;
+        overflow: hidden;
+    }
+
+    #pdfViewerModal .embed-responsive {
+        height: 100%;
+        padding: 0 !important;
+    }
+
+    #pdfViewerModal iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
     }
 </style>
 
@@ -526,6 +604,39 @@ $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
 });
     
 $(document).ready(function() {
+
+    // Restore last active tab
+    const lastActiveTab = localStorage.getItem('activeReceiptTab');
+        if (lastActiveTab) {
+            $(`#receiptTabs a[href="${lastActiveTab}"]`).tab('show');
+        }
+
+    // Store tab changes
+    $('#receiptTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+        const activeTab = $(e.target).attr('href');
+        localStorage.setItem('activeReceiptTab', activeTab);
+    });
+
+
+    // PDF Viewer handling
+    $(document).on('click', '.view-pdf', function(e) {
+        e.preventDefault();
+        const url = $(this).data('url');
+        const title = $(this).data('title');
+        
+        // Update modal
+        $('#pdfViewerModal .modal-title').text(title);
+        $('#pdfFrame').attr('src', url);
+        $('#downloadPdf').attr('href', url);
+        
+        // Show modal
+        $('#pdfViewerModal').modal('show');
+    });
+
+    // Clear iframe when modal closes to prevent memory issues
+    $('#pdfViewerModal').on('hidden.bs.modal', function() {
+        $('#pdfFrame').attr('src', '');
+    });
 
     // Initialize filters for each tab
     debug.log('Init', 'Initializing filters for active tab');
@@ -1384,6 +1495,7 @@ $(document).ready(function() {
             }
         });
     }
+
 }
 // Keyboard shortcuts
 $(document).keydown(function(e) {

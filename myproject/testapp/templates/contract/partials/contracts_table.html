@@ -5,6 +5,7 @@
            {% endif %}">
     <td>{{ contract.reference }}</td>
     <td>{{ contract.supplier.name }}</td>
+    <td>{{ contract.invoice_type }}</td>
     <td>{{ contract.start_date|date:"Y-m-d" }}</td>
     <td>
         {% if contract.is_indefinite %}

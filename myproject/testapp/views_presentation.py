@@ -1,3 +1,4 @@
+import os
 from django.views.generic import ListView, View
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
@@ -597,3 +598,63 @@ class PresentationFilterView(View):
             import traceback
             print(traceback.format_exc())
             return JsonResponse({'error': str(e)}, status=400)
+        
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PresentationDocumentUploadView(View):
+    def post(self, request, pk):
+        print("\n=== Uploading Presentation Document ===")
+        try:
+            presentation = get_object_or_404(Presentation, pk=pk)
+            
+            if 'document' not in request.FILES:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No document provided'
+                }, status=400)
+                
+            document = request.FILES['document']
+            print(f"Received document: {document.name}")
+            
+            # Delete old document if exists
+            if presentation.document:
+                if os.path.exists(presentation.document.path):
+                    os.remove(presentation.document.path)
+                    print(f"Deleted old document: {presentation.document.path}")
+            
+            presentation.document = document
+            presentation.save()
+            print("Document uploaded successfully")
+            
+            return JsonResponse({'status': 'success'})
+            
+        except Exception as e:
+            print(f"Error uploading document: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+
+@method_decorator(csrf_exempt, name='dispatch')
+class PresentationDocumentDeleteView(View):
+    def post(self, request, pk):
+        print("\n=== Deleting Presentation Document ===")
+        try:
+            presentation = get_object_or_404(Presentation, pk=pk)
+            
+            if presentation.document:
+                if os.path.exists(presentation.document.path):
+                    os.remove(presentation.document.path)
+                    print(f"Deleted document: {presentation.document.path}")
+                presentation.document = None
+                presentation.save()
+                print("Document reference removed from presentation")
+            
+            return JsonResponse({'status': 'success'})
+            
+        except Exception as e:
+            print(f"Error deleting document: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)

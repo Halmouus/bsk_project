@@ -22,7 +22,7 @@
 </div>
 
 <div class="modal-body bg-light">
-    <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}">
+    <form id="receiptForm" method="post" action="{% if receipt %}{% url 'receipt-edit' receipt_type receipt.id %}{% else %}{% url 'receipt-create' receipt_type %}{% endif %}" enctype="multipart/form-data">
         {% csrf_token %}
 
         <!-- Basic Information Card -->
@@ -259,6 +259,27 @@
                 </button>
             </div>
         </div>
+
+    <!-- Document Upload Card -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h6 class="mb-0 text-primary">
+                <i class="fas fa-file-pdf me-2"></i> Document
+            </h6>
+        </div>
+        <div class="card-body">
+            <div class="form-group">
+                <input type="file" class="form-control" id="document" name="document" accept=".pdf">
+                {% if receipt and receipt.document %}
+                    <div class="mt-2">
+                        <a href="{{ receipt.document.url }}" target="_blank" class="btn btn-sm btn-info">
+                            <i class="fas fa-eye me-1"></i> View Document
+                        </a>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 
         <!-- Notes Card -->
         <div class="card shadow-sm mb-4">
@@ -747,20 +768,19 @@ $(document).ready(function() {
 
     // Form submission validation
     $('#receiptForm').on('submit', function(e) {
-        // Check all required fields
-        $('input[required], select[required]').each(function() {
-            if (!$(this).val()) {
-                e.preventDefault();
-                validator.showError(this, 'This field is required');
-            }
-        });
-
-        if (validator.errors.size > 0) {
-            e.preventDefault();
-            alert('Please correct all errors before submitting.');
+        e.preventDefault();
+        console.log("Form submission started");
+        
+        const form = $(this)[0];
+        const formData = new FormData(form);
+        
+        // Debug form data
+        console.log("Form data contents:");
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
         }
 
-        // Gather compensation data
+        // Add compensations
         const compensations = [];
         $('.compensation-entry').each(function() {
             const receipt_id = $(this).find('.unpaid-receipt-select').val();
@@ -773,13 +793,50 @@ $(document).ready(function() {
                 });
             }
         });
+        formData.append('compensations', JSON.stringify(compensations));
 
-        // Add to hidden input
-        $('<input>').attr({
-            type: 'hidden',
-            name: 'compensations',
-            value: JSON.stringify(compensations)
-        }).appendTo(this);
+        // Debug final form data
+        console.log("Final form data after adding compensations:");
+        for (let pair of formData.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+
+        $.ajax({
+            url: form.action,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            xhr: function() {
+                var xhr = new window.XMLHttpRequest();
+                xhr.upload.addEventListener("progress", function(evt) {
+                    if (evt.lengthComputable) {
+                        var percentComplete = evt.loaded / evt.total;
+                        console.log('Upload progress: ' + percentComplete);
+                    }
+                }, false);
+                return xhr;
+            },
+            success: function(response) {
+                console.log("Success response:", response);
+                if (response.status === 'success') {
+                    $('#receiptModal').modal('hide');
+                    showToast(response.message, 'success');
+                    location.reload();
+                } else {
+                    showFormErrors(form, response.errors);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error("Ajax error:", {xhr, status, error});
+                try {
+                    const errors = JSON.parse(xhr.responseText);
+                    showFormErrors(form, errors);
+                } catch (e) {
+                    showToast('An error occurred while saving the receipt.', 'error');
+                }
+            }
+        });
     });
 
     // Template for compensation entry
