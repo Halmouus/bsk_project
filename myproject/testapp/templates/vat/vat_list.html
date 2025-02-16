@@ -39,6 +39,14 @@
                         <h6 class="text-muted mb-1">VAT Accounts</h6>
                         <p class="mb-0">{{ config.invoiced_vat_account }} / {{ config.deducted_vat_account }}</p>
                     </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Journal</h6>
+                        <p class="mb-0">{{ config.journal }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <h6 class="text-muted mb-1">Default Forecast Amount</h6>
+                        <p class="mb-0">{{ config.default_forecast_amount }}</p>
+                    </div>
                     <div class="col-md-3 text-end">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#configModal">
                             <i class="fas fa-edit me-2"></i>Edit Configuration
@@ -158,6 +166,30 @@
                                 </option>
                             {% endfor %}
                         </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Invoiced VAT Account</label>
+                        <input type="text" class="form-control" 
+                               name="invoiced_vat_account" 
+                               value="{{ config.invoiced_vat_account|default:'4300' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Deducted VAT Account</label>
+                        <input type="text" class="form-control" 
+                               name="deducted_vat_account" 
+                               value="{{ config.deducted_vat_account|default:'4400' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Journal</label>
+                        <input type="text" class="form-control" 
+                               name="journal" 
+                               value="{{ config.journal|default:'06' }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Default Forecast Amount</label>
+                        <input type="text" class="form-control" 
+                               name="default_forecast_amount" 
+                               value="{{ config.default_forecast_amount|default:'400000.00' }}" required>
                     </div>
                 </form>
             </div>
@@ -310,6 +342,85 @@ async function saveConfiguration() {
         showToast('error', 'Failed to save configuration');
     }
 }
+
+async function createDeclaration() {
+    console.log('Creating VAT declaration...');
+    
+    const form = document.getElementById('createDeclarationForm');
+    const formData = new FormData(form);
+    
+    try {
+        const response = await fetch('/testapp/vat/create/', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            location.reload();
+        } else {
+            showToast('error', result.message || 'Failed to create declaration');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('error', 'Failed to create declaration');
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const monthSelect = document.querySelector('select[name="month"]');
+    const yearInput = document.querySelector('input[name="year"]');
+    
+    // Get latest declaration period from table
+    const declarationsTable = document.querySelector('.table');
+    if (declarationsTable) {
+        const firstRow = declarationsTable.querySelector('tbody tr:first-child');
+        if (firstRow) {
+            // Get period from first column (MM/YYYY)
+            const periodCell = firstRow.querySelector('td:first-child');
+            const latestPeriod = periodCell.textContent.split('/');
+            const latestMonth = parseInt(latestPeriod[0]);
+            const latestYear = parseInt(latestPeriod[1]);
+            
+            // Calculate next valid period
+            let nextMonth = latestMonth + 1;
+            let nextYear = latestYear;
+            if (nextMonth > 12) {
+                nextMonth = 1;
+                nextYear++;
+            }
+            
+            console.log(`Latest period: ${latestMonth}/${latestYear}`);
+            console.log(`Next valid period: ${nextMonth}/${nextYear}`);
+            
+            // Set and restrict form values
+            monthSelect.value = nextMonth;
+            yearInput.value = nextYear;
+            yearInput.min = nextYear;
+            
+            // Disable past months for current year
+            Array.from(monthSelect.options).forEach(option => {
+                const month = parseInt(option.value);
+                if (yearInput.value == nextYear) {
+                    option.disabled = month < nextMonth;
+                }
+            });
+        }
+    }
+    
+    // Add year change handler
+    yearInput.addEventListener('change', function() {
+        const selectedYear = parseInt(this.value);
+        const nextYear = parseInt(this.min);
+        
+        Array.from(monthSelect.options).forEach(option => {
+            const month = parseInt(option.value);
+            // Only disable months if we're in the minimum allowed year
+            option.disabled = selectedYear === nextYear && month < parseInt(monthSelect.value);
+        });
+    });
+});
 
 async function createDeclaration() {
     console.log('Creating VAT declaration...');

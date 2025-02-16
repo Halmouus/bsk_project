@@ -93,6 +93,7 @@ from .views_pay import (
 )
 from . import views_production
 
+from .views import test_translation
 
 
 urlpatterns = [
@@ -362,4 +363,7 @@ urlpatterns = [
     path('production/brick-types/create/', views_production.BrickTypeCreateView.as_view(), name='brick-type-create'),
     path('production/brick-types/<uuid:pk>/update/', views_production.BrickTypeUpdateView.as_view(), name='brick-type-update'),
     path('production/brick-types/<uuid:pk>/delete/', views_production.BrickTypeDeleteView.as_view(), name='brick-type-delete'),
+
+    path('test-translation/<str:lang>/', test_translation, name='test-translation'),
+
 ]

@@ -5686,6 +5686,13 @@ class VATConfiguration(BaseModel):
         ]
     )
 
+    default_forecast_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('400000.00'),
+        help_text="Default amount for VAT forecasts"
+    )
+
     @classmethod
     def get_config(cls):
         """Get or create VAT configuration"""
@@ -5695,7 +5702,7 @@ class VATConfiguration(BaseModel):
         return config
 
     @classmethod
-    def initialize(cls, declaration_day, domiciliation_bank):
+    def initialize(cls, declaration_day, domiciliation_bank, invoiced_vat_account, deducted_vat_account, journal, default_forecast_amount):
         """Initialize or update VAT configuration"""
         print("\n=== Initializing VAT Configuration ===")
         
@@ -5704,16 +5711,24 @@ class VATConfiguration(BaseModel):
             print("Updating existing configuration")
             config.declaration_day = declaration_day
             config.domiciliation_bank = domiciliation_bank
+            config.invoiced_vat_account = invoiced_vat_account
+            config.deducted_vat_account = deducted_vat_account
+            config.journal = journal
+            config.default_forecast_amount = default_forecast_amount
             config.save()
         else:
             print("Creating new configuration")
             config = cls.objects.create(
                 declaration_day=declaration_day,
-                domiciliation_bank=domiciliation_bank
+                domiciliation_bank=domiciliation_bank,
+                invoiced_vat_account=invoiced_vat_account,
+                deducted_vat_account=deducted_vat_account,
+                journal=journal,
+                default_forecast_amount=default_forecast_amount
             )
             
         # Generate initial forecasts
-        VATDeclaration.generate_initial_forecasts()
+        VATDeclaration.generate_forecasts()
         return config
 
     def clean(self):
@@ -6072,6 +6087,33 @@ class VATDeclaration(BaseModel):
             debit.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
             debit.save()
         
+        bank_fees = BankFeeTransaction.objects.filter(
+            Q(
+                date__range=(period_start, period_end)
+            ) | Q(
+                date__lt=period_start
+            )
+        ).select_related('fee_type')
+        
+        for fee in bank_fees:
+            if fee.vat_amount > 0:
+                print(f"\nProcessing fee: {fee.fee_type.name}")
+                print(f"VAT amount: {fee.vat_amount}")
+                    
+                VATDeclarationDetail.objects.create(
+                    declaration=self,
+                    source_type='bank_fee',
+                    source_id=fee.id,
+                    vat_rate=fee.vat_rate,
+                    vat_amount=fee.vat_amount,
+                    original_amount=fee.raw_amount,
+                    credit_amount=Decimal('0.00')
+                )
+                
+                total_deducted += fee.vat_amount
+                print(f"Running total: {total_deducted}")
+
+            
         print(f"\nTotal deducted VAT: {total_deducted}")
         return total_deducted
 
@@ -6125,54 +6167,105 @@ class VATDeclaration(BaseModel):
         self.save()
 
     @classmethod
-    def generate_initial_forecasts(cls):
-        """Generate initial forecasts for all upcoming declarations"""
-        print("\n=== Generating Initial VAT Forecasts ===")
+    def generate_forecasts(cls):
+        """Generate and maintain rolling 12-month VAT forecasts"""
+        print("\n=== Generating VAT Forecasts ===")
         
         config = VATConfiguration.objects.first()
         if not config:
             print("No VAT configuration found")
             return
             
-        # Get last declaration
-        last_declaration = cls.objects.order_by('-period_year', '-period_month').first()
+        today = timezone.now().date()
+        current_month = today.month
+        current_year = today.year
+        print(f"Current date: {today}")
+        print(f"Current config: {config.declaration_day=}, {config.default_forecast_amount=}")
+        print(f"Generating forecasts from {current_month}/{current_year}")
         
-        if last_declaration:
-            # Start from month after last declaration
-            if last_declaration.period_month == 12:
-                start_month = 1
-                start_year = last_declaration.period_year + 1
-            else:
-                start_month = last_declaration.period_month + 1
-                start_year = last_declaration.period_year
-        else:
-            # Start from current month
-            today = timezone.now().date()
-            start_month = today.month
-            start_year = today.year
+        # Delete obsolete forecasts
+        obsolete_forecasts = ForecastStatement.objects.filter(
+            source_type='vat_declaration',
+            date__lt=today,
+            is_processed=False
+        )
+        if obsolete_forecasts.exists():
+            print(f"Deleting {obsolete_forecasts.count()} obsolete forecasts")
+            obsolete_forecasts.delete()
         
-        print(f"Starting forecasts from {start_month}/{start_year}")
+        # Get all existing future forecasts
+        existing_forecasts = ForecastStatement.objects.filter(
+            source_type='vat_declaration',
+            date__gte=today,
+            is_processed=False
+        ).order_by('date')
         
-        # Generate for 12 months
-        current_month = start_month
-        current_year = start_year
+        print(f"Found {existing_forecasts.count()} existing future forecasts")
         
-        for _ in range(12):
-            # Create declaration if doesn't exist
-            declaration, created = cls.objects.get_or_create(
-                period_month=current_month,
-                period_year=current_year
-            )
+        # Calculate how many months we need to generate
+        months_needed = 12 - existing_forecasts.count()
+        
+        if months_needed <= 0:
+            print("Already have enough forecasts")
+            return
             
-            if created:
-                print(f"Created declaration for {current_month}/{current_year}")
-                
-            # Increment month/year
-            if current_month == 12:
-                current_month = 1
-                current_year += 1
+        # Get last forecast date or start from today
+        last_date = existing_forecasts.last().date if existing_forecasts.exists() else today
+        
+        print(f"Generating {months_needed} new forecasts from {last_date}")
+        
+        # Generate new forecasts
+        current_date = last_date
+        for _ in range(months_needed):
+            # Move to next month
+            if current_date.month == 12:
+                next_date = current_date.replace(year=current_date.year + 1, month=1)
             else:
-                current_month += 1
+                next_date = current_date.replace(month=current_date.month + 1)
+                
+            # Adjust for declaration day
+            try:
+                forecast_date = next_date.replace(day=min(config.declaration_day, calendar.monthrange(next_date.year, next_date.month)[1]))
+            except ValueError:
+                # If day is invalid (e.g., February 30), use last day of month
+                forecast_date = next_date.replace(day=calendar.monthrange(next_date.year, next_date.month)[1])
+                
+            # Skip weekends
+            while forecast_date.weekday() >= 5:
+                forecast_date += timedelta(days=1)
+                
+            print(f"\nCreating forecast for {forecast_date}")
+            
+            # Check if declaration exists for this period
+            declaration = cls.objects.filter(
+                period_month=next_date.month,
+                period_year=next_date.year
+            ).first()
+            
+            if declaration:
+                print(f"Found existing declaration for {next_date.month}/{next_date.year}")
+                source_id = declaration.id
+                amount = declaration.total_invoiced_vat - declaration.total_deducted_vat
+            else:
+                print(f"Using default amount for {next_date.month}/{next_date.year}")
+                source_id = uuid.uuid4()  # Temporary ID
+                amount = config.default_forecast_amount
+                
+            # Create forecast
+            ForecastStatement.objects.create(
+                bank_account=config.domiciliation_bank,
+                date=forecast_date,
+                label=f"Expected VAT Payment {next_date.month:02d}/{next_date.year}",
+                debit=amount if amount > 0 else None,
+                credit=abs(amount) if amount < 0 else None,
+                reference=f"VAT-{next_date.month:02d}-{next_date.year}",
+                source_type='vat_declaration',
+                source_id=source_id,
+                amount=amount
+            )
+            print(f"Created forecast: {amount} on {forecast_date}")
+            
+            current_date = next_date
 
     def declare(self):
         """Mark declaration as declared and create forecast"""
@@ -6274,7 +6367,7 @@ class VATDeclaration(BaseModel):
         # Ensure we have at least 12 months of forecasts
         if not future_declarations.exists():
             print("No future declarations found, generating initial forecasts")
-            cls.generate_initial_forecasts()
+            cls.generate_forecasts()
         else:
             last_declaration = future_declarations.last()
             months_ahead = 12 - future_declarations.count()
@@ -6308,8 +6401,12 @@ class VATDeclaration(BaseModel):
         print("\n=== Saving VAT Declaration ===")
         print(f"Period: {self.period_month}/{self.period_year}")
         print(f"Status: {self.status}")
+        print(f"Is Processed: {self.is_processed}")
         print(f"Total Invoiced VAT: {self.total_invoiced_vat}")
         print(f"Total Deducted VAT: {self.total_deducted_vat}")
+
+        is_new = not self.pk
+        print(f"Is new declaration: {is_new}")
 
         # Calculate due date if not set
         if not self.due_date:
@@ -6331,7 +6428,40 @@ class VATDeclaration(BaseModel):
             while self.due_date.weekday() >= 5:
                 self.due_date += timedelta(days=1)
         
+        # Save declaration
         super().save(*args, **kwargs)
+        
+        # Handle forecasts
+        if self.is_processed:
+            print("\nUpdating forecasts for processed declaration")
+            
+            # Delete any existing forecasts for this period
+            ForecastStatement.objects.filter(
+                source_type='vat_declaration',
+                source_id=self.id,
+                is_processed=False
+            ).delete()
+            
+            # Create new forecast with actual amount
+            net_amount = self.total_invoiced_vat - self.total_deducted_vat
+            
+            if net_amount != 0:
+                print(f"Creating new forecast with actual amount: {net_amount}")
+                ForecastStatement.objects.create(
+                    bank_account=VATConfiguration.get_config().domiciliation_bank,
+                    date=self.due_date,
+                    label=f"VAT Payment {self.period_month:02d}/{self.period_year}",
+                    debit=net_amount if net_amount > 0 else None,
+                    credit=abs(net_amount) if net_amount < 0 else None,
+                    reference=f"VAT-{self.period_month:02d}-{self.period_year}",
+                    source_type='vat_declaration',
+                    source_id=self.id,
+                    amount=net_amount
+                )
+            
+            # Ensure we maintain 12 months of forecasts
+            print("\nGenerating forecasts after save")
+            self.__class__.generate_forecasts()
 
 class VATDeclarationDetail(BaseModel):
     """Individual entries in VAT declaration"""
@@ -6537,7 +6667,22 @@ class VATDeclarationDetail(BaseModel):
             debit.vat_declared = True
             debit.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
             debit.save()
-
+        
+        # Process bank fees
+        bank_fees = BankFeeTransaction.objects.filter(
+            date__range=(period_start, period_end)
+        ).select_related('fee_type')
+        
+        for fee in bank_fees:
+            vat_amount = fee.vat_amount
+            print(f"Bank Fee #{fee.id}: VAT = {vat_amount}")
+            VATDeclarationDetail.objects.create(
+                declaration=self,
+                source_type='bank_fee',
+                source_id=fee.id,
+                vat_amount=vat_amount,
+                is_deducted=False
+            )
 
 
     def mark_as_paid(self, payment_date):

@@ -1,7 +1,7 @@
 from django.shortcuts import render
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse
+from django.http import HttpResponse, JsonResponse
 from .models import Entity, Client, CheckReceipt, LCN
 import json
 import logging
@@ -9,13 +9,18 @@ from django.utils import translation
 from django.shortcuts import redirect
 from django.conf import settings
 from django.contrib import messages
+from django.utils.translation import gettext as _
 
 logger = logging.getLogger(__name__)
 
 @login_required
 def home(request):
-    print("[HomeView] Accessing home page")
-    return render(request, 'home.html')
+    welcome_message = _("Welcome to MyProject!")
+    subtitle = _("This is the home page.")
+    return render(request, 'home.html', {
+        'welcome_message': welcome_message,
+        'subtitle': subtitle
+    })
 
 @require_http_methods(["POST"])
 @login_required
@@ -78,6 +83,19 @@ def change_language(request):
         language = request.POST.get('language')
         if language:
             translation.activate(language)
+            # Use 'django_language' as the session key
             request.session['django_language'] = language
+            response = redirect(request.META.get('HTTP_REFERER', '/'))
+            response.set_cookie(settings.LANGUAGE_COOKIE_NAME, language)
             print(f"Language changed to: {language}")
-    return redirect(request.META.get('HTTP_REFERER', '/'))
+            return response
+    return redirect('home')
+
+def test_translation(request, lang=None):
+    if lang:
+        translation.activate(lang)
+    
+    # Test string that should be translated
+    test_string = _("Dashboard")
+    
+    return HttpResponse(f"Current language: {translation.get_language()}<br>Translated string: {test_string}")

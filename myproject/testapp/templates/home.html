@@ -1,8 +1,28 @@
-{% extends 'base.html' %}
-
-{% block title %}Home - MyProject{% endblock %}
+{% extends "base.html" %}
+{% load i18n %}
 
 {% block content %}
-<h1>Welcome to MyProject!</h1>
-<p>This is the home page.</p>
+<div class="container mt-5">
+    <h1>{{ welcome_message }}</h1>
+    <p>{{ subtitle }}</p>
+
+    <p>Current Language: {{ request.LANGUAGE_CODE }}</p>
+
+    <!-- Add a language switcher -->
+    <form action="{% url 'change_language' %}" method="post" class="mt-3">
+        {% csrf_token %}
+        <select name="language" onchange="this.form.submit()">
+            <option value="en" {% if request.LANGUAGE_CODE == 'en' %}selected{% endif %}>English</option>
+            <option value="fr" {% if request.LANGUAGE_CODE == 'fr' %}selected{% endif %}>Français</option>
+        </select>
+    </form>
+
+    <!-- Debug info -->
+    <div style="margin-top: 20px; padding: 10px; background: #f5f5f5;">
+        <p>Debug Info:</p>
+        <p>LANGUAGE_CODE: {{ request.LANGUAGE_CODE }}</p>
+        <p>Session Language: {{ request.session.django_language }}</p>
+        <p>Available Languages: {{ LANGUAGES }}</p>
+    </div>
+</div>
 {% endblock %}

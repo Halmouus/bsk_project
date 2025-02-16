@@ -8,7 +8,7 @@ from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils import timezone
 from decimal import Decimal
-from .models import Check, DirectDebit, ForecastStatement, VATConfiguration, VATDeclaration, BankAccount
+from .models import BankFeeTransaction, Check, DirectDebit, ForecastStatement, VATConfiguration, VATDeclaration, BankAccount
 from django.db import transaction
 from django.db.models import Q, Sum
 
@@ -55,15 +55,23 @@ class VATConfigurationView(View):
         try:
             declaration_day = int(request.POST.get('declaration_day'))
             bank_id = request.POST.get('bank_id')
+            invoiced_vat_account = request.POST.get('invoiced_vat_account')
+            deducted_vat_account = request.POST.get('deducted_vat_account')
+            journal = request.POST.get('journal')
+            default_forecast_amount = request.POST.get('default_forecast_amount')
             
             if not (1 <= declaration_day <= 31):
                 raise ValueError("Invalid declaration day")
-                
+                    
             bank = get_object_or_404(BankAccount, id=bank_id)
             
             config = VATConfiguration.initialize(
                 declaration_day=declaration_day,
-                domiciliation_bank=bank
+                domiciliation_bank=bank,
+                invoiced_vat_account=invoiced_vat_account,
+                deducted_vat_account=deducted_vat_account,
+                journal=journal,
+                default_forecast_amount=default_forecast_amount
             )
             
             messages.success(request, "VAT Configuration updated successfully")
@@ -87,6 +95,21 @@ class VATDeclarationCreateView(View):
             
             if not (1 <= month <= 12):
                 raise ValueError("Invalid month")
+            
+            latest = VATDeclaration.objects.order_by('-period_year', '-period_month').first()
+            
+            if latest:
+                # Calculate next valid period
+                next_month = latest.period_month + 1
+                next_year = latest.period_year
+                if next_month > 12:
+                    next_month = 1
+                    next_year += 1
+                    
+                # Validate requested period
+                if year < next_year or (year == next_year and month < next_month):
+                    raise ValidationError(f"Can only create declaration for period {next_month}/{next_year} or later")
+            
                 
             declaration = VATDeclaration.objects.create(
                 period_month=month,
@@ -147,11 +170,25 @@ class VATDeclarationDetailView(View):
             invoice_summary[rate]['total_original'] += detail.original_amount
             invoice_summary[rate]['total_credits'] += detail.credit_amount
             invoice_summary[rate]['total_vat'] += detail.vat_amount
+
+        bank_fee_details = details.filter(source_type='bank_fee').order_by('vat_rate')
+        bank_fee_summary = {}
+        for detail in bank_fee_details:
+            rate = detail.vat_rate
+            if rate not in bank_fee_summary:
+                bank_fee_summary[rate] = {
+                    'count': 0,
+                    'total_amount': Decimal('0.00'),
+                    'total_vat': Decimal('0.00')
+                }
+            bank_fee_summary[rate]['count'] += 1
+            bank_fee_summary[rate]['total_amount'] += detail.original_amount
+            bank_fee_summary[rate]['total_vat'] += detail.vat_amount
         
         # Calculate totals
         total_receipts = Decimal('0.00')
         total_invoices = Decimal('0.00')
-        
+        total_bank_fees = Decimal('0.00')
         # Sum up receipt totals
         for rate_summary in receipt_summary.values():
             total_receipts += rate_summary['total_vat']
@@ -159,6 +196,10 @@ class VATDeclarationDetailView(View):
         # Sum up invoice totals
         for rate_summary in invoice_summary.values():
             total_invoices += rate_summary['total_vat']
+        
+        # Sum up bank fee totals
+        for rate_summary in bank_fee_summary.values():
+            total_bank_fees += rate_summary['total_vat']
         
         print("\nTotals Calculation:")
         print(f"Receipt VAT Total: {total_receipts}")
@@ -168,10 +209,13 @@ class VATDeclarationDetailView(View):
             'declaration': declaration,
             'receipt_details': receipt_details,
             'invoice_details': invoice_details,
+            'bank_fee_details': bank_fee_details,
             'receipt_summary': receipt_summary,
             'invoice_summary': invoice_summary,
+            'bank_fee_summary': bank_fee_summary,
             'total_receipts': total_receipts,
-            'total_invoices': total_invoices
+            'total_invoices': total_invoices,
+            'total_bank_fees': total_bank_fees
         }
         
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
@@ -387,7 +431,6 @@ class VATDeductionDetailsView(View):
         declaration = get_object_or_404(VATDeclaration, id=declaration_id)
         consolidated_details = {}  # Key will be (supplier_id, invoice_id, vat_rate)
         
-        # Get all deduction details
         deduction_details = declaration.details.exclude(
             source_type='receipt'
         ).select_related(
@@ -399,6 +442,51 @@ class VATDeductionDetailsView(View):
         total_raw = Decimal('0.00')
         total_vat = Decimal('0.00')
         total_net = Decimal('0.00')
+
+        bank_fees = deduction_details.filter(source_type='bank_fee')
+        print(f"\nProcessing {bank_fees.count()} bank fees")
+
+        for detail in bank_fees:
+            print(f"\nProcessing bank fee detail: {detail.id}")
+            print(f"VAT amount: {detail.vat_amount}")
+            print(f"Original amount: {detail.original_amount}")
+            
+            try:
+                fee = BankFeeTransaction.objects.select_related(
+                    'fee_type', 
+                    'bank_account'
+                ).get(id=detail.source_id)
+
+                consolidated_details[(None, fee.id, detail.vat_rate, 'bank_fee')] = {
+                    'payment_date': fee.date,
+                    'payment_code': '3',  # Direct debit code
+                    'supplier_name': fee.bank_account.get_bank_display(),  # Bank name
+                    'if_code': fee.bank_account.if_code,  # Bank IF code
+                    'ice_code': fee.bank_account.ice_code,  # Bank ICE code
+                    'invoice_date': fee.date,
+                    'invoice_ref': fee.fee_type.name,  # Fee type name as reference
+                    'invoice_id': None,
+                    'vat_rate': detail.vat_rate,
+                    'fiscal_labels': 'Bank Fee',
+                    'raw_amount': detail.original_amount,
+                    'vat_amount': detail.vat_amount,
+                    'net_amount': detail.original_amount + detail.vat_amount,
+                    'is_credit_note': False,
+                    'order': 1,
+                    'is_bank_fee': True
+                }
+                
+                print(f"Bank: {fee.bank_account.get_bank_display()}")
+                print(f"IF Code: {fee.bank_account.if_code}")
+                print(f"ICE Code: {fee.bank_account.ice_code}")
+                
+                total_raw += detail.original_amount
+                total_vat += detail.vat_amount
+                total_net += detail.original_amount + detail.vat_amount
+                
+            except BankFeeTransaction.DoesNotExist:
+                print(f"Bank fee {detail.source_id} not found")
+                continue
         
         for detail in deduction_details:
             print(f"\nProcessing detail: {detail.source_type} - {detail.source_id}")
@@ -480,7 +568,7 @@ class VATDeductionDetailsView(View):
                                 'invoice_ref': invoice.ref,
                                 'invoice_id': invoice.id,
                                 'vat_rate': rate,
-                                'fiscal_labels': fiscal_labels,
+                                'fiscal_labels': ' - '.join(sorted(fiscal_labels)) if fiscal_labels else '',
                                 'raw_amount': amounts['amount'],
                                 'vat_amount': amounts['vat'],
                                 'net_amount': amounts['amount'] + amounts['vat'],
@@ -488,9 +576,10 @@ class VATDeductionDetailsView(View):
                                 'order': 1 if is_fully_paid else 2
                             }
                             print(f"Created new consolidated entry:")
+                            print(f"Key: {key}")
+                            print(f"Consolidated details: {consolidated_details[key]}")
                             print(f"Raw amount: {amounts['amount']}")
                             print(f"VAT amount: {amounts['vat']}")
-                            
                         else:
                             # Update amounts for existing entry
                             consolidated_details[key]['raw_amount'] += amounts['amount']
@@ -527,10 +616,8 @@ class VATDeductionDetailsView(View):
         # Convert consolidated details to list and calculate totals
         details = []
         for detail in consolidated_details.values():
-            # Join fiscal labels with separator
-            detail['fiscal_label'] = ' - '.join(sorted(detail['fiscal_labels']))
-            del detail['fiscal_labels']
-            
+            if 'fiscal_label' in detail and isinstance(detail['fiscal_label'], set):
+                detail['fiscal_label'] = ' - '.join(sorted(detail['fiscal_label']))
             details.append(detail)
             total_raw += detail['raw_amount']
             total_vat += detail['vat_amount']

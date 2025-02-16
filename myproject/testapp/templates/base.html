@@ -316,7 +316,7 @@
                 <li class="nav-item">
                     <a class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}" 
                        href="{% url 'home' %}">
-                        <i class="fas fa-home me-2"></i> Dashboard
+                        <i class="fas fa-home me-2"></i> {% trans "Dashboard" %}
                     </a>
                 </li>
 
@@ -325,7 +325,7 @@
                 <li class="nav-item">
                     <a class="nav-link {% if 'users' in request.path %}active{% endif %}" 
                     href="{% url 'user-management' %}">
-                        <i class="fas fa-users-cog me-2"></i> User Management
+                        <i class="fas fa-users-cog me-2"></i> {% trans "User Management" %}
                     </a>
                 </li>
                 {% endif %}
@@ -338,32 +338,32 @@
                     role="button" 
                     aria-expanded="false" 
                     aria-controls="businessSubmenu">
-                        <span><i class="fas fa-briefcase me-2"></i> Business Operations</span>
+                        <span><i class="fas fa-briefcase me-2"></i> {% trans "Business Operations" %}</span>
                     </a>
                     <div class="collapse nav-dropdown" id="businessSubmenu">
                         <a class="nav-link {% if 'supplier' in request.path %}active{% endif %}" 
                         href="{% url 'supplier-list' %}">
-                            <i class="fas fa-truck me-2"></i> Suppliers
+                            <i class="fas fa-truck me-2"></i> {% trans "Suppliers" %}
                         </a>
                         <a class="nav-link {% if 'product' in request.path %}active{% endif %}" 
                         href="{% url 'product-list' %}">
-                            <i class="fas fa-box-open me-2"></i> Products
+                            <i class="fas fa-box-open me-2"></i> {% trans "Products" %}
                         </a>
                         <a class="nav-link {% if 'delivery-note' in request.path %}active{% endif %}" 
                         href="{% url 'delivery-note-list' %}">
-                            <i class="fas fa-truck me-2"></i> Delivery Notes
+                            <i class="fas fa-truck me-2"></i> {% trans "Delivery Notes" %}
                         </a>
                         <a class="nav-link {% if 'reception-note' in request.path %}active{% endif %}" 
                         href="{% url 'reception-note-list' %}">
-                            <i class="fas fa-clipboard-check me-2"></i> Reception Notes
+                            <i class="fas fa-clipboard-check me-2"></i> {% trans "Reception Notes" %}
                         </a>
                         <a class="nav-link {% if 'invoice' in request.path %}active{% endif %}" 
                         href="{% url 'invoice-list' %}">
-                            <i class="fas fa-file-invoice-dollar me-2"></i> Invoices
+                            <i class="fas fa-file-invoice-dollar me-2"></i> {% trans "Invoices" %}
                         </a>
                         <a class="nav-link {% if 'contract' in request.path %}active{% endif %}" 
                         href="{% url 'contract-list' %}">
-                            <i class="fas fa-file-contract me-2"></i> Contracts
+                            <i class="fas fa-file-contract me-2"></i> {% trans "Contracts" %}
                         </a>
                     </div>
                 </li>
@@ -376,24 +376,24 @@
                        role="button" 
                        aria-expanded="false" 
                        aria-controls="clientSubmenu">
-                        <span><i class="fas fa-users me-2"></i> Clients</span>
+                        <span><i class="fas fa-users me-2"></i> {% trans "Clients" %}</span>
                     </a>
                     <div class="collapse nav-dropdown" id="clientSubmenu">
                         <a class="nav-link {% if 'receipt' in request.path %}active{% endif %}" 
                            href="{% url 'receipt-list' %}">
-                            <i class="fas fa-receipt me-2"></i> Receipts
+                            <i class="fas fa-receipt me-2"></i> {% trans "Receipts" %}
                         </a>
                         <a class="nav-link {% if 'client_management' in request.path %}active{% endif %}" 
                            href="{% url 'client_management' %}">
-                            <i class="fas fa-address-card me-2"></i> Clients
+                            <i class="fas fa-address-card me-2"></i> {% trans "Clients" %}
                         </a>
                         <a class="nav-link {% if 'sale-list' in request.path %}active{% endif %}" 
                            href="{% url 'sale-list' %}">
-                            <i class="fas fa-shopping-cart me-2"></i> Sales
+                            <i class="fas fa-shopping-cart me-2"></i> {% trans "Sales" %}
                         </a>
                         <a class="nav-link {% if 'presentation' in request.path %}active{% endif %}" 
                             href="{% url 'presentation-list' %}">
-                            <i class="fas fa-file-powerpoint me-2"></i> Presentations
+                            <i class="fas fa-file-powerpoint me-2"></i> {% trans "Presentations" %}
                         </a>
                     </div>
                 </li>
@@ -406,56 +406,56 @@
                     role="button" 
                     aria-expanded="false" 
                     aria-controls="financialSubmenu">
-                        <span><i class="fas fa-money-bill-wave me-2"></i> Financial Management</span>
+                        <span><i class="fas fa-money-bill-wave me-2"></i> {% trans "Financial Management" %}</span>
                     </a>
                     <div class="collapse nav-dropdown" id="financialSubmenu">
                         <!-- Bank & Payments Section -->
                         <div class="nav-section">
-                            <div class="nav-section-header">Banking & Payments</div>
+                            <div class="nav-section-header">{% trans "Banking & Payments" %}</div>
                             <a class="nav-link {% if 'bank-account' in request.path %}active{% endif %}" 
                             href="{% url 'bank-account-list' %}">
-                                <i class="fas fa-university me-2"></i> Bank Accounts
+                                <i class="fas fa-university me-2"></i> {% trans "Bank Accounts" %}
                             </a>
                             <a class="nav-link" href="{% url 'calendar' %}">
-                                <i class="fas fa-calendar-alt me-2"></i> Payment Calendar
+                                <i class="fas fa-calendar-alt me-2"></i> {% trans "Payment Calendar" %}
                             </a>
                             <a class="nav-link {% if 'checks' in request.path %}active{% endif %}" 
                             href="{% url 'check-list' %}">
-                                <i class="fas fa-money-check me-2"></i> Checks
+                                <i class="fas fa-money-check me-2"></i> {% trans "Checks" %}
                             </a>
                             <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" 
                             href="{% url 'checker-list' %}">
-                                <i class="fas fa-user-shield me-2"></i> Checkers
+                                <i class="fas fa-user-shield me-2"></i> {% trans "Checkers" %}
                             </a>
                         </div>
 
                         <!-- Pay Management Section -->
                         <div class="nav-section">
-                            <div class="nav-section-header">Pay Management</div>
+                            <div class="nav-section-header">{% trans "Pay Management" %}</div>
                             <a class="nav-link {% if request.path == '/testapp/pay/' %}active{% endif %}" 
                             href="{% url 'pay-list' %}">
-                                <i class="fas fa-home me-2"></i> Dashboard
+                                <i class="fas fa-home me-2"></i> {% trans "Dashboard" %}
                             </a>
                             <a class="nav-link {% if 'pay/items' in request.path %}active{% endif %}" 
                             href="{% url 'pay-item-list' %}">
-                                <i class="fas fa-list me-2"></i> Pay Items
+                                <i class="fas fa-list me-2"></i> {% trans "Pay Items" %}
                             </a>
                             <a class="nav-link {% if 'pay/declarations' in request.path %}active{% endif %}" 
                             href="{% url 'pay-declaration-list' %}">
-                                <i class="fas fa-file-invoice me-2"></i> Declarations
+                                <i class="fas fa-file-invoice me-2"></i> {% trans "Declarations" %}
                             </a>
                             <a class="nav-link {% if 'pay/accounting' in request.path %}active{% endif %}" 
                             href="{% url 'pay-accounting' %}">
-                                <i class="fas fa-calculator me-2"></i> Accounting
+                                <i class="fas fa-calculator me-2"></i> {% trans "Accounting" %}
                             </a>
                         </div>
 
                         <!-- Tax Management Section -->
                         <div class="nav-section">
-                            <div class="nav-section-header">Tax Management</div>
+                            <div class="nav-section-header">{% trans "Tax Management" %}</div>
                             <a class="nav-link {% if 'vat' in request.path %}active{% endif %}" 
                             href="{% url 'vat-list' %}">
-                                <i class="fas fa-file-invoice-dollar me-2"></i> VAT
+                                <i class="fas fa-file-invoice-dollar me-2"></i> {% trans "VAT" %}
                             </a>
                         </div>
                     </div>
@@ -469,7 +469,7 @@
                     role="button" 
                     aria-expanded="false" 
                     aria-controls="productionSubmenu">
-                        <span><i class="fas fa-industry me-2"></i> Production Management</span>
+                        <span><i class="fas fa-industry me-2"></i> {% trans "Production Management" %}</span>
                     </a>
                     <div class="collapse nav-dropdown" id="productionSubmenu">
                         <div class="nav-section">
@@ -478,7 +478,7 @@
                             <!-- Brick Management -->
                             <a class="nav-link {% if request.resolver_match.url_name == 'brick-type-list' %}active{% endif %}" 
                             href="{% url 'brick-type-list' %}">
-                                <i class="fas fa-cube me-2"></i> Brick Management
+                                <i class="fas fa-cube me-2"></i> {% trans "Brick Management" %}
                             </a>
 
                             <!-- Energy Management -->
@@ -507,13 +507,13 @@
                         aria-labelledby="userDropdown">
                         <li>
                             <a class="dropdown-item" href="{% url 'profile' %}">
-                                <i class="fas fa-id-card me-2"></i> Profile
+                                <i class="fas fa-id-card me-2"></i> {% trans "Profile" %}
                             </a>
                         </li>
                         <li><hr class="dropdown-divider"></li>
                         <li>
                             <a class="dropdown-item text-danger" href="{% url 'logout' %}">
-                                <i class="fas fa-sign-out-alt me-2"></i> Logout
+                                <i class="fas fa-sign-out-alt me-2"></i> {% trans "Logout" %}
                             </a>
                         </li>
                     </ul>
@@ -546,10 +546,10 @@
                     <span class="badge bg-danger">3</span>
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">
-                    <li><h6 class="dropdown-header">Notifications</h6></li>
-                    <li><a class="dropdown-item" href="#">New invoice added</a></li>
-                    <li><a class="dropdown-item" href="#">Payment received</a></li>
-                    <li><a class="dropdown-item" href="#">Check due today</a></li>
+                    <li><h6 class="dropdown-header">{% trans "Notifications" %}</h6></li>
+                    <li><a class="dropdown-item" href="#">{% trans "New invoice added" %}</a></li>
+                    <li><a class="dropdown-item" href="#">{% trans "Payment received" %}</a></li>
+                    <li><a class="dropdown-item" href="#">{% trans "Check due today" %}</a></li>
                 </ul>
             </div>
 
