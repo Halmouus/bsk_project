@@ -1,0 +1,30 @@
+<table class="table table-hover">
+    <thead class="bg-light">
+        <tr>
+            <th>Date</th>
+            <th>Journal</th>
+            <th>Account</th>
+            <th>Description</th>
+            <th class="text-right">Debit</th>
+            <th class="text-right">Credit</th>
+            <th>Reference</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for entry in entries %}
+        <tr>
+            <td>{{ entry.date|date:"d-m-Y" }}</td>
+            <td>{{ entry.journal }}</td>
+            <td>{{ entry.account_code }}</td>
+            <td>{{ entry.description }}</td>
+            <td class="text-right">
+                {% if entry.debit %}{{ entry.debit|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td class="text-right">
+                {% if entry.credit %}{{ entry.credit|floatformat:2 }}{% else %}-{% endif %}
+            </td>
+            <td>{{ entry.reference }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

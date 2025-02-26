@@ -305,7 +305,10 @@
         <tbody>
             {% for invoice in invoices %}
                 {% if invoice.type == 'invoice' %}
-                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}">
+                <tr class="{% if invoice.payment_status == 'paid' %}table-success{% elif invoice.exported_at %}table-light{% endif %}"
+                    data-cash-payment-allowed="{{ invoice.cash_payment_allowed|yesno:'true,false' }}"
+                    data-amount="{{ invoice.total_amount }}"
+                    data-payment-status="{{ invoice.payment_status }}">
                     <!-- Selection -->
                     <td class="align-middle">
                         {% if invoice.exported_at %}
@@ -485,6 +488,14 @@
                                         data-target="#paymentDetailsModal"
                                         data-invoice="{{ invoice.id }}">
                                     <i class="fas fa-money-bill-wave fa-fw"></i> Payment Details
+                                </button>
+
+                                <button class="dropdown-item" type="button"
+                                        data-toggle="modal" 
+                                        data-target="#cashPaymentModal"
+                                        data-invoice-id="{{ invoice.id }}"
+                                        {% if not invoice.cash_payment_allowed or invoice.total_amount > 5000 %}disabled{% endif %}>
+                                    <i class="fas fa-money-bill-wave fa-fw"></i> Cash Payment
                                 </button>
 
                                 <button class="dropdown-item accounting-summary-btn" type="button"
@@ -896,6 +907,56 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add to invoice_list.html -->
+<div class="modal fade" id= "cashPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill-wave"></i> Cash Payment
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="invoice-payment-details" class="alert alert-info">
+                    <!-- Filled by JavaScript -->
+                </div>
+
+                <form id="cash-payment-form">
+                    <input type="hidden" id="invoice-id" name="invoice-id">
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="payment-amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <small class="text-muted">Available cash: <span id="available-cash">0.00</span></small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="payment-reference" class="form-control" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Payment Date *</label>
+                        <input type="date" id="payment-date" class="form-control" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="payment-notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="submit-cash-payment">
+                    <i class="fas fa-save"></i> Make Payment
+                </button>
             </div>
         </div>
     </div>
@@ -1489,8 +1550,24 @@ showAccountingSummary: function(invoiceId) {
 
     updateChecksTable: function(checks) {
         console.log('Updating checks table with:', checks);
+        console.log('Checks type:', typeof checks);
+        console.log('Is array?', Array.isArray(checks));
+        
         const tbody = $('#payment-checks-tbody');
         tbody.empty();
+
+        if (!checks || checks.length === 0) {
+            console.log('No checks found or empty array');
+        } else {
+            console.log('Found checks:', checks.length);
+            checks.forEach(check => {
+                console.log('Processing check:', {
+                    type: check.type,
+                    amount: check.amount,
+                    reference: check.reference
+                });
+            });
+        }
 
         if (!checks || checks.length === 0) {
             tbody.append(`
@@ -1511,6 +1588,8 @@ showAccountingSummary: function(invoiceId) {
                 this.appendDirectDebitRow(row, check);
             } else if (check.type === 'direct') {
                 this.appendDirectPaymentRow(row, check);
+            } else if (check.type === 'cash') {
+            this.appendCashPaymentRow(row, check);
             } else {
                 this.appendAllocationRow(row, check);
             }
@@ -1560,6 +1639,24 @@ showAccountingSummary: function(invoiceId) {
             <td>${Utils.formatDate(check.delivered_at)}</td>
             <td>${Utils.formatDate(check.paid_at)}</td>
             <td>${Utils.getStatusBadge(check.status)}</td>
+        `;
+    },
+
+    appendCashPaymentRow: function(row, check) {
+        row.innerHTML = `
+            <td>
+                <i class="fas fa-money-bill-wave text-success mr-2"></i>
+                ${check.reference}
+                <br>
+                <span class="badge badge-success">Cash Payment</span>
+            </td>
+            <td class="text-right font-weight-bold">
+                ${Utils.formatMoney(check.amount)}
+            </td>
+            <td>${Utils.formatDate(check.created_at)}</td>
+            <td>${Utils.formatDate(check.created_at)}</td>
+            <td>${Utils.formatDate(check.paid_at)}</td>
+            <td>${Utils.getStatusBadge('paid')}</td>
         `;
     },
 
@@ -2267,6 +2364,151 @@ $(document).ready(function() {
         // Clear URL parameters and reload page
         window.location.search = '';
     });
+    updatePaymentButtons();
 });
+
+$('#cashPaymentModal').on('show.bs.modal', function(event) {
+    const button = $(event.relatedTarget);
+    const invoiceId = button.data('invoice-id');
+    
+    // Check if invoice ID is available
+    if (!invoiceId) {
+        console.error('No invoice ID provided');
+        return;
+    }
+    
+    console.log('Loading details for invoice:', invoiceId);
+    
+    // Set default date
+    $('#payment-date').val(new Date().toISOString().split('T')[0]);
+    
+    // Clear previous data
+    $('#payment-amount').val('');
+    $('#payment-reference').val('');
+    $('#payment-notes').val('');
+    
+    // Load invoice details
+    $.get(`/testapp/cash/payment/invoice/${invoiceId}/`, function(response) {
+        if (response.status !== 'success') {
+            alert('Error loading invoice details');
+            return;
+        }
+        
+        const invoice = response.invoice;
+        const config = response.cash_config;
+        
+        // Update invoice information
+        $('#invoice-payment-details').html(`
+            <div>
+                <strong>Invoice:</strong> ${invoice.ref}<br>
+                <strong>Supplier:</strong> ${invoice.supplier}<br>
+                <strong>Total Amount:</strong> ${invoice.total_amount.toFixed(2)}<br>
+                <strong>Remaining Amount:</strong> ${invoice.remaining.toFixed(2)}<br>
+                <strong>Available Cash:</strong> ${config.current_balance.toFixed(2)}
+            </div>
+        `);
+        
+        // Set max amount to minimum of remaining amount and available cash
+        const maxAmount = Math.min(invoice.remaining, config.current_balance);
+        $('#payment-amount').attr('max', maxAmount);
+        $('#payment-amount').val(maxAmount.toFixed(2));
+        
+        // Store invoice ID
+        $('#invoice-id').val(invoiceId);
+    })
+    .fail(function(xhr) {
+        console.error('Error fetching invoice details:', xhr);
+        alert('Error loading invoice details');
+    });
+});
+
+$('#submit-cash-payment').on('click', function() {
+    const invoiceId = $('#invoice-id').val();
+    const amount = $('#payment-amount').val();
+    const date = $('#payment-date').val();
+    const reference = $('#payment-reference').val();
+    const notes = $('#payment-notes').val();
+    
+    console.log('Validation Values:', {
+        invoiceId,
+        amount,
+        date,
+        reference,
+        notes
+    });
+    
+    // Basic validation
+    if (!invoiceId || !amount || !date || !reference) {
+        console.log('Failed validation for:', {
+            hasInvoiceId: !!invoiceId,
+            hasAmount: !!amount,
+            hasDate: !!date,
+            hasReference: !!reference
+        });
+        alert('Please fill all required fields');
+        return;
+    }
+    
+    const data = {
+        invoice_id: invoiceId,
+        amount: amount,
+        date: date,
+        reference: reference,
+        notes: notes
+    };
+    
+    console.log('Submitting payment:', data);
+    
+    $.ajax({
+        url: '{% url "cash-payments" %}',
+        method: 'POST',
+        data: JSON.stringify(data),
+        contentType: 'application/json',
+        headers: {
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        success: function(response) {
+            console.log('Payment successful:', response);
+            // Close modal
+            $('#cashPaymentModal').modal('hide');
+            // Reload page to show updated data
+            location.reload();
+        },
+        error: function(xhr) {
+            console.error('Payment error:', xhr);
+            alert(xhr.responseJSON?.message || 'Error processing payment');
+        }
+    });
+});
+
+function updatePaymentButtons() {
+    console.log('Updating payment buttons...');
+    document.querySelectorAll('[data-target="#cashPaymentModal"]').forEach(button => {
+        const invoiceRow = button.closest('tr');
+        const cashAllowed = invoiceRow.dataset.cashPaymentAllowed === 'true';
+        const amount = parseFloat(invoiceRow.dataset.amount || 0);
+        const isPaid = invoiceRow.dataset.paymentStatus === 'paid';
+        
+        console.log('Invoice:', {
+            'cashAllowed': cashAllowed,
+            'amount': amount,
+            'isPaid': isPaid
+        });
+        
+        // Enable button only if conditions are met
+        button.disabled = !cashAllowed || amount > 5000 || isPaid;
+        
+        // Add tooltip explaining why it's disabled
+        if (!cashAllowed) {
+            button.setAttribute('title', 'Cash payment not allowed for this invoice');
+        } else if (amount > 5000) {
+            button.setAttribute('title', 'Amount exceeds cash payment limit (5000)');
+        } else if (isPaid) {
+            button.setAttribute('title', 'Invoice already paid');
+        } else {
+            button.setAttribute('title', 'Pay with cash');
+        }
+    });
+}
 </script>
 {% endblock %}

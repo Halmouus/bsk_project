@@ -24,23 +24,28 @@ def space_thousands(value):
     if value is None:
         return ''
     
-    # Format to 2 decimal places first
-    formatted = floatformat(value, 2)
-    
-    # Split the number into integer and decimal parts
-    if '.' in formatted:
+    try:
+        # Convert to decimal for consistent handling
+        if isinstance(value, str):
+            value = value.replace(' ', '').replace(',', '.')
+        value = Decimal(str(value))
+        
+        # Format with 2 decimal places
+        formatted = '{:.2f}'.format(value)
+        
+        # Split into integer and decimal parts
         integer_part, decimal_part = formatted.split('.')
-    else:
-        integer_part, decimal_part = formatted, '00'
-
-    # Add space thousand separators to integer part
-    int_with_spaces = ''
-    for i, digit in enumerate(reversed(integer_part)):
-        if i and i % 3 == 0:
-            int_with_spaces = ' ' + int_with_spaces
-        int_with_spaces = digit + int_with_spaces
-
-    return f'{int_with_spaces}.{decimal_part}'
+        
+        # Format integer part with space separators
+        int_with_spaces = ''
+        for i, digit in enumerate(reversed(integer_part)):
+            if i and i % 3 == 0:
+                int_with_spaces = ' ' + int_with_spaces
+            int_with_spaces = digit + int_with_spaces
+            
+        return f'{int_with_spaces}.{decimal_part}'
+    except (ValueError, TypeError, InvalidOperation):
+        return str(value)
 
 @register.filter
 def format_balance(value):
@@ -130,3 +135,11 @@ def subtract(value, arg):
 @register.filter
 def amount_to_words(value):
     return number_to_french_words(float(value))
+
+@register.filter
+def replace(value, arg):
+    """Replace the first substring matching the argument with the second substring"""
+    args = arg.split(':')
+    if len(args) != 2:
+        return value
+    return value.replace(args[0], args[1])

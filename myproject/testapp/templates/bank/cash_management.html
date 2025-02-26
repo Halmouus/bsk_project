@@ -1,0 +1,960 @@
+{% extends 'base.html' %}
+{% load humanize %}
+{% load accounting_filters %}
+
+{% block title %}Cash Management{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card border-left-primary shadow-sm h-100 py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Cash Balance
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ current_balance|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-wallet fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="col-md-9">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="text-primary font-weight-bold mb-4">Quick Actions</h6>
+                <div class="d-flex justify-content-around">
+                    <button class="btn-quick-action deposit-action" data-toggle="modal" data-target="#newDepositModal">
+                        <div class="icon-wrapper bg-primary">
+                            <i class="fas fa-plus-circle fa-2x"></i>
+                        </div>
+                        <span class="action-label">New Deposit</span>
+                        <small class="text-muted">Add funds to cash reserve</small>
+                    </button>
+        
+                    <button class="btn-quick-action expense-action" data-toggle="modal" data-target="#newExpenseModal">
+                        <div class="icon-wrapper bg-danger">
+                            <i class="fas fa-file-invoice fa-2x"></i>
+                        </div>
+                        <span class="action-label">New Expense</span>
+                        <small class="text-muted">Record direct expense</small>
+                    </button>
+        
+                    <button class="btn-quick-action payment-action" data-toggle="modal" data-target="#cashPaymentModal">
+                        <div class="icon-wrapper bg-success">
+                            <i class="fas fa-money-bill-wave fa-2x"></i>
+                        </div>
+                        <span class="action-label">Pay Invoice</span>
+                        <small class="text-muted">Pay invoice with cash</small>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Button -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body d-flex justify-content-between align-items-center">
+        <div>
+            <h5 class="font-weight-bold mb-0">Cash Configuration</h5>
+            <p class="text-muted mb-0 small">
+                <span class="mr-3"><i class="fas fa-book mr-1"></i> Journal: {{ config.journal_code|default:'Not Set' }}</span>
+                <span><i class="fas fa-hashtag mr-1"></i> Account: {{ config.accounting_code|default:'Not Set' }}</span>
+            </p>
+        </div>
+        <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#configModal">
+            <i class="fas fa-cog mr-1"></i> Edit Configuration
+        </button>
+    </div>
+</div>
+
+<!-- Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card border-left-primary shadow-sm py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                            Current Cash Balance
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ current_balance|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-left-success shadow-sm py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                            Total Deposits
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ total_deposits|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-plus-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card border-left-danger shadow-sm py-2">
+            <div class="card-body">
+                <div class="row no-gutters align-items-center">
+                    <div class="col mr-2">
+                        <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                            Total Payments
+                        </div>
+                        <div class="h5 mb-0 font-weight-bold text-gray-800">
+                            {{ total_payments|floatformat:2 }}
+                        </div>
+                    </div>
+                    <div class="col-auto">
+                        <i class="fas fa-minus-circle fa-2x text-gray-300"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Navigation Tabs -->
+<ul class="nav nav-tabs mb-4">
+    <li class="nav-item">
+        <a class="nav-link active" id="statement-tab" data-toggle="tab" href="#statement">
+            <i class="fas fa-file-alt"></i> Statement
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" id="accounting-tab" data-toggle="tab" href="#accounting">
+            <i class="fas fa-book"></i> Accounting
+        </a>
+    </li>
+</ul>
+
+<!-- Tab Content -->
+<div class="tab-content">
+
+<!-- Statement Tab -->
+<div class="tab-pane fade show active" id="statement">
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h6 class="font-weight-bold mb-0">Cash Statement</h6>
+                <div class="date-filter">
+                    <input type="date" class="form-control form-control-sm d-inline-block" style="width: auto" id="statement-start-date">
+                    <span class="mx-2">to</span>
+                    <input type="date" class="form-control form-control-sm d-inline-block" style="width: auto" id="statement-end-date">
+                    <button class="btn btn-primary btn-sm ml-2" id="filter-statement">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Reference</th>
+                            <th>Type</th>
+                            <th>Details</th>
+                            <th class="text-right">Credit</th>
+                            <th class="text-right">Debit</th>
+                            <th class="text-right">Balance</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="statement-entries">
+                        {% for entry in statement_entries %}
+                        <tr>
+                            <td>{{ entry.date|date:"d-m-Y" }}</td>
+                            <td>{{ entry.reference }}</td>
+                            <td>
+                                {% if entry.type == 'deposit' %}
+                                <span class="badge badge-success">Deposit</span>
+                                {% elif entry.type == 'expense' %}
+                                <span class="badge badge-warning">Expense</span>
+                                {% else %}
+                                <span class="badge badge-danger">Payment</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if entry.type == 'payment' %}
+                                <a href="{% url 'invoice-update' entry.invoice.id %}" target="_blank">
+                                    {{ entry.description }}
+                                </a>
+                                {% else %}
+                                {{ entry.description|default:"-" }}
+                                {% endif %}
+                            </td>
+                            <td class="text-right text-success">
+                                {% if entry.credit %}{{ entry.credit|floatformat:2 }}{% else %}-{% endif %}
+                            </td>
+                            <td class="text-right text-danger">
+                                {% if entry.debit %}{{ entry.debit|floatformat:2 }}{% else %}-{% endif %}
+                            </td>
+                            <td class="text-right font-weight-bold">{{ entry.balance|floatformat:2 }}</td>
+                            <td>
+                                {% if entry.type == 'payment' %}
+                                <button class="btn btn-sm btn-link view-payment" data-payment="{{ entry.id }}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">
+                                <i class="fas fa-info-circle mr-1"></i> No transactions found
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot class="bg-light font-weight-bold">
+                        <tr>
+                            <td colspan="4">Totals</td>
+                            <td class="text-right text-success">{{ total_credit|floatformat:2 }}</td>
+                            <td class="text-right text-danger">{{ total_debit|floatformat:2 }}</td>
+                            <td class="text-right">{{ current_balance|floatformat:2 }}</td>
+                            <td></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Accounting Tab -->
+    <div class="tab-pane fade" id="accounting">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 class="font-weight-bold mb-0">Accounting Entries</h6>
+                    <div class="date-filter">
+                        <input type="date" class="form-control form-control-sm" id="accounting-start-date">
+                        <span class="mx-2">to</span>
+                        <input type="date" class="form-control form-control-sm" id="accounting-end-date">
+                        <button class="btn btn-primary btn-sm ml-2" id="filter-accounting">
+                            <i class="fas fa-filter"></i> Filter
+                        </button>
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead class="bg-light">
+                            <tr>
+                                <th>Date</th>
+                                <th>Journal</th>
+                                <th>Account</th>
+                                <th>Description</th>
+                                <th class="text-right">Debit</th>
+                                <th class="text-right">Credit</th>
+                                <th>Reference</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accounting-entries">
+                            {% for entry in accounting_entries %}
+                            <tr>
+                                <td>{{ entry.date|date:"d-m-Y" }}</td>
+                                <td>{{ entry.journal }}</td>
+                                <td>{{ entry.account_code }}</td>
+                                <td>{{ entry.description }}</td>
+                                <td class="text-right">{{ entry.debit|default:"-"|floatformat:2 }}</td>
+                                <td class="text-right">{{ entry.credit|default:"-"|floatformat:2 }}</td>
+                                <td>{{ entry.reference }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Modal -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-cog"></i> Cash Configuration
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form method="post" class="needs-validation" novalidate>
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle mr-2"></i> These settings control how cash transactions are recorded in the accounting system.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Accounting Code *</label>
+                        <input type="text" name="accounting_code" class="form-control" 
+                                value="{{ config.accounting_code }}" required
+                                pattern="^\d{4,5}$">
+                        <div class="invalid-feedback">
+                            Please enter 4-5 digits for accounting code
+                        </div>
+                        <small class="form-text text-muted">
+                            Main account code for cash operations
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Journal Code *</label>
+                        <input type="text" name="journal_code" class="form-control" 
+                                value="{{ config.journal_code|default:'08' }}" required
+                                pattern="^\d{2}$">
+                        <div class="invalid-feedback">
+                            Please enter exactly 2 digits for journal code
+                        </div>
+                        <small class="form-text text-muted">
+                            Journal for cash accounting entries
+                        </small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Maximum Payment Threshold *</label>
+                        <input type="number" name="max_payment_threshold" class="form-control" 
+                            value="{{ max_threshold_value }}" required
+                            min="0.01" step="0.01">
+                        <div class="invalid-feedback">
+                            Please enter a valid threshold amount
+                        </div>
+                        <small class="form-text text-muted">
+                            Maximum amount that can be paid in cash
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Configuration
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- New Deposit Modal -->
+<div class="modal fade" id="newDepositModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-plus-circle"></i> New Cash Deposit
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="deposit-form" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="deposit-amount" name="amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <div class="invalid-feedback">
+                            Please enter a valid amount
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Date *</label>
+                        <input type="date" id="deposit-date" name="date" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please select a date
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Source *</label>
+                        <select id="deposit-source-type" class="form-control" required>
+                            <option value="">Select source...</option>
+                            <option value="bank">Bank Account</option>
+                            <option value="other">Other Source</option>
+                        </select>
+                        <div class="invalid-feedback">
+                            Please select a source
+                        </div>
+                    </div>
+                    
+                    <!-- Bank account selection (conditionally shown) -->
+                    <div id="bank-account-group" class="form-group d-none">
+                        <label class="small font-weight-bold">Bank Account *</label>
+                        <select id="deposit-bank-account" class="form-control">
+                            <option value="">Select bank account...</option>
+                            {% for account in bank_accounts %}
+                            <option value="{{ account.id }}">
+                                {{ account.get_bank_display }} - {{ account.account_number }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">
+                            Please select a bank account
+                        </div>
+                    </div>
+                    
+                    <!-- Account code (conditionally shown) -->
+                    <div id="account-code-group" class="form-group d-none">
+                        <label class="small font-weight-bold">Source Account Code *</label>
+                        <input type="text" id="deposit-account-code" class="form-control"
+                               pattern="^\d{4,5}$">
+                        <div class="invalid-feedback">
+                            Please enter a valid account code (4-5 digits)
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="deposit-reference" name="reference" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a reference number
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="deposit-notes" name="notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" id="submit-deposit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Save Deposit
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- New Expense Modal -->
+<div class="modal fade" id="newExpenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-danger text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-invoice"></i> New Direct Expense
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="expense-form" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Expense Type *</label>
+                        <select id="expense-type" class="form-control" required>
+                            <option value="">Select type...</option>
+                            {% for code, name in expense_types.items %}
+                            <option value="{{ code }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">
+                            Please select an expense type
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="expense-amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <div class="invalid-feedback">
+                            Please enter a valid amount
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Date *</label>
+                        <input type="date" id="expense-date" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please select a date
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Expense Account *</label>
+                        <input type="text" id="expense-account" class="form-control" required
+                               pattern="^\d{4,5}$">
+                        <div class="invalid-feedback">
+                            Please enter a valid 4-5 digit account code
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="expense-reference" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a reference number
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="expense-notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" id="submit-expense" class="btn btn-danger">
+                        <i class="fas fa-save"></i> Record Expense
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Cash Payment Modal -->
+<div class="modal fade" id="cashPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill-wave"></i> Cash Payment
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="payment-form" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div id="invoice-list" class="mb-3">
+                        <label class="small font-weight-bold">Select Invoice *</label>
+                        <select id="invoice-selector" class="form-control" required>
+                            <option value="">Select invoice...</option>
+                            {% for invoice in invoices %}
+                            <option value="{{ invoice.id }}" 
+                                    data-ref="{{ invoice.ref }}"
+                                    data-amount="{{ invoice.get_cash_payment_status.remaining }}">
+                                {{ invoice.ref }} - {{ invoice.supplier.name }} ({{ invoice.get_cash_payment_status.remaining|floatformat:2 }})
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div id="invoice-payment-details" class="alert alert-info d-none">
+                        <!-- Filled by JavaScript -->
+                    </div>
+
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="payment-amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <small class="text-muted">Available cash: {{ current_balance|floatformat:2 }}</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Date *</label>
+                        <input type="date" id="payment-date" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please select a date
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="payment-reference" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a reference number
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="payment-notes" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <input type="hidden" id="invoice-id">
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="button" id="submit-payment" class="btn btn-success">
+                        <i class="fas fa-save"></i> Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .btn-quick-action {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: none;
+        border: none;
+        padding: 1rem;
+        border-radius: 1rem;
+        transition: all 0.3s ease;
+        width: 200px;
+    }
+    
+    .btn-quick-action:hover {
+        transform: translateY(-5px);
+        background: #f8f9fa;
+    }
+    
+    .icon-wrapper {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 1rem;
+        color: white;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-quick-action:hover .icon-wrapper {
+        transform: scale(1.1);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    
+    .action-label {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+        color: #2d3748;
+    }
+
+    .badge-expense {
+        background-color: #6c757d;
+        color: white;
+    }
+    
+    .deposit-action:hover .icon-wrapper { background: #4299e1; }
+    .expense-action:hover .icon-wrapper { background: #f56565; }
+    .payment-action:hover .icon-wrapper { background: #48bb78; }
+</style>
+
+<script>
+// Form validation
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
+
+$('#newExpenseModal').on('show.bs.modal', function() {
+    // Load available expense types
+    $.get('/testapp/cash/expense-types/', function(data) {
+        const select = $('#expense-type');
+        select.empty();
+        data.forEach(type => {
+            select.append(new Option(type.name, type.code));
+        });
+    });
+
+    // Set default date to today
+    $('#expense-date').val(new Date().toISOString().split('T')[0]);
+});
+
+$('#submit-expense').on('click', function() {
+    const data = {
+        expense_type: $('#expense-type').val(),
+        amount: $('#expense-amount').val(),
+        date: $('#expense-date').val(),
+        expense_account: $('#expense-account').val(),
+        reference: $('#expense-reference').val(),
+        notes: $('#expense-notes').val()
+    };
+
+    $.ajax({
+        url: '{% url "cash-expenses" %}',
+        method: 'POST',
+        data: JSON.stringify(data),
+        contentType: 'application/json',
+        success: function(response) {
+            location.reload();
+        },
+        error: function(xhr) {
+                alert(xhr.responseJSON.message || 'Error creating expense');
+            }
+        });
+    });
+
+    $('#newDepositModal').on('show.bs.modal', function() {
+        console.log('Opening deposit modal');
+        // Reset form
+        $('#deposit-form')[0].reset();
+        // Set default date
+        $('#deposit-date').val(new Date().toISOString().split('T')[0]);
+        // Hide conditional fields
+        $('#bank-account-group, #account-code-group').addClass('d-none');
+        // Remove required attribute
+        $('#deposit-bank-account, #deposit-account-code').prop('required', false);
+    });
+
+    // Handle source type change
+    $('#deposit-source-type').on('change', function() {
+        const sourceType = $(this).val();
+        
+        // Reset fields
+        $('#bank-account-group, #account-code-group').addClass('d-none');
+        $('#deposit-bank-account, #deposit-account-code').prop('required', false);
+        
+        if (sourceType === 'bank') {
+            $('#bank-account-group').removeClass('d-none');
+            $('#deposit-bank-account').prop('required', true);
+        } else if (sourceType === 'other') {
+            $('#account-code-group').removeClass('d-none');
+            $('#deposit-account-code').prop('required', true);
+        }
+    });
+
+    $('#submit-deposit').on('click', function() {
+        console.log('Submitting deposit');
+        const form = $('#deposit-form');
+        
+        // Manual validation for conditional fields
+        const sourceType = $('#deposit-source-type').val();
+        let isValid = true;
+        
+        if (!sourceType) {
+            $('#deposit-source-type').addClass('is-invalid');
+            isValid = false;
+        } else {
+            $('#deposit-source-type').removeClass('is-invalid');
+            
+            if (sourceType === 'bank') {
+                if (!$('#deposit-bank-account').val()) {
+                    $('#deposit-bank-account').addClass('is-invalid');
+                    isValid = false;
+                } else {
+                    $('#deposit-bank-account').removeClass('is-invalid');
+                }
+            } else if (sourceType === 'other') {
+                const accountCode = $('#deposit-account-code').val();
+                if (!accountCode || !/^\d{4,5}$/.test(accountCode)) {
+                    $('#deposit-account-code').addClass('is-invalid');
+                    isValid = false;
+                } else {
+                    $('#deposit-account-code').removeClass('is-invalid');
+                }
+            }
+        }
+        
+        // Check other fields
+        if (!$('#deposit-amount').val() || !$('#deposit-date').val() || !$('#deposit-reference').val()) {
+            form.addClass('was-validated');
+            isValid = false;
+        }
+        
+        if (!isValid) {
+            return;
+        }
+
+        // Prepare data
+        const data = {
+            amount: $('#deposit-amount').val(),
+            date: $('#deposit-date').val(),
+            reference: $('#deposit-reference').val(),
+            notes: $('#deposit-notes').val(),
+            source_type: sourceType
+        };
+        
+        // Add source-specific data
+        if (sourceType === 'bank') {
+            data.bank_account_id = $('#deposit-bank-account').val();
+        } else if (sourceType === 'other') {
+            data.account_code = $('#deposit-account-code').val();
+        }
+
+        console.log('Deposit data:', data);
+
+        $.ajax({
+            url: '{% url "cash-deposits" %}',
+            method: 'POST',
+            data: JSON.stringify(data),
+            contentType: 'application/json',
+            success: function(response) {
+                console.log('Deposit success:', response);
+                location.reload();
+            },
+            error: function(xhr) {
+                console.error('Deposit error:', xhr);
+                alert(xhr.responseJSON.message || 'Error creating deposit');
+            }
+        });
+    });
+
+$(document).ready(function() {
+    // Initialize date filters with current month
+    const today = new Date();
+    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    
+    $('#statement-start-date, #accounting-start-date').val(firstDay.toISOString().split('T')[0]);
+    $('#statement-end-date, #accounting-end-date').val(today.toISOString().split('T')[0]);
+
+    // Statement filtering
+    $('#filter-statement').click(function() {
+        const startDate = $('#statement-start-date').val();
+        const endDate = $('#statement-end-date').val();
+        
+        $.get('{% url "cash-statement" %}', {
+            start_date: startDate,
+            end_date: endDate
+        }, function(response) {
+            $('#statement-entries').html(response.html);
+            updateStatementTotals(response.totals);
+        });
+    });
+
+    // Accounting filtering
+    $('#filter-accounting').click(function() {
+        const startDate = $('#accounting-start-date').val();
+        const endDate = $('#accounting-end-date').val();
+        
+        $.get('{% url "cash-accounting" %}', {
+            start_date: startDate,
+            end_date: endDate
+        }, function(response) {
+            $('#accounting-entries').html(response.html);
+        });
+    });
+
+    // Handle payment detail view
+    $('.view-payment').on('click', function() {
+        const paymentId = $(this).data('payment');
+        
+        $.get(`/testapp/cash/payment/detail/?id=${paymentId}`, function(response) {
+            showTransactionModal(response);
+        }).fail(function(error) {
+            console.error('Error fetching payment details:', error);
+            showTransactionModal({ error: 'Failed to load payment details' });
+        });
+    });
+
+    function updateStatementTotals(totals) {
+        $('.total-debit').text(parseFloat(totals.debit).toFixed(2));
+        $('.total-credit').text(parseFloat(totals.credit).toFixed(2));
+        $('.current-balance').text(parseFloat(totals.balance).toFixed(2));
+    }
+
+    function showPaymentDetailsModal(data) {
+        // Implementation of payment details modal
+        // ...
+    }
+
+    function showTransactionModal(data) {
+        if (!$('#transactionDetailsModal').length) {
+            $('body').append(`
+                <div class="modal fade" id="transactionDetailsModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header bg-primary text-white">
+                                <h5 class="modal-title">Payment Details</h5>
+                                <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
+                            </div>
+                            <div class="modal-body" id="transaction-details-content">
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `);
+        }
+        
+        // Fill modal content
+        if (data.payment) {
+            const p = data.payment;
+            const content = `
+                <div class="card">
+                    <div class="card-body">
+                        <h6 class="card-title font-weight-bold">
+                            <i class="fas fa-money-bill-wave text-primary mr-2"></i>
+                            Cash Payment
+                        </h6>
+                        <table class="table table-sm">
+                            <tr>
+                                <th style="width: 30%">Date:</th>
+                                <td>${p.date}</td>
+                            </tr>
+                            <tr>
+                                <th>Reference:</th>
+                                <td>${p.reference}</td>
+                            </tr>
+                            <tr>
+                                <th>Amount:</th>
+                                <td class="font-weight-bold text-danger">${parseFloat(p.amount).toFixed(2)}</td>
+                            </tr>
+                            <tr>
+                                <th>Invoice:</th>
+                                <td>
+                                    <a href="/testapp/invoices/${p.invoice.id}/update/" target="_blank">${p.invoice.ref}</a>
+                                    <div class="small text-muted">${p.invoice.supplier}</div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>Notes:</th>
+                                <td>${p.notes}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            `;
+            $('#transaction-details-content').html(content);
+        } else if (data.error) {
+            $('#transaction-details-content').html(`
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle mr-2"></i> ${data.error}
+                </div>
+            `);
+        }
+        
+        $('#transactionDetailsModal').modal('show');
+    }
+});
+</script>
+{% endblock %}

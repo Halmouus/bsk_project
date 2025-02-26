@@ -640,3 +640,27 @@ class VATDeductionDetailsView(View):
         }
         
         return render(request, 'vat/vat_deduction_details.html', context)
+    
+
+class VATDeclarationDeleteView(View):
+    def post(self, request, declaration_id):
+        """Delete VAT declaration"""
+        print(f"\n=== Deleting VAT Declaration {declaration_id} ===")
+        
+        try:
+            declaration = get_object_or_404(VATDeclaration, id=declaration_id)
+            
+            if not declaration.can_be_deleted():
+                raise ValidationError("This declaration cannot be deleted")
+                
+            declaration.delete()
+            messages.success(request, "VAT Declaration deleted successfully")
+            
+            return JsonResponse({'status': 'success'})
+            
+        except Exception as e:
+            print(f"Error: {str(e)}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)

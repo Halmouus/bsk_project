@@ -349,6 +349,11 @@
                         href="{% url 'product-list' %}">
                             <i class="fas fa-box-open me-2"></i> {% trans "Products" %}
                         </a>
+                        <a class="nav-link {% if 'asset-account' in request.path %}active{% endif %}" 
+                        href="{% url 'asset-account-list' %}">
+                            <i class="fas fa-building me-2"></i> {% trans "Asset Accounts" %}
+                        </a>
+                        
                         <a class="nav-link {% if 'delivery-note' in request.path %}active{% endif %}" 
                         href="{% url 'delivery-note-list' %}">
                             <i class="fas fa-truck me-2"></i> {% trans "Delivery Notes" %}
@@ -426,6 +431,19 @@
                             <a class="nav-link {% if 'checkers' in request.path %}active{% endif %}" 
                             href="{% url 'checker-list' %}">
                                 <i class="fas fa-user-shield me-2"></i> {% trans "Checkers" %}
+                            </a>
+                            <!-- Cash Management Section -->
+                            <a class="nav-link {% if 'cash-configuration' in request.path %}active{% endif %}" 
+                            href="{% url 'cash-configuration' %}">
+                                <i class="fas fa-cash-register me-2"></i> {% trans "Cash Management" %}
+                            </a>
+                            <a class="nav-link {% if 'cash-deposits' in request.path %}active{% endif %}" 
+                            href="{% url 'cash-deposits' %}">
+                                <i class="fas fa-money-bill-alt me-2"></i> {% trans "Cash Deposits" %}
+                            </a>
+                            <a class="nav-link {% if 'cash-expenses' in request.path %}active{% endif %}" 
+                            href="{% url 'cash-expenses' %}">
+                                <i class="fas fa-receipt me-2"></i> {% trans "Cash Expenses" %}
                             </a>
                         </div>
 

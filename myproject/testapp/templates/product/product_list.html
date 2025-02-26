@@ -1,81 +1,318 @@
 {% extends 'base.html' %}
 
-{% block title %}Product List{% endblock %}
+{% block title %}Products{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-    <h1 class="mb-4 animate__animated animate__fadeInDown">Product List</h1>
-    <a href="{% url 'product-create' %}" class="btn btn-primary mb-4 animate__animated animate__fadeIn">
-        <i class="fas fa-plus me-2"></i> Add New Product
-    </a>
-    <div class="table-responsive">
-        <table class="table table-hover table-striped animate__animated animate__fadeInUp">
-            <thead class="table-dark">
-                <tr>
-                    <th>Name</th>
-                    <th>VAT Rate</th>
-                    <th>Expense Code</th>
-                    <th class="text-end">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for product in products %}
-                    <tr class="animate__animated animate__fadeIn">
-                        <td class="fw-semibold">{{ product.name }}</td>
-                        <td>{{ product.vat_rate }}%</td>
-                        <td>{{ product.expense_code|default:"-" }}</td>
-                        <td class="text-end">
-                            <a href="{% url 'product-update' product.pk %}" class="btn btn-warning btn-sm">
-                                <i class="fas fa-edit"></i> Edit
-                            </a>
-                            <a href="{% url 'product-delete' product.pk %}" class="btn btn-danger btn-sm">
-                                <i class="fas fa-trash"></i> Delete
-                            </a>
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="display-5 mb-0 animate__animated animate__fadeInDown">
+                <i class="fas fa-boxes text-primary me-2"></i> Products
+            </h1>
+            <p class="text-muted mt-2">Manage your products and assets</p>
+        </div>
+        <a href="{% url 'product-create' %}" class="btn btn-primary btn-lg animate__animated animate__fadeIn">
+            <i class="fas fa-plus-circle me-2"></i> New Product
+        </a>
+    </div>
+
+    <!-- Filters Panel -->
+    <div class="card shadow-sm mb-4 animate__animated animate__fadeIn">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <!-- Search Bar -->
+                <div class="col-lg-4 col-md-6">
+                    <div class="search-box">
+                        <i class="fas fa-search search-icon"></i>
+                        <input type="text" 
+                               id="searchInput"
+                               name="search" 
+                               class="form-control form-control-lg search-input" 
+                               placeholder="Search products..." 
+                               value="{{ search }}"
+                               autocomplete="off">
+                        <div class="spinner-border spinner-border-sm text-primary search-spinner" role="status" style="display: none;">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Type Filter -->
+                <div class="col-lg-3 col-md-6">
+                    <div class="filter-box">
+                        <i class="fas fa-filter filter-icon"></i>
+                        <select name="type" class="form-select form-select-lg" onchange="this.form.submit()">
+                            <option value="" {% if not type_filter %}selected{% endif %}>All Types</option>
+                            <option value="regular" {% if type_filter == 'regular' %}selected{% endif %}>
+                                <i class="fas fa-box"></i> Regular Products
+                            </option>
+                            <option value="asset" {% if type_filter == 'asset' %}selected{% endif %}>
+                                <i class="fas fa-building"></i> Assets
+                            </option>
+                            <option value="energy" {% if type_filter == 'energy' %}selected{% endif %}>
+                                <i class="fas fa-bolt"></i> Energy Products
+                            </option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- VAT Filter -->
+                <div class="col-lg-3 col-md-6">
+                    <div class="filter-box">
+                        <i class="fas fa-percentage filter-icon"></i>
+                        <select name="vat_rate" class="form-select form-select-lg" onchange="this.form.submit()">
+                            <option value="" {% if not vat_filter %}selected{% endif %}>All VAT Rates</option>
+                            {% for rate in vat_rates %}
+                                <option value="{{ rate }}" {% if vat_filter == rate|stringformat:"s" %}selected{% endif %}>
+                                    {{ rate }}%
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Reset Button -->
+                <div class="col-lg-2 col-md-6 d-flex align-items-center">
+                    <a href="{% url 'product-list' %}" class="btn btn-outline-secondary btn-lg w-100">
+                        <i class="fas fa-undo-alt me-2"></i> Reset
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="card shadow-sm animate__animated animate__fadeInUp">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr class="bg-light">
+                        <th class="border-0 ps-4">Name</th>
+                        <th class="border-0">Type</th>
+                        <th class="border-0">Code</th>
+                        <th class="border-0">VAT Rate</th>
+                        <th class="border-0">Fiscal Label</th>
+                        <th class="border-0 text-end pe-4">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr class="product-row">
+                        <td class="ps-4">
+                            <div class="d-flex align-items-center">
+                                <i class="fas {% if product.is_asset %}fa-building{% elif product.is_energy %}fa-bolt{% else %}fa-box{% endif %} text-muted me-2"></i>
+                                <span class="fw-medium">{{ product.name }}</span>
+                            </div>
+                        </td>
+                        <td>
+                            {% if product.is_asset %}
+                                <span class="badge bg-info-subtle text-info">
+                                    <i class="fas fa-building me-1"></i> Asset
+                                </span>
+                            {% endif %}
+                            {% if product.is_energy %}
+                                <span class="badge bg-warning-subtle text-warning">
+                                    <i class="fas fa-bolt me-1"></i> Energy
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td><code class="bg-light px-2 py-1 rounded">{{ product.expense_code }}</code></td>
+                        <td>
+                            <span class="badge bg-primary-subtle text-primary">
+                                {{ product.vat_rate }}%
+                            </span>
+                        </td>
+                        <td class="text-muted">{{ product.fiscal_label }}</td>
+                        <td class="text-end pe-4">
+                            <div class="btn-group btn-group-sm">
+                                <a href="{% url 'product-update' product.pk %}" 
+                                   class="btn btn-outline-primary"
+                                   data-bs-toggle="tooltip"
+                                   title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </a>
+                                <a href="{% url 'product-delete' product.pk %}" 
+                                   class="btn btn-outline-danger"
+                                   data-bs-toggle="tooltip"
+                                   title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </a>
+                            </div>
                         </td>
                     </tr>
-                {% empty %}
+                    {% empty %}
                     <tr>
-                        <td colspan="4" class="text-center text-muted">No products found.</td>
+                        <td colspan="6" class="text-center py-5">
+                            <div class="empty-state">
+                                <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                                <h5 class="text-muted">No products found</h5>
+                                <p class="text-muted mb-0">Try adjusting your search or filters</p>
+                            </div>
+                        </td>
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <style>
+    /* Search and Filter Styles */
+    .search-box, .filter-box {
+        position: relative;
+    }
+
+    .search-icon, .filter-icon {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: #6c757d;
+        z-index: 10;
+    }
+
+    .search-input {
+        padding-left: 2.8rem;
+    }
+
+    .form-select {
+        padding-left: 2.8rem;
+    }
+
+    /* Table Styles */
+    .table {
+        font-size: 0.95rem;
+    }
+
+    .product-row {
+        transition: all 0.2s ease;
+    }
+
+    .product-row:hover {
+        background-color: rgba(78, 115, 223, 0.05);
+        transform: translateX(6px);
+    }
+
+    /* Badge Styles */
+    .badge {
+        font-size: 0.85em;
+        padding: 0.5em 0.8em;
+        font-weight: 500;
+    }
+
+    .bg-info-subtle {
+        background-color: rgba(13, 202, 240, 0.1);
+    }
+
+    .bg-warning-subtle {
+        background-color: rgba(255, 193, 7, 0.1);
+    }
+
+    .bg-primary-subtle {
+        background-color: rgba(13, 110, 253, 0.1);
+    }
+
+    /* Empty State */
+    .empty-state {
+        padding: 2rem;
+    }
+
+    /* Animation Duration */
     .animate__animated {
         animation-duration: 0.5s;
     }
 
-    .table-hover tbody tr:hover {
-        transform: translateX(8px);
-        transition: transform 0.3s ease;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    /* Button Styles */
+    .btn-group .btn {
+        padding: 0.5rem 0.75rem;
     }
 
-    .btn-warning {
-        background-color: #f59e0b;
-        border-color: #f59e0b;
+    .btn-group .btn:hover {
+        transform: translateY(-1px);
     }
 
-    .btn-warning:hover {
-        background-color: #d97706;
-        border-color: #d97706;
+    /* Add to your existing styles */
+    .search-spinner {
+        position: absolute;
+        right: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        display: none;
     }
 
-    .btn-danger {
-        background-color: #ef4444;
-        border-color: #ef4444;
-    }
-
-    .btn-danger:hover {
-        background-color: #dc2626;
-        border-color: #dc2626;
-    }
-
-    .table-striped tbody tr:nth-of-type(odd) {
-        background-color: rgba(241, 245, 249, 0.3);
+    .search-input {
+        padding-right: 2.8rem !important;
     }
 </style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
+
+    // Real-time search functionality
+    const searchInput = document.getElementById('searchInput');
+    const searchSpinner = document.querySelector('.search-spinner');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        // Show spinner
+        searchSpinner.style.display = 'block';
+        
+        // Clear previous timeout
+        clearTimeout(searchTimeout);
+        
+        // Set new timeout
+        searchTimeout = setTimeout(function() {
+            const searchValue = searchInput.value;
+            const currentUrl = new URL(window.location.href);
+            const searchParams = new URLSearchParams(currentUrl.search);
+            
+            // Update search parameter
+            if (searchValue) {
+                searchParams.set('search', searchValue);
+            } else {
+                searchParams.delete('search');
+            }
+            
+            // Keep other filters
+            const type = searchParams.get('type');
+            const vat_rate = searchParams.get('vat_rate');
+            
+            // Fetch updated results
+            fetch(`${currentUrl.pathname}?${searchParams.toString()}`, {
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(response => response.text())
+            .then(html => {
+                // Update table content
+                document.querySelector('.table-responsive').outerHTML = html;
+                
+                // Reinitialize tooltips
+                var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+                tooltipTriggerList.map(function (tooltipTriggerEl) {
+                    return new bootstrap.Tooltip(tooltipTriggerEl)
+                });
+                
+                // Hide spinner
+                searchSpinner.style.display = 'none';
+                
+                // Update URL without page reload
+                window.history.pushState({}, '', `${currentUrl.pathname}?${searchParams.toString()}`);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                searchSpinner.style.display = 'none';
+            });
+        }, 300); // 300ms delay
+    });
+});
+</script>
 {% endblock %}

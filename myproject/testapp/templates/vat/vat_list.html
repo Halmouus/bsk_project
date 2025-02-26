@@ -106,6 +106,11 @@
                                                         data-declaration-id="{{ declaration.id }}">
                                                     <i class="fas fa-cogs"></i>
                                                 </button>
+                                                <button class="btn btn-sm btn-danger delete-vat"
+                                                        data-declaration-id="{{ declaration.id }}"
+                                                        title="Delete Declaration">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
                                             {% endif %}
                                         {% elif declaration.status == 'declared' %}
                                             <button class="btn btn-sm btn-success pay-vat"
@@ -535,6 +540,33 @@ async function recordPayment() {
 function viewDetails(declarationId) {
     window.location.href = `/testapp/vat/${declarationId}/`;
 }
+
+document.querySelectorAll('.delete-vat').forEach(btn => {
+    btn.addEventListener('click', async function() {
+        if (!confirm('Are you sure you want to delete this declaration? This will undo all VAT marks.')) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/testapp/vat/${this.dataset.declarationId}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            });
+            
+            const result = await response.json();
+            if (response.ok) {
+                location.reload();
+            } else {
+                showToast('error', result.message || 'Failed to delete declaration');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showToast('error', 'Failed to delete declaration');
+        }
+    });
+});
 
 function showToast(type, message) {
     const container = document.querySelector('.toast-container') || (() => {

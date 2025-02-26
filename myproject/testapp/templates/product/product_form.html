@@ -11,28 +11,91 @@
         <div class="card-body">
             <form method="post" class="needs-validation" novalidate>
                 {% csrf_token %}
-                {% for field in form %}
-                    <div class="mb-3">
-                        <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
-                        {% if field.name == 'vat_rate' %}
-                            <select name="{{ field.name }}" class="form-select auto-size-select" required>
-                                {% for choice in field.field.choices %}
-                                    <option value="{{ choice.0 }}" {% if field.value|floatformat:2 == choice.0|floatformat:2 %}selected{% endif %}>
-                                        {{ choice.1 }}
-                                    </option>
-                                {% endfor %}
-                            </select>
-                        {% else %}
-                            {{ field }}
+                <div class="row">
+                    <!-- Product Name -->
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.name.id_for_label }}" class="form-label">Product Name *</label>
+                        <input type="text" name="name" class="form-control" id="{{ form.name.id_for_label }}" value="{{ form.name.value|default:'' }}" required>
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>
                         {% endif %}
-                        <div class="invalid-feedback">
-                            Please provide a valid {{ field.label }}.
-                        </div>
                     </div>
-                {% endfor %}
+
+                    <!-- VAT Rate -->
+                    <div class="col-md-6 mb-3">
+                        <label for="{{ form.vat_rate.id_for_label }}" class="form-label">VAT Rate *</label>
+                        {{ form.vat_rate }}
+                        {% if form.vat_rate.errors %}
+                            <div class="invalid-feedback d-block">{{ form.vat_rate.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Fiscal Label -->
+                <div class="mb-3">
+                    <label for="{{ form.fiscal_label.id_for_label }}" class="form-label">Fiscal Label *</label>
+                    <input type="text" name="fiscal_label" class="form-control" id="{{ form.fiscal_label.id_for_label }}" value="{{ form.fiscal_label.value|default:'' }}" required>
+                    {% if form.fiscal_label.errors %}
+                        <div class="invalid-feedback d-block">{{ form.fiscal_label.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Asset Toggle -->
+                <div class="mb-3">
+                    <div class="form-check form-switch">
+                        <input type="checkbox" name="is_asset" class="form-check-input asset-toggle" id="{{ form.is_asset.id_for_label }}" {% if form.is_asset.value %}checked{% endif %}>
+                        <label class="form-check-label" for="{{ form.is_asset.id_for_label }}">Treat as Asset</label>
+                    </div>
+                    {% if form.is_asset.errors %}
+                        <div class="invalid-feedback d-block">{{ form.is_asset.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <!-- Dynamic Fields Container -->
+                <div class="asset-dependent-fields">
+                    <!-- Expense Code (shown when not asset) -->
+                    <div class="mb-3 expense-field">
+                        <label for="{{ form.expense_code.id_for_label }}" class="form-label">Expense Code *</label>
+                        <input type="text" name="expense_code" class="form-control" id="{{ form.expense_code.id_for_label }}" value="{{ form.expense_code.value|default:'' }}">
+                        {% if form.expense_code.errors %}
+                            <div class="invalid-feedback d-block">{{ form.expense_code.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Asset Account (shown when asset) -->
+                    <div class="mb-3 asset-field" style="display: none;">
+                        <label for="{{ form.asset_account.id_for_label }}" class="form-label">Asset Account *</label>
+                        {{ form.asset_account }}
+                        <div class="mt-2 d-flex justify-content-between align-items-center">
+                            <small class="text-muted">
+                                {% if form.instance.asset_account %}
+                                    Account Code: {{ form.instance.asset_account.account_code }}
+                                {% endif %}
+                            </small>
+                            <a href="{% url 'asset-account-create' %}" class="btn btn-sm btn-outline-primary" target="_blank">
+                                <i class="fas fa-plus"></i> Create New Asset Account
+                            </a>
+                        </div>
+                        {% if form.asset_account.errors %}
+                            <div class="invalid-feedback d-block">{{ form.asset_account.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Energy Flag -->
+                <div class="mb-3">
+                    <div class="form-check">
+                        <input type="checkbox" name="is_energy" class="form-check-input" id="{{ form.is_energy.id_for_label }}" {% if form.is_energy.value %}checked{% endif %}>
+                        <label class="form-check-label" for="{{ form.is_energy.id_for_label }}">Energy Product</label>
+                    </div>
+                    {% if form.is_energy.errors %}
+                        <div class="invalid-feedback d-block">{{ form.is_energy.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
                 <div class="d-grid gap-2">
-                    <button type="submit" class="btn btn-success btn-lg animate__animated animate__pulse animate__infinite">
-                        <i class="fas fa-save me-2"></i> Save
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-save me-2"></i> Save Product
                     </button>
                     <a href="{% url 'product-list' %}" class="btn btn-secondary btn-lg">
                         <i class="fas fa-times me-2"></i> Cancel
@@ -44,21 +107,9 @@
 </div>
 
 <style>
-    .animate__animated {
-        animation-duration: 1s;
-    }
-
     .card {
         border-radius: 15px;
         overflow: hidden;
-    }
-
-    .card-header {
-        padding: 1.5rem;
-    }
-
-    .card-body {
-        padding: 2rem;
     }
 
     .form-control, .form-select {
@@ -68,62 +119,54 @@
     }
 
     .form-control:focus, .form-select:focus {
-        border-color: #2563eb;
-        box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.25);
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.25);
     }
 
-    .btn-success {
-        background-color: #10b981;
-        border-color: #10b981;
+    .form-switch .form-check-input {
+        width: 3em;
+        height: 1.5em;
+        margin-right: 0.5em;
     }
 
-    .btn-success:hover {
-        background-color: #059669;
-        border-color: #059669;
-    }
-
-    .btn-secondary {
-        background-color: #6b7280;
-        border-color: #6b7280;
-    }
-
-    .btn-secondary:hover {
-        background-color: #4b5563;
-        border-color: #4b5563;
-    }
-
-    .auto-size-select {
-        display: inline-block;
-        min-width: 100px;
-        max-width: 100%;
-        width: auto;
+    .asset-field, .expense-field {
+        transition: all 0.3s ease;
     }
 </style>
 
 <script>
-    document.querySelectorAll('.auto-size-select').forEach(select => {
-        select.style.width = `${select.scrollWidth}px`;
-    });
-
-    // Example starter JavaScript for disabling form submissions if there are invalid fields
-    (function () {
-        'use strict'
-
-        // Fetch all the forms we want to apply custom Bootstrap validation styles to
-        var forms = document.querySelectorAll('.needs-validation')
-
-        // Loop over them and prevent submission
-        Array.prototype.slice.call(forms)
-            .forEach(function (form) {
-                form.addEventListener('submit', function (event) {
-                    if (!form.checkValidity()) {
-                        event.preventDefault()
-                        event.stopPropagation()
-                    }
-
-                    form.classList.add('was-validated')
-                }, false)
-            })
-    })()
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing product form...');
+    
+    const assetToggle = document.querySelector('.asset-toggle');
+    const expenseField = document.querySelector('.expense-field');
+    const assetField = document.querySelector('.asset-field');
+    
+    function updateFields() {
+        console.log('Updating fields, is asset:', assetToggle.checked);
+        console.log('Asset Account Field:', document.getElementById('{{ form.asset_account.id_for_label }}'));
+        console.log('Expense Code Field:', document.getElementById('{{ form.expense_code.id_for_label }}'));
+        
+        if (assetToggle.checked) {
+            console.log('Switching to asset mode');
+            expenseField.style.display = 'none';
+            assetField.style.display = 'block';
+            document.getElementById('{{ form.expense_code.id_for_label }}').removeAttribute('required');
+            document.getElementById('{{ form.asset_account.id_for_label }}').setAttribute('required', 'required');
+        } else {
+            console.log('Switching to non-asset mode');
+            expenseField.style.display = 'block';
+            assetField.style.display = 'none';
+            document.getElementById('{{ form.expense_code.id_for_label }}').setAttribute('required', 'required');
+            document.getElementById('{{ form.asset_account.id_for_label }}').removeAttribute('required');
+        }
+    }
+    
+    // Initial state
+    updateFields();
+    
+    // Handle changes
+    assetToggle.addEventListener('change', updateFields);
+});
 </script>
 {% endblock %}

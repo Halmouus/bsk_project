@@ -1,7 +1,8 @@
+from django import forms
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
-from .models import Product
+from .models import AssetAccount, Product
 from .forms import ProductForm
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse
@@ -13,6 +14,10 @@ from django.db.models import ProtectedError
 from django.db import models
 from django.views.generic.edit import DeleteView
 from django.contrib import messages
+from django.utils.translation import gettext_lazy as _
+import traceback
+from django.db.models import Q
+from decimal import Decimal, DecimalException
 
 # List all Products
 class ProductListView(ListView):
@@ -20,13 +25,80 @@ class ProductListView(ListView):
     template_name = 'product/product_list.html'
     context_object_name = 'products'
 
+    def get_template_names(self):
+        if self.request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return ['product/includes/product_table.html']
+        return [self.template_name]
+
+    def get_queryset(self):
+        queryset = Product.objects.all()
+        search = self.request.GET.get('search', '')
+        type_filter = self.request.GET.get('type', '')
+        vat_filter = self.request.GET.get('vat_rate', '')
+        
+        if search:
+            queryset = queryset.filter(
+                Q(name__icontains=search) |
+                Q(fiscal_label__icontains=search) |
+                Q(expense_code__icontains=search)
+            )
+        
+        if type_filter:
+            if type_filter == 'asset':
+                queryset = queryset.filter(is_asset=True)
+            elif type_filter == 'regular':
+                queryset = queryset.filter(is_asset=False)
+            elif type_filter == 'energy':
+                queryset = queryset.filter(is_energy=True)
+                
+        if vat_filter:
+            try:
+                vat_rate = Decimal(vat_filter.replace(',', '.'))
+                queryset = queryset.filter(vat_rate=vat_rate)
+            except (ValueError, DecimalException):
+                pass
+                
+        return queryset.order_by('name')
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update({
+            'search': self.request.GET.get('search', ''),
+            'type_filter': self.request.GET.get('type', ''),
+            'vat_filter': self.request.GET.get('vat_rate', ''),
+            'vat_rates': Product.objects.values_list('vat_rate', flat=True).distinct().order_by('vat_rate')
+        })
+        return context
+
 # Create a new Product
 class ProductCreateView(SuccessMessageMixin, CreateView):
     model = Product
-    fields = ['name', 'vat_rate', 'expense_code', 'is_energy', 'fiscal_label']
+    form_class = ProductForm
     template_name = 'product/product_form.html'
     success_url = reverse_lazy('product-list')
     success_message = "Product successfully created."
+
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        messages.success(self.request, self.success_message)
+        return response
+
+    def form_invalid(self, form):
+        print("\n=== Form Invalid Called ===")
+        print(f"Form Errors: {form.errors}")
+        print(f"Form Data: {form.cleaned_data}")
+        messages.error(self.request, "Please correct the errors below.")
+        return super().form_invalid(form)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # Add Bootstrap classes to all fields
+        for field in form.fields.values():
+            if isinstance(field.widget, forms.CheckboxInput):
+                field.widget.attrs['class'] = 'form-check-input asset-toggle'
+            else:
+                field.widget.attrs['class'] = 'form-control'
+        return form
 
 # Update an existing Product
 class ProductUpdateView(SuccessMessageMixin, UpdateView):
@@ -110,4 +182,51 @@ class ProductDetailsView(View):
             })
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
+
+class AssetAccountListView(ListView):
+    model = AssetAccount
+    template_name = 'product/asset_account_list.html'
+    context_object_name = 'asset_accounts'
+
+class AssetAccountCreateView(SuccessMessageMixin, CreateView):
+    model = AssetAccount
+    fields = ['name', 'description', 'account_code', 'depreciation_account', 
+              'allowance_account', 'depreciation_period']
+    template_name = 'product/asset_account_form.html'
+    success_url = reverse_lazy('asset-account-list')
+    success_message = _("Asset account successfully created.")
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # Add Bootstrap classes to all fields
+        for field in form.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        return form
+
+class AssetAccountUpdateView(SuccessMessageMixin, UpdateView):
+    model = AssetAccount
+    fields = ['name', 'description', 'account_code', 'depreciation_account', 
+              'allowance_account', 'depreciation_period']
+    template_name = 'product/asset_account_form.html'
+    success_url = reverse_lazy('asset-account-list')
+    success_message = _("Asset account successfully updated.")
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        # Add Bootstrap classes to all fields
+        for field in form.fields.values():
+            field.widget.attrs.update({'class': 'form-control'})
+        return form
+
+class AssetAccountDeleteView(DeleteView):
+    model = AssetAccount
+    template_name = 'product/asset_account_confirm_delete.html'
+    success_url = reverse_lazy('asset-account-list')
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        if self.object.product_set.exists():
+            messages.error(request, _('Cannot delete asset account. It is used by one or more products.'))
+            return redirect('asset-account-list')
+        return super().get(request, *args, **kwargs)
 

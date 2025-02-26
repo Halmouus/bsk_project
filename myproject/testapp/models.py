@@ -23,6 +23,7 @@ from dateutil.relativedelta import relativedelta
 from django.db.models.functions import Coalesce
 from django.db.models import Sum, Manager, Max
 from django.utils.translation import gettext_lazy as _
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -263,22 +264,110 @@ def get_supplier_unpaid_invoices(supplier):
 class Product(BaseModel):
     name = models.CharField(max_length=100)
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=20.00, choices=[
-    (0.00, '0%'), (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
-])
-    expense_code = models.CharField(max_length=25, validators=[RegexValidator(r'^[0-9]{5,}$', _('Expense code must be numeric and at least 5 characters long.'))])
+        (Decimal('0.00'), '0%'),
+        (Decimal('7.00'), '7%'), 
+        (Decimal('10.00'), '10%'),
+        (Decimal('11.00'), '11%'),
+        (Decimal('14.00'), '14%'),
+        (Decimal('16.00'), '16%'),
+        (Decimal('20.00'), '20%')
+    ])
+    # Remove the validator from the model field
+    expense_code = models.CharField(max_length=25)
     is_energy = models.BooleanField(default=False)
     fiscal_label = models.CharField(max_length=255, blank=False)
+    is_asset = models.BooleanField(
+        default=False,
+        help_text=_("If true, this product is treated as an asset")
+    )
+    asset_account = models.ForeignKey(
+        'AssetAccount',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        help_text=_("Required if product is an asset")
+    )
     non_deductible_vat = models.BooleanField(
         default=False,
         help_text=_("If true, VAT from this product cannot be deducted")
     )
 
-    class Meta:
-        constraints = [
-        ]
-    def __str__(self):
-        return self.name
+    def clean(self):
+        super().clean()
+        if self.is_asset:
+            if not self.asset_account:
+                raise ValidationError(_("Asset account is required for assets"))
+            # For assets, validate 4-digit minimum
+            if not re.match(r'^[0-9]{4,}$', str(self.expense_code)):
+                raise ValidationError({
+                    'expense_code': _("Asset account code must be numeric and at least 4 characters long.")
+                })
+        else:
+            if self.asset_account:
+                raise ValidationError(_("Asset account can only be set for assets"))
+            if not self.expense_code:
+                raise ValidationError(_("Expense code is required for non-asset products"))
+            # For non-assets, validate 5-digit minimum
+            if not re.match(r'^[0-9]{5,}$', str(self.expense_code)):
+                raise ValidationError({
+                    'expense_code': _("Expense code must be numeric and at least 5 characters long.")
+                })
 
+    class Meta:
+        # Allow products with same name but different types
+        constraints = [
+            models.UniqueConstraint(
+                fields=['name', 'is_asset'],
+                name='unique_product_name_per_type'
+            )
+        ]
+
+class AssetAccount(BaseModel):
+    account_code = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^2\d{3,4}$', _('Asset account must start with 2 and have 4-5 digits'))
+        ],
+        unique=True
+    )
+    depreciation_account = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^2\d{3,4}$', _('Depreciation account must start with 2 and have 4-5 digits'))
+        ],
+        unique=True
+    )
+    allowance_account = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^6\d{3,4}$', _('Allowance account must start with 6 and have 4-5 digits'))
+        ],
+        unique=True
+    )
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    depreciation_period = models.IntegerField(
+        validators=[
+            MinValueValidator(1),
+            MaxValueValidator(20)
+        ],
+        help_text=_("Depreciation period in years")
+    )
+
+    class Meta:
+        ordering = ['name']
+        verbose_name = _("Asset Account")
+        verbose_name_plural = _("Asset Accounts")
+
+    def __str__(self):
+        return f"{self.name} ({self.account_code})"
+
+    def clean(self):
+        super().clean()
+        # Ensure accounts are different
+        if len({self.account_code, self.depreciation_account, self.allowance_account}) != 3:
+            raise ValidationError(_("Asset, depreciation and allowance accounts must be different"))
+        
 class DocumentBase(BaseModel):
     """
     Base model for documents with common fields and functionality
@@ -446,8 +535,14 @@ class Invoice(BaseModel):
         on_delete=models.PROTECT,
         related_name='credit_notes'
     )
+    cash_payment_allowed = models.BooleanField(
+        default=False,
+        help_text="If True, this invoice can be paid by cash"
+    )
 
     def save(self, *args, **kwargs):
+        print(f"\n=== Saving Invoice {self.ref} ===")
+        print(f"Cash payment allowed: {self.cash_payment_allowed}")
         if not self.special_index:
             # Get the last index for this type this year
             year = self.date.year
@@ -570,6 +665,15 @@ class Invoice(BaseModel):
         credit_notes_total = sum(cn.total_amount for cn in self.credit_notes.all())
         return credit_notes_total < self.total_amount
     
+    def get_cash_payment_status(self):
+        """Get cash payment details"""
+        total_cash_paid = sum(
+            payment.amount for payment in self.cash_payments.all()
+        )
+        return {
+            'total_paid': total_cash_paid,
+            'remaining': max(Decimal('0.00'), self.total_amount - total_cash_paid)
+        }
 
     def clean(self):
         """Custom clean method to validate credit notes"""
@@ -590,6 +694,9 @@ class Invoice(BaseModel):
                 raise ValidationError(_("Cannot create credit note for another credit note"))
             if self.supplier != self.original_invoice.supplier:
                 raise ValidationError(_("Credit note must have same supplier as original invoice"))
+        
+        if self.cash_payment_allowed and self.total_amount > Decimal('5000.00'):
+            raise ValidationError("Invoices over 5000 cannot be paid by cash")
     
     @property
     def has_documents(self):
@@ -662,40 +769,67 @@ class Invoice(BaseModel):
         entries = []
         sign = -1 if self.type == 'credit_note' else 1
         expense_groups = {}
+        asset_groups = {}
         tax_groups = {}
+
+        print("\n=== Generating Accounting Entries ===")
+        print(f"Invoice: {self.ref}")
         
         for invoice_product in self.products.all():
             if self.is_loan_invoice() and self.payment_status != 'paid':
                 print("Loan invoice not paid yet, skipping accounting entries")
                 return entries
-            # Group products by expense code
-            key = invoice_product.product.expense_code
-            if key not in expense_groups:
-                expense_groups[key] = {
-                    'products': {},  # Changed to dict to track values
-                    'amount': 0,
-                    'is_energy': invoice_product.product.is_energy
-                }
-            # Track product value
+
+            print(f"\nProcessing product: {invoice_product.product.name}")
+            print(f"Is asset: {invoice_product.product.is_asset}")
+            
+            # Calculate product value
             product_value = (
                 invoice_product.quantity * 
                 invoice_product.unit_price * 
                 (1 - invoice_product.reduction_rate / 100) * 
                 sign
             )
-            expense_groups[key]['products'][invoice_product.product.name] = product_value
-            expense_groups[key]['amount'] += product_value
+            print(f"Product value: {product_value}")
 
-            # Group taxes by rate (unchanged)
+            if invoice_product.product.is_asset:
+                # Group by asset account
+                asset_account = invoice_product.product.asset_account
+                key = asset_account.account_code
+                if key not in asset_groups:
+                    asset_groups[key] = {
+                        'products': {},
+                        'amount': 0,
+                        'asset_account': asset_account,
+                        'is_energy': invoice_product.product.is_energy
+                    }
+                asset_groups[key]['products'][invoice_product.product.name] = product_value
+                asset_groups[key]['amount'] += product_value
+                print(f"Added to asset group: {key}")
+            else:
+                # Group by expense code
+                key = invoice_product.product.expense_code
+                if key not in expense_groups:
+                    expense_groups[key] = {
+                        'products': {},
+                        'amount': 0,
+                        'is_energy': invoice_product.product.is_energy
+                    }
+                expense_groups[key]['products'][invoice_product.product.name] = product_value
+                expense_groups[key]['amount'] += product_value
+                print(f"Added to expense group: {key}")
+
+            # Group taxes
             tax_key = invoice_product.vat_rate
             if tax_key not in tax_groups:
                 tax_groups[tax_key] = 0
             tax_groups[tax_key] += (product_value * invoice_product.vat_rate / 100)
+            print(f"Added VAT: {tax_key}% - {product_value * invoice_product.vat_rate / 100}")
 
-        # Add expense entries with top 3 products by value
+        # Add expense entries
         prefix = "CN -" if self.type == 'credit_note' else ""
+        print("\nProcessing expense groups:")
         for expense_code, data in expense_groups.items():
-            # Sort products by value and get unique names
             sorted_products = sorted(data['products'].items(), key=lambda x: x[1], reverse=True)
             unique_products = []
             seen = set()
@@ -718,8 +852,38 @@ class Invoice(BaseModel):
                 'journal': '10' if data['is_energy'] else '01',
                 'counterpart': ''
             })
+            print(f"Added expense entry: {expense_code} - {data['amount']}")
 
-        # Rest of the method remains unchanged
+        # Add asset entries
+        print("\nProcessing asset groups:")
+        for asset_code, data in asset_groups.items():
+            sorted_products = sorted(data['products'].items(), key=lambda x: x[1], reverse=True)
+            unique_products = []
+            seen = set()
+            for name, _ in sorted_products:
+                if name not in seen:
+                    unique_products.append(name)
+                    seen.add(name)
+            
+            product_names = unique_products[:3]
+            if len(sorted_products) > 3:
+                product_names.append('...')
+
+            # Asset entry
+            entries.append({
+                'date': self.date,
+                'label': f"{prefix} {', '.join(product_names)} (Asset)",
+                'debit': data['amount'] if sign > 0 else None,
+                'credit': abs(data['amount']) if sign < 0 else None,
+                'account_code': asset_code,
+                'reference': self.ref,
+                'journal': '20',  # Asset journal
+                'counterpart': ''
+            })
+            print(f"Added asset entry: {asset_code} - {data['amount']}")
+
+        # Add VAT entries
+        print("\nProcessing VAT entries:")
         for rate, amount in tax_groups.items():
             if rate > 0:
                 entries.append({
@@ -732,7 +896,9 @@ class Invoice(BaseModel):
                     'journal': '10' if self.supplier.is_energy else '01',
                     'counterpart': ''
                 })
+                print(f"Added VAT entry: {rate}% - {amount}")
 
+        # Add supplier entry
         entries.append({
             'date': self.date,
             'label': self.supplier.name,
@@ -743,8 +909,10 @@ class Invoice(BaseModel):
             'journal': '10' if self.supplier.is_energy else '01',
             'counterpart': ''
         })
+        print(f"Added supplier entry: {self.total_amount}")
 
-        return entries    
+        print(f"\nTotal entries generated: {len(entries)}")
+        return entries
     
     @property
     def amount_available_for_payment(self):
@@ -821,6 +989,10 @@ class Invoice(BaseModel):
 
         print(f"Allocated payments - Pending: {alloc_pending}, Delivered: {alloc_delivered}, Paid: {alloc_paid}")
 
+        cash_payments = self.cash_payments.all()
+        cash_paid_amount = sum(payment.amount for payment in cash_payments)
+        print(f"Cash payments found: {cash_payments.count()}, Total: {cash_paid_amount}")
+
         # Get contract payments if this is a contract invoice
         direct_debit_amount = Decimal('0')
         direct_debit_details = None
@@ -842,12 +1014,14 @@ class Invoice(BaseModel):
                 'bank': contract_invoice.contract.domiciliation_bank.bank,
                 'account': contract_invoice.contract.domiciliation_bank.account_number,
             }
+        
+        
 
         # Update totals with allocations only (direct debits handled in view)
         pending_amount += alloc_pending
         delivered_amount += alloc_delivered
-        paid_amount += alloc_paid
-        total_issued += total_allocated
+        paid_amount += alloc_paid + cash_paid_amount
+        total_issued += total_allocated + cash_paid_amount
 
         net_amount = self.net_amount
         amount_to_issue = net_amount - total_issued  # Now total_issued includes non-rejected direct debits
@@ -889,6 +1063,18 @@ class Invoice(BaseModel):
                 'created_at': allocation.payment.creation_date.strftime('%Y-%m-%d'),
                 'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
                 'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
+            })
+        
+        for payment in cash_payments:
+            checks.append({
+                'id': str(payment.id),
+                'type': 'cash',
+                'reference': payment.reference,
+                'amount': float(payment.amount),
+                'status': 'paid',
+                'created_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'delivered_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'paid_at': payment.payment_date.strftime('%Y-%m-%d'),
             })
 
         print(f"Total checks to display: {len(checks)}")
@@ -954,6 +1140,10 @@ class Invoice(BaseModel):
             payment__status='paid'  # Only count allocations from paid checks
         )
         total_payments += sum(allocation.amount for allocation in allocations)
+
+        # Cash payments
+        cash_payments = CashPayment.objects.filter(invoice=self)
+        total_payments += sum(payment.amount for payment in cash_payments)
 
         contract_invoice = hasattr(self, 'contract_invoice') and self.contract_invoice
         if contract_invoice:
@@ -1081,6 +1271,19 @@ class Invoice(BaseModel):
         """Check if this is a loan invoice"""
         return self.invoice_type == 'LOAN'
 
+    def get_remaining_amount(self):
+        """Get remaining amount to be paid"""
+        # Get total from cash payments
+        cash_payments_total = Decimal('0')
+        for payment in self.cash_payments.all():
+            cash_payments_total += payment.amount
+        
+        # Get total from other payment types (checks, etc.)
+        other_payments = self.get_payment_details()['paid_amount']
+        
+        # Return remaining amount
+        return max(Decimal('0'), self.total_amount - cash_payments_total - other_payments)
+
     def __str__(self):
         return f'Invoice {self.ref} from {self.supplier.name}'
 
@@ -1095,7 +1298,10 @@ class InvoiceProduct(BaseModel):
     vat_rate = models.DecimalField(max_digits=5, decimal_places=2, choices=[
         (0.00, '0%'), (7.00, '7%'), (10.00, '10%'), (11.00, '11%'), (14.00, '14%'), (16.00, '16%'), (20.00, '20%')
     ], default=20.00)
-
+    treated_as_asset = models.BooleanField(
+        default=False,
+        help_text=_("Indicates if this product was treated as an asset in this invoice")
+    )
     @property
     def subtotal(self):
         discount = (self.unit_price * self.quantity) * (self.reduction_rate / 100)
@@ -1108,6 +1314,8 @@ class InvoiceProduct(BaseModel):
     def save(self, *args, **kwargs):
         if self.vat_rate == 0.00:
             self.vat_rate = self.product.vat_rate
+        if not self.pk:
+            self.treated_as_asset = self.product.is_asset
         super().save(*args, **kwargs)
 
 
@@ -1913,6 +2121,290 @@ class BankCheckTemplate(BaseModel):
     class Meta:
         unique_together = ['bank', 'check_type']
 
+
+class CashConfiguration(BaseModel):
+    """Configuration for cash management"""
+    accounting_code = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ],
+        help_text="Main account code for cash operations"
+    )
+    journal_code = models.CharField(
+        max_length=2,
+        default='08',  # Using 08 for cash journal
+        validators=[
+            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+        ]
+    )
+    current_balance = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2,
+        default=Decimal('0.00')
+    )
+    max_payment_threshold = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('5000.00')
+    )
+
+    def clean(self):
+        super().clean()
+        if self.pk and CashConfiguration.objects.exclude(pk=self.pk).exists():
+            raise ValidationError("Only one cash configuration can exist")
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving CashConfiguration ===")
+        print(f"Current balance: {self.current_balance}")
+        print(f"Max threshold: {self.max_payment_threshold}")
+        
+        if not self.pk and CashConfiguration.objects.exists():
+            raise ValidationError("Only one cash configuration can exist")
+            
+        super().save(*args, **kwargs)
+
+    @classmethod
+    def get_config(cls):
+        """Get or create cash configuration"""
+        config = CashConfiguration.objects.first()
+        if not config:
+            raise ValidationError("Cash Configuration must be set up")
+        return config
+
+    def __str__(self):
+        return f"Cash Configuration (Balance: {self.current_balance})"
+
+class CashDeposit(BaseModel):
+    """Records cash deposits to increase cash reserve"""
+    SOURCE_TYPE_CHOICES = [
+        ('bank', 'Bank Account'),
+        ('other', 'Other Source')
+    ]
+    
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    date = models.DateField()
+    reference = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Unique reference number for this deposit"
+    )
+    notes = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.PROTECT,
+        related_name='cash_deposits'
+    )
+    
+    # New fields for source tracking
+    source_type = models.CharField(
+        max_length=10,
+        choices=SOURCE_TYPE_CHOICES,
+        default='other'
+    )
+    source_bank_account = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name='cash_withdrawals'
+    )
+    source_account_code = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        help_text="Accounting code for the source account"
+    )
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving CashDeposit ===")
+        print(f"Amount: {self.amount}")
+        print(f"Date: {self.date}")
+        print(f"Reference: {self.reference}")
+        print(f"Source Type: {self.source_type}")
+        
+        # Update cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance += self.amount
+        config.save()
+        
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        print("\n=== Deleting CashDeposit ===")
+        print(f"Amount: {self.amount}")
+        
+        # Revert cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance -= self.amount
+        config.save()
+        
+        super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f"Cash Deposit {self.reference} - {self.amount}"
+
+    class Meta:
+        ordering = ['-date', '-created_at']
+
+class CashPayment(BaseModel):
+    """Records cash payments for invoices"""
+    invoice = models.ForeignKey(
+        'Invoice',
+        on_delete=models.PROTECT,
+        related_name='cash_payments'
+    )
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    payment_date = models.DateField()
+    reference = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Unique reference number for this payment"
+    )
+    recorded_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.PROTECT,
+        related_name='cash_payments'
+    )
+    notes = models.TextField(blank=True)
+    vat_declared = models.BooleanField(default=False)
+    vat_declaration_period = models.CharField(
+        max_length=7,
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r'^\d{2}-\d{4}$',
+                'Period must be in MM-YYYY format'
+            )
+        ]
+    )
+
+    def clean(self):
+        super().clean()
+        if not self.invoice.cash_payment_allowed:
+            raise ValidationError("This invoice cannot be paid by cash")
+            
+        # Check if payment would exceed cash balance
+        config = CashConfiguration.get_config()
+        if self.amount > config.current_balance:
+            raise ValidationError("Insufficient cash balance for this payment")
+            
+        # Check if payment would exceed invoice remaining amount
+        payment_status = self.invoice.get_cash_payment_status()
+        if self.amount > payment_status['remaining']:
+            raise ValidationError("Payment amount exceeds invoice remaining amount")
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving CashPayment ===")
+        print(f"Invoice: {self.invoice.ref}")
+        print(f"Amount: {self.amount}")
+        print(f"Date: {self.payment_date}")
+        
+        # Update cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance -= self.amount
+        config.save()
+        
+        # Update invoice payment status
+        self.invoice.update_payment_status()
+        
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        print("\n=== Deleting CashPayment ===")
+        print(f"Amount: {self.amount}")
+        
+        # Revert cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance += self.amount
+        config.save()
+        
+        # Update invoice payment status
+        self.invoice.update_payment_status()
+        
+        super().delete(*args, **kwargs)
+
+    def __str__(self):
+        return f"Cash Payment {self.reference} for Invoice {self.invoice.ref}"
+
+    class Meta:
+        ordering = ['-payment_date', '-created_at']
+
+
+class CashExpense(BaseModel):
+    """Records direct cash expenses without invoices"""
+    EXPENSE_TYPE_CHOICES = [
+        ('FINE', 'Fines'),
+        ('FOOD', 'Food'),
+        ('TAXI', 'Transportation'),
+        ('OTHER', 'Other Expenses')
+    ]
+    amount = models.DecimalField(
+        max_digits=15, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    date = models.DateField()
+    reference = models.CharField(
+        max_length=50,
+        unique=True,
+        help_text="Unique reference number for this expense"
+    )
+    expense_account = models.CharField(
+        max_length=5,
+        validators=[
+            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+        ],
+        help_text="Expense account code"
+    )
+    expense_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('FINE', 'Fines'),
+            ('FOOD', 'Food'),
+            ('TAXI', 'Transportation'),
+            ('OTHER', 'Other Expenses')
+        ]
+    )
+    notes = models.TextField(blank=True)
+    recorded_by = models.ForeignKey(
+        'auth.User',
+        on_delete=models.PROTECT,
+        related_name='cash_expenses'
+    )
+
+    def save(self, *args, **kwargs):
+        print("\n=== Saving CashExpense ===")
+        print(f"Amount: {self.amount}")
+        print(f"Date: {self.date}")
+        print(f"Account: {self.expense_account}")
+        
+        # Update cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance -= self.amount
+        config.save()
+        
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        print("\n=== Deleting CashExpense ===")
+        print(f"Amount: {self.amount}")
+        
+        # Revert cash balance
+        config = CashConfiguration.get_config()
+        config.current_balance += self.amount
+        config.save()
+        
+        super().delete(*args, **kwargs)
 
 class Client(BaseModel):
     """
@@ -3356,6 +3848,26 @@ class BankStatement(models.Model):
         Dynamically generates statement entries for a bank account.
         """
         entries = []
+
+        cash_withdrawals = CashDeposit.objects.filter(
+            source_type='bank',
+            source_bank_account=bank_account
+        )
+
+        for deposit in cash_withdrawals:
+            entries.append({
+                'date': deposit.date,
+                'label': f"Cash withdrawal - {deposit.reference}",
+                'type': 'CASH_WITHDRAWAL',
+                'debit': deposit.amount,
+                'credit': None,
+                'reference': deposit.reference,
+                'source_type': 'cash_deposit',
+                'source_id': deposit.id,
+                'can_transfer': False,
+                'is_transferred': False,
+            })
+            print(f"Added cash withdrawal to bank statement: {deposit.amount}")
         
         # Get cash receipts
         cash_receipts = CashReceipt.objects.filter(
@@ -3397,7 +3909,7 @@ class BankStatement(models.Model):
                 'operation_date': receipt.operation_date,
                 **rejection_info  # Spread rejection info safely
             })
-            
+        
         # Get transfer receipts
         transfer_receipts = TransferReceipt.objects.filter(
             credited_account=bank_account
@@ -3964,6 +4476,41 @@ class AccountingEntry(models.Model):
         Returns chronologically ordered list of debit/credit pairs.
         """
         entries = []
+
+        cash_withdrawals = CashDeposit.objects.filter(
+            source_type='bank',
+            source_bank_account=bank_account
+        )
+
+        for deposit in cash_withdrawals:
+            # Journal entry for the bank side
+            entries.extend([
+                {
+                    'date': deposit.date,
+                    'label': f"Cash withdrawal - {deposit.reference}",
+                    'debit': None,
+                    'credit': deposit.amount,
+                    'account_code': bank_account.accounting_number,
+                    'reference': deposit.reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_deposit',
+                    'source_id': deposit.id,
+                    'pair_index': len(entries) // 2
+                },
+                {
+                    'date': deposit.date,
+                    'label': f"Cash withdrawal - {deposit.reference}",
+                    'debit': deposit.amount,
+                    'credit': None,
+                    'account_code': CashConfiguration.get_config().accounting_code,
+                    'reference': deposit.reference,
+                    'journal_code': bank_account.journal_number,
+                    'source_type': 'cash_deposit',
+                    'source_id': deposit.id,
+                    'pair_index': len(entries) // 2
+                }
+            ])
+            print(f"Added cash withdrawal accounting entries: {deposit.amount}")
         
         # Get all relevant receipts and presentations
         cash_receipts = CashReceipt.objects.filter(
@@ -4624,6 +5171,126 @@ class AccountingEntry(models.Model):
         
         return entries
     
+    def get_cash_entries(cls, start_date=None, end_date=None):
+        """Generate accounting entries for cash transactions"""
+        print("\n=== Getting Cash Accounting Entries ===")
+        
+        entries = []
+        try:
+            config = CashConfiguration.get_config()
+            
+            # Process deposits
+            deposits = CashDeposit.objects.all()
+            if start_date:
+                deposits = deposits.filter(date__gte=start_date)
+            if end_date:
+                deposits = deposits.filter(date__lte=end_date)
+                
+            for deposit in deposits:
+                entries.extend([
+                    {
+                        'date': deposit.date,
+                        'label': f"Cash deposit {deposit.reference}",
+                        'debit': deposit.amount,
+                        'credit': None,
+                        'account_code': config.accounting_code,
+                        'reference': deposit.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_deposit',
+                        'source_id': deposit.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': deposit.date,
+                        'label': f"Cash deposit {deposit.reference}",
+                        'debit': None,
+                        'credit': deposit.amount,
+                        'account_code': '5161',  # Cash in transit
+                        'reference': deposit.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_deposit',
+                        'source_id': deposit.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+                
+            # Process payments
+            payments = CashPayment.objects.all()
+            if start_date:
+                payments = payments.filter(payment_date__gte=start_date)
+            if end_date:
+                payments = payments.filter(payment_date__lte=end_date)
+                
+            for payment in payments:
+                entries.extend([
+                    {
+                        'date': payment.payment_date,
+                        'label': f"Cash payment for invoice {payment.invoice.ref}",
+                        'debit': payment.amount,
+                        'credit': None,
+                        'account_code': payment.invoice.supplier.accounting_code,
+                        'reference': payment.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_payment',
+                        'source_id': payment.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': payment.payment_date,
+                        'label': f"Cash payment for invoice {payment.invoice.ref}",
+                        'debit': None,
+                        'credit': payment.amount,
+                        'account_code': config.accounting_code,
+                        'reference': payment.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_payment',
+                        'source_id': payment.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+            
+            # Process expenses
+            expenses = CashExpense.objects.all()
+            if start_date:
+                expenses = expenses.filter(date__gte=start_date)
+            if end_date:
+                expenses = expenses.filter(date__lte=end_date)
+                
+            for expense in expenses:
+                entries.extend([
+                    {
+                        'date': expense.date,
+                        'label': f"Cash expense ({expense.get_expense_type_display()})",
+                        'debit': expense.amount,
+                        'credit': None,
+                        'account_code': expense.expense_account,
+                        'reference': expense.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_expense',
+                        'source_id': expense.id,
+                        'pair_index': len(entries) // 2
+                    },
+                    {
+                        'date': expense.date,
+                        'label': f"Cash expense ({expense.get_expense_type_display()})",
+                        'debit': None,
+                        'credit': expense.amount,
+                        'account_code': config.accounting_code,
+                        'reference': expense.reference,
+                        'journal_code': config.journal_code,
+                        'source_type': 'cash_expense',
+                        'source_id': expense.id,
+                        'pair_index': len(entries) // 2
+                    }
+                ])
+
+            return entries
+            
+        except Exception as e:
+            print(f"Error getting cash accounting entries: {str(e)}")
+            return []
+
+
     @classmethod
     def get_entries_for_journal(cls, journal_code, start_date=None, end_date=None):
         print(f"\n=== Getting entries for journal {journal_code} ===")
@@ -4759,6 +5426,19 @@ class BankFeeTransaction(BaseModel):
         default=Decimal('0.00')
     )
     total_amount = models.DecimalField(max_digits=15, decimal_places=2)
+    vat_declared = models.BooleanField(default=False)
+    vat_declaration_period = models.CharField(
+        max_length=7,
+        null=True,
+        blank=True,
+        validators=[
+            RegexValidator(
+                r'^\d{2}-\d{4}$',
+                'Period must be in MM-YYYY format'
+            )
+        ],
+        help_text="VAT Declaration period (MM-YYYY)"
+    )
 
     def calculate_amounts(self):
         """Calculate VAT and total amounts based on settings"""
@@ -6113,6 +6793,43 @@ class VATDeclaration(BaseModel):
                 total_deducted += fee.vat_amount
                 print(f"Running total: {total_deducted}")
 
+        print("\nProcessing cash payments...")
+        cash_payments = CashPayment.objects.filter(
+            Q(
+                payment_date__range=(period_start, period_end),
+                vat_declared=False
+            ) | Q(
+                vat_declared=False,
+                payment_date__lt=period_start
+            )
+        ).select_related('invoice')
+
+        for payment in cash_payments:
+            if not payment.invoice or payment.invoice.non_deductible_vat:
+                print(f"Skipping payment {payment.id} - non-deductible")
+                continue
+                
+            vat_details = payment.invoice.calculate_payment_vat(payment.amount)
+            print(f"\nCash Payment {payment.reference} VAT details:", vat_details)
+            
+            # Create detail records for each VAT rate
+            for rate, details in vat_details.items():
+                VATDeclarationDetail.objects.create(
+                    declaration=self,
+                    source_type='cash_payment',
+                    source_id=payment.id,
+                    vat_rate=rate,
+                    vat_amount=details['vat'],
+                    original_amount=details['amount'],
+                    credit_amount=Decimal('0.00')
+                )
+                total_deducted += details['vat']
+            
+            # Mark payment as declared
+            payment.vat_declared = True
+            payment.vat_declaration_period = f"{self.period_month:02d}-{self.period_year}"
+            payment.save()
+
             
         print(f"\nTotal deducted VAT: {total_deducted}")
         return total_deducted
@@ -6391,6 +7108,82 @@ class VATDeclaration(BaseModel):
                     
                     if created:
                         print(f"Created declaration for {current_month}/{current_year}")
+
+    def can_be_deleted(self):
+        """Check if declaration can be deleted"""
+        print(f"\n=== Checking if VAT Declaration {self.id} can be deleted ===")
+        print(f"Status: {self.status}")
+        
+        if self.status != self.DRAFT:
+            print("Cannot delete: Status is not DRAFT")
+            return False
+        
+        print("Declaration can be deleted")
+        return True
+
+    def delete(self, *args, **kwargs):
+        """Override delete to handle cleanup"""
+        if not self.can_be_deleted():
+            raise ValidationError("Cannot delete this declaration")
+            
+        with transaction.atomic():
+            # Revert Receipt VAT marks
+            receipt_details = self.details.filter(source_type='receipt')
+            for detail in receipt_details:
+                for model in [CheckReceipt, LCN, TransferReceipt, CashReceipt]:
+                    try:
+                        receipt = model.objects.get(id=detail.source_id)
+                        if receipt.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                            receipt.vat_declared = False
+                            receipt.vat_declaration_period = None
+                            receipt.save()
+                    except model.DoesNotExist:
+                        continue
+
+            # Revert Check payment VAT marks
+            check_details = self.details.filter(source_type='invoice_check')
+            for detail in check_details:
+                try:
+                    check = Check.objects.get(id=detail.source_id)
+                    if check.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                        check.vat_declared = False
+                        check.vat_declaration_period = None
+                        check.save()
+                except Check.DoesNotExist:
+                    continue
+
+            # Revert Direct Debit VAT marks
+            debit_details = self.details.filter(source_type='invoice_direct_debit')
+            for detail in debit_details:
+                try:
+                    debit = DirectDebit.objects.get(id=detail.source_id)
+                    if debit.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                        debit.vat_declared = False
+                        debit.vat_declaration_period = None
+                        debit.save()
+                except DirectDebit.DoesNotExist:
+                    continue
+
+            # Revert Bank Fee VAT marks
+            fee_details = self.details.filter(source_type='bank_fee')
+            for detail in fee_details:
+                try:
+                    fee = BankFeeTransaction.objects.get(id=detail.source_id)
+                    if fee.vat_declaration_period == f"{self.period_month:02d}-{self.period_year}":
+                        fee.vat_declared = False
+                        fee.vat_declaration_period = None
+                        fee.save()
+                except BankFeeTransaction.DoesNotExist:
+                    continue
+
+            # Delete details and forecast
+            self.details.all().delete()
+            if self.forecast:
+                self.forecast.delete()
+                
+            # Call parent delete
+            super().delete(*args, **kwargs)
+
 
     def clean(self):
         super().clean()

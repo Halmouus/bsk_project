@@ -1,0 +1,168 @@
+{% extends 'base.html' %}
+
+{% block title %}
+    {% if form.instance.pk %}Edit{% else %}New{% endif %} Asset Account
+{% endblock %}
+
+
+{% block content %}
+<div class="container mt-5">
+    <div class="card shadow-lg animate__animated animate__fadeIn">
+        <div class="card-header bg-primary text-white">
+            <h2 class="card-title mb-0">
+                {% if form.instance.pk %}
+                    Edit Asset Account: {{ form.instance.name }}
+                {% else %}
+                    New Asset Account
+                {% endif %}
+            </h2>
+        </div>
+        <div class="card-body">
+            <form method="post" class="needs-validation" novalidate>
+                {% csrf_token %}
+                
+                <div class="row">
+                    <!-- Name -->
+                    <div class="col-md-8 mb-3">
+                        <label for="id_name" class="form-label">Account Name *</label>
+                        {{ form.name }}
+                        {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Depreciation Period -->
+                    <div class="col-md-4 mb-3">
+                        <label for="id_depreciation_period" class="form-label">Depreciation Period (Years) *</label>
+                        {{ form.depreciation_period }}
+                        {% if form.depreciation_period.errors %}
+                            <div class="invalid-feedback d-block">{{ form.depreciation_period.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Description -->
+                <div class="mb-3">
+                    <label for="id_description" class="form-label">Description</label>
+                    {{ form.description }}
+                    {% if form.description.errors %}
+                        <div class="invalid-feedback d-block">{{ form.description.errors|join:", " }}</div>
+                    {% endif %}
+                </div>
+
+                <div class="row">
+                    <!-- Account Codes -->
+                    <div class="col-md-4 mb-3">
+                        <label for="id_account_code" class="form-label">Asset Account Code *</label>
+                        {{ form.account_code }}
+                        <small class="text-muted">Must start with 2 and have 4-5 digits</small>
+                        {% if form.account_code.errors %}
+                            <div class="invalid-feedback d-block">{{ form.account_code.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="id_depreciation_account" class="form-label">Depreciation Account Code *</label>
+                        {{ form.depreciation_account }}
+                        <small class="text-muted">Must start with 2 and have 4-5 digits</small>
+                        {% if form.depreciation_account.errors %}
+                            <div class="invalid-feedback d-block">{{ form.depreciation_account.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="col-md-4 mb-3">
+                        <label for="id_allowance_account" class="form-label">Allowance Account Code *</label>
+                        {{ form.allowance_account }}
+                        <small class="text-muted">Must start with 6 and have 4-5 digits</small>
+                        {% if form.allowance_account.errors %}
+                            <div class="invalid-feedback d-block">{{ form.allowance_account.errors|join:", " }}</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="d-grid gap-2">
+                    <button type="submit" class="btn btn-success btn-lg">
+                        <i class="fas fa-save me-2"></i> Save Asset Account
+                    </button>
+                    <a href="{% url 'asset-account-list' %}" class="btn btn-secondary btn-lg">
+                        <i class="fas fa-times me-2"></i> Cancel
+                    </a>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border-radius: 15px;
+        overflow: hidden;
+    }
+
+    .form-control {
+        border-radius: 10px;
+        padding: 0.75rem 1rem;
+    }
+
+    .form-control:focus {
+        border-color: #4e73df;
+        box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.25);
+    }
+
+    .text-muted {
+        font-size: 0.875rem;
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.querySelector('form');
+    
+    // Account code validation
+    function validateAccountCode(input, pattern, errorMessage) {
+        const value = input.value;
+        const isValid = pattern.test(value);
+        const feedback = input.nextElementSibling.nextElementSibling;
+        
+        if (!isValid) {
+            input.classList.add('is-invalid');
+            feedback.textContent = errorMessage;
+            feedback.style.display = 'block';
+        } else {
+            input.classList.remove('is-invalid');
+            feedback.style.display = 'none';
+        }
+        
+        return isValid;
+    }
+    
+    // Validation patterns
+    const assetPattern = /^2\d{3,4}$/;
+    const allowancePattern = /^6\d{3,4}$/;
+    
+    form.addEventListener('submit', function(event) {
+        let isValid = true;
+        
+        // Validate asset and depreciation accounts
+        const assetCode = document.getElementById('id_account_code');
+        const depreciationCode = document.getElementById('id_depreciation_account');
+        const allowanceCode = document.getElementById('id_allowance_account');
+        
+        isValid = validateAccountCode(assetCode, assetPattern, 'Must start with 2 and have 4-5 digits') && isValid;
+        isValid = validateAccountCode(depreciationCode, assetPattern, 'Must start with 2 and have 4-5 digits') && isValid;
+        isValid = validateAccountCode(allowanceCode, allowancePattern, 'Must start with 6 and have 4-5 digits') && isValid;
+        
+        // Validate unique codes
+        const codes = [assetCode.value, depreciationCode.value, allowanceCode.value];
+        if (new Set(codes).size !== codes.length) {
+            isValid = false;
+            alert('Account codes must be unique');
+        }
+        
+        if (!isValid) {
+            event.preventDefault();
+        }
+    });
+});
+</script>
+{% endblock %}

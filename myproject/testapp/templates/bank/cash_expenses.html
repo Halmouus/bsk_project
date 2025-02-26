@@ -1,0 +1,234 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Cash Expenses{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4 bg-white rounded-lg shadow-sm p-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-file-invoice text-primary"></i> Direct Cash Expenses
+        </h1>
+        <button type="button" class="btn btn-primary btn-sm shadow-sm" data-toggle="modal" data-target="#newExpenseModal">
+            <i class="fas fa-plus-circle"></i> New Expense
+        </button>
+    </div>
+</div>
+
+<!-- Summary Card -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h5 class="font-weight-bold text-primary mb-3">
+                    <i class="fas fa-wallet"></i> Available Balance
+                </h5>
+                <h3 class="mb-0">{{ current_balance|floatformat:2 }}</h3>
+            </div>
+            <div class="col-md-6 text-right">
+                <h5 class="font-weight-bold text-danger mb-3">
+                    <i class="fas fa-file-invoice"></i> Total Expenses
+                </h5>
+                <h3 class="mb-0">{{ total_expenses|floatformat:2 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form id="filter-form" class="row">
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label class="small font-weight-bold">Start Date</label>
+                    <input type="date" name="start_date" class="form-control" 
+                           value="{{ request.GET.start_date }}">
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="form-group">
+                    <label class="small font-weight-bold">End Date</label>
+                    <input type="date" name="end_date" class="form-control" 
+                           value="{{ request.GET.end_date }}">
+                </div>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary mr-2">
+                    <i class="fas fa-filter"></i> Filter
+                </button>
+                <button type="button" id="clear-filters" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Expenses Table -->
+<div class="card shadow-sm" id="expenses-table-wrapper">
+    {% include 'bank/partials/cash_expenses_table.html' %}
+</div>
+
+<!-- New Expense Modal -->
+<div class="modal fade" id="newExpenseModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-file-invoice"></i> New Direct Expense
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="expense-form" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Expense Type *</label>
+                        <select id="expense-type" class="form-control" required>
+                            <option value="">Select type...</option>
+                            {% for code, name in expense_types.items %}
+                            <option value="{{ code }}">{{ name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="invalid-feedback">
+                            Please select an expense type
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="expense-amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <div class="invalid-feedback">
+                            Please enter a valid amount
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Date *</label>
+                        <input type="date" id="expense-date" class="form-control" required
+                               value="{{ today|date:'Y-m-d' }}">
+                        <div class="invalid-feedback">
+                            Please select a date
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Expense Account *</label>
+                        <input type="text" id="expense-account" class="form-control" required
+                               pattern="^\d{4,5}$">
+                        <div class="invalid-feedback">
+                            Please enter a valid 4-5 digit account code
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="expense-reference" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a reference number
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="expense-notes" class="form-control" rows="3"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Record Expense
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form validation
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
+
+// Handle expense form submission
+document.getElementById('expense-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!this.checkValidity()) {
+        return;
+    }
+    
+    const data = {
+        expense_type: document.getElementById('expense-type').value,
+        amount: document.getElementById('expense-amount').value,
+        date: document.getElementById('expense-date').value,
+        expense_account: document.getElementById('expense-account').value,
+        reference: document.getElementById('expense-reference').value,
+        notes: document.getElementById('expense-notes').value
+    };
+    
+    fetch('', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            window.location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while recording the expense');
+    });
+});
+
+// Filter handling
+document.getElementById('filter-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    const formData = new FormData(this);
+    const params = new URLSearchParams(formData);
+    
+    fetch(`${window.location.pathname}?${params.toString()}`, {
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        document.getElementById('expenses-table-wrapper').innerHTML = data.html;
+    })
+    .catch(error => console.error('Error:', error));
+});
+
+document.getElementById('clear-filters').addEventListener('click', function() {
+    document.getElementById('filter-form').reset();
+    window.location.search = '';
+});
+</script>
+{% endblock %}

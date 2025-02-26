@@ -1,0 +1,274 @@
+{% extends 'base.html' %}
+{% load humanize %}
+
+{% block title %}Cash Payments{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4 bg-white rounded-lg shadow-sm p-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <h1 class="h3 mb-0 text-gray-800">
+            <i class="fas fa-money-bill-wave text-primary"></i> Cash Payments
+        </h1>
+        <button type="button" class="btn btn-primary btn-sm shadow-sm" data-toggle="modal" data-target="#newPaymentModal">
+            <i class="fas fa-plus-circle"></i> New Payment
+        </button>
+    </div>
+</div>
+
+<!-- Summary Card -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h5 class="font-weight-bold text-primary mb-3">
+                    <i class="fas fa-wallet"></i> Available Balance
+                </h5>
+                <h3 class="mb-0">{{ current_balance|floatformat:2 }}</h3>
+                <small class="text-muted">
+                    Maximum payment threshold: {{ max_threshold|floatformat:2 }}
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Payments List -->
+<div class="row">
+    <!-- Recent Payments -->
+    <div class="col-md-8">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0 font-weight-bold text-primary">
+                    <i class="fas fa-history mr-2"></i> Recent Payments
+                </h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="bg-light">
+                        <tr>
+                            <th>Date</th>
+                            <th>Invoice</th>
+                            <th>Supplier</th>
+                            <th class="text-right">Amount</th>
+                            <th>Reference</th>
+                            <th>Recorded By</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                        <tr>
+                            <td>{{ payment.payment_date|date:"d-m-Y" }}</td>
+                            <td>
+                                <a href="{% url 'invoice-update' payment.invoice.id %}" class="text-decoration-none">
+                                    {{ payment.invoice.ref }}
+                                </a>
+                            </td>
+                            <td>{{ payment.invoice.supplier.name }}</td>
+                            <td class="text-right font-weight-bold text-danger">
+                                {{ payment.amount|floatformat:2 }}
+                            </td>
+                            <td>{{ payment.reference }}</td>
+                            <td>{{ payment.recorded_by.username }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">
+                                <i class="fas fa-info-circle mr-1"></i> No payments recorded
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Available Invoices -->
+    <div class="col-md-4">
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white py-3">
+                <h5 class="card-title mb-0 font-weight-bold text-primary">
+                    <i class="fas fa-file-invoice-dollar mr-2"></i> Available Invoices
+                </h5>
+            </div>
+            <div class="list-group list-group-flush">
+                {% for invoice in invoices %}
+                {% with payment_status=invoice.get_cash_payment_status %}
+                <div class="list-group-item">
+                    <div class="d-flex w-100 justify-content-between align-items-center">
+                        <div>
+                            <h6 class="mb-1">{{ invoice.ref }}</h6>
+                            <small class="text-muted">{{ invoice.supplier.name }}</small>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-weight-bold">
+                                {{ payment_status.remaining|floatformat:2 }}
+                            </div>
+                            <button class="btn btn-sm btn-primary make-payment" 
+                                    data-invoice-id="{{ invoice.id }}"
+                                    data-invoice-ref="{{ invoice.ref }}"
+                                    data-supplier="{{ invoice.supplier.name }}"
+                                    data-amount="{{ payment_status.remaining }}"
+                                    data-toggle="modal" 
+                                    data-target="#newPaymentModal">
+                                <i class="fas fa-money-bill-wave"></i> Pay
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endwith %}
+                {% empty %}
+                <div class="list-group-item text-center text-muted py-4">
+                    <i class="fas fa-info-circle mr-1"></i> No eligible invoices
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Payment Modal -->
+<div class="modal fade" id="newPaymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-money-bill-wave"></i> New Cash Payment
+                </h5>
+                <button type="button" class="close text-white" data-dismiss="modal">
+                    <span>&times;</span>
+                </button>
+            </div>
+            <form id="payment-form" class="needs-validation" novalidate>
+                <div class="modal-body">
+                    <div id="invoice-details" class="alert alert-info d-none">
+                        <!-- Filled by JavaScript -->
+                    </div>
+
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Amount *</label>
+                        <input type="number" id="payment-amount" class="form-control" required
+                               min="0.01" step="0.01">
+                        <div class="invalid-feedback">
+                            Please enter a valid amount
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Date *</label>
+                        <input type="date" id="payment-date" class="form-control" required
+                               value="{{ today|date:'Y-m-d' }}">
+                        <div class="invalid-feedback">
+                            Please select a date
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Reference *</label>
+                        <input type="text" id="payment-reference" class="form-control" required>
+                        <div class="invalid-feedback">
+                            Please enter a reference number
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="small font-weight-bold">Notes</label>
+                        <textarea id="payment-notes" class="form-control" rows="3"></textarea>
+                    </div>
+
+                    <input type="hidden" id="invoice-id">
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">
+                        <i class="fas fa-times"></i> Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save"></i> Record Payment
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+// Form validation
+(function() {
+    'use strict';
+    window.addEventListener('load', function() {
+        var forms = document.getElementsByClassName('needs-validation');
+        Array.prototype.filter.call(forms, function(form) {
+            form.addEventListener('submit', function(event) {
+                if (form.checkValidity() === false) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+                form.classList.add('was-validated');
+            }, false);
+        });
+    }, false);
+})();
+
+// Handle payment button clicks
+document.querySelectorAll('.make-payment').forEach(button => {
+    button.addEventListener('click', function() {
+        const invoiceId = this.dataset.invoiceId;
+        const invoiceRef = this.dataset.invoiceRef;
+        const supplier = this.dataset.supplier;
+        const amount = this.dataset.amount;
+        
+        document.getElementById('invoice-id').value = invoiceId;
+        document.getElementById('payment-amount').value = amount;
+        document.getElementById('payment-amount').max = amount;
+        
+        const details = document.getElementById('invoice-details');
+        details.innerHTML = `
+            <div class="mb-0">
+                <strong>Invoice:</strong> ${invoiceRef}<br>
+                <strong>Supplier:</strong> ${supplier}<br>
+                <strong>Remaining Amount:</strong> ${parseFloat(amount).toFixed(2)}
+            </div>
+        `;
+        details.classList.remove('d-none');
+    });
+});
+
+// Handle payment form submission
+document.getElementById('payment-form').addEventListener('submit', function(e) {
+    e.preventDefault();
+    
+    if (!this.checkValidity()) {
+        return;
+    }
+    
+    const data = {
+        invoice_id: document.getElementById('invoice-id').value,
+        amount: document.getElementById('payment-amount').value,
+        date: document.getElementById('payment-date').value,
+        reference: document.getElementById('payment-reference').value,
+        notes: document.getElementById('payment-notes').value
+    };
+    
+    fetch('', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            window.location.reload();
+        } else {
+            alert(data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('An error occurred while recording the payment');
+    });
+});
+</script>
+{% endblock %}

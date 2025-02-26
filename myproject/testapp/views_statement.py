@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, VATDeclaration, get_supplier_balance
+from .models import CashExpense, Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, VATDeclaration, get_supplier_balance, CashConfiguration, CashDeposit, CashPayment, Invoice
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -1067,3 +1067,105 @@ class ContractPaymentActionView(View):
                 'message': str(e)
             }, status=400)
         
+
+def get_cash_statement_entries(start_date=None, end_date=None):
+    """Generate statement entries for cash transactions"""
+    print("\n=== Getting Cash Statement Entries ===")
+    
+    entries = []
+    try:
+        # Get configuration
+        config = CashConfiguration.get_config()
+        
+        # Add deposits
+        deposits = CashDeposit.objects.all()
+        if start_date:
+            deposits = deposits.filter(date__gte=start_date)
+        if end_date:
+            deposits = deposits.filter(date__lte=end_date)
+            
+        for deposit in deposits:
+            entries.append({
+                'date': deposit.date,
+                'label': f"Cash deposit {deposit.reference}",
+                'type': 'CASH_DEPOSIT',
+                'debit': None,
+                'credit': deposit.amount,
+                'reference': deposit.reference,
+                'source_type': 'cash_deposit',
+                'source_id': deposit.id,
+                'can_transfer': False,
+                'is_transferred': False,
+                'details': {
+                    'notes': deposit.notes,
+                    'recorded_by': deposit.recorded_by.username
+                }
+            })
+            
+        # Add payments
+        payments = CashPayment.objects.all()
+        if start_date:
+            payments = payments.filter(payment_date__gte=start_date)
+        if end_date:
+            payments = payments.filter(payment_date__lte=end_date)
+            
+        for payment in payments:
+            entries.append({
+                'date': payment.payment_date,
+                'label': f"Cash payment for invoice {payment.invoice.ref}",
+                'type': 'CASH_PAYMENT',
+                'debit': payment.amount,
+                'credit': None,
+                'reference': payment.reference,
+                'source_type': 'cash_payment',
+                'source_id': payment.id,
+                'can_transfer': False,
+                'is_transferred': False,
+                'invoice': {
+                    'ref': payment.invoice.ref,
+                    'id': str(payment.invoice.id),
+                    'supplier': payment.invoice.supplier.name
+                }
+            })
+        
+        # Add cash expenses
+        expenses = CashExpense.objects.all()
+        if start_date:
+            expenses = expenses.filter(date__gte=start_date)
+        if end_date:
+            expenses = expenses.filter(date__lte=end_date)
+            
+        for expense in expenses:
+            entries.append({
+                'date': expense.date,
+                'label': f"Cash expense ({expense.get_expense_type_display()})",
+                'type': 'CASH_EXPENSE',
+                'debit': expense.amount,
+                'credit': None,
+                'reference': expense.reference,
+                'source_type': 'cash_expense',
+                'source_id': expense.id,
+                'can_transfer': False,
+                'is_transferred': False,
+                'details': {
+                    'expense_type': expense.get_expense_type_display(),
+                    'account': expense.expense_account,
+                    'notes': expense.notes,
+                    'recorded_by': expense.recorded_by.username
+                }
+            })
+            
+        # Sort entries by date
+        entries.sort(key=lambda x: x['date'], reverse=True)
+        
+        # Calculate running balance
+        balance = config.current_balance
+        for entry in entries:
+            balance -= (entry['debit'] or 0) - (entry['credit'] or 0)
+            entry['balance'] = balance
+            
+        return entries
+        
+    except Exception as e:
+        print(f"Error getting cash statement entries: {str(e)}")
+        return []

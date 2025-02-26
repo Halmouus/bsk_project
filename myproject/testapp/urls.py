@@ -13,6 +13,10 @@ from .views_product import (
     ProductListView, ProductCreateView, ProductUpdateView, ProductDeleteView, ProductAjaxCreateView, ProductDetailsView
 )
 
+from .views_product import (
+    AssetAccountListView, AssetAccountCreateView, AssetAccountUpdateView, AssetAccountDeleteView
+)
+
 from .views_invoice import (
     InvoiceListView, InvoiceCreateView, InvoiceUpdateView, InvoiceDeleteView, InvoiceDetailsView,
     product_autocomplete, AddProductToInvoiceView, EditProductInInvoiceView, ExportInvoicesView, UnexportInvoiceView,
@@ -42,10 +46,11 @@ from .views_credit_notes import CreditNoteDetailsView, CreateCreditNoteView
 
 from .views_bank import (
     BankAccountListView, BankAccountCreateView, 
-    BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView,
+    BankAccountDeactivateView, BankAccountFilterView, BankAccountUpdateView, BankAccountDeleteView, CashAccountingView, CashExpenseView, CashPaymentDetailView, CashPaymentDetailsView, CashStatementView, GetExpenseTypesView,
     bank_account_autocomplete, BankFeeCreateView, BankFeeDeleteView, PresentationAutocompleteView
 )
 
+from .views_bank import CashConfigurationView, CashDepositView, CashPaymentView
 from .views_receipts import (
     ReceiptListView, ReceiptCreateView, ReceiptUpdateView, ReceiptDeleteView, ReceiptDetailView, client_autocomplete,
     entity_autocomplete, unpaid_receipt_autocomplete, ReceiptStatusUpdateView, UnpaidReceiptsView, ReceiptTimelineView,
@@ -81,7 +86,7 @@ from .views_transfer import (
 )
 
 from .views_vat import (
-    VATDeductionDetailsView, VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
+    VATDeclarationDeleteView, VATDeductionDetailsView, VATListView, VATConfigurationView, VATDeclarationCreateView, VATDeclarationDetailView, 
     VATDeclarationProcessView, VATDeclarationDeclareView, VATDeclarationPayView, 
     VATPendingDeclarationsView, VATForecastView
 )
@@ -128,6 +133,12 @@ urlpatterns = [
     path('products/<uuid:pk>/delete/', ProductDeleteView.as_view(), name='product-delete'),  # Delete a product
     path('products/<uuid:pk>/details/', ProductDetailsView.as_view(), name='product-details'),  # Details for a specific product
     path('products/ajax-create/', ProductAjaxCreateView.as_view(), name='product-ajax-create'),  # AJAX view for creating a new Product
+
+    # Asset Accounts URLs
+    path('asset-accounts/', AssetAccountListView.as_view(), name='asset-account-list'),
+    path('asset-accounts/create/', AssetAccountCreateView.as_view(), name='asset-account-create'),
+    path('asset-accounts/<uuid:pk>/update/', AssetAccountUpdateView.as_view(), name='asset-account-update'),
+    path('asset-accounts/<uuid:pk>/delete/', AssetAccountDeleteView.as_view(), name='asset-account-delete'),
 
     # Invoices URLs
     path('invoices/', InvoiceListView.as_view(), name='invoice-list'),  # List all invoices
@@ -244,6 +255,18 @@ urlpatterns = [
          PresentationAutocompleteView.as_view(), name='presentation-autocomplete'),
 
 
+    # Cash Management URLs
+    path('cash/', CashConfigurationView.as_view(), name='cash-configuration'),
+    path('cash/deposits/', CashDepositView.as_view(), name='cash-deposits'),
+    path('cash/payment/<uuid:invoice_id>/', CashPaymentView.as_view(), name='get-cash-payment-details'),
+    path('cash/payment/invoice/<uuid:invoice_id>/', CashPaymentDetailsView.as_view(), name='cash-payment-details'),
+    path('cash/payments/', CashPaymentView.as_view(), name='cash-payments'),
+    path('cash/expenses/', CashExpenseView.as_view(), name='cash-expenses'),
+    path('cash/expense-types/', GetExpenseTypesView.as_view(), name='get-expense-types'),
+    path('cash/statement/', CashStatementView.as_view(), name='cash-statement'),
+    path('cash/accounting/', CashAccountingView.as_view(), name='cash-accounting'),
+    path('cash/payment/detail/', CashPaymentDetailView.as_view(), name='cash-payment-detail'),
+
 
     # Client Management Page
     path('client-management/', client_management, name='client_management'),
@@ -337,6 +360,7 @@ urlpatterns = [
     path('vat/<uuid:declaration_id>/deductions/', 
         VATDeductionDetailsView.as_view(), 
         name='vat-deduction-details'),  
+    path('vat/<uuid:declaration_id>/delete/', VATDeclarationDeleteView.as_view(),name='vat-delete'),
 
     # Pay URLs    
     path('pay/config/', PayConfigurationView.as_view(), name='pay-config'),

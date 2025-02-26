@@ -1,0 +1,71 @@
+<div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+        <thead>
+            <tr class="bg-light">
+                <th class="border-0 ps-4">Name</th>
+                <th class="border-0">Type</th>
+                <th class="border-0">Code</th>
+                <th class="border-0">VAT Rate</th>
+                <th class="border-0">Fiscal Label</th>
+                <th class="border-0 text-end pe-4">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for product in products %}
+            <tr class="product-row">
+                <td class="ps-4">
+                    <div class="d-flex align-items-center">
+                        <i class="fas {% if product.is_asset %}fa-building{% elif product.is_energy %}fa-bolt{% else %}fa-box{% endif %} text-muted me-2"></i>
+                        <span class="fw-medium">{{ product.name }}</span>
+                    </div>
+                </td>
+                <td>
+                    {% if product.is_asset %}
+                        <span class="badge bg-info-subtle text-info">
+                            <i class="fas fa-building me-1"></i> Asset
+                        </span>
+                    {% endif %}
+                    {% if product.is_energy %}
+                        <span class="badge bg-warning-subtle text-warning">
+                            <i class="fas fa-bolt me-1"></i> Energy
+                        </span>
+                    {% endif %}
+                </td>
+                <td><code class="bg-light px-2 py-1 rounded">{{ product.expense_code }}</code></td>
+                <td>
+                    <span class="badge bg-primary-subtle text-primary">
+                        {{ product.vat_rate }}%
+                    </span>
+                </td>
+                <td class="text-muted">{{ product.fiscal_label }}</td>
+                <td class="text-end pe-4">
+                    <div class="btn-group btn-group-sm">
+                        <a href="{% url 'product-update' product.pk %}" 
+                           class="btn btn-outline-primary"
+                           data-bs-toggle="tooltip"
+                           title="Edit">
+                            <i class="fas fa-edit"></i>
+                        </a>
+                        <a href="{% url 'product-delete' product.pk %}" 
+                           class="btn btn-outline-danger"
+                           data-bs-toggle="tooltip"
+                           title="Delete">
+                            <i class="fas fa-trash"></i>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center py-5">
+                    <div class="empty-state">
+                        <i class="fas fa-box-open fa-3x text-muted mb-3"></i>
+                        <h5 class="text-muted">No products found</h5>
+                        <p class="text-muted mb-0">Try adjusting your search or filters</p>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div> 

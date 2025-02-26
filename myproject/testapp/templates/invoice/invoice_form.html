@@ -41,6 +41,14 @@
     </div>
 </div>
 
+<!-- Add this temporarily for debugging -->
+{% if debug %}
+<div class="alert alert-info">
+    <p>Form date value: {{ form.date.value|default:"No date" }}</p>
+    <p>Instance date: {{ view.object.date|default:"No instance date" }}</p>
+</div>
+{% endif %}
+
 <!-- Main Form -->
 <form method="post" enctype="multipart/form-data" class="needs-validation" novalidate>
     {% csrf_token %}
@@ -66,9 +74,12 @@
                     <div class="form-group">
                         <label class="small font-weight-bold text-muted">Invoice Date *</label>
                         {{ form.date|add_class:"form-control" }}
+                        <!-- Add this to see any potential errors -->
                         {% if form.date.errors %}
                             <div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>
                         {% endif %}
+                        <!-- Add this temporarily to debug the actual value -->
+                        <small class="text-muted">Current value: {{ form.date.value|default:"No value" }}</small>
                     </div>
                 </div>
                 
@@ -97,7 +108,18 @@
                         <label class="small font-weight-bold text-muted">Document Status *</label>
                         {{ form.doc_status|add_class:"form-control" }}
                     </div>
-                    
+                    <div class="form-group">
+                        <div class="custom-control custom-checkbox">
+                            <input type="checkbox" class="custom-control-input" 
+                                   name="cash_payment_allowed" 
+                                   id="id_cash_payment_allowed" 
+                                   {% if form.instance.cash_payment_allowed %}checked{% endif %}>
+                            <label class="custom-control-label" for="id_cash_payment_allowed">
+                                Allow cash payment (max 5000)
+                            </label>
+                        </div>
+                    </div>
+                        
                     <div class="form-group">
                         <label class="small font-weight-bold text-muted">Invoice Document</label>
                         <div class="custom-file">
@@ -837,49 +859,88 @@ document.addEventListener('DOMContentLoaded', function () {
         const isNewProduct = selectedProductId === 'new';
         
         if (isNewProduct) {
-            if (!$('#new-product-name').val()) {
+            console.log('Creating new product...');
+            const productData = {
+                name: $('#new-product-name').val(),
+                fiscal_label: $('#fiscal-label').val(),
+                is_energy: $('#is-energy').is(':checked'),
+                expense_code: $('#expense_code').val(),
+                vat_rate: $('#vat_rate').val(),
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            };
+
+            if (!productData.name) {
                 isValid = false;
                 validationErrors.push("Product name is required");
             }
-            if (!$('#fiscal-label').val()) {
+            if (!productData.fiscal_label) {
                 isValid = false;
                 validationErrors.push("Fiscal label is required");
             }
-        } else if (!selectedProductId) {
-            isValid = false;
-            validationErrors.push("Please select a product");
-        }
+            if (!productData.expense_code) {
+                isValid = false;
+                validationErrors.push("Expense code is required");
+            }
 
-        // Validate expense code
-        const expenseCode = $('#expense_code').val();
-        if (!/^\d{5,}$/.test(expenseCode)) {
-            isValid = false;
-            $('#expense_code').addClass('is-invalid');
-            validationErrors.push("Expense code must be at least 5 digits");
-        }
+            if (isValid) {
+                $.ajax({
+                    url: "{% url 'product-ajax-create' %}",
+                    method: "POST",
+                    data: productData,
+                    success: function(response) {
+                        console.log('Product created:', response);
+                        addProductToInvoice(response.product_id);
+                    },
+                    error: function(error) {
+                        console.error('Failed to create product:', error);
+                        showError("Failed to create new product.");
+                    }
+                });
+            }
+        } else {
+            // Handle existing product addition/modification
+            const editingProductId = $('#save-product-button').attr('data-editing');
+            
+            const productData = {
+                product: selectedProductId,
+                quantity: $('#quantity').val(),
+                unit_price: $('#unit_price').val(),
+                reduction_rate: $('#reduction_rate').val() || 0,
+                vat_rate: $('#vat_rate').val(),
+                csrfmiddlewaretoken: '{{ csrf_token }}'
+            };
 
-        // Validate quantity
-        const quantity = $('#quantity').val();
-        if (!quantity || quantity < 1) {
-            isValid = false;
-            $('#quantity').addClass('is-invalid');
-            validationErrors.push("Quantity must be at least 1");
-        }
+            // Validate required fields
+            if (!productData.quantity || productData.quantity < 1) {
+                isValid = false;
+                validationErrors.push("Quantity must be at least 1");
+            }
+            if (!productData.unit_price || productData.unit_price <= 0) {
+                isValid = false;
+                validationErrors.push("Unit price must be greater than 0");
+            }
 
-        // Validate unit price
-        const unitPrice = $('#unit_price').val();
-        if (!unitPrice || unitPrice <= 0) {
-            isValid = false;
-            $('#unit_price').addClass('is-invalid');
-            validationErrors.push("Unit price must be greater than 0");
-        }
-
-        // Validate reduction rate
-        const reductionRate = $('#reduction_rate').val();
-        if (reductionRate < 0 || reductionRate > 100) {
-            isValid = false;
-            $('#reduction_rate').addClass('is-invalid');
-            validationErrors.push("Reduction rate must be between 0 and 100");
+            if (isValid) {
+                if (editingProductId) {
+                    // Edit existing product
+                    $.ajax({
+                        url: `/testapp/invoices/edit-product/${editingProductId}/`,
+                        method: "POST",
+                        data: productData,
+                        success: function(response) {
+                            console.log('Product updated successfully');
+                            location.reload();
+                        },
+                        error: function(error) {
+                            console.error('Failed to update product:', error);
+                            showError("Failed to update product.");
+                        }
+                    });
+                } else {
+                    // Add existing product to invoice
+                    addProductToInvoice(selectedProductId);
+                }
+            }
         }
 
         if (!isValid) {
@@ -887,36 +948,6 @@ document.addEventListener('DOMContentLoaded', function () {
             alertBox.className = "alert alert-danger";
             alertBox.innerHTML = "<ul class='mb-0'><li>" + validationErrors.join("</li><li>") + "</li></ul>";
             alertBox.classList.remove("d-none");
-            return;
-        }
-
-        // Handle new product creation
-        if (isNewProduct) {
-            console.log('Creating new product...');
-            const productData = {
-                name: $('#new-product-name').val(),
-                fiscal_label: $('#fiscal-label').val(),
-                is_energy: $('#is-energy').is(':checked'),
-                expense_code: expenseCode,
-                vat_rate: $('#vat_rate').val(),
-                csrfmiddlewaretoken: '{{ csrf_token }}'
-            };
-
-            $.ajax({
-                url: "{% url 'product-ajax-create' %}",
-                method: "POST",
-                data: productData,
-                success: function(response) {
-                    console.log('Product created:', response);
-                    addProductToInvoice(response.product_id);
-                },
-                error: function(error) {
-                    console.error('Failed to create product:', error);
-                    showError("Failed to create new product.");
-                }
-            });
-        } else {
-            addProductToInvoice(selectedProductId);
         }
     });
 

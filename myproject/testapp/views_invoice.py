@@ -21,6 +21,7 @@ from django.contrib import messages
 from decimal import Decimal, InvalidOperation
 from django.template.loader import render_to_string
 from django.db.models.sql.where import EmptyResultSet
+from django.conf import settings
 
 
 
@@ -379,14 +380,31 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     success_url = reverse_lazy('invoice-list')
     success_message = "Invoice successfully updated."
 
-    def get_context_data(self, **kwargs):
-        data = super().get_context_data(**kwargs) 
-        if self.request.POST:
-            data['products'] = InvoiceProductInlineFormset(self.request.POST, instance=self.object) 
-        else:
-             data['products'] = InvoiceProductInlineFormset(instance=self.object, queryset=InvoiceProduct.objects.filter(invoice=self.object))
-        return data
+    def get_initial(self):
+        initial = super().get_initial()
+        if self.object and self.object.date:
+            # Ensure date is formatted correctly for the form
+            initial['date'] = self.object.date.strftime('%Y-%m-%d')
+        return initial
 
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        
+        # Add products formset back
+        if self.request.POST:
+            context['products'] = InvoiceProductInlineFormset(
+                self.request.POST, 
+                instance=self.object
+            )
+        else:
+            context['products'] = InvoiceProductInlineFormset(
+                instance=self.object,
+                queryset=InvoiceProduct.objects.filter(invoice=self.object)
+            )
+        
+        # Add debug info
+        context['debug'] = settings.DEBUG
+        return context
 
     def get_form_class(self):
         print("Using UPDATE VIEW")  # Debug print
@@ -399,9 +417,11 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
         products = context['products']
         print("Form valid:", form.is_valid())
         print("Products valid:", products.is_valid())
+        
         if not products.is_valid():
-            print("Products errors:", products.errors)  # Add this
-            print("Non-form errors:", products.non_form_errors())  # And this
+            print("Products errors:", products.errors)
+            print("Non-form errors:", products.non_form_errors())
+            
         if form.is_valid() and products.is_valid():
             print("Both form and products are valid")
             self.object = form.save()
@@ -409,6 +429,7 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
             products.save()
             print("Save completed")
             return super().form_valid(form)
+            
         print("Form validation failed")
         return self.form_invalid(form)
 
@@ -751,6 +772,21 @@ class InvoicePaymentDetailsView(View):
                 'created_at': allocation.payment.creation_date.strftime('%Y-%m-%d'),
                 'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
                 'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
+            })
+
+        cash_payments = invoice.cash_payments.all()
+        print(f"\nFound {cash_payments.count()} cash payments")
+        for payment in cash_payments:
+            check_details.append({
+                'id': str(payment.id),
+                'type': 'cash',
+                'payment_type': 'Cash',
+                'reference': payment.reference,
+                'amount': float(payment.amount),
+                'status': 'paid',
+                'created_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'delivered_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'paid_at': payment.payment_date.strftime('%Y-%m-%d'),
             })
         
         # Get direct debit records if this is a contract invoice
