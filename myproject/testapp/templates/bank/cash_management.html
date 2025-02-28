@@ -161,15 +161,59 @@
 <div class="tab-pane fade show active" id="statement">
     <div class="card shadow-sm">
         <div class="card-body">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h6 class="font-weight-bold mb-0">Cash Statement</h6>
-                <div class="date-filter">
-                    <input type="date" class="form-control form-control-sm d-inline-block" style="width: auto" id="statement-start-date">
-                    <span class="mx-2">to</span>
-                    <input type="date" class="form-control form-control-sm d-inline-block" style="width: auto" id="statement-end-date">
-                    <button class="btn btn-primary btn-sm ml-2" id="filter-statement">
-                        <i class="fas fa-filter"></i> Filter
-                    </button>
+            <!-- Add the filters here -->
+            <div class="filters-container mb-4">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="date-filter d-flex mb-3">
+                            <input type="date" class="form-control form-control-sm mr-2" id="statement-start-date">
+                            <span class="mx-2 d-flex align-items-center">to</span>
+                            <input type="date" class="form-control form-control-sm" id="statement-end-date">
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div id="filter-status" class="text-muted small"></div>
+                        <div class="text-right">
+                            <button class="btn btn-sm btn-secondary" id="reset-filters">
+                                <i class="fas fa-undo"></i> Reset Filters
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label class="small font-weight-bold">Reference</label>
+                        <input type="text" class="form-control form-control-sm" id="reference-filter" placeholder="Search reference...">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="small font-weight-bold">Supplier</label>
+                        <input type="text" class="form-control form-control-sm" id="supplier-filter" placeholder="Search supplier...">
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="small font-weight-bold">Transaction Type</label>
+                        <div class="d-flex flex-wrap">
+                            <div class="custom-control custom-checkbox mr-3">
+                                <input type="checkbox" class="custom-control-input type-filter" id="type-deposit" value="deposit" checked>
+                                <label class="custom-control-label" for="type-deposit">Deposits</label>
+                            </div>
+                            <div class="custom-control custom-checkbox mr-3">
+                                <input type="checkbox" class="custom-control-input type-filter" id="type-payment" value="payment" checked>
+                                <label class="custom-control-label" for="type-payment">Payments</label>
+                            </div>
+                            <div class="custom-control custom-checkbox">
+                                <input type="checkbox" class="custom-control-input type-filter" id="type-expense" value="expense" checked>
+                                <label class="custom-control-label" for="type-expense">Expenses</label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label class="small font-weight-bold">Amount Range</label>
+                        <div class="d-flex">
+                            <input type="number" class="form-control form-control-sm mr-2" id="min-amount" placeholder="Min" min="0" step="0.01">
+                            <input type="number" class="form-control form-control-sm" id="max-amount" placeholder="Max" min="0" step="0.01">
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="table-responsive">
@@ -218,10 +262,10 @@
                             <td class="text-right font-weight-bold">{{ entry.balance|floatformat:2 }}</td>
                             <td>
                                 {% if entry.type == 'payment' %}
-                                <button class="btn btn-sm btn-link view-payment" data-payment="{{ entry.id }}">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                            {% endif %}
+                                    <button class="btn btn-sm btn-link view-payment" data-payment="{{ entry.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                {% endif %}
                             </td>
                         </tr>
                         {% empty %}
@@ -831,36 +875,173 @@ $(document).ready(function() {
     // Initialize date filters with current month
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
     
     $('#statement-start-date, #accounting-start-date').val(firstDay.toISOString().split('T')[0]);
-    $('#statement-end-date, #accounting-end-date').val(today.toISOString().split('T')[0]);
+    $('#statement-end-date, #accounting-end-date').val(lastDay.toISOString().split('T')[0]);
 
-    // Statement filtering
-    $('#filter-statement').click(function() {
+     // Statement filtering
+     function debounce(func, wait) {
+        let timeout;
+        return function() {
+            const context = this, args = arguments;
+            clearTimeout(timeout);
+            timeout = setTimeout(function() {
+                func.apply(context, args);
+            }, wait);
+        };
+    }
+    
+    // Statement filtering function
+    const filterStatement = debounce(function() {
         const startDate = $('#statement-start-date').val();
         const endDate = $('#statement-end-date').val();
+        const reference = $('#reference-filter').val();
+        const supplier = $('#supplier-filter').val();
         
-        $.get('{% url "cash-statement" %}', {
-            start_date: startDate,
-            end_date: endDate
-        }, function(response) {
-            $('#statement-entries').html(response.html);
-            updateStatementTotals(response.totals);
+        // Get selected transaction types
+        const types = [];
+        $('.type-filter:checked').each(function() {
+            types.push($(this).val());
         });
-    });
+        
+        const minAmount = $('#min-amount').val();
+        const maxAmount = $('#max-amount').val();
+        
+        if (!validateDates(startDate, endDate)) {
+            console.error('Invalid date range');
+            return;
+        }
+        
+        console.log('Applying filters:', {
+            start_date: startDate,
+            end_date: endDate,
+            reference: reference,
+            supplier: supplier,
+            types: types,
+            min_amount: minAmount,
+            max_amount: maxAmount
+        });
+        
+        $.get(window.location.pathname, {
+            start_date: startDate,
+            end_date: endDate,
+            reference: reference,
+            supplier: supplier,
+            types: types.join(','),
+            min_amount: minAmount,
+            max_amount: maxAmount,
+            filter_type: 'statement'
+        })
+        .done(function(response) {
+            $('#statement-entries').html(response.html);
+            
+            // Update the footer with filtered totals
+            if (response.totals) {
+                $('.filtered-total-credit').text(parseFloat(response.totals.filtered_credit).toFixed(2));
+                $('.filtered-total-debit').text(parseFloat(response.totals.filtered_debit).toFixed(2));
+                
+                // Update the filter status text to show how many items are displayed
+                $('#filter-status').text(`Showing ${response.totals.total_count} transactions`);
+            }
+            
+            rebindActionButtons();
+            console.log("Statement filtered successfully");
+        })
+        .fail(function(xhr) {
+            console.error("Error filtering statement:", xhr.responseText);
+        });
+    }, 500);  // 500ms debounce
 
-    // Accounting filtering
-    $('#filter-accounting').click(function() {
+    $('#supplier-filter').on('input', function() {
+        const supplierValue = $(this).val().trim();
+        
+        if (supplierValue) {
+            // If supplier field has a value, uncheck deposit and expense
+            $('#type-deposit, #type-expense').prop('checked', false);
+        } else {
+            // If supplier field is cleared, re-check deposit and expense
+            $('#type-deposit, #type-expense').prop('checked', true);
+        }
+        
+        // Apply the updated filters
+        filterStatement();
+    });
+    
+    // Set up event listeners for all statement filters
+    $('#statement-start-date, #statement-end-date').on('change', filterStatement);
+    $('#reference-filter').on('input', filterStatement);
+    $('#min-amount, #max-amount').on('input', filterStatement); 
+    $('.type-filter').on('change', filterStatement);
+    
+    // Reset filters button
+    $('#reset-filters').on('click', function() {
+        // Reset date to current month
+        $('#statement-start-date').val(firstDay.toISOString().split('T')[0]);
+        $('#statement-end-date').val(lastDay.toISOString().split('T')[0]);
+        
+        // Clear other filters
+        $('#reference-filter, #supplier-filter, #min-amount, #max-amount').val('');
+        
+        // Check all transaction types
+        $('.type-filter').prop('checked', true);
+        
+        // Apply the reset filters
+        filterStatement();
+    });
+    
+    // Run initial filters
+    filterStatement();
+    
+    // Accounting filtering function
+    const filterAccounting = debounce(function() {
         const startDate = $('#accounting-start-date').val();
         const endDate = $('#accounting-end-date').val();
         
-        $.get('{% url "cash-accounting" %}', {
+        if (!validateDates(startDate, endDate)) {
+            console.error('Invalid date range');
+            return;
+        }
+        
+        $.get(window.location.pathname, {
             start_date: startDate,
-            end_date: endDate
-        }, function(response) {
+            end_date: endDate,
+            filter_type: 'accounting'
+        })
+        .done(function(response) {
             $('#accounting-entries').html(response.html);
+            console.log("Accounting filtered automatically");
+        })
+        .fail(function(xhr) {
+            console.error("Error filtering accounting:", xhr.responseText);
         });
+    }, 500);  // 500ms debounce
+    
+    // Set up event listeners for date inputs
+    $('#statement-start-date, #statement-end-date').on('change', filterStatement);
+    $('#accounting-start-date, #accounting-end-date').on('change', filterAccounting);
+    
+    // Keep the button handlers for manual triggers
+    $('#filter-statement').on('click', function(e) {
+        e.preventDefault();
+        filterStatement();
     });
+    
+    $('#filter-accounting').on('click', function(e) {
+        e.preventDefault();
+        filterAccounting();
+    });
+    
+    // Helper function to validate date range
+    function validateDates(startDate, endDate) {
+        if (!startDate || !endDate) return true;
+        return new Date(startDate) <= new Date(endDate);
+    }
+    
+    // Run initial filters
+    filterStatement();
+    filterAccounting();
+
 
     // Handle payment detail view
     $('.view-payment').on('click', function() {
@@ -954,6 +1135,20 @@ $(document).ready(function() {
         }
         
         $('#transactionDetailsModal').modal('show');
+    }
+
+    function rebindActionButtons() {
+        // Rebind payment view buttons
+        $('.view-payment').on('click', function() {
+            const paymentId = $(this).data('payment');
+            
+            $.get(`/testapp/cash/payment/detail/?id=${paymentId}`, function(response) {
+                showTransactionModal(response);
+            }).fail(function(error) {
+                console.error('Error fetching payment details:', error);
+                showTransactionModal({ error: 'Failed to load payment details' });
+            });
+        });
     }
 });
 </script>

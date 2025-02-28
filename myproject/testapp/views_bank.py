@@ -371,66 +371,163 @@ class CashConfigurationView(View):
             print(f"Current config: {config}")
 
             bank_accounts = BankAccount.objects.filter(is_active=True)
-            print(f"Active bank accounts: {bank_accounts}")
+            
+            # Get filter parameters
+            start_date = request.GET.get('start_date')
+            end_date = request.GET.get('end_date')
+            reference = request.GET.get('reference')
+            supplier = request.GET.get('supplier')
+            types = request.GET.get('types')
+            min_amount = request.GET.get('min_amount')
+            max_amount = request.GET.get('max_amount')
+            
+            is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            
+            print(f"Filter params - start: {start_date}, end: {end_date}, reference: {reference}, supplier: {supplier}")
+            print(f"Types: {types}, min: {min_amount}, max: {max_amount}, ajax: {is_ajax}")
+            
+            # Get all transactions
+            deposits = CashDeposit.objects.all()
+            payments = CashPayment.objects.select_related('invoice', 'invoice__supplier')
+            expenses = CashExpense.objects.all()
+            
+            # Apply date filters if provided
+            if start_date:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                deposits = deposits.filter(date__gte=start_date_obj)
+                payments = payments.filter(payment_date__gte=start_date_obj)
+                expenses = expenses.filter(date__gte=start_date_obj)
+                
+            if end_date:
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                deposits = deposits.filter(date__lte=end_date_obj)
+                payments = payments.filter(payment_date__lte=end_date_obj)
+                expenses = expenses.filter(date__lte=end_date_obj)
+            
+            # Apply reference filter
+            if reference:
+                deposits = deposits.filter(reference__icontains=reference)
+                payments = payments.filter(reference__icontains=reference)
+                expenses = expenses.filter(reference__icontains=reference)
+                
+            
+            # Sort by date for processing
+            deposits = deposits.order_by('date')
+            payments = payments.order_by('payment_date')
+            expenses = expenses.order_by('date')
+            
+            # Create a list of all transactions in chronological order
+            all_transactions = []
+            
+            # Apply transaction type filter - only add transactions of selected types
+            selected_types = types.split(',') if types else ['deposit', 'payment', 'expense']
+            
+            if 'deposit' in selected_types:
+                for deposit in deposits:
+                    all_transactions.append({
+                        'id': deposit.id,
+                        'source_id': deposit.id,
+                        'date': deposit.date,
+                        'reference': deposit.reference,
+                        'type': 'deposit',
+                        'notes': deposit.notes,
+                        'description': deposit.notes if deposit.notes else f"Cash deposit {deposit.reference}",
+                        'credit': deposit.amount,
+                        'debit': None,
+                        'source_bank': deposit.source_bank_account,
+                        'raw_date': deposit.date,
+                        'amount': deposit.amount  # For amount filtering
+                    })
+                    
+            if 'payment' in selected_types:
+                # Apply supplier filter only to payments, before adding them to all_transactions
+                filtered_payments = payments
+                if supplier:
+                    filtered_payments = payments.filter(invoice__supplier__name__icontains=supplier)
+                    
+                for payment in filtered_payments:
+                    all_transactions.append({
+                        'id': payment.id,
+                        'source_id': payment.id,
+                        'date': payment.payment_date,
+                        'reference': payment.reference,
+                        'type': 'payment',
+                        'invoice': payment.invoice,
+                        'supplier': payment.invoice.supplier.name,  # Include supplier name
+                        'description': f"Invoice {payment.invoice.ref}",
+                        'credit': None,
+                        'debit': payment.amount,
+                        'raw_date': payment.payment_date,
+                        'amount': payment.amount  # For amount filtering
+                    })
+                    
+            if 'expense' in selected_types:
+                for expense in expenses:
+                    all_transactions.append({
+                        'id': expense.id,
+                        'source_id': expense.id,
+                        'date': expense.date,
+                        'reference': expense.reference,
+                        'type': 'expense',
+                        'notes': expense.notes,
+                        'description': expense.notes if expense.notes else f"{expense.get_expense_type_display()}",
+                        'credit': None,
+                        'debit': expense.amount,
+                        'expense_account': expense.expense_account,
+                        'raw_date': expense.date,
+                        'amount': expense.amount  # For amount filtering
+                    })
+                    
+            # Apply amount range filter
+            if min_amount or max_amount:
+                filtered_transactions = []
+                for t in all_transactions:
+                    amount = t.get('amount', 0)
+                    if min_amount and float(amount) < float(min_amount):
+                        continue
+                    if max_amount and float(amount) > float(max_amount):
+                        continue
+                    filtered_transactions.append(t)
+                all_transactions = filtered_transactions
+                
+            # Sort all transactions by date (oldest first for balance calculation)
+            all_transactions.sort(key=lambda x: x['raw_date'])
+            
+            # Calculate proper running balance
+            # Make absolutely sure we're only calculating balance from actual transactions
+            
+            # Starting balance calculation (properly considering transaction effects)
+            starting_balance = config.current_balance
+            for t in all_transactions:
+                if t['type'] == 'deposit':
+                    starting_balance -= t['credit']  # Subtract deposits
+                else:
+                    starting_balance += t['debit']   # Add payments/expenses
 
-            # Get all deposits and payments
-            deposits = CashDeposit.objects.all().order_by('-date')
-            payments = CashPayment.objects.select_related('invoice', 'invoice__supplier').order_by('-payment_date')
-            expenses = CashExpense.objects.all().order_by('-date')
-            total_expenses = expenses.aggregate(total=Sum('amount'))['total'] or 0
-            # Create statement entries with running balance
+            # Now calculate the running balance for each transaction
+            running_balance = starting_balance
             statement_entries = []
-            running_balance = config.current_balance if config else Decimal('0')
-            # Add deposits with calculated balance
-            for deposit in deposits:
-                statement_entries.append({
-                    'id': deposit.id,
-                    'date': deposit.date,
-                    'reference': deposit.reference,
-                    'type': 'deposit',
-                    'notes': deposit.notes,
-                    'description': f"Cash deposit {deposit.reference}" if deposit.notes == '' else deposit.notes,
-                    'credit': deposit.amount,
-                    'debit': None,
-                    'balance': running_balance,
-                    'raw_date': deposit.date
-                })
-                running_balance -= deposit.amount
-                
-            # Add payments with calculated balance
-            for payment in payments:
-                statement_entries.append({
-                    'id': payment.id,
-                    'date': payment.payment_date,
-                    'reference': payment.reference,
-                    'type': 'payment',
-                    'invoice': payment.invoice,
-                    'description': f"Cash payment for invoice {payment.invoice}",
-                    'credit': None,
-                    'debit': payment.amount,
-                    'balance': running_balance,
-                    'raw_date': payment.payment_date
-                })
-                running_balance += payment.amount
 
-            # Add expenses with calculated balance
-            for expense in expenses:
-                statement_entries.append({
-                    'id': expense.id,
-                    'date': expense.date,
-                    'reference': expense.reference,
-                    'type': 'expense',
-                    'notes': expense.notes,
-                    'description': f"Expense {expense.reference}" if expense.notes == '' else expense.notes,
-                    'credit': None,
-                    'debit': expense.amount,
-                    'balance': running_balance,
-                    'raw_date': expense.date
-                })
-                running_balance -= expense.amount
+            print(f"Starting balance before transactions: {starting_balance}")
+            for transaction in all_transactions:
+                # Create a new dictionary for the display entry to avoid modifying original
+                entry = transaction.copy()
                 
-            # Sort by date (newest first)
-            statement_entries.sort(key=lambda x: x['date'], reverse=True)
+                # Update running balance
+                if transaction['type'] == 'deposit':
+                    running_balance += transaction['credit']  # Deposits increase cash
+                else:
+                    running_balance -= transaction['debit']   # Payments/expenses decrease cash
+                
+                entry['balance'] = running_balance
+                print(f"Transaction: {transaction['type']} - {transaction['raw_date']} - "+
+                    f"Credit: {transaction['credit']} - Debit: {transaction['debit']} - "+
+                    f"New Balance: {running_balance}")
+                
+                statement_entries.append(entry)
+            
+            # Reverse for display (newest first)
+            statement_entries.reverse()
             
             # Generate accounting entries
             accounting_entries = []
@@ -506,23 +603,61 @@ class CashConfigurationView(View):
                     }
                 ])
             
-            # Sort accounting entries by date
+            # Sort accounting entries by date (newest first)
             accounting_entries.sort(key=lambda x: x['date'], reverse=True)
             
             # Calculate totals
             total_credit = sum(entry['credit'] or 0 for entry in statement_entries)
             total_debit = sum(entry['debit'] or 0 for entry in statement_entries)
-
-            total_payments = payments.aggregate(total=Sum('amount'))['total'] or 0
-            total_deposits = deposits.aggregate(total=Sum('amount'))['total'] or 0
             
+            total_deposits_amount = deposits.aggregate(total=Sum('amount'))['total'] or 0
+            total_payments_amount = payments.aggregate(total=Sum('amount'))['total'] or 0
+            total_expenses_amount = expenses.aggregate(total=Sum('amount'))['total'] or 0
+            
+            # Handle AJAX request for filtered data
+            if is_ajax:
+                filter_type = request.GET.get('filter_type', 'statement')
+                
+                if filter_type == 'statement':
+                    # Calculate totals from the filtered and displayed transactions only
+                    filtered_total_credit = sum(entry['credit'] or 0 for entry in statement_entries)
+                    filtered_total_debit = sum(entry['debit'] or 0 for entry in statement_entries)
+                    
+                    html = render_to_string(
+                        'bank/partials/cash_statement_table.html',
+                        {
+                            'entries': statement_entries,
+                            'filtered_total_credit': filtered_total_credit,
+                            'filtered_total_debit': filtered_total_debit
+                        },
+                        request=request
+                    )
+                    return JsonResponse({
+                        'html': html,
+                        'totals': {
+                            'filtered_credit': float(filtered_total_credit),
+                            'filtered_debit': float(filtered_total_debit),
+                            'total_count': len(statement_entries)
+                        }
+                    })
+                elif filter_type == 'accounting':
+                    total_debit = sum(entry['debit'] or 0 for entry in accounting_entries)
+                    total_credit = sum(entry['credit'] or 0 for entry in accounting_entries)
+                    html = render_to_string(
+                        'bank/partials/cash_accounting_table.html',
+                        {'entries': accounting_entries, 'total_debit': total_debit, 'total_credit': total_credit},
+                        request=request
+                    )
+                    return JsonResponse({'html': html})
+            
+            # Normal page load
             context = {
                 'config': config,
                 'current_balance': float(config.current_balance) if config else 0,
                 'max_threshold_value': config.max_payment_threshold if config else 5000.00,
-                'total_deposits': float(total_deposits),
-                'total_payments': float(total_payments + total_expenses),
-                'total_expenses': float(total_expenses),
+                'total_deposits': float(total_deposits_amount),
+                'total_payments': float(total_payments_amount),
+                'total_expenses': float(total_expenses_amount),
                 'expense_types': dict(CashExpense.EXPENSE_TYPE_CHOICES),
                 'statement_entries': statement_entries,
                 'accounting_entries': accounting_entries,
@@ -530,8 +665,10 @@ class CashConfigurationView(View):
                 'total_debit': float(total_debit),
                 'bank_accounts': bank_accounts
             }
+            
             print(f"\nDebug Config object: {config}")
             print(f"Config max_payment_threshold: {config.max_payment_threshold if config else 'None'}")
+            
             return render(request, 'bank/cash_management.html', context)
             
         except Exception as e:

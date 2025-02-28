@@ -1,41 +1,44 @@
-<table class="table table-hover">
-    <thead class="bg-light">
-        <tr>
-            <th>Date</th>
-            <th>Description</th>
-            <th class="text-right">Debit</th>
-            <th class="text-right">Credit</th>
-            <th class="text-right">Balance</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for entry in transactions %}
-        <tr>
-            <td>{{ entry.date|date:"d-m-Y" }}</td>
-            <td>
-                {{ entry.description }}
-                {% if entry.type == 'payment' %}
-                <button class="btn btn-link btn-sm view-payment" data-payment="{{ entry.reference }}">
-                    <i class="fas fa-eye"></i>
-                </button>
-                {% endif %}
-            </td>
-            <td class="text-right text-danger">
-                {% if entry.debit %}{{ entry.debit|floatformat:2 }}{% else %}-{% endif %}
-            </td>
-            <td class="text-right text-success">
-                {% if entry.credit %}{{ entry.credit|floatformat:2 }}{% else %}-{% endif %}
-            </td>
-            <td class="text-right font-weight-bold">{{ entry.balance|floatformat:2 }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-    <tfoot class="bg-light font-weight-bold">
-        <tr>
-            <td colspan="2">Totals</td>
-            <td class="text-right text-danger">{{ total_debit|floatformat:2 }}</td>
-            <td class="text-right text-success">{{ total_credit|floatformat:2 }}</td>
-            <td class="text-right">{{ current_balance|floatformat:2 }}</td>
-        </tr>
-    </tfoot>
-</table>
+{% for entry in entries %}
+<tr>
+    <td>{{ entry.date|date:"d-m-Y" }}</td>
+    <td>{{ entry.reference }}</td>
+    <td>
+        {% if entry.type == 'deposit' %}
+        <span class="badge badge-success">Deposit</span>
+        {% elif entry.type == 'expense' %}
+        <span class="badge badge-secondary">Expense</span>
+        {% else %}
+        <span class="badge badge-danger">Payment</span>
+        {% endif %}
+    </td>
+    <td>
+        {% if entry.type == 'payment' and entry.invoice %}
+        <a href="{% url 'invoice-update' entry.invoice.id %}" target="_blank">
+            Invoice {{ entry.invoice.ref }}
+        </a>
+        {% else %}
+        {{ entry.description|default:"-" }}
+        {% endif %}
+    </td>
+    <td class="text-right text-success">
+        {% if entry.credit %}{{ entry.credit|floatformat:2 }}{% else %}-{% endif %}
+    </td>
+    <td class="text-right text-danger">
+        {% if entry.debit %}{{ entry.debit|floatformat:2 }}{% else %}-{% endif %}
+    </td>
+    <td class="text-right font-weight-bold">{{ entry.balance|floatformat:2 }}</td>
+    <td>
+        {% if entry.type == 'payment' %}
+            <button class="btn btn-sm btn-link view-payment" data-payment="{{ entry.id }}">
+                <i class="fas fa-eye"></i>
+            </button>
+        {% endif %}
+    </td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="8" class="text-center text-muted py-4">
+        <i class="fas fa-info-circle mr-1"></i> No transactions found
+    </td>
+</tr>
+{% endfor %}
