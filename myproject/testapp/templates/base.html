@@ -500,8 +500,16 @@
                             </a>
 
                             <!-- Energy Management -->
+                            <a class="nav-link {% if request.resolver_match.url_name == 'energy-type-list' %}active{% endif %}" 
+                            href="{% url 'energy-type-list' %}">
+                                <i class="fas fa-bolt me-2"></i> {% trans "Energy Management" %}
+                            </a>
 
                             <!-- Production Records -->
+                            <a class="nav-link {% if request.resolver_match.url_name == 'production-list' %}active{% endif %}" 
+                            href="{% url 'production-list' %}">
+                                <i class="fas fa-industry me-2"></i> {% trans "Production Records" %}
+                            </a>
 
                             <!-- Loading Records -->
 

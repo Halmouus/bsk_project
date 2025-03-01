@@ -1,0 +1,1105 @@
+{% extends "base.html" %}
+
+{% block title %}Production Records{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="h3 mb-0 text-gray-800">Production Records</h1>
+        <button type="button" class="btn btn-primary" onclick="ProductionManager.openCreateModal()">
+            <i class="fas fa-plus"></i> New Production Record
+        </button>
+    </div>
+
+    <!-- Debug Panel -->
+    <div id="debugPanel" class="alert alert-info mb-4" style="display: none;">
+        <pre id="debugContent"></pre>
+    </div>
+
+    <!-- Main Table -->
+    <div class="card shadow">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>VPower</th>
+                            <th>Total Wagons</th>
+                            <th>Total Bricks</th>
+                            <th>Packaged Bricks</th>
+                            <th>Bulk Bricks</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for batch in production_batches %}
+                        <tr data-id="{{ batch.id }}">
+                            <td>{{ batch.production_date|date:"Y-m-d" }}</td>
+                            <td>{{ batch.effective_vpower }}</td>
+                            <td>{{ batch.total_wagons }}</td>
+                            <td>{{ batch.total_bricks }}</td>
+                            <td>{{ batch.total_packaged }}</td>
+                            <td>{{ batch.total_bulk }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-info view-production" data-id="{{ batch.id }}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="btn btn-sm btn-warning ms-2 edit-production" data-id="{{ batch.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-danger ms-2 delete-production" data-id="{{ batch.id }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Production Modal -->
+<div class="modal fade" id="productionModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">New Production Record</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="productionForm">
+                    {% csrf_token %}
+                    <input type="hidden" name="production_id" id="productionId">
+                    
+                    <!-- Tabs -->
+                    <ul class="nav nav-tabs mb-3" id="productionTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab" aria-controls="basic" aria-selected="true">Basic Info</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="energy-tab" data-bs-toggle="tab" data-bs-target="#energy" type="button" role="tab" aria-controls="energy" aria-selected="false">Energy</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button" role="tab" aria-controls="production" aria-selected="false">Production</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="packaging-tab" data-bs-toggle="tab" data-bs-target="#packaging" type="button" role="tab" aria-controls="packaging" aria-selected="false">Packaging</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content" id="productionTabContent">
+                        <!-- Basic Info Tab -->
+                        <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">Production Date*</label>
+                                    <input type="date" name="production_date" id="productionDate" class="form-control" required>
+                                    <small class="text-muted">Cannot be earlier than the latest production record</small>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label">VPower</label>
+                                    <div class="input-group">
+                                        <input type="number" name="vpower" id="vpowerInput" class="form-control" readonly>
+                                        <button class="btn btn-outline-secondary" type="button" id="manualVpowerBtn">Manual</button>
+                                    </div>
+                                    <small class="text-muted">VPower is calculated automatically from total wagons</small>
+                                </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Notes</label>
+                                <textarea name="notes" class="form-control" rows="3"></textarea>
+                            </div>
+                        </div>
+                        
+                        <!-- Energy Tab -->
+                        <div class="tab-pane fade" id="energy" role="tabpanel" aria-labelledby="energy-tab">
+                            <div class="alert alert-info">
+                                Enter quantities for each energy type used in production.
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Energy Type</th>
+                                            <th>Unit</th>
+                                            <th>Quantity</th>
+                                            <th>Price per Unit</th>
+                                            <th>Total Cost</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="energyItems">
+                                        {% for energy_type in energy_types %}
+                                        <tr data-energy-id="{{ energy_type.id }}">
+                                            <td>
+                                                {{ energy_type.name }}
+                                                <input type="hidden" name="energy_type_ids[]" value="{{ energy_type.id }}">
+                                            </td>
+                                            <td>{{ energy_type.unit }}</td>
+                                            <td>
+                                                <input type="number" name="energy_quantities[]" class="form-control energy-quantity" placeholder="0" step="0.01" min="0" value="0">
+                                            </td>
+                                            <td>
+                                                <span class="energy-price">{{ energy_type.get_current_price|default:"0" }}</span>
+                                            </td>
+                                            <td class="energy-cost">0.00</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary">
+                                            <th colspan="4">Total Energy Cost</th>
+                                            <td id="totalEnergyCost">0.00</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Production Tab -->
+                        <div class="tab-pane fade" id="production" role="tabpanel" aria-labelledby="production-tab">
+                            <div class="alert alert-info">
+                                <p>Enter number of wagons produced for each brick type.</p>
+                                <p>The total number of bricks is automatically calculated based on bricks per wagon.</p>
+                                <p>Miscellaneous values are adjustments (positive or negative) to account for anomalies.</p>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Brick Type</th>
+                                            <th>Bricks/Wagon</th>
+                                            <th>Wagons</th>
+                                            <th>Misc. Adjustment</th>
+                                            <th>Total Bricks</th>
+                                            <th>Bulk Price</th>
+                                            <th>Value</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="productionItems">
+                                        {% for brick_type in brick_types %}
+                                        <tr data-brick-id="{{ brick_type.id }}">
+                                            <td>
+                                                {{ brick_type.name }}
+                                                <input type="hidden" name="brick_type_ids[]" value="{{ brick_type.id }}">
+                                            </td>
+                                            <td>
+                                                <span class="bricks-per-wagon">{{ brick_type.bricks_per_wagon }}</span>
+                                            </td>
+                                            <td>
+                                                <input type="number" name="wagons[]" class="form-control wagons-input" min="0" value="0">
+                                            </td>
+                                            <td>
+                                                <input type="number" name="misc_adjustments[]" class="form-control misc-input" value="0">
+                                            </td>
+                                            <td>
+                                                <span class="total-bricks">0</span>
+                                            </td>
+                                            <td>
+                                                <span class="bulk-price">{{ brick_type.get_current_prices.bulk_price|default:"0" }}</span>
+                                            </td>
+                                            <td>
+                                                <span class="bulk-value">0</span>
+                                            </td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary">
+                                            <th colspan="2">Totals</th>
+                                            <td id="totalWagons">0</td>
+                                            <td id="totalMisc">0</td>
+                                            <td id="grandTotal">0</td>
+                                            <td></td>
+                                            <td id="totalValue">0</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        <!-- Packaging Tab -->
+                        <div class="tab-pane fade" id="packaging" role="tabpanel" aria-labelledby="packaging-tab">
+                            <div class="alert alert-info">
+                                <p>Enter the number of bricks to be packaged for each type.</p>
+                                <p>Cannot exceed the total bricks produced (including miscellaneous adjustments).</p>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Brick Type</th>
+                                            <th>Current Stock</th>
+                                            <th>New Production</th>
+                                            <th>Total Available</th>
+                                            <th>Packaged Bricks</th>
+                                            <th>Remaining (Bulk)</th>
+                                            <th>Package Price</th>
+                                            <th>Value Added</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="packagingItems">
+                                        {% for brick_type in brick_types %}
+                                        <tr data-brick-id="{{ brick_type.id }}">
+                                            <td>{{ brick_type.name }}</td>
+                                            <td class="current-stock">0</td>
+                                            <td class="new-production">0</td>
+                                            <td class="total-available">0</td>
+                                            <td>
+                                                <input type="number" name="packaged[]" class="form-control packaging-input" min="0" value="0">
+                                            </td>
+                                            <td class="remaining-bricks">0</td>
+                                            <td>
+                                                <span class="packaged-price">{{ brick_type.get_current_prices.packaged_price|default:"0" }}</span>
+                                            </td>
+                                            <td class="packaging-value-added">0</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="table-secondary">
+                                            <th colspan="4">Totals</th>
+                                            <td id="totalPackaged">0</td>
+                                            <td id="totalRemaining">0</td>
+                                            <td></td>
+                                            <td id="totalValueAdded">0</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveProduction">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const ProductionManager = {
+    modal: null,
+    currentMode: 'create',
+    vpowerManualMode: false,
+
+    initialize() {
+        this.modal = new bootstrap.Modal(document.getElementById('productionModal'));
+        this.debug('ProductionManager initialized');
+        
+        // Initialize the tabs
+        const tabElements = document.querySelectorAll('#productionTabs button');
+        tabElements.forEach(tab => {
+            tab.addEventListener('click', event => {
+                event.preventDefault();
+                const tabTarget = document.querySelector(event.target.dataset.bsTarget);
+                
+                // Hide all tabs
+                document.querySelectorAll('.tab-pane').forEach(pane => {
+                    pane.classList.remove('show', 'active');
+                });
+                
+                // Deactivate all tab buttons
+                tabElements.forEach(t => {
+                    t.classList.remove('active');
+                    t.setAttribute('aria-selected', 'false');
+                });
+                
+                // Show the selected tab
+                tabTarget.classList.add('show', 'active');
+                
+                // Activate the tab button
+                event.target.classList.add('active');
+                event.target.setAttribute('aria-selected', 'true');
+            });
+        });
+        
+        // Fetch the latest production date and current stock levels
+        this.fetchLatestProductionDate();
+        this.fetchCurrentStock();
+        
+        this.setupEventListeners();
+    },
+    
+    async fetchLatestProductionDate() {
+        try {
+            const response = await fetch('/testapp/production/records/latest-date/');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.latestProductionDate = data.latest_date;
+                this.debug(`Latest production date: ${this.latestProductionDate}`);
+            }
+        } catch (error) {
+            this.debug(`Error fetching latest production date: ${error.message}`);
+        }
+    },
+    
+    async fetchCurrentStock() {
+        try {
+            const response = await fetch('/testapp/production/api/current-stock/');
+            const data = await response.json();
+            
+            if (data.success) {
+                this.currentStock = data.stock;
+                this.debug(`Current stock loaded: ${this.currentStock.length} items`);
+            }
+        } catch (error) {
+            this.debug(`Error fetching current stock: ${error.message}`);
+        }
+    },
+
+    debug(msg) {
+        console.log(msg);
+        const panel = document.getElementById('debugPanel');
+        const content = document.getElementById('debugContent');
+        content.textContent += JSON.stringify(msg, null, 2) + '\n';
+        panel.style.display = 'block';
+    },
+
+    setupEventListeners() {
+        // View button
+        document.querySelectorAll('.view-production').forEach(button => {
+            button.addEventListener('click', e => {
+                this.viewProduction(e.target.closest('button').dataset.id);
+            });
+        });
+
+        // Edit button
+        document.querySelectorAll('.edit-production').forEach(button => {
+            button.addEventListener('click', e => {
+                this.editProduction(e.target.closest('button').dataset.id);
+            });
+        });
+
+        // Delete button
+        document.querySelectorAll('.delete-production').forEach(button => {
+            button.addEventListener('click', e => {
+                this.deleteProduction(e.target.closest('button').dataset.id);
+            });
+        });
+
+        // Save button
+        document.getElementById('saveProduction').addEventListener('click', () => {
+            if (this.currentMode === 'create') {
+                this.createProduction();
+            } else {
+                this.updateProduction();
+            }
+        });
+
+        // Manual VPower button
+        document.getElementById('manualVpowerBtn').addEventListener('click', () => {
+            this.toggleVpowerMode();
+        });
+
+        // Production inputs for realtime calculations
+        document.querySelectorAll('.wagons-input, .misc-input').forEach(input => {
+            input.addEventListener('input', () => this.calculateTotals());
+        });
+
+        // Packaging inputs
+        document.querySelectorAll('.packaging-input').forEach(input => {
+            input.addEventListener('input', () => {
+                this.validatePackaging();
+                this.updatePackagingValues();
+            });
+        });
+        
+        // Energy inputs
+        document.querySelectorAll('.energy-quantity').forEach(input => {
+            input.addEventListener('input', () => this.calculateEnergyCosts());
+        });
+    },
+
+    updatePackagingValues() {
+        let totalPackagedValue = 0;
+        
+        document.querySelectorAll('#packagingItems > tr').forEach(row => {
+            const packagingInput = row.querySelector('.packaging-input');
+            const packagedPriceEl = row.querySelector('.packaged-price');
+            const valueEl = row.querySelector('.packaging-value-added');
+            
+            if (!packagingInput || !packagedPriceEl || !valueEl) return;
+            
+            const packaged = parseInt(packagingInput.value) || 0;
+            const packagedPrice = parseFloat(packagedPriceEl.textContent) || 0;
+            
+            // Calculate package value (quantity * price)
+            const packagedValue = packaged * packagedPrice;
+            valueEl.textContent = packagedValue.toFixed(2);
+            
+            totalPackagedValue += packagedValue;
+        });
+        
+        // Update total in footer
+        const totalValueAddedEl = document.getElementById('totalValueAdded');
+        if (totalValueAddedEl) {
+            totalValueAddedEl.textContent = totalPackagedValue.toFixed(2);
+        }
+    },
+    
+    calculateEnergyCosts() {
+        let totalCost = 0;
+        
+        document.querySelectorAll('#energyItems > tr').forEach(row => {
+            const quantityInput = row.querySelector('.energy-quantity');
+            const priceEl = row.querySelector('.energy-price');
+            const costEl = row.querySelector('.energy-cost');
+            
+            if (!quantityInput || !priceEl || !costEl) return;
+            
+            const quantity = parseFloat(quantityInput.value) || 0;
+            const price = parseFloat(priceEl.textContent) || 0;
+            const cost = quantity * price;
+            
+            costEl.textContent = cost.toFixed(2);
+            totalCost += cost;
+        });
+        
+        const totalCostEl = document.getElementById('totalEnergyCost');
+        if (totalCostEl) {
+            totalCostEl.textContent = totalCost.toFixed(2);
+        }
+    },
+
+    toggleVpowerMode() {
+        const vpowerInput = document.getElementById('vpowerInput');
+        const vpowerBtn = document.getElementById('manualVpowerBtn');
+        
+        this.vpowerManualMode = !this.vpowerManualMode;
+        
+        if (this.vpowerManualMode) {
+            vpowerInput.readOnly = false;
+            vpowerBtn.textContent = 'Auto';
+            vpowerBtn.classList.remove('btn-outline-secondary');
+            vpowerBtn.classList.add('btn-outline-warning');
+        } else {
+            vpowerInput.readOnly = true;
+            vpowerBtn.textContent = 'Manual';
+            vpowerBtn.classList.remove('btn-outline-warning');
+            vpowerBtn.classList.add('btn-outline-secondary');
+            this.calculateVpower();
+        }
+    },
+
+    calculateVpower() {
+        if (this.vpowerManualMode) return;
+        
+        const totalWagons = parseInt(document.getElementById('totalWagons').textContent) || 0;
+        let vpower = 0;
+        
+        if (totalWagons > 0) {
+            // VPower formula: (24 hours * 60 minutes) / (total wagons * 3)
+            vpower = Math.round((24 * 60) / (totalWagons * 3));
+        }
+        
+        document.getElementById('vpowerInput').value = vpower;
+    },
+
+    calculateTotals() {
+        let totalWagons = 0;
+        let totalMisc = 0;
+        let grandTotal = 0;
+        let totalValue = 0;
+        
+        // Calculate totals for each row in production tab
+        document.querySelectorAll('#productionItems > tr').forEach(row => {
+            const bricksPerWagonEl = row.querySelector('.bricks-per-wagon');
+            const wagonsInput = row.querySelector('.wagons-input');
+            const miscInput = row.querySelector('.misc-input');
+            const totalBricksEl = row.querySelector('.total-bricks');
+            const bulkPriceEl = row.querySelector('.bulk-price');
+            const bulkValueEl = row.querySelector('.bulk-value');
+            
+            if (!bricksPerWagonEl || !wagonsInput || !miscInput || !totalBricksEl) return;
+            
+            const bricksPerWagon = parseInt(bricksPerWagonEl.textContent) || 0;
+            const wagons = parseInt(wagonsInput.value) || 0;
+            const misc = parseInt(miscInput.value) || 0;
+            const bulkPrice = bulkPriceEl ? (parseFloat(bulkPriceEl.textContent) || 0) : 0;
+            
+            // Calculate total bricks produced
+            const totalBricks = (wagons * bricksPerWagon) + misc;
+            totalBricksEl.textContent = totalBricks;
+            
+            // Calculate value (price * quantity)
+            const rowValue = totalBricks * bulkPrice;
+            if (bulkValueEl) {
+                bulkValueEl.textContent = rowValue.toFixed(2);
+            }
+            totalValue += rowValue;
+            
+            // Update the same brick type in the packaging tab
+            this.updatePackagingRow(row.dataset.brickId, totalBricks);
+            
+            // Update production totals
+            totalWagons += wagons;
+            totalMisc += misc;
+            grandTotal += totalBricks;
+        });
+        
+        // Update totals in production footer
+        const totalWagonsEl = document.getElementById('totalWagons');
+        const totalMiscEl = document.getElementById('totalMisc');
+        const grandTotalEl = document.getElementById('grandTotal');
+        const totalValueEl = document.getElementById('totalValue');
+        
+        if (totalWagonsEl) totalWagonsEl.textContent = totalWagons;
+        if (totalMiscEl) totalMiscEl.textContent = totalMisc;
+        if (grandTotalEl) grandTotalEl.textContent = grandTotal;
+        if (totalValueEl) totalValueEl.textContent = totalValue.toFixed(2);
+        
+        // Recalculate VPower
+        this.calculateVpower();
+        
+        // Update packaging remaining and values
+        this.validatePackaging();
+    },
+    
+    updatePackagingRow(brickId, newProduction) {
+        const packagingRow = document.querySelector(`#packagingItems > tr[data-brick-id="${brickId}"]`);
+        if (!packagingRow) return;
+        
+        const newProductionEl = packagingRow.querySelector('.new-production');
+        const totalAvailableEl = packagingRow.querySelector('.total-available');
+        const currentStockEl = packagingRow.querySelector('.current-stock');
+        
+        if (newProductionEl) {
+            newProductionEl.textContent = newProduction;
+        }
+        
+        // Update total available (current stock + new production)
+        if (totalAvailableEl && currentStockEl) {
+            const currentStock = parseInt(currentStockEl.textContent) || 0;
+            totalAvailableEl.textContent = currentStock + newProduction;
+        }
+    },
+
+    validatePackaging() {
+        let totalPackaged = 0;
+        let totalRemaining = 0;
+        let totalPackagedValue = 0;
+        
+        document.querySelectorAll('#packagingItems > tr').forEach(row => {
+            const currentStockEl = row.querySelector('.current-stock');
+            const newProductionEl = row.querySelector('.new-production');
+            const totalAvailableEl = row.querySelector('.total-available');
+            const packagingInput = row.querySelector('.packaging-input');
+            const remainingEl = row.querySelector('.remaining-bricks');
+            const packagedPriceEl = row.querySelector('.packaged-price');
+            const valueAddedEl = row.querySelector('.packaging-value-added'); // We'll keep the class name but change its meaning
+            
+            if (!currentStockEl || !newProductionEl || !totalAvailableEl || !packagingInput || !remainingEl) return;
+            
+            const currentStock = parseInt(currentStockEl.textContent) || 0;
+            const newProduction = parseInt(newProductionEl.textContent) || 0;
+            const totalAvailable = currentStock + newProduction;
+            const packaged = parseInt(packagingInput.value) || 0;
+            
+            // Calculate remaining bulk bricks
+            const remaining = totalAvailable - packaged;
+            
+            // Calculate packaged value (packaged quantity * package price)
+            const packagedPrice = packagedPriceEl ? (parseFloat(packagedPriceEl.textContent) || 0) : 0;
+            const packagedValue = packaged * packagedPrice;
+            
+            if (valueAddedEl) {
+                valueAddedEl.textContent = packagedValue.toFixed(2);
+            }
+            
+            // Update the display
+            totalAvailableEl.textContent = totalAvailable;
+            remainingEl.textContent = remaining;
+            
+            // Update totals
+            totalPackaged += packaged;
+            totalRemaining += remaining;
+            totalPackagedValue += packagedValue;
+            
+            // Validate packaging input - can't package more than available
+            if (packaged > totalAvailable) {
+                packagingInput.classList.add('is-invalid');
+            } else {
+                packagingInput.classList.remove('is-invalid');
+            }
+        });
+        
+        // Update totals in the footer
+        const totalPackagedEl = document.getElementById('totalPackaged');
+        const totalRemainingEl = document.getElementById('totalRemaining');
+        const totalValueAddedEl = document.getElementById('totalValueAdded');
+        
+        if (totalPackagedEl) {
+            totalPackagedEl.textContent = totalPackaged;
+        }
+        if (totalRemainingEl) {
+            totalRemainingEl.textContent = totalRemaining;
+        }
+        if (totalValueAddedEl) {
+            totalValueAddedEl.textContent = totalPackagedValue.toFixed(2);
+        }
+    },
+    openCreateModal() {
+        this.currentMode = 'create';
+        
+        // Reset the entire form to initial state
+        document.getElementById('productionForm').reset();
+        document.getElementById('productionId').value = '';
+        document.querySelector('#productionModal .modal-title').textContent = 'New Production Record';
+        
+        // Make sure all inputs are enabled
+        document.querySelectorAll('#productionForm input, #productionForm textarea').forEach(input => {
+            input.readOnly = false;
+        });
+        
+        document.getElementById('manualVpowerBtn').style.display = 'inline-block';
+        document.getElementById('saveProduction').style.display = 'block';
+        
+        // Set today's date
+        const today = new Date().toISOString().split('T')[0];
+        const dateInput = document.querySelector('#productionDate');
+        dateInput.value = today;
+        
+        // Set min date based on latest production date
+        if (this.latestProductionDate) {
+            const nextDay = new Date(this.latestProductionDate);
+            nextDay.setDate(nextDay.getDate() + 1);
+            const minDate = nextDay.toISOString().split('T')[0];
+            dateInput.min = minDate;
+        }
+        
+        // Reset VPower mode
+        this.vpowerManualMode = false;
+        const vpowerBtn = document.getElementById('manualVpowerBtn');
+        vpowerBtn.textContent = 'Manual';
+        vpowerBtn.classList.remove('btn-outline-warning');
+        vpowerBtn.classList.add('btn-outline-secondary');
+        document.getElementById('vpowerInput').readOnly = true;
+        
+        // Clear all inputs explicitly
+        document.querySelectorAll('.wagons-input, .misc-input, .packaging-input, .energy-quantity').forEach(input => {
+            input.value = 0;
+        });
+        
+        // Reset all calculated totals
+        document.querySelectorAll('.total-bricks, .new-production, .remaining-bricks, .energy-cost, .bulk-value, .packaging-value-added').forEach(span => {
+            span.textContent = '0';
+        });
+        
+        // Set current stock levels in the packaging tab
+        this.displayCurrentStock();
+        
+        document.getElementById('totalWagons').textContent = '0';
+        document.getElementById('totalMisc').textContent = '0';
+        document.getElementById('grandTotal').textContent = '0';
+        document.getElementById('vpowerInput').value = '0';
+        
+        if (document.getElementById('totalEnergyCost')) document.getElementById('totalEnergyCost').textContent = '0.00';
+        if (document.getElementById('totalValue')) document.getElementById('totalValue').textContent = '0.00';
+        if (document.getElementById('totalPackaged')) document.getElementById('totalPackaged').textContent = '0';
+        if (document.getElementById('totalRemaining')) document.getElementById('totalRemaining').textContent = '0';
+        if (document.getElementById('totalValueAdded')) document.getElementById('totalValueAdded').textContent = '0.00';
+        
+        // Perform initial calculation to ensure all values are set
+        this.calculateTotals();
+        this.calculateEnergyCosts();
+        
+        // Show the modal
+        this.modal.show();
+    },
+    
+    // Display current stock levels from API data
+    displayCurrentStock() {
+        if (!this.currentStock) return;
+        
+        document.querySelectorAll('#packagingItems > tr').forEach(row => {
+            const brickId = row.dataset.brickId;
+            const stockItem = this.currentStock.find(item => item.brick_type_id === brickId);
+            
+            const currentStockEl = row.querySelector('.current-stock');
+            if (currentStockEl && stockItem) {
+                // Only show bulk stock as current stock
+                currentStockEl.textContent = stockItem.bulk_quantity;
+                
+                // Initialize total-available with current stock
+                const totalAvailableEl = row.querySelector('.total-available');
+                if (totalAvailableEl) {
+                    totalAvailableEl.textContent = stockItem.bulk_quantity;
+                }
+            }
+        });
+    },
+
+    async createProduction() {
+        const form = document.getElementById('productionForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        // Check for packaging validation
+        const invalidPackaging = document.querySelector('.packaging-input.is-invalid');
+        if (invalidPackaging) {
+            alert('Packaging cannot exceed production. Please check packaging quantities.');
+            return;
+        }
+
+        try {
+            // Prepare data
+            const formData = this.prepareProductionData();
+            this.debug('Creating production with data:', formData);
+
+            const response = await fetch('/testapp/production/records/create/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+            this.debug('Create response:', data);
+
+            if (data.success) {
+                this.modal.hide();
+                showToast('Production record created successfully', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Failed to create production record', 'error');
+            }
+        } catch (error) {
+            this.debug('Create error:', error);
+            showToast('Failed to create production record', 'error');
+        }
+    },
+
+    prepareProductionData() {
+        const formData = new FormData();
+        
+        // Basic info
+        formData.append('production_date', document.querySelector('input[name="production_date"]').value);
+        formData.append('vpower', document.getElementById('vpowerInput').value);
+        formData.append('notes', document.querySelector('textarea[name="notes"]').value);
+        formData.append('vpower_manual', this.vpowerManualMode ? '1' : '0');
+        
+        // Energy consumption
+        const energyTypeIds = [];
+        const energyQuantities = [];
+        
+        document.querySelectorAll('input[name="energy_type_ids[]"]').forEach((el, index) => {
+            const quantity = document.querySelectorAll('input[name="energy_quantities[]"]')[index].value;
+            energyTypeIds.push(el.value);
+            energyQuantities.push(quantity);
+        });
+        
+        formData.append('energy_type_ids', JSON.stringify(energyTypeIds));
+        formData.append('energy_quantities', JSON.stringify(energyQuantities));
+        
+        // Brick production
+        const brickTypeIds = [];
+        const wagons = [];
+        const miscAdjustments = [];
+        const packaged = [];
+        
+        document.querySelectorAll('input[name="brick_type_ids[]"]').forEach((el, index) => {
+            brickTypeIds.push(el.value);
+            const wagonValue = document.querySelectorAll('input[name="wagons[]"]')[index].value || '0';
+            const miscValue = document.querySelectorAll('input[name="misc_adjustments[]"]')[index].value || '0';
+            const packagedInput = document.querySelectorAll('input[name="packaged[]"]')[index];
+            
+            wagons.push(wagonValue);
+            miscAdjustments.push(miscValue);
+            packaged.push(packagedInput ? packagedInput.value || '0' : '0');
+        });
+        
+        formData.append('brick_type_ids', JSON.stringify(brickTypeIds));
+        formData.append('wagons', JSON.stringify(wagons));
+        formData.append('misc_adjustments', JSON.stringify(miscAdjustments));
+        formData.append('packaged', JSON.stringify(packaged));
+        
+        return formData;
+    },
+
+    viewProduction(id) {
+        this.currentMode = 'view';
+        this.loadProductionData(id).then(() => {
+            // Make all inputs read-only for view mode
+            document.querySelectorAll('#productionForm input, #productionForm textarea').forEach(input => {
+                input.readOnly = true;
+            });
+            document.getElementById('manualVpowerBtn').style.display = 'none';
+            document.getElementById('saveProduction').style.display = 'none';
+            document.querySelector('#productionModal .modal-title').textContent = 'View Production Record';
+            this.modal.show();
+        });
+    },
+
+    editProduction(id) {
+        this.currentMode = 'edit';
+        this.loadProductionData(id).then(() => {
+            // Enable inputs for edit mode, except for certain fields
+            document.querySelectorAll('#productionForm input, #productionForm textarea').forEach(input => {
+                input.readOnly = false;
+            });
+            
+            // VPower input might still be readonly depending on mode
+            if (this.vpowerManualMode) {
+                document.getElementById('vpowerInput').readOnly = false;
+            } else {
+                document.getElementById('vpowerInput').readOnly = true;
+            }
+            
+            document.getElementById('manualVpowerBtn').style.display = 'inline-block';
+            document.getElementById('saveProduction').style.display = 'block';
+            document.querySelector('#productionModal .modal-title').textContent = 'Edit Production Record';
+            this.modal.show();
+        });
+    },
+
+    async loadProductionData(id) {
+        try {
+            // Reset all data first
+            this.resetData();
+            
+            const response = await fetch(`/testapp/production/records/${id}/detail/`);
+            const data = await response.json();
+            this.debug('Load data response:', data);
+            
+            if (data.success) {
+                const batch = data.batch;
+                
+                // Set basic info
+                document.getElementById('productionId').value = batch.id;
+                document.querySelector('input[name="production_date"]').value = batch.production_date;
+                document.getElementById('vpowerInput').value = batch.vpower || batch.calculated_vpower;
+                document.querySelector('textarea[name="notes"]').value = batch.notes || '';
+                
+                // For view/edit mode, dynamically change the stock column header to match the context
+                const stockHeader = document.querySelector('.stock-column-header');
+                if (stockHeader) {
+                    stockHeader.textContent = `Stock on ${batch.production_date}`;
+                }
+                
+                // Set VPower mode
+                this.vpowerManualMode = !!batch.vpower;
+                if (this.vpowerManualMode) {
+                    document.getElementById('manualVpowerBtn').textContent = 'Auto';
+                    document.getElementById('manualVpowerBtn').classList.add('btn-outline-warning');
+                    document.getElementById('manualVpowerBtn').classList.remove('btn-outline-secondary');
+                } else {
+                    document.getElementById('manualVpowerBtn').textContent = 'Manual';
+                    document.getElementById('manualVpowerBtn').classList.remove('btn-outline-warning');
+                    document.getElementById('manualVpowerBtn').classList.add('btn-outline-secondary');
+                    document.getElementById('vpowerInput').readOnly = true;
+                }
+                
+                // Load historical stock data for this production date
+                await this.loadHistoricalStock(batch.production_date);
+                
+                // Set energy consumption
+                data.energy_consumption.forEach(item => {
+                    const row = document.querySelector(`tr[data-energy-id="${item.energy_type_id}"]`);
+                    if (row) {
+                        const quantityInput = row.querySelector('.energy-quantity');
+                        if (quantityInput) {
+                            quantityInput.value = item.quantity;
+                        }
+                        
+                        // Set price if available
+                        const priceEl = row.querySelector('.energy-price');
+                        if (priceEl && item.price) {
+                            priceEl.textContent = item.price;
+                        }
+                    }
+                });
+                
+                // Set brick production
+                data.brick_productions.forEach(item => {
+                    const row = document.querySelector(`#productionItems > tr[data-brick-id="${item.brick_type_id}"]`);
+                    if (row) {
+                        const wagonsInput = row.querySelector('.wagons-input');
+                        const miscInput = row.querySelector('.misc-input');
+                        
+                        if (wagonsInput) wagonsInput.value = item.wagons_produced;
+                        if (miscInput) miscInput.value = item.miscellaneous_adjustment;
+                        
+                        // Set prices if available
+                        const bulkPriceEl = row.querySelector('.bulk-price');
+                        if (bulkPriceEl && item.bulk_price) {
+                            bulkPriceEl.textContent = item.bulk_price;
+                        }
+                    }
+                    
+                    // Set packaging data
+                    const packagingRow = document.querySelector(`#packagingItems > tr[data-brick-id="${item.brick_type_id}"]`);
+                    if (packagingRow) {
+                        const packagedInput = packagingRow.querySelector('.packaging-input');
+                        if (packagedInput) {
+                            packagedInput.value = item.bricks_packaged;
+                        }
+                        
+                        // Set prices if available
+                        const packagedPriceEl = packagingRow.querySelector('.packaged-price');
+                        if (packagedPriceEl && item.packaged_price) {
+                            packagedPriceEl.textContent = item.packaged_price;
+                        }
+                    }
+                });
+                
+                // Recalculate totals
+                this.calculateTotals();
+                this.calculateEnergyCosts();
+                
+            } else {
+                showToast(data.error || 'Failed to load production record', 'error');
+            }
+        } catch (error) {
+            this.debug('Load data error:', error);
+            showToast('Failed to load production record', 'error');
+        }
+    },
+    
+    async loadHistoricalStock(date) {
+        try {
+            // Fetch historical stock data for the given date
+            const response = await fetch(`/testapp/production/api/historical-stock/?date=${date}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                // Set the historical stock values in the packaging table
+                document.querySelectorAll('#packagingItems > tr').forEach(row => {
+                    const brickId = row.dataset.brickId;
+                    const stockItem = data.stock.find(item => item.brick_type_id === brickId);
+                    
+                    const currentStockEl = row.querySelector('.current-stock');
+                    if (currentStockEl && stockItem) {
+                        // Display bulk stock at that date
+                        currentStockEl.textContent = stockItem.bulk_quantity;
+                    }
+                });
+            } else {
+                this.debug('Error fetching historical stock:', data.error);
+            }
+        } catch (error) {
+            this.debug('Error fetching historical stock:', error.message);
+        }
+    },
+    
+    resetData() {
+        // Reset the form
+        document.getElementById('productionForm').reset();
+        
+        // Reset all inputs to 0
+        document.querySelectorAll('.wagons-input, .misc-input, .packaging-input, .energy-quantity').forEach(input => {
+            input.value = 0;
+        });
+        
+        // Reset all calculated values
+        document.querySelectorAll('.total-bricks, .new-production, .current-stock, .total-available, .remaining-bricks, .energy-cost, .bulk-value, .packaging-value-added').forEach(span => {
+            span.textContent = '0';
+        });
+        
+        // Reset footer totals
+        document.getElementById('totalWagons').textContent = '0';
+        document.getElementById('totalMisc').textContent = '0';
+        document.getElementById('grandTotal').textContent = '0';
+        document.getElementById('vpowerInput').value = '0';
+        
+        if (document.getElementById('totalEnergyCost')) document.getElementById('totalEnergyCost').textContent = '0.00';
+        if (document.getElementById('totalValue')) document.getElementById('totalValue').textContent = '0.00';
+        if (document.getElementById('totalPackaged')) document.getElementById('totalPackaged').textContent = '0';
+        if (document.getElementById('totalRemaining')) document.getElementById('totalRemaining').textContent = '0';
+        if (document.getElementById('totalValueAdded')) document.getElementById('totalValueAdded').textContent = '0.00';
+    },
+
+    async updateProduction() {
+        const form = document.getElementById('productionForm');
+        if (!form.checkValidity()) {
+            form.reportValidity();
+            return;
+        }
+        
+        // Check for packaging validation
+        const invalidPackaging = document.querySelector('.packaging-input.is-invalid');
+        if (invalidPackaging) {
+            alert('Packaging cannot exceed production. Please check packaging quantities.');
+            return;
+        }
+
+        const id = document.getElementById('productionId').value;
+        try {
+            // Prepare data
+            const formData = this.prepareProductionData();
+            this.debug('Updating production with data:', formData);
+
+            const response = await fetch(`/testapp/production/records/${id}/update/`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+            this.debug('Update response:', data);
+
+            if (data.success) {
+                this.modal.hide();
+                showToast('Production record updated successfully', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast(data.error || 'Failed to update production record', 'error');
+            }
+        } catch (error) {
+            this.debug('Update error:', error);
+            showToast('Failed to update production record', 'error');
+        }
+    },
+
+    async deleteProduction(id) {
+        if (!confirm('Are you sure you want to delete this production record?')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/testapp/production/records/${id}/delete/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+            this.debug('Delete response:', data);
+
+            if (data.success) {
+                const row = document.querySelector(`tr[data-id="${id}"]`);
+                if (row) row.remove();
+                showToast('Production record deleted successfully', 'success');
+            } else {
+                showToast(data.error || 'Failed to delete production record', 'error');
+            }
+        } catch (error) {
+            this.debug('Delete error:', error);
+            showToast('Failed to delete production record', 'error');
+        }
+    }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    ProductionManager.initialize();
+});
+</script>
+{% endblock %}

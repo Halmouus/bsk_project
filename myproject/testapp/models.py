@@ -7926,17 +7926,37 @@ class BrickProduction(BaseModel):
     @property
     def total_bricks_produced(self):
         """Calculate total bricks produced, including miscellaneous adjustments"""
-        base_production = self.wagons_produced * self.brick_type.bricks_per_wagon
-        return base_production + self.miscellaneous_adjustment
+        try:
+            wagons = int(self.wagons_produced)
+            bricks_per_wagon = int(self.brick_type.bricks_per_wagon)
+            misc_adj = int(self.miscellaneous_adjustment)
+            
+            base_production = wagons * bricks_per_wagon
+            return base_production + misc_adj
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error calculating total_bricks_produced: {str(e)}")
+            # Default to zero if calculation fails
+            return 0
 
     @property
     def available_for_packaging(self):
         """Calculate bricks available for packaging"""
-        return self.total_bricks_produced - self.bricks_packaged
+        try:
+            total = int(self.total_bricks_produced)
+            packaged = int(self.bricks_packaged)
+            return total - packaged
+        except (ValueError, TypeError) as e:
+            logger.error(f"Error calculating available_for_packaging: {str(e)}")
+            return 0
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if self.bricks_packaged > self.total_bricks_produced:
+        
+        # Get values as integers
+        total = int(self.total_bricks_produced)
+        packaged = int(self.bricks_packaged)
+        
+        if packaged > total:
             raise ValidationError({
                 'bricks_packaged': 'Cannot package more bricks than produced'
             })

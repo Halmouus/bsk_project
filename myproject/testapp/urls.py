@@ -387,7 +387,26 @@ urlpatterns = [
     path('production/brick-types/create/', views_production.BrickTypeCreateView.as_view(), name='brick-type-create'),
     path('production/brick-types/<uuid:pk>/update/', views_production.BrickTypeUpdateView.as_view(), name='brick-type-update'),
     path('production/brick-types/<uuid:pk>/delete/', views_production.BrickTypeDeleteView.as_view(), name='brick-type-delete'),
+   
+    # Energy URLs   
+    path('production/energy/', views_production.EnergyTypeListView.as_view(), name='energy-type-list'),
+    path('production/energy/create/', views_production.EnergyTypeCreateView.as_view(), name='energy-type-create'),
+    path('production/energy/<uuid:pk>/update/', views_production.EnergyTypeUpdateView.as_view(), name='energy-type-update'),
+    path('production/energy/<uuid:pk>/delete/', views_production.EnergyTypeDeleteView.as_view(), name='energy-type-delete'),
 
+    # Production Batch URLs
+    path('production/records/', views_production.ProductionBatchListView.as_view(), name='production-list'),
+    path('production/records/create/', views_production.ProductionBatchCreateView.as_view(), name='production-create'),
+    path('production/records/<uuid:pk>/detail/', views_production.ProductionBatchDetailView.as_view(), name='production-detail'),
+    path('production/records/<uuid:pk>/update/', views_production.ProductionBatchUpdateView.as_view(), name='production-update'),
+    path('production/records/<uuid:pk>/delete/', views_production.ProductionBatchDeleteView.as_view(), name='production-delete'),
+
+    # API endpoints for production data
+    path('production/records/latest-date/', views_production.LatestProductionDateView.as_view(), name='production-latest-date'),
+    path('production/api/current-stock/', views_production.CurrentStockView.as_view(), name='production-current-stock'),
+    path('production/api/historical-stock/', views_production.HistoricalStockView.as_view(), name='historical-stock'),
+    
+    # test translation
     path('test-translation/<str:lang>/', test_translation, name='test-translation'),
 
 ]
