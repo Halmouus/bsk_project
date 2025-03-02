@@ -512,6 +512,10 @@
                             </a>
 
                             <!-- Loading Records -->
+                            <a class="nav-link {% if request.resolver_match.url_name == 'loading-list' %}active{% endif %}" 
+                            href="{% url 'loading-list' %}">
+                                <i class="fas fa-truck me-2"></i> {% trans "Loading Records" %}
+                            </a>
 
                             <!-- Reports -->
                         </div>

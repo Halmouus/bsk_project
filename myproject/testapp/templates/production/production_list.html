@@ -972,7 +972,7 @@ const ProductionManager = {
     async loadHistoricalStock(date) {
         try {
             // Fetch historical stock data for the given date
-            const response = await fetch(`/testapp/production/api/historical-stock/?date=${date}`);
+            const response = await fetch(`/testapp/production/api/historical-stock/?date=${date}&type=production`);
             const data = await response.json();
             
             if (data.success) {

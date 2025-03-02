@@ -8048,6 +8048,51 @@ class LoadingRecord(BaseModel):
         packaged_value = self.packaged_quantity * self.packaged_price
         return bulk_value + packaged_value
 
+class LoadingRecord(BaseModel):
+    """Records a loading operation on a specific date"""
+    loading_date = models.DateField()
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ['-loading_date']
+        verbose_name = "Loading Record"
+        verbose_name_plural = "Loading Records"
+
+    def __str__(self):
+        return f"Loading on {self.loading_date}"
+
+class LoadingItem(BaseModel):
+    """Records details of loaded items in a loading record"""
+    loading_record = models.ForeignKey(
+        LoadingRecord,
+        on_delete=models.CASCADE,
+        related_name='items'
+    )
+    brick_type = models.ForeignKey(
+        BrickType,
+        on_delete=models.PROTECT
+    )
+    bulk_quantity = models.PositiveIntegerField(default=0)
+    packaged_quantity = models.PositiveIntegerField(default=0)
+    breakage = models.PositiveIntegerField(default=0)
+    bulk_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)]
+    )
+    packaged_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        validators=[MinValueValidator(0)]
+    )
+
+    class Meta:
+        ordering = ['brick_type__name']
+        unique_together = ['loading_record', 'brick_type']
+        
+    def __str__(self):
+        return f"{self.brick_type.name} - Bulk: {self.bulk_quantity}, Packaged: {self.packaged_quantity}"
+
 class DailyProductionMetrics(BaseModel):
     """Tracks daily production metrics including industrial power (VPower)"""
     production_date = models.DateField(unique=True)

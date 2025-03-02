@@ -385,15 +385,19 @@ urlpatterns = [
     # Brick Management URLs
     path('production/brick-types/', views_production.BrickTypeListView.as_view(), name='brick-type-list'),
     path('production/brick-types/create/', views_production.BrickTypeCreateView.as_view(), name='brick-type-create'),
+    path('production/brick-types/<uuid:pk>/detail/', views_production.BrickTypeDetailView.as_view(), name='brick-type-detail'),
     path('production/brick-types/<uuid:pk>/update/', views_production.BrickTypeUpdateView.as_view(), name='brick-type-update'),
     path('production/brick-types/<uuid:pk>/delete/', views_production.BrickTypeDeleteView.as_view(), name='brick-type-delete'),
-   
+    path('production/brick-types/<uuid:pk>/price-history/', views_production.BrickPriceHistoryView.as_view(), name='brick-price-history'),
+    
     # Energy URLs   
     path('production/energy/', views_production.EnergyTypeListView.as_view(), name='energy-type-list'),
     path('production/energy/create/', views_production.EnergyTypeCreateView.as_view(), name='energy-type-create'),
     path('production/energy/<uuid:pk>/update/', views_production.EnergyTypeUpdateView.as_view(), name='energy-type-update'),
     path('production/energy/<uuid:pk>/delete/', views_production.EnergyTypeDeleteView.as_view(), name='energy-type-delete'),
-
+    path('production/energy/<uuid:pk>/price-history/', views_production.EnergyPriceHistoryView.as_view(), name='energy-price-history'),
+    path('production/energy/<uuid:pk>/detail/', views_production.EnergyTypeDetailView.as_view(), name='energy-type-detail'),
+    
     # Production Batch URLs
     path('production/records/', views_production.ProductionBatchListView.as_view(), name='production-list'),
     path('production/records/create/', views_production.ProductionBatchCreateView.as_view(), name='production-create'),
@@ -406,6 +410,14 @@ urlpatterns = [
     path('production/api/current-stock/', views_production.CurrentStockView.as_view(), name='production-current-stock'),
     path('production/api/historical-stock/', views_production.HistoricalStockView.as_view(), name='historical-stock'),
     
+    # Loading Record URLs
+    path('production/loading/', views_production.LoadingRecordListView.as_view(), name='loading-list'),
+    path('production/loading/create/', views_production.LoadingRecordCreateView.as_view(), name='loading-create'),
+    path('production/loading/<uuid:pk>/detail/', views_production.LoadingRecordDetailView.as_view(), name='loading-detail'),
+    path('production/loading/<uuid:pk>/update/', views_production.LoadingRecordUpdateView.as_view(), name='loading-update'),
+    path('production/loading/<uuid:pk>/delete/', views_production.LoadingRecordDeleteView.as_view(), name='loading-delete'),
+    path('production/loading/latest-date/', views_production.LatestLoadingDateView.as_view(), name='loading-latest-date'),
+
     # test translation
     path('test-translation/<str:lang>/', test_translation, name='test-translation'),
 

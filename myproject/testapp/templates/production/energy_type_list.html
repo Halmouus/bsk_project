@@ -1,69 +1,106 @@
 {% extends "base.html" %}
 
-{% block title %}Energy Types{% endblock %}
+{% block title %}Energy Types Management{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
-    <!-- Header -->
+    <!-- Header with improved styling -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0 text-gray-800">Energy Types</h1>
+        <div>
+            <h1 class="h3 mb-0 text-gray-800">Energy Types Management</h1>
+            <p class="text-muted small">Manage all energy types, units, and pricing</p>
+        </div>
         <button type="button" class="btn btn-primary" onclick="EnergyManager.openCreateModal()">
-            <i class="fas fa-plus"></i> New Energy Type
+            <i class="fas fa-plus me-2"></i> New Energy Type
         </button>
     </div>
 
-    <!-- Debug Panel -->
+    <!-- Debug Panel (hidden by default) -->
     <div id="debugPanel" class="alert alert-info mb-4" style="display: none;">
-        <pre id="debugContent"></pre>
+        <div class="d-flex justify-content-between">
+            <strong>Debug Information</strong>
+            <button type="button" class="btn-close" onclick="document.getElementById('debugPanel').style.display='none'"></button>
+        </div>
+        <hr>
+        <pre id="debugContent" class="mb-0"></pre>
     </div>
 
-    <!-- Main Table -->
+    <!-- Main Table with improved styling -->
     <div class="card shadow">
+        <div class="card-header py-3 d-flex justify-content-between align-items-center">
+            <h6 class="m-0 font-weight-bold text-primary">Energy Types</h6>
+            <div class="input-group w-50">
+                <span class="input-group-text bg-light">
+                    <i class="fas fa-search text-gray-500"></i>
+                </span>
+                <input type="text" id="energySearch" class="form-control" placeholder="Search by name or unit..." onkeyup="EnergyManager.filterTable()">
+            </div>
+        </div>
         <div class="card-body">
             <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
+                <table class="table table-hover align-middle" id="energyTable">
+                    <thead class="table-light">
                         <tr>
-                            <th>Name</th>
-                            <th>Unit</th>
+                            <th onclick="EnergyManager.sortTable(0)" class="sortable">Name <i class="fas fa-sort ms-1 text-muted"></i></th>
+                            <th onclick="EnergyManager.sortTable(1)" class="sortable">Unit <i class="fas fa-sort ms-1 text-muted"></i></th>
                             <th>Current Price</th>
-                            <th>Status</th>
-                            <th>Actions</th>
+                            <th class="text-center">Status</th>
+                            <th class="text-center">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for energy_type in energy_types %}
                         <tr data-id="{{ energy_type.id }}">
-                            <td>{{ energy_type.name }}</td>
-                            <td>{{ energy_type.unit }}</td>
-                            <td>{{ energy_type.get_current_price|default:"-" }}</td>
+                            <td class="fw-semibold">{{ energy_type.name }}</td>
+                            <td><span class="badge bg-info">{{ energy_type.unit }}</span></td>
                             <td>
-                                <span class="badge {% if energy_type.is_active %}bg-success{% else %}bg-danger{% endif %}">
-                                    {{ energy_type.is_active|yesno:"Active,Inactive" }}
-                                </span>
+                                {% if energy_type.get_current_price %}
+                                    <span class="text-dark fw-bold">{{ energy_type.get_current_price }}</span>
+                                {% else %}
+                                    <span class="text-muted">Not set</span>
+                                {% endif %}
                             </td>
-                            <td>
-                                <button class="btn btn-sm btn-info edit-energy" data-id="{{ energy_type.id }}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger ms-2 delete-energy" data-id="{{ energy_type.id }}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                            <td class="text-center">
+                                {% if energy_type.is_active %}
+                                    <span class="badge bg-success">Active</span>
+                                {% else %}
+                                    <span class="badge bg-danger">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary price-history" data-id="{{ energy_type.id }}" title="Price History">
+                                        <i class="fas fa-history"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-info edit-energy ms-2" data-id="{{ energy_type.id }}" title="Edit">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger ms-2 delete-energy" data-id="{{ energy_type.id }}" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+                
+                <!-- Empty state message -->
+                <div id="emptyState" class="text-center p-5 d-none">
+                    <i class="fas fa-bolt fa-3x text-muted mb-3"></i>
+                    <h5 class="text-muted">No energy types found</h5>
+                    <p class="text-muted">Try different search criteria or add a new energy type</p>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Create/Edit Modal -->
+<!-- Create/Edit Modal with improved layout -->
 <div class="modal fade" id="energyModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
+            <div class="modal-header bg-light">
                 <h5 class="modal-title">New Energy Type</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -72,77 +109,222 @@
                     {% csrf_token %}
                     <input type="hidden" name="energy_id" id="energyId">
                     
-                    <div class="mb-3">
-                        <label class="form-label">Name*</label>
-                        <input type="text" name="name" class="form-control" required>
+                    <div class="mb-4">
+                        <label for="energyName" class="form-label fw-bold">
+                            <i class="fas fa-tag me-1 text-primary"></i> Name*
+                        </label>
+                        <input type="text" name="name" id="energyName" class="form-control" required>
+                        <div class="form-text text-muted">Enter the name of the energy type</div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Unit*</label>
-                        <input type="text" name="unit" class="form-control" required>
+                    <div class="mb-4">
+                        <label for="energyUnit" class="form-label fw-bold">
+                            <i class="fas fa-ruler me-1 text-primary"></i> Unit*
+                        </label>
+                        <input type="text" name="unit" id="energyUnit" class="form-control" required>
+                        <div class="form-text text-muted">Enter the unit of measurement (e.g., kWh, ton, liter)</div>
                     </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">Price*</label>
-                        <input type="number" step="0.01" name="price" class="form-control" required>
-                    </div>
-
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input type="checkbox" name="is_active" class="form-check-input" id="isActive" checked>
-                            <label class="form-check-label" for="isActive">Active</label>
+                    <div class="card mb-4">
+                        <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
+                            <h6 class="m-0 font-weight-bold">
+                                <i class="fas fa-money-bill-wave me-1 text-success"></i> Pricing Information
+                            </h6>
+                            <div style="width: 200px;">
+                                <label for="priceEffectiveDate" class="form-label fw-bold">Effective Date</label>
+                                <input type="date" name="price_effective_date" id="priceEffectiveDate" class="form-control">
+                                <div class="form-text text-muted">If blank, today will be used</div>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="mb-3">
+                                <label for="energyPrice" class="form-label fw-bold">
+                                    Price per Unit*
+                                </label>
+                                <input type="number" step="0.01" min="0" name="price" id="energyPrice" class="form-control" required>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="priceNotes" class="form-label fw-bold">
+                                    Price Notes
+                                </label>
+                                <textarea name="price_notes" id="priceNotes" class="form-control" rows="2"></textarea>
+                                <div class="form-text text-muted">Optional notes about this price change</div>
+                            </div>
                         </div>
                     </div>
 
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" id="isActive" name="is_active" checked>
+                        <label class="form-check-label fw-bold" for="isActive">Active</label>
+                        <div class="form-text text-muted">Inactive energy types won't appear in production forms</div>
+                    </div>
+
                     <div class="mb-3">
-                        <label class="form-label">Notes</label>
-                        <textarea name="notes" class="form-control" rows="3"></textarea>
+                        <label for="energyNotes" class="form-label fw-bold">
+                            <i class="fas fa-sticky-note me-1 text-warning"></i> Notes
+                        </label>
+                        <textarea name="notes" id="energyNotes" class="form-control" rows="3"></textarea>
+                        <div class="form-text text-muted">Additional information about this energy type (optional)</div>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveEnergy">Save</button>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveEnergy">
+                    <i class="fas fa-save me-1"></i> Save
+                </button>
             </div>
         </div>
     </div>
 </div>
 
+<!-- Price History Modal -->
+<div class="modal fade" id="priceHistoryModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-light">
+                <h5 class="modal-title">Price History</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h6 id="energyTypeInfo" class="mb-0 fw-bold">Loading...</h6>
+                    <span id="energyUnitLabel" class="badge bg-info px-3 py-2">-</span>
+                </div>
+                
+                <div class="card">
+                    <div class="card-header bg-light py-2">
+                        <h6 class="m-0 font-weight-bold text-primary">
+                            <i class="fas fa-chart-line me-1"></i> Price History
+                        </h6>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table mb-0" id="priceTable">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Price</th>
+                                        <th>Effective Date</th>
+                                        <th>Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="3" class="text-center">Loading...</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="alert alert-info mt-4">
+                    <i class="fas fa-info-circle me-2"></i> The most recent price is highlighted in blue and is the active price used for calculations.
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
+<style>
+    .sortable {
+        cursor: pointer;
+    }
+    .sortable:hover {
+        background-color: #f8f9fa;
+    }
+    #energyTable th i {
+        opacity: 0.3;
+    }
+    #energyTable th.asc i:before {
+        content: "\f0de";
+        opacity: 1;
+    }
+    #energyTable th.desc i:before {
+        content: "\f0dd";
+        opacity: 1;
+    }
+    
+    /* Price history styles */
+    #priceTable tr:first-child {
+        font-weight: bold;
+        background-color: #e8f4ff;
+    }
+    
+    /* Form styles */
+    .form-label {
+        margin-bottom: 0.25rem;
+    }
+    .form-text {
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .card-header h6 {
+        font-size: 0.95rem;
+    }
+</style>
+
 <script>
 const EnergyManager = {
     modal: null,
+    priceHistoryModal: null,
     currentMode: 'create',
+    sortField: 0,
+    sortDirection: 'asc',
 
     initialize() {
         this.modal = new bootstrap.Modal(document.getElementById('energyModal'));
+        this.priceHistoryModal = new bootstrap.Modal(document.getElementById('priceHistoryModal'));
         this.debug('EnergyManager initialized');
         this.setupEventListeners();
     },
 
-    debug(msg) {
-        console.log(msg);
+    debug(msg, data = null) {
+        console.log(msg, data);
         const panel = document.getElementById('debugPanel');
         const content = document.getElementById('debugContent');
-        content.textContent += JSON.stringify(msg, null, 2) + '\n';
+        
+        if (typeof msg === 'object') {
+            content.textContent += JSON.stringify(msg, null, 2) + '\n';
+        } else {
+            content.textContent += msg + (data ? ': ' + JSON.stringify(data, null, 2) : '') + '\n';
+        }
+        
         panel.style.display = 'block';
     },
 
     setupEventListeners() {
+        // Edit buttons
         document.querySelectorAll('.edit-energy').forEach(button => {
             button.addEventListener('click', e => {
-                this.editEnergy(e.target.closest('button').dataset.id);
+                const btn = e.currentTarget;
+                this.editEnergy(btn.dataset.id);
             });
         });
 
+        // Delete buttons
         document.querySelectorAll('.delete-energy').forEach(button => {
             button.addEventListener('click', e => {
-                this.deleteEnergy(e.target.closest('button').dataset.id);
+                const btn = e.currentTarget;
+                this.deleteEnergy(btn.dataset.id);
+            });
+        });
+        
+        // Price History buttons
+        document.querySelectorAll('.price-history').forEach(button => {
+            button.addEventListener('click', e => {
+                const btn = e.currentTarget;
+                this.showPriceHistory(btn.dataset.id);
             });
         });
 
+        // Save button
         document.getElementById('saveEnergy').addEventListener('click', () => {
             if (this.currentMode === 'create') {
                 this.createEnergy();
@@ -150,28 +332,315 @@ const EnergyManager = {
                 this.updateEnergy();
             }
         });
+        
+        // Form validation listeners
+        const form = document.getElementById('energyForm');
+        const inputs = form.querySelectorAll('input[required], textarea[required]');
+        
+        inputs.forEach(input => {
+            input.addEventListener('blur', () => {
+                if (input.value.trim() === '') {
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                    input.classList.add('is-valid');
+                }
+            });
+            
+            input.addEventListener('input', () => {
+                if (input.value.trim() !== '') {
+                    input.classList.remove('is-invalid');
+                }
+            });
+        });
+        
+        // Set default effective date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('priceEffectiveDate').value = today;
+    },
+    
+    async showPriceHistory(id) {
+        this.debug('Fetching price history', { id });
+        
+        try {
+            // Clear previous data
+            document.getElementById('energyTypeInfo').textContent = 'Loading...';
+            document.getElementById('energyUnitLabel').textContent = '-';
+            document.getElementById('priceTable').querySelector('tbody').innerHTML = 
+                '<tr><td colspan="3" class="text-center">Loading...</td></tr>';
+            
+            // Show the modal while loading
+            this.priceHistoryModal.show();
+            
+            // Fetch price history data
+            const response = await fetch(`/testapp/production/energy/${id}/price-history/`);
+            const data = await response.json();
+            
+            if (!data.success) {
+                throw new Error(data.error || 'Failed to fetch price history');
+            }
+            
+            this.debug('Price history loaded', data);
+            
+            // Update energy info
+            const energyInfo = data.energy_type;
+            document.getElementById('energyTypeInfo').textContent = 
+                `${energyInfo.name} - Price History`;
+            document.getElementById('energyUnitLabel').textContent = 
+                energyInfo.unit;
+            
+            // Update price table
+            const priceTable = document.getElementById('priceTable').querySelector('tbody');
+            if (data.prices.length === 0) {
+                priceTable.innerHTML = '<tr><td colspan="3" class="text-center">No price history available</td></tr>';
+            } else {
+                let priceHtml = '';
+                data.prices.forEach((price, index) => {
+                    // Format the date to be more readable
+                    const effectiveDate = new Date(price.effective_date);
+                    const formattedDate = effectiveDate.toLocaleDateString() + ' ' + 
+                                     effectiveDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    
+                    // Add a highlight class for the current price (first in the list)
+                    const rowClass = index === 0 ? 'table-primary' : '';
+                    
+                    priceHtml += `
+                        <tr class="${rowClass}">
+                            <td>${price.price} ${energyInfo.unit ? '/ ' + energyInfo.unit : ''}</td>
+                            <td>${formattedDate}</td>
+                            <td>${price.notes || '-'}</td>
+                        </tr>
+                    `;
+                });
+                priceTable.innerHTML = priceHtml;
+            }
+            
+        } catch (error) {
+            this.debug('Error fetching price history', error.message);
+            
+            // Show error in the tables
+            document.getElementById('energyTypeInfo').textContent = 'Error loading price history';
+            
+            document.getElementById('priceTable').querySelector('tbody').innerHTML = 
+                `<tr><td colspan="3" class="text-center text-danger">Error: ${error.message}</td></tr>`;
+                
+            showToast('Failed to load price history: ' + error.message, 'error');
+        }
+    },
+    
+    filterTable() {
+        const searchInput = document.getElementById('energySearch');
+        const filter = searchInput.value.toUpperCase();
+        const table = document.getElementById('energyTable');
+        const tr = table.getElementsByTagName('tr');
+        let rowsVisible = 0;
+        
+        // Loop through all table rows, and hide those that don't match the search query
+        for (let i = 1; i < tr.length; i++) { // Start at 1 to skip header row
+            const nameCell = tr[i].cells[0]; // Name is in first column
+            const unitCell = tr[i].cells[1]; // Unit is in second column
+            
+            if (nameCell && unitCell) {
+                const nameText = nameCell.textContent || nameCell.innerText;
+                const unitText = unitCell.textContent || unitCell.innerText;
+                
+                if (nameText.toUpperCase().indexOf(filter) > -1 || unitText.toUpperCase().indexOf(filter) > -1) {
+                    tr[i].style.display = '';
+                    rowsVisible++;
+                } else {
+                    tr[i].style.display = 'none';
+                }
+            }
+        }
+        
+        // Show or hide empty state message
+        const emptyState = document.getElementById('emptyState');
+        if (rowsVisible === 0 && filter !== '') {
+            emptyState.classList.remove('d-none');
+            table.classList.add('d-none');
+        } else {
+            emptyState.classList.add('d-none');
+            table.classList.remove('d-none');
+        }
+    },
+    
+    sortTable(col) {
+        const table = document.getElementById('energyTable');
+        const headers = table.querySelectorAll('th');
+        
+        // Toggle sort direction if clicking the same column
+        if (this.sortField === col) {
+            this.sortDirection = this.sortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+            this.sortField = col;
+            this.sortDirection = 'asc';
+        }
+        
+        // Update header classes
+        headers.forEach(header => {
+            header.classList.remove('asc', 'desc');
+        });
+        
+        headers[col].classList.add(this.sortDirection);
+        
+        // Get all rows except header
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        // Sort the rows
+        const sortedRows = rows.sort((a, b) => {
+            let aText = a.cells[col].textContent.trim();
+            let bText = b.cells[col].textContent.trim();
+            
+            // If both values are numbers, compare them as numbers
+            if (!isNaN(aText) && !isNaN(bText)) {
+                aText = parseFloat(aText);
+                bText = parseFloat(bText);
+            }
+            
+            if (this.sortDirection === 'asc') {
+                return aText > bText ? 1 : -1;
+            } else {
+                return aText < bText ? 1 : -1;
+            }
+        });
+        
+        // Clear the table body
+        while (tbody.firstChild) {
+            tbody.removeChild(tbody.firstChild);
+        }
+        
+        // Add sorted rows
+        sortedRows.forEach(row => {
+            tbody.appendChild(row);
+        });
     },
 
     openCreateModal() {
         this.currentMode = 'create';
         document.getElementById('energyForm').reset();
         document.getElementById('energyId').value = '';
-        document.querySelector('#energyModal .modal-title').textContent = 'New Energy Type';
+        
+        // Set default effective date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('priceEffectiveDate').value = today;
+        
+        // Add is_active input - it's not in the original HTML
         document.getElementById('isActive').checked = true;
+        
+        // Clear validation classes
+        document.querySelectorAll('.is-valid, .is-invalid').forEach(elem => {
+            elem.classList.remove('is-valid', 'is-invalid');
+        });
+        
+        document.querySelector('#energyModal .modal-title').textContent = 'New Energy Type';
         this.modal.show();
+    },
+
+    async editEnergy(id) {
+        this.currentMode = 'edit';
+        this.debug('Fetching energy type details', {id});
+        
+        try {
+            // Reset the form
+            document.getElementById('energyForm').reset();
+            document.getElementById('energyId').value = id;
+            
+            // Set today's date as the default effective date for price changes
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('priceEffectiveDate').value = today;
+            
+            // Fetch complete details with a direct API call
+            const response = await fetch(`/testapp/production/energy/${id}/detail/`);
+            const data = await response.json();
+            
+            if (data.success) {
+                const energy = data.energy_type;
+                this.debug('Energy type details loaded', energy);
+                
+                // Fill the form with fetched data
+                const form = document.getElementById('energyForm');
+                form.querySelector('[name="name"]').value = energy.name;
+                form.querySelector('[name="unit"]').value = energy.unit;
+                form.querySelector('[name="price"]').value = energy.current_price;
+                form.querySelector('[name="notes"]').value = energy.notes || '';
+                
+                // Handle is_active checkbox
+                document.getElementById('isActive').checked = energy.is_active;
+                
+                // Clear validation classes
+                document.querySelectorAll('.is-valid, .is-invalid').forEach(elem => {
+                    elem.classList.remove('is-valid', 'is-invalid');
+                });
+                
+                document.querySelector('#energyModal .modal-title').textContent = 'Edit Energy Type';
+                this.modal.show();
+            } else {
+                throw new Error(data.error || 'Failed to fetch energy type details');
+            }
+        } catch (error) {
+            this.debug('Error fetching energy type details', error.message);
+            
+            // Fallback to getting data from the table row if API call fails
+            try {
+                const row = document.querySelector(`tr[data-id="${id}"]`);
+                if (!row) {
+                    throw new Error('Energy type row not found in the table');
+                }
+                
+                // Get basic data from row cells
+                const name = row.cells[0].textContent.trim();
+                const unit = row.cells[1].textContent.trim();
+                let price = row.cells[2].textContent.trim();
+                
+                if (price === 'Not set') {
+                    price = '';
+                }
+                
+                const isActive = row.cells[3].querySelector('.badge').textContent.trim() === 'Active';
+                
+                // Fill the form with the data
+                const form = document.getElementById('energyForm');
+                form.querySelector('[name="name"]').value = name;
+                form.querySelector('[name="unit"]').value = unit;
+                form.querySelector('[name="price"]').value = price;
+                document.getElementById('isActive').checked = isActive;
+                
+                document.querySelector('#energyModal .modal-title').textContent = 'Edit Energy Type';
+                this.modal.show();
+            } catch (fallbackError) {
+                showToast('Failed to load energy type details: ' + error.message, 'error');
+            }
+        }
     },
 
     async createEnergy() {
         const form = document.getElementById('energyForm');
         if (!form.checkValidity()) {
+            // Highlight invalid fields
+            const invalidInputs = form.querySelectorAll(':invalid');
+            invalidInputs.forEach(input => {
+                input.classList.add('is-invalid');
+            });
+            
             form.reportValidity();
             return;
         }
 
         try {
+            const formData = new FormData(form);
+            
+            // Add is_active field if it exists
+            const isActiveCheckbox = document.getElementById('isActive');
+            if (isActiveCheckbox) {
+                formData.append('is_active', isActiveCheckbox.checked ? 'on' : 'off');
+            }
+            
+            this.debug('Creating energy type with data', Object.fromEntries(formData));
+            
             const response = await fetch('/testapp/production/energy/create/', {
                 method: 'POST',
-                body: new FormData(form),
+                body: formData,
                 headers: {
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
                     'X-Requested-With': 'XMLHttpRequest'
@@ -179,7 +648,7 @@ const EnergyManager = {
             });
 
             const data = await response.json();
-            this.debug('Create response:', data);
+            this.debug('Create response', data);
 
             if (data.success) {
                 this.modal.hide();
@@ -189,45 +658,39 @@ const EnergyManager = {
                 showToast(data.error || 'Failed to create energy type', 'error');
             }
         } catch (error) {
-            this.debug('Create error:', error);
-            showToast('Failed to create energy type', 'error');
+            this.debug('Create error', error);
+            showToast('Failed to create energy type: ' + error.message, 'error');
         }
-    },
-
-    async editEnergy(id) {
-        this.currentMode = 'edit';
-        const row = document.querySelector(`tr[data-id="${id}"]`);
-        if (!row) return;
-
-        const form = document.getElementById('energyForm');
-        const cells = row.cells;
-        
-        document.getElementById('energyId').value = id;
-        form.querySelector('[name="name"]').value = cells[0].textContent;
-        form.querySelector('[name="unit"]').value = cells[1].textContent;
-        
-        const price = cells[2].textContent;
-        form.querySelector('[name="price"]').value = price !== '-' ? price : '';
-        
-        const isActive = cells[3].textContent.trim() === 'Active';
-        document.getElementById('isActive').checked = isActive;
-
-        document.querySelector('#energyModal .modal-title').textContent = 'Edit Energy Type';
-        this.modal.show();
     },
 
     async updateEnergy() {
         const form = document.getElementById('energyForm');
         if (!form.checkValidity()) {
+            // Highlight invalid fields
+            const invalidInputs = form.querySelectorAll(':invalid');
+            invalidInputs.forEach(input => {
+                input.classList.add('is-invalid');
+            });
+            
             form.reportValidity();
             return;
         }
 
         const id = document.getElementById('energyId').value;
         try {
+            const formData = new FormData(form);
+            
+            // Add is_active field if it exists
+            const isActiveCheckbox = document.getElementById('isActive');
+            if (isActiveCheckbox) {
+                formData.append('is_active', isActiveCheckbox.checked ? 'on' : 'off');
+            }
+            
+            this.debug('Updating energy type with data', Object.fromEntries(formData));
+            
             const response = await fetch(`/testapp/production/energy/${id}/update/`, {
                 method: 'POST',
-                body: new FormData(form),
+                body: formData,
                 headers: {
                     'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
                     'X-Requested-With': 'XMLHttpRequest'
@@ -235,7 +698,7 @@ const EnergyManager = {
             });
 
             const data = await response.json();
-            this.debug('Update response:', data);
+            this.debug('Update response', data);
 
             if (data.success) {
                 this.modal.hide();
@@ -245,17 +708,19 @@ const EnergyManager = {
                 showToast(data.error || 'Failed to update energy type', 'error');
             }
         } catch (error) {
-            this.debug('Update error:', error);
-            showToast('Failed to update energy type', 'error');
+            this.debug('Update error', error);
+            showToast('Failed to update energy type: ' + error.message, 'error');
         }
     },
 
     async deleteEnergy(id) {
-        if (!confirm('Are you sure you want to delete this energy type?')) {
+        if (!confirm('Are you sure you want to delete this energy type? This action cannot be undone.')) {
             return;
         }
 
         try {
+            this.debug('Deleting energy type', {id});
+            
             const response = await fetch(`/testapp/production/energy/${id}/delete/`, {
                 method: 'POST',
                 headers: {
@@ -265,24 +730,88 @@ const EnergyManager = {
             });
 
             const data = await response.json();
-            this.debug('Delete response:', data);
+            this.debug('Delete response', data);
 
             if (data.success) {
                 const row = document.querySelector(`tr[data-id="${id}"]`);
-                if (row) row.remove();
+                if (row) {
+                    // Fade out and remove the row
+                    row.style.transition = 'opacity 0.5s';
+                    row.style.opacity = '0';
+                    setTimeout(() => row.remove(), 500);
+                }
                 showToast('Energy type deleted successfully', 'success');
             } else {
                 showToast(data.error || 'Failed to delete energy type', 'error');
             }
         } catch (error) {
-            this.debug('Delete error:', error);
-            showToast('Failed to delete energy type', 'error');
+            this.debug('Delete error', error);
+            showToast('Failed to delete energy type: ' + error.message, 'error');
         }
     }
 };
 
 document.addEventListener('DOMContentLoaded', () => {
     EnergyManager.initialize();
+    
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[title]'))
+    tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+    });
 });
+
+// Toast notification function (if not already defined)
+function showToast(message, type = 'info') {
+    if (typeof showToast !== 'undefined' && this !== window) {
+        return;
+    }
+    
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = '9999';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Create toast element
+    const toastId = 'toast-' + Date.now();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast align-items-center text-white bg-${type === 'error' ? 'danger' : type} border-0`;
+    toast.role = 'alert';
+    toast.ariaLive = 'assertive';
+    toast.ariaAtomic = 'true';
+    
+    // Toast content
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Add to container
+    toastContainer.appendChild(toast);
+    
+    // Initialize and show toast
+    const bsToast = new bootstrap.Toast(toast, {
+        animation: true,
+        autohide: true,
+        delay: 5000
+    });
+    
+    bsToast.show();
+    
+    // Remove from DOM after hiding
+    toast.addEventListener('hidden.bs.toast', () => {
+        toast.remove();
+    });
+}
 </script>
 {% endblock %}
