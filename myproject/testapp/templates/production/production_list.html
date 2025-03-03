@@ -17,46 +17,71 @@
         <pre id="debugContent"></pre>
     </div>
 
-    <!-- Main Table -->
-    <div class="card shadow">
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-hover">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>VPower</th>
-                            <th>Total Wagons</th>
-                            <th>Total Bricks</th>
-                            <th>Packaged Bricks</th>
-                            <th>Bulk Bricks</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for batch in production_batches %}
-                        <tr data-id="{{ batch.id }}">
-                            <td>{{ batch.production_date|date:"Y-m-d" }}</td>
-                            <td>{{ batch.effective_vpower }}</td>
-                            <td>{{ batch.total_wagons }}</td>
-                            <td>{{ batch.total_bricks }}</td>
-                            <td>{{ batch.total_packaged }}</td>
-                            <td>{{ batch.total_bulk }}</td>
-                            <td>
-                                <button class="btn btn-sm btn-info view-production" data-id="{{ batch.id }}">
+<!-- Main Table -->
+<div class="card shadow">
+    <div class="card-header py-3 d-flex justify-content-between align-items-center">
+        <h6 class="m-0 font-weight-bold text-primary">Production Records</h6>
+        <div class="input-group w-50">
+            <span class="input-group-text bg-light">
+                <i class="fas fa-search text-gray-500"></i>
+            </span>
+            <input type="text" id="productionSearch" class="form-control" placeholder="Search by date..." onkeyup="filterProductionTable()">
+        </div>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle" id="productionTable">
+                <thead class="table-light">
+                    <tr>
+                        <th class="sortable" onclick="sortProductionTable(0)">Date <i class="fas fa-sort ms-1 text-muted"></i></th>
+                        <th class="text-center">VPower</th>
+                        <th class="text-center">Total Wagons</th>
+                        <th class="text-center">Total Bricks</th>
+                        <th class="text-center">Packaged</th>
+                        <th class="text-center">Bulk</th>
+                        <th class="text-center">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for batch in production_batches %}
+                    <tr data-id="{{ batch.id }}">
+                        <td>
+                            <span class="fw-semibold">{{ batch.production_date|date:"Y-m-d" }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-info px-2 py-1">{{ batch.effective_vpower }}</span>
+                        </td>
+                        <td class="text-center">{{ batch.total_wagons }}</td>
+                        <td class="text-center">{{ batch.total_bricks }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success px-2 py-1">{{ batch.total_packaged }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary px-2 py-1">{{ batch.total_bulk }}</span>
+                        </td>
+                        <td class="text-center">
+                            <div class="btn-group btn-group-sm" role="group">
+                                <button class="btn btn-outline-primary view-production" data-id="{{ batch.id }}" title="View">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn btn-sm btn-warning ms-2 edit-production" data-id="{{ batch.id }}">
+                                <button class="btn btn-outline-warning ms-1 edit-production" data-id="{{ batch.id }}" title="Edit">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger ms-2 delete-production" data-id="{{ batch.id }}">
+                                <button class="btn btn-outline-danger ms-1 delete-production" data-id="{{ batch.id }}" title="Delete">
                                     <i class="fas fa-trash"></i>
                                 </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            
+            <!-- Empty state message -->
+            <div id="emptyState" class="text-center p-5 d-none">
+                <i class="fas fa-industry fa-3x text-muted mb-3"></i>
+                <h5 class="text-muted">No production records found</h5>
+                <p class="text-muted">Try different search criteria or add a new production record</p>
             </div>
         </div>
     </div>
@@ -94,35 +119,54 @@
                     <div class="tab-content" id="productionTabContent">
                         <!-- Basic Info Tab -->
                         <div class="tab-pane fade show active" id="basic" role="tabpanel" aria-labelledby="basic-tab">
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">Production Date*</label>
-                                    <input type="date" name="production_date" id="productionDate" class="form-control" required>
-                                    <small class="text-muted">Cannot be earlier than the latest production record</small>
+                            <div class="card border-light mb-3">
+                                <div class="card-header bg-light">
+                                    <h6 class="mb-0 fw-bold">
+                                        <i class="fas fa-calendar-alt me-2 text-primary"></i> Production Details
+                                    </h6>
                                 </div>
-                                <div class="col-md-6 mb-3">
-                                    <label class="form-label">VPower</label>
-                                    <div class="input-group">
-                                        <input type="number" name="vpower" id="vpowerInput" class="form-control" readonly>
-                                        <button class="btn btn-outline-secondary" type="button" id="manualVpowerBtn">Manual</button>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="productionDate" class="form-label fw-bold">Production Date*</label>
+                                            <input type="date" name="production_date" id="productionDate" class="form-control" required>
+                                            <small class="text-muted">
+                                                <i class="fas fa-info-circle me-1"></i> Cannot be earlier than the latest production record
+                                            </small>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label for="vpowerInput" class="form-label fw-bold">VPower</label>
+                                            <div class="input-group">
+                                                <input type="number" name="vpower" id="vpowerInput" class="form-control" readonly>
+                                                <button class="btn btn-outline-secondary" type="button" id="manualVpowerBtn">Manual</button>
+                                            </div>
+                                            <small class="text-muted">
+                                                <i class="fas fa-info-circle me-1"></i> VPower is calculated automatically from total wagons
+                                            </small>
+                                        </div>
                                     </div>
-                                    <small class="text-muted">VPower is calculated automatically from total wagons</small>
+                                    <div class="mb-3">
+                                        <label for="productionNotes" class="form-label fw-bold">Notes</label>
+                                        <textarea name="notes" id="productionNotes" class="form-control" rows="3" placeholder="Enter any relevant notes about this production batch"></textarea>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="mb-3">
-                                <label class="form-label">Notes</label>
-                                <textarea name="notes" class="form-control" rows="3"></textarea>
+                            
+                            <div class="alert alert-warning py-2">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <small>Use the tabs above to enter production data, energy consumption, and packaging information.</small>
                             </div>
                         </div>
                         
                         <!-- Energy Tab -->
                         <div class="tab-pane fade" id="energy" role="tabpanel" aria-labelledby="energy-tab">
-                            <div class="alert alert-info">
-                                Enter quantities for each energy type used in production.
+                            <div class="alert alert-info py-2">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <small>Enter quantities for each energy type used in production. Total costs will be calculated automatically.</small>
                             </div>
                             <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
+                                <table class="table table-hover">
+                                    <thead class="table-light">
                                         <tr>
                                             <th>Energy Type</th>
                                             <th>Unit</th>
@@ -135,24 +179,27 @@
                                         {% for energy_type in energy_types %}
                                         <tr data-energy-id="{{ energy_type.id }}">
                                             <td>
-                                                {{ energy_type.name }}
+                                                <span class="fw-semibold">{{ energy_type.name }}</span>
                                                 <input type="hidden" name="energy_type_ids[]" value="{{ energy_type.id }}">
                                             </td>
-                                            <td>{{ energy_type.unit }}</td>
+                                            <td><span class="badge bg-info">{{ energy_type.unit }}</span></td>
                                             <td>
-                                                <input type="number" name="energy_quantities[]" class="form-control energy-quantity" placeholder="0" step="0.01" min="0" value="0">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" name="energy_quantities[]" class="form-control energy-quantity" placeholder="0" step="0.01" min="0" value="0">
+                                                    <span class="input-group-text">{{ energy_type.unit }}</span>
+                                                </div>
                                             </td>
                                             <td>
                                                 <span class="energy-price">{{ energy_type.get_current_price|default:"0" }}</span>
                                             </td>
-                                            <td class="energy-cost">0.00</td>
+                                            <td class="energy-cost fw-bold">0.00</td>
                                         </tr>
                                         {% endfor %}
                                     </tbody>
                                     <tfoot>
                                         <tr class="table-secondary">
                                             <th colspan="4">Total Energy Cost</th>
-                                            <td id="totalEnergyCost">0.00</td>
+                                            <td id="totalEnergyCost" class="fw-bold">0.00</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -161,20 +208,19 @@
                         
                         <!-- Production Tab -->
                         <div class="tab-pane fade" id="production" role="tabpanel" aria-labelledby="production-tab">
-                            <div class="alert alert-info">
-                                <p>Enter number of wagons produced for each brick type.</p>
-                                <p>The total number of bricks is automatically calculated based on bricks per wagon.</p>
-                                <p>Miscellaneous values are adjustments (positive or negative) to account for anomalies.</p>
+                            <div class="alert alert-info py-2">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <small>Enter number of wagons produced for each brick type. The total number of bricks is automatically calculated based on bricks per wagon. Miscellaneous values are adjustments to account for anomalies.</small>
                             </div>
                             <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
+                                <table class="table table-hover">
+                                    <thead class="table-light">
                                         <tr>
                                             <th>Brick Type</th>
-                                            <th>Bricks/Wagon</th>
-                                            <th>Wagons</th>
-                                            <th>Misc. Adjustment</th>
-                                            <th>Total Bricks</th>
+                                            <th class="text-center">Bricks/Wagon</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="Number of wagons produced">Wagons</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="Adjustments (positive or negative)">Misc. Adjustment</th>
+                                            <th class="text-center">Total Bricks</th>
                                             <th>Bulk Price</th>
                                             <th>Value</th>
                                         </tr>
@@ -183,26 +229,27 @@
                                         {% for brick_type in brick_types %}
                                         <tr data-brick-id="{{ brick_type.id }}">
                                             <td>
-                                                {{ brick_type.name }}
+                                                <span class="fw-semibold">{{ brick_type.name }}</span>
+                                                <small class="d-block text-muted">{{ brick_type.industrial_code }}</small>
                                                 <input type="hidden" name="brick_type_ids[]" value="{{ brick_type.id }}">
                                             </td>
-                                            <td>
-                                                <span class="bricks-per-wagon">{{ brick_type.bricks_per_wagon }}</span>
+                                            <td class="text-center">
+                                                <span class="bricks-per-wagon badge bg-secondary" data-bs-toggle="tooltip" title="Bricks per wagon">{{ brick_type.bricks_per_wagon }}</span>
                                             </td>
                                             <td>
-                                                <input type="number" name="wagons[]" class="form-control wagons-input" min="0" value="0">
+                                                <input type="number" name="wagons[]" class="form-control form-control-sm wagons-input" min="0" value="0">
                                             </td>
                                             <td>
-                                                <input type="number" name="misc_adjustments[]" class="form-control misc-input" value="0">
+                                                <input type="number" name="misc_adjustments[]" class="form-control form-control-sm misc-input" value="0">
                                             </td>
-                                            <td>
-                                                <span class="total-bricks">0</span>
+                                            <td class="text-center">
+                                                <span class="total-bricks badge bg-primary">0</span>
                                             </td>
                                             <td>
                                                 <span class="bulk-price">{{ brick_type.get_current_prices.bulk_price|default:"0" }}</span>
                                             </td>
                                             <td>
-                                                <span class="bulk-value">0</span>
+                                                <span class="bulk-value fw-bold">0</span>
                                             </td>
                                         </tr>
                                         {% endfor %}
@@ -210,11 +257,11 @@
                                     <tfoot>
                                         <tr class="table-secondary">
                                             <th colspan="2">Totals</th>
-                                            <td id="totalWagons">0</td>
-                                            <td id="totalMisc">0</td>
-                                            <td id="grandTotal">0</td>
+                                            <td id="totalWagons" class="text-center fw-bold">0</td>
+                                            <td id="totalMisc" class="text-center fw-bold">0</td>
+                                            <td id="grandTotal" class="text-center fw-bold">0</td>
                                             <td></td>
-                                            <td id="totalValue">0</td>
+                                            <td id="totalValue" class="fw-bold">0</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -223,20 +270,21 @@
                         
                         <!-- Packaging Tab -->
                         <div class="tab-pane fade" id="packaging" role="tabpanel" aria-labelledby="packaging-tab">
-                            <div class="alert alert-info">
-                                <p>Enter the number of bricks to be packaged for each type.</p>
-                                <p>Cannot exceed the total bricks produced (including miscellaneous adjustments).</p>
+                            <div class="alert alert-info py-2">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <small>Enter the number of bricks to be packaged for each type. You cannot exceed the total bricks produced.</small>
                             </div>
                             <div class="table-responsive">
-                                <table class="table">
-                                    <thead>
+                                <table class="table table-hover">
+                                    <thead class="table-light">
                                         <tr>
                                             <th>Brick Type</th>
-                                            <th>Current Stock</th>
-                                            <th>New Production</th>
-                                            <th>Total Available</th>
-                                            <th>Packaged Bricks</th>
-                                            <th>Remaining (Bulk)</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="Available bulk stock at this date">Bulk Stock</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="Available packaged stock at this date">Packaged Stock</th>
+                                            <th class="text-center">New Production</th>
+                                            <th class="text-center">Total Available</th>
+                                            <th class="text-center">Package Amount</th>
+                                            <th class="text-center">Remaining (Bulk)</th>
                                             <th>Package Price</th>
                                             <th>Value Added</th>
                                         </tr>
@@ -244,14 +292,18 @@
                                     <tbody id="packagingItems">
                                         {% for brick_type in brick_types %}
                                         <tr data-brick-id="{{ brick_type.id }}">
-                                            <td>{{ brick_type.name }}</td>
-                                            <td class="current-stock">0</td>
-                                            <td class="new-production">0</td>
-                                            <td class="total-available">0</td>
                                             <td>
-                                                <input type="number" name="packaged[]" class="form-control packaging-input" min="0" value="0">
+                                                <span class="fw-semibold">{{ brick_type.name }}</span>
+                                                <small class="d-block text-muted">{{ brick_type.industrial_code }}</small>
                                             </td>
-                                            <td class="remaining-bricks">0</td>
+                                            <td class="text-center current-stock">0</td>
+                                            <td class="text-center packaged-stock">0</td>
+                                            <td class="text-center new-production">0</td>
+                                            <td class="text-center total-available">0</td>
+                                            <td>
+                                                <input type="number" name="packaged[]" class="form-control form-control-sm packaging-input" min="0" value="0">
+                                            </td>
+                                            <td class="text-center remaining-bricks">0</td>
                                             <td>
                                                 <span class="packaged-price">{{ brick_type.get_current_prices.packaged_price|default:"0" }}</span>
                                             </td>
@@ -262,10 +314,11 @@
                                     <tfoot>
                                         <tr class="table-secondary">
                                             <th colspan="4">Totals</th>
-                                            <td id="totalPackaged">0</td>
-                                            <td id="totalRemaining">0</td>
+                                            <td id="totalBulkStock" class="text-center fw-bold">0</td>
+                                            <td id="totalPackaged" class="text-center fw-bold">0</td>
+                                            <td id="totalRemaining" class="text-center fw-bold">0</td>
                                             <td></td>
-                                            <td id="totalValueAdded">0</td>
+                                            <td id="totalValueAdded" class="fw-bold">0</td>
                                         </tr>
                                     </tfoot>
                                 </table>
@@ -284,8 +337,109 @@
 
 {% endblock %}
 
+<style>
+    #productionTable th.sortable {
+        cursor: pointer;
+    }
+    #productionTable th.sortable:hover {
+        background-color: #f8f9fa;
+    }
+    #productionTable th i {
+        opacity: 0.3;
+    }
+    #productionTable th.asc i:before {
+        content: "\f0de";
+        opacity: 1;
+    }
+    #productionTable th.desc i:before {
+        content: "\f0dd";
+        opacity: 1;
+    }
+</style>
+
 {% block extra_js %}
 <script>
+
+function filterProductionTable() {
+    const input = document.getElementById('productionSearch');
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById('productionTable');
+    const tr = table.getElementsByTagName('tr');
+    let rowsVisible = 0;
+    
+    // Loop through all table rows, and hide those who don't match the search query
+    for (let i = 1; i < tr.length; i++) { // Start at 1 to skip header row
+        const td = tr[i].getElementsByTagName('td')[0]; // Date is in first column
+        if (td) {
+            const txtValue = td.textContent || td.innerText;
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = '';
+                rowsVisible++;
+            } else {
+                tr[i].style.display = 'none';
+            }
+        }       
+    }
+    
+    // Show or hide empty state message
+    const emptyState = document.getElementById('emptyState');
+    if (rowsVisible === 0 && filter !== '') {
+        emptyState.classList.remove('d-none');
+        table.classList.add('d-none');
+    } else {
+        emptyState.classList.add('d-none');
+        table.classList.remove('d-none');
+    }
+}
+
+function sortProductionTable(columnIndex) {
+    const table = document.getElementById('productionTable');
+    const header = table.querySelector('th:nth-child(' + (columnIndex + 1) + ')');
+    const isAscending = !header.classList.contains('asc');
+    
+    // Reset all headers
+    table.querySelectorAll('th').forEach(th => {
+        th.classList.remove('asc', 'desc');
+    });
+    
+    // Set new sorting direction
+    header.classList.add(isAscending ? 'asc' : 'desc');
+    
+    // Sort the rows
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+    
+    rows.sort((a, b) => {
+        const aValue = a.cells[columnIndex].textContent.trim();
+        const bValue = b.cells[columnIndex].textContent.trim();
+        
+        // For dates, convert to timestamps for comparison
+        if (columnIndex === 0) {
+            return isAscending 
+                ? new Date(aValue) - new Date(bValue) 
+                : new Date(bValue) - new Date(aValue);
+        }
+        
+        // For numeric columns
+        const aNum = parseFloat(aValue.replace(/[^\d.-]/g, ''));
+        const bNum = parseFloat(bValue.replace(/[^\d.-]/g, ''));
+        
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+            return isAscending ? aNum - bNum : bNum - aNum;
+        }
+        
+        // Default string comparison
+        return isAscending 
+            ? aValue.localeCompare(bValue) 
+            : bValue.localeCompare(aValue);
+    });
+    
+    // Re-add the sorted rows
+    rows.forEach(row => {
+        tbody.appendChild(row);
+    });
+}
+
 const ProductionManager = {
     modal: null,
     currentMode: 'create',
@@ -417,6 +571,11 @@ const ProductionManager = {
         // Energy inputs
         document.querySelectorAll('.energy-quantity').forEach(input => {
             input.addEventListener('input', () => this.calculateEnergyCosts());
+        });
+
+        // Load historical stock
+        document.getElementById('productionDate').addEventListener('change', (e) => {
+            this.loadHistoricalStock(e.target.value);
         });
     },
 
@@ -648,6 +807,7 @@ const ProductionManager = {
             totalValueAddedEl.textContent = totalPackagedValue.toFixed(2);
         }
     },
+
     openCreateModal() {
         this.currentMode = 'create';
         
@@ -695,8 +855,9 @@ const ProductionManager = {
             span.textContent = '0';
         });
         
-        // Set current stock levels in the packaging tab
-        this.displayCurrentStock();
+        // Use historical stock calculation instead of current stock
+        // This ensures we account for loadings when calculating available stock
+        this.loadHistoricalStock(dateInput.value);
         
         document.getElementById('totalWagons').textContent = '0';
         document.getElementById('totalMisc').textContent = '0';
@@ -971,7 +1132,9 @@ const ProductionManager = {
     
     async loadHistoricalStock(date) {
         try {
-            // Fetch historical stock data for the given date
+            this.debug(`Loading historical stock for date: ${date} (production view)`);
+            
+            // Explicitly specify type=production to ensure correct stock calculation
             const response = await fetch(`/testapp/production/api/historical-stock/?date=${date}&type=production`);
             const data = await response.json();
             
@@ -982,11 +1145,47 @@ const ProductionManager = {
                     const stockItem = data.stock.find(item => item.brick_type_id === brickId);
                     
                     const currentStockEl = row.querySelector('.current-stock');
-                    if (currentStockEl && stockItem) {
-                        // Display bulk stock at that date
-                        currentStockEl.textContent = stockItem.bulk_quantity;
+                    const packagedStockEl = row.querySelector('.packaged-stock');
+                    
+                    if (stockItem) {
+                        // Display bulk and packaged stock at that date
+                        if (currentStockEl) {
+                            currentStockEl.textContent = stockItem.bulk_quantity;
+                        }
+                        
+                        if (packagedStockEl) {
+                            packagedStockEl.textContent = stockItem.packaged_quantity;
+                        }
+                        
+                        // Update total available with current stock + new production
+                        const totalAvailableEl = row.querySelector('.total-available');
+                        const newProductionEl = row.querySelector('.new-production');
+                        
+                        if (totalAvailableEl && newProductionEl) {
+                            const currentStock = parseInt(currentStockEl?.textContent) || 0;
+                            const newProduction = parseInt(newProductionEl?.textContent) || 0;
+                            totalAvailableEl.textContent = currentStock + newProduction;
+                        }
                     }
                 });
+                
+                // Calculate total bulk and packaged stock
+                let totalBulkStock = 0;
+                let totalPackagedStock = 0;
+                
+                data.stock.forEach(item => {
+                    totalBulkStock += parseInt(item.bulk_quantity) || 0;
+                    totalPackagedStock += parseInt(item.packaged_quantity) || 0;
+                });
+                
+                // Update totals in the UI
+                const totalBulkStockEl = document.getElementById('totalBulkStock');
+                if (totalBulkStockEl) {
+                    totalBulkStockEl.textContent = totalBulkStock;
+                }
+                
+                // After updating stock display, update validation
+                this.validatePackaging();
             } else {
                 this.debug('Error fetching historical stock:', data.error);
             }

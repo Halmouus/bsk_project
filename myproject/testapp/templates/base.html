@@ -492,6 +492,10 @@
                     <div class="collapse nav-dropdown" id="productionSubmenu">
                         <div class="nav-section">
                             <!-- Dashboard -->
+                            <a class="nav-link {% if request.resolver_match.url_name == 'production-dashboard' %}active{% endif %}" 
+                            href="{% url 'production-dashboard' %}">
+                                <i class="fas fa-tachometer-alt"></i> {% trans "Dashboard" %}
+                            </a>
 
                             <!-- Brick Management -->
                             <a class="nav-link {% if request.resolver_match.url_name == 'brick-type-list' %}active{% endif %}" 

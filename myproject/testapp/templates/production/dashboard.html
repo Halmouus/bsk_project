@@ -1,0 +1,1158 @@
+{% extends "base.html" %}
+
+{% block title %}Production Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Hidden JSON data for JavaScript -->
+    <script type="application/json" id="production-data-json">{{ production_data_json|safe }}</script>
+    <script type="application/json" id="stock-data-json">{{ stock_data_json|safe }}</script>
+    <script type="application/json" id="loading-data-json">{{ loading_data_json|safe }}</script>
+    <script type="application/json" id="kpis-json">{{ kpis_json|safe }}</script>
+    
+    <!-- Header with Filters -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h1 class="h3 text-gray-800">Production Dashboard</h1>
+            <p class="text-muted">Comprehensive overview of production, inventory, and sales metrics</p>
+        </div>
+        
+        <!-- Filters -->
+        <form id="dashboardFilters" class="d-flex" method="get">
+            <!-- Date Range Filter -->
+            <div class="d-flex align-items-center me-3">
+                <div class="input-group me-2">
+                    <span class="input-group-text bg-light">
+                        <i class="fas fa-calendar-alt text-primary"></i>
+                    </span>
+                    <input type="date" id="start_date" name="start_date" class="form-control filter-input" value="{{ start_date }}">
+                </div>
+                <span class="mx-2">to</span>
+                <div class="input-group me-2">
+                    <span class="input-group-text bg-light">
+                        <i class="fas fa-calendar-alt text-primary"></i>
+                    </span>
+                    <input type="date" id="end_date" name="end_date" class="form-control filter-input" value="{{ end_date }}">
+                </div>
+            </div>
+            
+            <!-- Brick Type Filter -->
+            <div class="d-flex align-items-center me-3">
+                <div class="input-group">
+                    <span class="input-group-text bg-light">
+                        <i class="fas fa-cube text-primary"></i>
+                    </span>
+                    <select id="brick_type" name="brick_type" class="form-select filter-input">
+                        <option value="">All Brick Types</option>
+                        {% for brick_type in brick_types %}
+                        <option value="{{ brick_type.id }}" {% if selected_brick_type.id == brick_type.id %}selected{% endif %}>
+                            {{ brick_type.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" id="update-dashboard">
+                <i class="fas fa-sync-alt me-1"></i> <span id="update-text">Update</span>
+            </button>
+        </form>
+    </div>
+
+    <!-- Debug Panel (initially hidden) -->
+    <div id="debugPanel" class="alert alert-info mb-4" style="display: none;">
+        <div class="d-flex justify-content-between">
+            <strong>Debug Information</strong>
+            <button type="button" class="btn-close" onclick="document.getElementById('debugPanel').style.display='none'"></button>
+        </div>
+        <hr>
+        <pre id="debugContent" class="mb-0"></pre>
+    </div>
+
+    {% if error_message %}
+    <div class="alert alert-danger">
+        <strong>Error:</strong> {{ error_message }}
+    </div>
+    {% else %}
+    
+    <!-- KPI Cards Section -->
+    <div class="row mb-4">
+        <!-- Production Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Total Production</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ production_data.total_bricks }}</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span class="me-2">{{ production_data.avg_daily_production|floatformat:0 }} daily avg</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-industry fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Inventory Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Current Inventory</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_bulk|add:stock_data.total_packaged }}</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span class="me-2">{{ stock_data.total_bulk }} bulk</span> 
+                                <span>{{ stock_data.total_packaged }} packaged</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sales Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-info shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
+                                Total Loadings</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ loading_data.total_bulk|add:loading_data.total_packaged }}</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span class="me-2">{{ loading_data.total_bulk }} bulk</span>
+                                <span>{{ loading_data.total_packaged }} packaged</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-truck-loading fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Efficiency Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-warning shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
+                                Avg VPower</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.production_efficiency.avg_vpower|floatformat:0 }}</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span>Industrial Power Efficiency</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bolt fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Remaining Quantities Cards Row -->
+    <div class="row mb-4">
+        <div class="col-xl-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Remaining Quantities (End of Period)</div>
+                            <div class="row mt-2">
+                                <div class="col-6">
+                                    <div class="text-xs font-weight-bold">Bulk Bricks:</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_bulk }}</div>
+                                    <div class="text-xs text-muted">Value: {{ stock_data.bulk_value|default:0|floatformat:2 }}</div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="text-xs font-weight-bold">Packaged Bricks:</div>
+                                    <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_packaged }}</div>
+                                    <div class="text-xs text-muted">Value: {{ stock_data.packaged_value|default:0|floatformat:2 }}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-boxes fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-xl-6 mb-4">
+            <div class="card border-left-success shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
+                                Total Inventory Value</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_value|default:0|floatformat:2 }}</div>
+                            <div class="text-xs text-muted mt-2">As of {{ end_date }}</div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Inventory Evolution Chart -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card shadow">
+                <div class="card-header py-3">
+                    <h6 class="m-0 font-weight-bold text-primary">Inventory Evolution</h6>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="inventoryEvolutionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1 -->
+    <div class="row mb-4">
+        <!-- Production Over Time Chart -->
+        <div class="col-lg-8 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Production Over Time</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="productionChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="productionChartOptions">
+                            <li><button class="dropdown-item production-view-toggle active" data-view="total">Total Production</button></li>
+                            <li><button class="dropdown-item production-view-toggle" data-view="split">Split (Bulk/Packaged)</button></li>
+                            <li><button class="dropdown-item production-view-toggle" data-view="wagons">Wagons</button></li>
+                            <li><div class="dropdown-divider"></div></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionChart', 'production-over-time')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="productionChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Production by Type Pie Chart -->
+        <div class="col-lg-4 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Production by Type</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="productionPieOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="productionPieOptions">
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionPieChart', 'production-by-type')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="productionPieChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2 -->
+    <div class="row mb-4">
+        <!-- Inventory Status -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-success">Current Inventory</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="inventoryChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="inventoryChartOptions">
+                            <li><button class="dropdown-item inventory-view-toggle active" data-view="quantity">By Quantity</button></li>
+                            <li><button class="dropdown-item inventory-view-toggle" data-view="value">By Value</button></li>
+                            <li><div class="dropdown-divider"></div></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('inventoryChart', 'inventory-status')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="inventoryChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading/Sales Data -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-info">Loading Activity</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="loadingChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="loadingChartOptions">
+                            <li><button class="dropdown-item loading-view-toggle active" data-view="quantity">By Quantity</button></li>
+                            <li><button class="dropdown-item loading-view-toggle" data-view="value">By Value</button></li>
+                            <li><div class="dropdown-divider"></div></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('loadingChart', 'loading-activity')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="loadingChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Data Tables Row -->
+    <div class="row">
+        <!-- Recent Production -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Recent Production</h6>
+                    <a href="{% url 'production-list' %}" class="btn btn-sm btn-primary">
+                        <i class="fas fa-arrow-right"></i> View All
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Total</th>
+                                    <th>Bulk</th>
+                                    <th>Packaged</th>
+                                    <th>Wagons</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in production_data.by_date|slice:"-5:" %}
+                                <tr>
+                                    <td>{{ item.date }}</td>
+                                    <td>{{ item.total_bricks }}</td>
+                                    <td>{{ item.bulk }}</td>
+                                    <td>{{ item.packaged }}</td>
+                                    <td>{{ item.wagons }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">No production data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Recent Loadings -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-info">Recent Loadings</h6>
+                    <a href="{% url 'loading-list' %}" class="btn btn-sm btn-info">
+                        <i class="fas fa-arrow-right"></i> View All
+                    </a>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Bulk</th>
+                                    <th>Packaged</th>
+                                    <th>Breakage</th>
+                                    <th>Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in loading_data.by_date|slice:"-5:" %}
+                                <tr>
+                                    <td>{{ item.date }}</td>
+                                    <td>{{ item.bulk }}</td>
+                                    <td>{{ item.packaged }}</td>
+                                    <td>{{ item.breakage }}</td>
+                                    <td>{{ item.value|floatformat:2 }}</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">No loading data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.6.0/dist/chart.min.js"></script>
+
+<script>
+const DashboardManager = {
+    // Chart objects
+    charts: {},
+    // Chart data
+    productionData: null,
+    stockData: null,
+    loadingData: null,
+    kpis: null,
+    // View settings
+    views: {
+        production: 'total',
+        inventory: 'quantity',
+        loading: 'quantity'
+    },
+    // Chart colors
+    colors: {
+        primary: '#4e73df',
+        success: '#1cc88a',
+        info: '#36b9cc',
+        warning: '#f6c23e',
+        danger: '#e74a3b',
+        secondary: '#858796',
+        light: '#f8f9fc',
+        dark: '#5a5c69',
+        bulk: '#4e73df',
+        packaged: '#1cc88a',
+        breakage: '#e74a3b',
+        wagons: '#f6c23e',
+        value: '#36b9cc'
+    },
+    
+    initialize() {
+        console.log('Initializing dashboard');
+        try {
+            // Parse JSON data from the hidden elements
+            const productionElem = document.getElementById('production-data-json');
+            const stockElem = document.getElementById('stock-data-json');
+            const loadingElem = document.getElementById('loading-data-json');
+            const kpisElem = document.getElementById('kpis-json');
+            
+            if (productionElem) this.productionData = JSON.parse(productionElem.textContent);
+            if (stockElem) this.stockData = JSON.parse(stockElem.textContent);
+            if (loadingElem) this.loadingData = JSON.parse(loadingElem.textContent);
+            if (kpisElem) this.kpis = JSON.parse(kpisElem.textContent);
+            
+            this.setupDebug();
+            this.setupEventListeners();
+            this.initCharts();
+            this.initInventoryEvolutionChart();
+        } catch (e) {
+            console.error('Error initializing dashboard:', e);
+            this.debug('Error initializing dashboard: ' + e.message);
+        }
+    },
+    
+    setupDebug() {
+        this.debug('DashboardManager initialized');
+        if (this.productionData) {
+            this.debug('Production data: ' + this.productionData.total_bricks + ' total bricks');
+        }
+        if (this.stockData) {
+            this.debug('Stock data: ' + (this.stockData.total_bulk + this.stockData.total_packaged) + ' total items');
+        }
+        if (this.loadingData) {
+            this.debug('Loading data: ' + (this.loadingData.total_bulk + this.loadingData.total_packaged) + ' total loadings');
+        }
+    },
+    
+    debug(msg, data = null) {
+        console.log(msg, data);
+        const panel = document.getElementById('debugPanel');
+        const content = document.getElementById('debugContent');
+        
+        if (!panel || !content) return;
+        
+        if (typeof msg === 'object') {
+            content.textContent += JSON.stringify(msg, null, 2) + '\n';
+        } else {
+            content.textContent += msg + (data ? ': ' + JSON.stringify(data, null, 2) : '') + '\n';
+        }
+        
+        panel.style.display = 'block';
+    },
+    
+    setupEventListeners() {
+        // Production view toggle
+        document.querySelectorAll('.production-view-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.production-view-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.views.production = e.target.dataset.view;
+                this.updateProductionChart();
+            });
+        });
+        
+        // Inventory view toggle
+        document.querySelectorAll('.inventory-view-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.inventory-view-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.views.inventory = e.target.dataset.view;
+                this.updateInventoryChart();
+            });
+        });
+        
+        // Loading view toggle
+        document.querySelectorAll('.loading-view-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.loading-view-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.views.loading = e.target.dataset.view;
+                this.updateLoadingChart();
+            });
+        });
+    },
+    
+    initCharts() {
+        // Initialize all charts if data is available
+        if (this.productionData && this.productionData.by_date && this.productionData.by_date.length > 0) {
+            this.initProductionChart();
+            this.initProductionPieChart();
+        } else {
+            this.debug('No production data available for charts');
+        }
+        
+        if (this.stockData && this.stockData.items && this.stockData.items.length > 0) {
+            this.initInventoryChart();
+        } else {
+            this.debug('No stock data available for charts');
+        }
+        
+        if (this.loadingData && this.loadingData.by_date && this.loadingData.by_date.length > 0) {
+            this.initLoadingChart();
+        } else {
+            this.debug('No loading data available for charts');
+        }
+    },
+    
+    initProductionChart() {
+        const ctx = document.getElementById('productionChart');
+        if (!ctx) {
+            this.debug('Production chart element not found');
+            return;
+        }
+        
+        // Process data
+        const labels = this.productionData.by_date.map(item => item.date);
+        const totalData = this.productionData.by_date.map(item => item.total_bricks);
+        const bulkData = this.productionData.by_date.map(item => item.bulk);
+        const packagedData = this.productionData.by_date.map(item => item.packaged);
+        const wagonsData = this.productionData.by_date.map(item => item.wagons);
+        
+        // Create chart
+        this.charts.production = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Total Production',
+                    data: totalData,
+                    backgroundColor: this.colors.primary,
+                    borderColor: this.colors.primary,
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Bricks'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store the different dataset configs for switching views
+        this.productionDatasets = {
+            total: [{
+                label: 'Total Production',
+                data: totalData,
+                backgroundColor: this.colors.primary,
+                borderColor: this.colors.primary,
+                tension: 0.1,
+                fill: false
+            }],
+            split: [
+                {
+                    label: 'Bulk',
+                    data: bulkData,
+                    backgroundColor: this.colors.bulk,
+                    borderColor: this.colors.bulk,
+                    tension: 0.1,
+                    fill: false
+                },
+                {
+                    label: 'Packaged',
+                    data: packagedData,
+                    backgroundColor: this.colors.packaged,
+                    borderColor: this.colors.packaged,
+                    tension: 0.1,
+                    fill: false
+                }
+            ],
+            wagons: [{
+                label: 'Wagons',
+                data: wagonsData,
+                backgroundColor: this.colors.wagons,
+                borderColor: this.colors.wagons,
+                tension: 0.1,
+                fill: false
+            }]
+        };
+    },
+    
+    updateProductionChart() {
+        if (!this.charts.production) return;
+        
+        const chart = this.charts.production;
+        chart.data.datasets = this.productionDatasets[this.views.production];
+        chart.update();
+    },
+    
+    initProductionPieChart() {
+        const ctx = document.getElementById('productionPieChart');
+        if (!ctx) {
+            this.debug('Production pie chart element not found');
+            return;
+        }
+        
+        // Process data
+        const labels = this.productionData.by_type.map(item => item.name);
+        const data = this.productionData.by_type.map(item => item.total_bricks);
+        
+        // Generate colors
+        const colors = this.generateColors(labels.length);
+        
+        // Create chart
+        this.charts.productionPie = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: colors,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+    
+    initInventoryChart() {
+        const ctx = document.getElementById('inventoryChart');
+        if (!ctx) {
+            this.debug('Inventory chart element not found');
+            return;
+        }
+        
+        // Limit to top 10 items for readability
+        const items = this.stockData.items.slice(0, 10);
+        
+        // Process data for quantity view
+        const labels = items.map(item => item.brick_type_name);
+        const bulkData = items.map(item => item.bulk_quantity);
+        const packagedData = items.map(item => item.packaged_quantity);
+        
+        // Process data for value view
+        const bulkValueData = items.map(item => item.bulk_value);
+        const packagedValueData = items.map(item => item.packaged_value);
+        
+        // Create chart
+        this.charts.inventory = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Bulk',
+                        data: bulkData,
+                        backgroundColor: this.colors.bulk,
+                        borderColor: this.colors.bulk,
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Packaged',
+                        data: packagedData,
+                        backgroundColor: this.colors.packaged,
+                        borderColor: this.colors.packaged,
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Quantity'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Brick Type'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store the different dataset configs for switching views
+        this.inventoryDatasets = {
+            quantity: [
+                {
+                    label: 'Bulk',
+                    data: bulkData,
+                    backgroundColor: this.colors.bulk,
+                    borderColor: this.colors.bulk,
+                    borderWidth: 1
+                },
+                {
+                    label: 'Packaged',
+                    data: packagedData,
+                    backgroundColor: this.colors.packaged,
+                    borderColor: this.colors.packaged,
+                    borderWidth: 1
+                }
+            ],
+            value: [
+                {
+                    label: 'Bulk Value',
+                    data: bulkValueData,
+                    backgroundColor: this.colors.bulk,
+                    borderColor: this.colors.bulk,
+                    borderWidth: 1
+                },
+                {
+                    label: 'Packaged Value',
+                    data: packagedValueData,
+                    backgroundColor: this.colors.packaged,
+                    borderColor: this.colors.packaged,
+                    borderWidth: 1
+                }
+            ]
+        };
+    },
+    
+    updateInventoryChart() {
+        if (!this.charts.inventory) return;
+        
+        const chart = this.charts.inventory;
+        chart.data.datasets = this.inventoryDatasets[this.views.inventory];
+        
+        // Update y-axis title
+        chart.options.scales.y.title.text = this.views.inventory === 'quantity' ? 'Quantity' : 'Value';
+        
+        chart.update();
+    },
+    
+    initLoadingChart() {
+        const ctx = document.getElementById('loadingChart');
+        if (!ctx) {
+            this.debug('Loading chart element not found');
+            return;
+        }
+        
+        // Process data
+        const labels = this.loadingData.by_date.map(item => item.date);
+        const bulkData = this.loadingData.by_date.map(item => item.bulk);
+        const packagedData = this.loadingData.by_date.map(item => item.packaged);
+        const breakageData = this.loadingData.by_date.map(item => item.breakage);
+        const valueData = this.loadingData.by_date.map(item => item.value);
+        
+        // Create chart
+        this.charts.loading = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    {
+                        label: 'Bulk',
+                        data: bulkData,
+                        backgroundColor: this.colors.bulk,
+                        borderColor: this.colors.bulk,
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Packaged',
+                        data: packagedData,
+                        backgroundColor: this.colors.packaged,
+                        borderColor: this.colors.packaged,
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Breakage',
+                        data: breakageData,
+                        backgroundColor: this.colors.breakage,
+                        borderColor: this.colors.breakage,
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Quantity'
+                        },
+                        stacked: true
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        },
+                        stacked: true
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y;
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store the different dataset configs for switching views
+        this.loadingDatasets = {
+            quantity: [
+                {
+                    label: 'Bulk',
+                    data: bulkData,
+                    backgroundColor: this.colors.bulk,
+                    borderColor: this.colors.bulk,
+                    borderWidth: 1
+                },
+                {
+                    label: 'Packaged',
+                    data: packagedData,
+                    backgroundColor: this.colors.packaged,
+                    borderColor: this.colors.packaged,
+                    borderWidth: 1
+                },
+                {
+                    label: 'Breakage',
+                    data: breakageData,
+                    backgroundColor: this.colors.breakage,
+                    borderColor: this.colors.breakage,
+                    borderWidth: 1
+                }
+            ],
+            value: [{
+                label: 'Value',
+                data: valueData,
+                backgroundColor: this.colors.value,
+                borderColor: this.colors.value,
+                borderWidth: 1
+            }]
+        };
+    },
+    
+    updateLoadingChart() {
+        if (!this.charts.loading) return;
+        
+        const chart = this.charts.loading;
+        
+        // Update datasets
+        chart.data.datasets = this.loadingDatasets[this.views.loading];
+        
+        // Update stacking based on view type
+        const isStacked = this.views.loading === 'quantity';
+        chart.options.scales.y.stacked = isStacked;
+        chart.options.scales.x.stacked = isStacked;
+        
+        // Update y-axis title
+        chart.options.scales.y.title.text = this.views.loading === 'quantity' ? 'Quantity' : 'Value';
+        
+        chart.update();
+    },
+    
+    initInventoryEvolutionChart() {
+        // Initialize inventory evolution chart
+        const ctx = document.getElementById('inventoryEvolutionChart');
+        if (!ctx) {
+            console.log('Inventory evolution chart element not found');
+            return;
+        }
+        
+        // Use data from both production and loading to show inventory evolution
+        try {
+            if (!this.productionData || !this.loadingData) {
+                console.log('Missing production or loading data');
+                return;
+            }
+            
+            if (!this.productionData.by_date || !this.loadingData.by_date) {
+                console.log('Missing date data');
+                return;
+            }
+            
+            // Combine dates from both datasets and sort them
+            const allDates = [...new Set([
+                ...this.productionData.by_date.map(item => item.date),
+                ...this.loadingData.by_date.map(item => item.date)
+            ])].sort();
+            
+            // Calculate running inventory for each date
+            let runningBulk = 0;
+            let runningPackaged = 0;
+            
+            const bulkData = [];
+            const packagedData = [];
+            
+            allDates.forEach(date => {
+                // Add production for this date
+                const prodItem = this.productionData.by_date.find(item => item.date === date);
+                if (prodItem) {
+                    runningBulk += prodItem.bulk;
+                    runningPackaged += prodItem.packaged;
+                }
+                
+                // Subtract loadings for this date
+                const loadItem = this.loadingData.by_date.find(item => item.date === date);
+                if (loadItem) {
+                    runningBulk -= loadItem.bulk;
+                    runningBulk -= loadItem.breakage || 0;
+                    runningPackaged -= loadItem.packaged;
+                }
+                
+                // Ensure we don't go negative
+                runningBulk = Math.max(0, runningBulk);
+                runningPackaged = Math.max(0, runningPackaged);
+                
+                // Add to our data arrays
+                bulkData.push(runningBulk);
+                packagedData.push(runningPackaged);
+            });
+            
+            // Create the chart
+            this.charts.evolutionChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: allDates,
+                    datasets: [
+                        {
+                            label: 'Bulk Inventory',
+                            data: bulkData,
+                            backgroundColor: this.colors.bulk,
+                            borderColor: this.colors.bulk,
+                            fill: false
+                        },
+                        {
+                            label: 'Packaged Inventory',
+                            data: packagedData,
+                            backgroundColor: this.colors.packaged,
+                            borderColor: this.colors.packaged,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Quantity'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Date'
+                            }
+                        }
+                    }
+                }
+            });
+            
+            console.log('Inventory evolution chart initialized');
+        } catch (e) {
+            console.error('Error initializing inventory evolution chart:', e);
+        }
+    },
+    
+    generateColors(count) {
+        const baseColors = [
+            '#4e73df', // primary
+            '#1cc88a', // success
+            '#36b9cc', // info
+            '#f6c23e', // warning
+            '#e74a3b', // danger
+            '#5a5c69', // dark
+            '#6f42c1', // purple
+            '#fd7e14', // orange
+            '#20c9a6', // teal
+            '#27a844', // green
+        ];
+        
+        const colors = [];
+        for (let i = 0; i < count; i++) {
+            colors.push(baseColors[i % baseColors.length]);
+        }
+        
+        return colors;
+    }
+};
+
+// Function to download chart as image
+function downloadChartAsImage(chartId, filename) {
+    const canvas = document.getElementById(chartId);
+    if (!canvas) {
+        console.error('Chart canvas not found:', chartId);
+        return;
+    }
+    
+    const image = canvas.toDataURL('image/png', 1.0);
+    
+    // Create download link
+    const link = document.createElement('a');
+    link.download = filename + '.png';
+    link.href = image;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Set up automatic filtering when inputs change
+function setupAutoFilter() {
+    // Auto-submit form when any filter changes
+    document.querySelectorAll('.filter-input').forEach(input => {
+        input.addEventListener('change', () => {
+            // Show loading indicator
+            const updateBtn = document.getElementById('update-dashboard');
+            const updateText = document.getElementById('update-text');
+            if (updateBtn && updateText) {
+                updateBtn.disabled = true;
+                updateText.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading...';
+            }
+            
+            // Submit the form
+            document.getElementById('dashboardFilters').submit();
+        });
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    // Make sure the DOM is fully loaded
+    setTimeout(() => {
+        DashboardManager.initialize();
+        setupAutoFilter();
+    }, 300);
+});
+</script>
+{% endblock %}

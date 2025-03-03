@@ -382,6 +382,9 @@ urlpatterns = [
     path('pay/declarations/<uuid:pk>/declare/', PayDeclarationDeclareView.as_view(), name='pay-declaration-declare'),
 
 
+    # Production Dashboard URLs
+    path('production/dashboard/', views_production.DashboardView.as_view(), name='production-dashboard'),
+
     # Brick Management URLs
     path('production/brick-types/', views_production.BrickTypeListView.as_view(), name='brick-type-list'),
     path('production/brick-types/create/', views_production.BrickTypeCreateView.as_view(), name='brick-type-create'),
@@ -397,7 +400,7 @@ urlpatterns = [
     path('production/energy/<uuid:pk>/delete/', views_production.EnergyTypeDeleteView.as_view(), name='energy-type-delete'),
     path('production/energy/<uuid:pk>/price-history/', views_production.EnergyPriceHistoryView.as_view(), name='energy-price-history'),
     path('production/energy/<uuid:pk>/detail/', views_production.EnergyTypeDetailView.as_view(), name='energy-type-detail'),
-    
+
     # Production Batch URLs
     path('production/records/', views_production.ProductionBatchListView.as_view(), name='production-list'),
     path('production/records/create/', views_production.ProductionBatchCreateView.as_view(), name='production-create'),

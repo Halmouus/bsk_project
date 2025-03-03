@@ -523,8 +523,8 @@ const LoadingManager = {
                 document.getElementById('loadingDate').value = record.loading_date;
                 document.querySelector('textarea[name="notes"]').value = record.notes || '';
                 
-                // Load stock for this date
-                await this.loadStockForDate();
+                // Load stock for this date, excluding this record to get the stock as it was before this loading
+                await this.loadHistoricalStock(record.loading_date, id);
                 
                 // Set loading quantities
                 data.items.forEach(item => {
@@ -673,6 +673,42 @@ const LoadingManager = {
         } catch (error) {
             this.debug('Delete error:', error);
             showToast('Failed to delete loading record', 'error');
+        }
+    },
+
+    async loadHistoricalStock(date, excludeRecordId = null) {
+        try {
+            this.debug(`Loading historical stock for date: ${date}${excludeRecordId ? ', excluding record: ' + excludeRecordId : ''}`);
+            
+            // Clear previous stock data
+            document.querySelectorAll('#loadingItems > tr').forEach(row => {
+                const availableBulkEl = row.querySelector('.available-bulk');
+                const availablePackagedEl = row.querySelector('.available-packaged');
+                
+                if (availableBulkEl) availableBulkEl.textContent = '0';
+                if (availablePackagedEl) availablePackagedEl.textContent = '0';
+            });
+            
+            // Construct API URL with parameters
+            let apiUrl = `/testapp/production/api/historical-stock/?date=${date}&type=loading`;
+            if (excludeRecordId) {
+                apiUrl += `&exclude_id=${excludeRecordId}`;
+            }
+            
+            // Fetch historical stock data
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            
+            if (data.success) {
+                this.updateStockDisplay(data.stock);
+                this.lastLoadedDate = date;
+            } else {
+                this.debug(`Error loading stock: ${data.error}`);
+                showToast(`Error loading stock: ${data.error}`, 'error');
+            }
+        } catch (error) {
+            this.debug(`Error loading stock: ${error.message}`);
+            showToast(`Error loading stock: ${error.message}`, 'error');
         }
     },
     

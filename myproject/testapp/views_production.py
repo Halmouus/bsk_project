@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 import json
 import logging
+import traceback
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db import transaction
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
+from django.shortcuts import get_object_or_404, render
 from django.views.generic import ListView, View
 from .models import BrickProduction, BrickType, BrickPriceHistory, EnergyPriceHistory, EnergyType, ProductionBatch, ProductionEnergy, BrickStock, LoadingRecord, LoadingItem
 from django.utils import timezone
@@ -18,12 +19,12 @@ class BrickTypeListView(LoginRequiredMixin, ListView):
     context_object_name = 'brick_types'
 
     def get_queryset(self):
-        logger.debug("Fetching brick types")
+        print("Fetching brick types")
         return BrickType.objects.all().order_by('name')
 
 class BrickTypeCreateView(LoginRequiredMixin, View):
     def post(self, request):
-        logger.debug("Received create brick type request")
+        print("Received create brick type request")
         try:
             with transaction.atomic():
                 # Create brick type
@@ -54,7 +55,7 @@ class BrickTypeCreateView(LoginRequiredMixin, View):
                 else:
                     effective_date = timezone.now()
                 
-                logger.debug(f"Using effective date: {effective_date}")
+                print(f"Using effective date: {effective_date}")
                 
                 # Create prices if provided
                 if request.POST.get('bulk_price'):
@@ -82,7 +83,7 @@ class BrickTypeCreateView(LoginRequiredMixin, View):
                 })
 
         except Exception as e:
-            logger.error(f"Error creating brick type: {str(e)}")
+            print(f"Error creating brick type: {str(e)}")
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)
@@ -90,7 +91,7 @@ class BrickTypeCreateView(LoginRequiredMixin, View):
 
 class BrickTypeDetailView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching details for brick type {pk}")
+        print(f"Fetching details for brick type {pk}")
         try:
             brick_type = get_object_or_404(BrickType, pk=pk)
             
@@ -118,7 +119,7 @@ class BrickTypeDetailView(LoginRequiredMixin, View):
             return JsonResponse(data)
             
         except Exception as e:
-            logger.error(f"Error fetching brick type details: {str(e)}")
+            print(f"Error fetching brick type details: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -126,7 +127,7 @@ class BrickTypeDetailView(LoginRequiredMixin, View):
         
 class BrickTypeUpdateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received update request for brick type {pk}")
+        print(f"Received update request for brick type {pk}")
         try:
             with transaction.atomic():
                 brick_type = get_object_or_404(BrickType, pk=pk)
@@ -163,7 +164,7 @@ class BrickTypeUpdateView(LoginRequiredMixin, View):
                 else:
                     effective_date = timezone.now()
                 
-                logger.debug(f"Using effective date: {effective_date}")
+                print(f"Using effective date: {effective_date}")
                 
                 if bulk_price and str(bulk_price) != str(current_prices.get('bulk_price')):
                     BrickPriceHistory.objects.create(
@@ -187,7 +188,7 @@ class BrickTypeUpdateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error updating brick type: {str(e)}")
+            print(f"Error updating brick type: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -195,7 +196,7 @@ class BrickTypeUpdateView(LoginRequiredMixin, View):
 
 class BrickTypeDeleteView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received delete request for brick type {pk}")
+        print(f"Received delete request for brick type {pk}")
         try:
             brick_type = get_object_or_404(BrickType, pk=pk)
             
@@ -211,7 +212,7 @@ class BrickTypeDeleteView(LoginRequiredMixin, View):
             return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error deleting brick type: {str(e)}")
+            print(f"Error deleting brick type: {str(e)}")
             return JsonResponse({
                 'success': False, 
                 'error': str(e)
@@ -219,7 +220,7 @@ class BrickTypeDeleteView(LoginRequiredMixin, View):
 
 class BrickPriceHistoryView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching price history for brick type {pk}")
+        print(f"Fetching price history for brick type {pk}")
         try:
             brick_type = get_object_or_404(BrickType, pk=pk)
             
@@ -263,7 +264,7 @@ class BrickPriceHistoryView(LoginRequiredMixin, View):
             })
         
         except Exception as e:
-            logger.error(f"Error fetching price history: {str(e)}")
+            print(f"Error fetching price history: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -275,12 +276,12 @@ class EnergyTypeListView(LoginRequiredMixin, ListView):
     context_object_name = 'energy_types'
 
     def get_queryset(self):
-        logger.debug("Fetching energy types")
+        print("Fetching energy types")
         return EnergyType.objects.all().order_by('name')
 
 class EnergyTypeCreateView(LoginRequiredMixin, View):
     def post(self, request):
-        logger.debug("Received create energy type request")
+        print("Received create energy type request")
         try:
             with transaction.atomic():
                 # Create energy type
@@ -307,7 +308,7 @@ class EnergyTypeCreateView(LoginRequiredMixin, View):
                 else:
                     effective_date = timezone.now()
                 
-                logger.debug(f"Using effective date: {effective_date}")
+                print(f"Using effective date: {effective_date}")
                 
                 # Create initial price
                 if request.POST.get('price'):
@@ -323,7 +324,7 @@ class EnergyTypeCreateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error creating energy type: {str(e)}")
+            print(f"Error creating energy type: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -331,7 +332,7 @@ class EnergyTypeCreateView(LoginRequiredMixin, View):
 
 class EnergyTypeUpdateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received update request for energy type {pk}")
+        print(f"Received update request for energy type {pk}")
         try:
             with transaction.atomic():
                 energy_type = get_object_or_404(EnergyType, pk=pk)
@@ -363,7 +364,7 @@ class EnergyTypeUpdateView(LoginRequiredMixin, View):
                 else:
                     effective_date = timezone.now()
                 
-                logger.debug(f"Using effective date: {effective_date}")
+                print(f"Using effective date: {effective_date}")
                 
                 if new_price and str(new_price) != str(current_price):
                     EnergyPriceHistory.objects.create(
@@ -378,7 +379,7 @@ class EnergyTypeUpdateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error updating energy type: {str(e)}")
+            print(f"Error updating energy type: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -386,7 +387,7 @@ class EnergyTypeUpdateView(LoginRequiredMixin, View):
 
 class EnergyTypeDeleteView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received delete request for energy type {pk}")
+        print(f"Received delete request for energy type {pk}")
         try:
             energy_type = get_object_or_404(EnergyType, pk=pk)
             
@@ -402,7 +403,7 @@ class EnergyTypeDeleteView(LoginRequiredMixin, View):
             return JsonResponse({'success': True})
 
         except Exception as e:
-            logger.error(f"Error deleting energy type: {str(e)}")
+            print(f"Error deleting energy type: {str(e)}")
             return JsonResponse({
                 'success': False, 
                 'error': str(e)
@@ -410,7 +411,7 @@ class EnergyTypeDeleteView(LoginRequiredMixin, View):
 
 class EnergyPriceHistoryView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching price history for energy type {pk}")
+        print(f"Fetching price history for energy type {pk}")
         try:
             energy_type = get_object_or_404(EnergyType, pk=pk)
             
@@ -440,7 +441,7 @@ class EnergyPriceHistoryView(LoginRequiredMixin, View):
             })
         
         except Exception as e:
-            logger.error(f"Error fetching energy price history: {str(e)}")
+            print(f"Error fetching energy price history: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -448,7 +449,7 @@ class EnergyPriceHistoryView(LoginRequiredMixin, View):
 
 class EnergyTypeDetailView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching details for energy type {pk}")
+        print(f"Fetching details for energy type {pk}")
         try:
             energy_type = get_object_or_404(EnergyType, pk=pk)
             
@@ -471,7 +472,7 @@ class EnergyTypeDetailView(LoginRequiredMixin, View):
             return JsonResponse(data)
             
         except Exception as e:
-            logger.error(f"Error fetching energy type details: {str(e)}")
+            print(f"Error fetching energy type details: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -483,7 +484,7 @@ class ProductionBatchListView(LoginRequiredMixin, ListView):
     context_object_name = 'production_batches'
     
     def get_queryset(self):
-        logger.debug("Fetching production batches")
+        print("Fetching production batches")
         return ProductionBatch.objects.prefetch_related(
             'brick_productions',
             'brick_productions__brick_type',
@@ -509,9 +510,9 @@ class ProductionBatchListView(LoginRequiredMixin, ListView):
 
 class ProductionBatchCreateView(LoginRequiredMixin, View):
     def post(self, request):
-        logger.debug("Received create production batch request")
+        print("Received create production batch request")
         try:
-            logger.debug(f"POST data: {request.POST}")
+            print(f"POST data: {request.POST}")
             
             # Parse JSON data from form
             brick_type_ids = json.loads(request.POST.get('brick_type_ids', '[]'))
@@ -522,10 +523,10 @@ class ProductionBatchCreateView(LoginRequiredMixin, View):
             energy_quantities = json.loads(request.POST.get('energy_quantities', '[]'))
             
             # Debug parsed data
-            logger.debug(f"Brick type IDs: {brick_type_ids}")
-            logger.debug(f"Wagons: {wagons}")
-            logger.debug(f"Misc adjustments: {misc_adjustments}")
-            logger.debug(f"Packaged: {packaged}")
+            print(f"Brick type IDs: {brick_type_ids}")
+            print(f"Wagons: {wagons}")
+            print(f"Misc adjustments: {misc_adjustments}")
+            print(f"Packaged: {packaged}")
 
             with transaction.atomic():
                 # Parse JSON data from form
@@ -583,7 +584,7 @@ class ProductionBatchCreateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error creating production batch: {str(e)}")
+            print(f"Error creating production batch: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -608,14 +609,14 @@ class ProductionBatchCreateView(LoginRequiredMixin, View):
             stock.packaged_quantity += packaged
             stock.save()
             
-            logger.debug(f"Updated stock for {brick_type.name}: +{bulk_increase} bulk, +{packaged} packaged")
+            print(f"Updated stock for {brick_type.name}: +{bulk_increase} bulk, +{packaged} packaged")
         except Exception as e:
-            logger.error(f"Error updating stock: {str(e)}")
+            print(f"Error updating stock: {str(e)}")
             raise
 
 class ProductionBatchDetailView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching details for production batch {pk}")
+        print(f"Fetching details for production batch {pk}")
         try:
             # Get production batch with related data
             batch = get_object_or_404(ProductionBatch.objects.prefetch_related(
@@ -663,7 +664,7 @@ class ProductionBatchDetailView(LoginRequiredMixin, View):
             return JsonResponse(data)
             
         except Exception as e:
-            logger.error(f"Error fetching production batch details: {str(e)}")
+            print(f"Error fetching production batch details: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -671,7 +672,7 @@ class ProductionBatchDetailView(LoginRequiredMixin, View):
 
 class ProductionBatchUpdateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received update request for production batch {pk}")
+        print(f"Received update request for production batch {pk}")
         try:
             with transaction.atomic():
                 # Get the production batch
@@ -737,7 +738,7 @@ class ProductionBatchUpdateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error updating production batch: {str(e)}")
+            print(f"Error updating production batch: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -763,9 +764,9 @@ class ProductionBatchUpdateView(LoginRequiredMixin, View):
                 stock.packaged_quantity = max(0, stock.packaged_quantity)
                 
                 stock.save()
-                logger.debug(f"Reverted stock for {prod.brick_type.name}: -{bulk_change} bulk, -{bricks_packaged} packaged")
+                print(f"Reverted stock for {prod.brick_type.name}: -{bulk_change} bulk, -{bricks_packaged} packaged")
             except Exception as e:
-                logger.error(f"Error reverting stock for {prod.brick_type.name}: {str(e)}")
+                print(f"Error reverting stock for {prod.brick_type.name}: {str(e)}")
                 raise
     
     def update_stock(self, brick_type, total_produced, packaged):
@@ -787,14 +788,14 @@ class ProductionBatchUpdateView(LoginRequiredMixin, View):
             stock.packaged_quantity += packaged
             stock.save()
             
-            logger.debug(f"Updated stock for {brick_type.name}: +{bulk_increase} bulk, +{packaged} packaged")
+            print(f"Updated stock for {brick_type.name}: +{bulk_increase} bulk, +{packaged} packaged")
         except Exception as e:
-            logger.error(f"Error updating stock: {str(e)}")
+            print(f"Error updating stock: {str(e)}")
             raise
 
 class ProductionBatchDeleteView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received delete request for production batch {pk}")
+        print(f"Received delete request for production batch {pk}")
         try:
             with transaction.atomic():
                 batch = get_object_or_404(ProductionBatch, pk=pk)
@@ -818,7 +819,7 @@ class ProductionBatchDeleteView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error deleting production batch: {str(e)}")
+            print(f"Error deleting production batch: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -844,9 +845,9 @@ class ProductionBatchDeleteView(LoginRequiredMixin, View):
                 stock.packaged_quantity = max(0, stock.packaged_quantity)
                 
                 stock.save()
-                logger.debug(f"Reverted stock for {prod.brick_type.name}: -{bulk_change} bulk, -{bricks_packaged} packaged")
+                print(f"Reverted stock for {prod.brick_type.name}: -{bulk_change} bulk, -{bricks_packaged} packaged")
             except Exception as e:
-                logger.error(f"Error reverting stock for {prod.brick_type.name}: {str(e)}")
+                print(f"Error reverting stock for {prod.brick_type.name}: {str(e)}")
                 raise
 
 class LatestProductionDateView(LoginRequiredMixin, View):
@@ -861,7 +862,7 @@ class LatestProductionDateView(LoginRequiredMixin, View):
                 'latest_date': latest_date.isoformat() if latest_date else None
             })
         except Exception as e:
-            logger.error(f"Error fetching latest production date: {str(e)}")
+            print(f"Error fetching latest production date: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -922,7 +923,7 @@ class CurrentStockView(LoginRequiredMixin, View):
                 'stock': stock_data
             })
         except Exception as e:
-            logger.error(f"Error fetching current stock: {str(e)}")
+            print(f"Error fetching current stock: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -934,6 +935,7 @@ class HistoricalStockView(LoginRequiredMixin, View):
         try:
             date_str = request.GET.get('date')
             view_type = request.GET.get('type', 'loading')  # Default to loading view
+            excluded_id = request.GET.get('exclude_id')  # Optional ID to exclude (for editing existing records)
             
             if not date_str:
                 return JsonResponse({
@@ -949,9 +951,20 @@ class HistoricalStockView(LoginRequiredMixin, View):
                     'error': 'Invalid date format. Use YYYY-MM-DD'
                 }, status=400)
 
-            # For production view: exclude target date's production
-            # For loading view: include target date's production
-            production_date_filter = target_date if view_type == 'loading' else target_date - timedelta(days=1)
+            print(f"Calculating historical stock for date: {target_date}, view_type: {view_type}, excluded_id: {excluded_id}")
+            
+            # For production view: include production up to the day before target date
+            # For loading view: include production up to and including target date
+            if view_type == 'production':
+                production_date_filter = target_date - timedelta(days=1)
+                loading_filter_date = target_date
+                print(f"Production filter date: {production_date_filter} (excluding target date)")
+                print(f"Loading filter date: {loading_filter_date} (including target date)")
+            else:
+                production_date_filter = target_date
+                loading_filter_date = target_date
+                print(f"Production filter date: {production_date_filter} (including target date)")
+                print(f"Loading filter date: {loading_filter_date} (including target date)")
             
             batches = ProductionBatch.objects.filter(
                 production_date__lte=production_date_filter
@@ -960,10 +973,21 @@ class HistoricalStockView(LoginRequiredMixin, View):
                 'brick_productions__brick_type'
             )
             
-            # Always exclude loading records of target date
-            loading_items = LoadingItem.objects.filter(
-                loading_record__loading_date__lt=target_date
+            # For loading records:
+            # - When viewing: include all loadings before target date 
+            # - When editing: also exclude the current loading record
+            loading_items_query = LoadingItem.objects.filter(
+                loading_record__loading_date__lt=loading_filter_date
             ).select_related('brick_type', 'loading_record')
+            
+            # If we're editing an existing record, exclude it from historical calculations
+            if excluded_id:
+                loading_items_query = loading_items_query.exclude(loading_record_id=excluded_id)
+                print(f"Excluding loading record with ID: {excluded_id}")
+            
+            loading_items = loading_items_query.all()
+            
+            print(f"Found {batches.count()} production batches and {loading_items.count()} loading items")
             
             stock_data = []
             
@@ -992,8 +1016,17 @@ class HistoricalStockView(LoginRequiredMixin, View):
                 bulk_stock = max(0, (bulk_produced - packaged) - bulk_loaded - breakage)
                 packaged_stock = max(0, packaged - packaged_loaded)
                 
+                print(f"Stock calculation for {brick_type.name}:")
+                print(f"- Bulk produced: {bulk_produced}")
+                print(f"- Packaged: {packaged}")
+                print(f"- Bulk loaded: {bulk_loaded}")
+                print(f"- Packaged loaded: {packaged_loaded}")
+                print(f"- Breakage: {breakage}")
+                print(f"- Final bulk stock: {bulk_stock}")
+                print(f"- Final packaged stock: {packaged_stock}")
+                
                 # Get prices at the target date
-                print(f"\nFetching prices for {brick_type.name} at {target_date}")
+                print(f"Fetching prices for {brick_type.name} at {target_date}")
                 
                 # Convert target_date to start and end of day
                 start_of_day = timezone.make_aware(
@@ -1006,29 +1039,14 @@ class HistoricalStockView(LoginRequiredMixin, View):
                 bulk_price = BrickPriceHistory.objects.filter(
                     brick_type=brick_type,
                     is_packaged=False,
-                    effective_date__range=(start_of_day, end_of_day)  # Changed to range
+                    effective_date__lte=end_of_day
                 ).order_by('-effective_date').first()
                 
                 packaged_price = BrickPriceHistory.objects.filter(
                     brick_type=brick_type,
                     is_packaged=True,
-                    effective_date__range=(start_of_day, end_of_day)  # Changed to range
+                    effective_date__lte=end_of_day
                 ).order_by('-effective_date').first()
-                
-                # If no price found for exact date, get the latest price before this date
-                if not bulk_price:
-                    bulk_price = BrickPriceHistory.objects.filter(
-                        brick_type=brick_type,
-                        is_packaged=False,
-                        effective_date__lt=start_of_day
-                    ).order_by('-effective_date').first()
-                    
-                if not packaged_price:
-                    packaged_price = BrickPriceHistory.objects.filter(
-                        brick_type=brick_type,
-                        is_packaged=True,
-                        effective_date__lt=start_of_day
-                    ).order_by('-effective_date').first()
                 
                 stock_data.append({
                     'brick_type_id': str(brick_type.id),
@@ -1038,17 +1056,16 @@ class HistoricalStockView(LoginRequiredMixin, View):
                     'bulk_price': str(bulk_price.price) if bulk_price else "0",
                     'packaged_price': str(packaged_price.price) if packaged_price else "0"
                 })
-                
-                print(f"Added stock data: {stock_data[-1]}")
             
             return JsonResponse({
                 'success': True,
                 'date': date_str,
+                'view_type': view_type,
                 'stock': stock_data
             })
                 
         except Exception as e:
-            logger.error(f"Error fetching historical stock: {str(e)}")
+            print(f"Error fetching historical stock: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -1060,7 +1077,7 @@ class LoadingRecordListView(LoginRequiredMixin, ListView):
     context_object_name = 'loading_records'
     
     def get_queryset(self):
-        logger.debug("Fetching loading records")
+        print("Fetching loading records")
         return LoadingRecord.objects.prefetch_related('items').order_by('-loading_date')
     
     def get_context_data(self, **kwargs):
@@ -1101,7 +1118,7 @@ class LoadingRecordListView(LoginRequiredMixin, ListView):
 
 class LoadingRecordDetailView(LoginRequiredMixin, View):
     def get(self, request, pk):
-        logger.debug(f"Fetching details for loading record {pk}")
+        print(f"Fetching details for loading record {pk}")
         try:
             # Get loading record with related items
             record = get_object_or_404(LoadingRecord.objects.prefetch_related('items__brick_type'), pk=pk)
@@ -1131,7 +1148,7 @@ class LoadingRecordDetailView(LoginRequiredMixin, View):
             return JsonResponse(data)
             
         except Exception as e:
-            logger.error(f"Error fetching loading record details: {str(e)}")
+            print(f"Error fetching loading record details: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -1139,7 +1156,7 @@ class LoadingRecordDetailView(LoginRequiredMixin, View):
 
 class LoadingRecordCreateView(LoginRequiredMixin, View):
     def post(self, request):
-        logger.debug("Received create loading record request")
+        print("Received create loading record request")
         try:
             with transaction.atomic():
                 # Parse JSON data from form
@@ -1242,7 +1259,7 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error creating loading record: {str(e)}")
+            print(f"Error creating loading record: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -1252,27 +1269,34 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
         """Calculate available stock at a given date, optionally excluding a record"""
         try:
             # Debug info to help diagnose calculation issues
-            logger.debug(f"Calculating stock for {brick_type.name} at {date_str}")
+            print(f"Calculating stock for {brick_type.name} at {date_str}")
             
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             
-            # Get all production batches up to and including the target date (so we have stock on that date)
+            # Get all production batches up to and including the target date
             batches = ProductionBatch.objects.filter(
                 production_date__lte=target_date
             ).prefetch_related('brick_productions')
             
-            # Get all loading records up to and including the target date
+            # Get all loading records up to but not including the target date
+            # Or, if we're editing, include target date BUT exclude the current record
             loading_items_query = LoadingItem.objects.filter(
-                loading_record__loading_date__lte=target_date,
+                loading_record__loading_date__lt=target_date,
                 brick_type=brick_type
             ).select_related('loading_record')
             
             # Exclude the current record if provided (for updates)
             if exclude_record:
-                loading_items_query = loading_items_query.exclude(loading_record=exclude_record)
-            
-            # Execute the query
-            loading_items = loading_items_query.all()
+                # Also include records from the target date but not the excluded one
+                target_date_records = LoadingItem.objects.filter(
+                    loading_record__loading_date=target_date,
+                    brick_type=brick_type
+                ).exclude(loading_record=exclude_record)
+                
+                # Combine the queries
+                loading_items = list(loading_items_query) + list(target_date_records)
+            else:
+                loading_items = loading_items_query.all()
             
             # Calculate production totals
             bulk_produced = 0
@@ -1293,19 +1317,19 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
             packaged_stock = max(0, packaged - packaged_loaded)
             
             # Debug the calculation
-            logger.debug(f"Stock calculation for {brick_type.name}:")
-            logger.debug(f"- Bulk produced: {bulk_produced}")
-            logger.debug(f"- Packaged: {packaged}")
-            logger.debug(f"- Bulk loaded: {bulk_loaded}")
-            logger.debug(f"- Packaged loaded: {packaged_loaded}")
-            logger.debug(f"- Breakage: {breakage}")
-            logger.debug(f"- Final bulk stock: {bulk_stock}")
-            logger.debug(f"- Final packaged stock: {packaged_stock}")
+            print(f"Stock calculation for {brick_type.name}:")
+            print(f"- Bulk produced: {bulk_produced}")
+            print(f"- Packaged: {packaged}")
+            print(f"- Bulk loaded: {bulk_loaded}")
+            print(f"- Packaged loaded: {packaged_loaded}")
+            print(f"- Breakage: {breakage}")
+            print(f"- Final bulk stock: {bulk_stock}")
+            print(f"- Final packaged stock: {packaged_stock}")
             
             return bulk_stock, packaged_stock
             
         except Exception as e:
-            logger.error(f"Error calculating stock at date: {str(e)}")
+            print(f"Error calculating stock at date: {str(e)}")
             return 0, 0
     
     def get_prices_at_date(self, brick_type, date_str):
@@ -1331,12 +1355,12 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
             }
             
         except Exception as e:
-            logger.error(f"Error getting prices at date: {str(e)}")
+            print(f"Error getting prices at date: {str(e)}")
             return {'bulk': Decimal('0'), 'packaged': Decimal('0')}
 
 class LoadingRecordUpdateView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received update request for loading record {pk}")
+        print(f"Received update request for loading record {pk}")
         try:
             with transaction.atomic():
                 # Get the loading record
@@ -1445,7 +1469,7 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error updating loading record: {str(e)}")
+            print(f"Error updating loading record: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -1455,27 +1479,34 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
         """Calculate available stock at a given date, optionally excluding a record"""
         try:
             # Debug info to help diagnose calculation issues
-            logger.debug(f"Calculating stock for {brick_type.name} at {date_str}")
+            print(f"Calculating stock for {brick_type.name} at {date_str}")
             
             target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             
-            # Get all production batches up to and including the target date (so we have stock on that date)
+            # Get all production batches up to and including the target date
             batches = ProductionBatch.objects.filter(
                 production_date__lte=target_date
             ).prefetch_related('brick_productions')
             
-            # Get all loading records up to and including the target date
+            # Get all loading records up to but not including the target date
+            # Or, if we're editing, include target date BUT exclude the current record
             loading_items_query = LoadingItem.objects.filter(
-                loading_record__loading_date__lte=target_date,
+                loading_record__loading_date__lt=target_date,
                 brick_type=brick_type
             ).select_related('loading_record')
             
             # Exclude the current record if provided (for updates)
             if exclude_record:
-                loading_items_query = loading_items_query.exclude(loading_record=exclude_record)
-            
-            # Execute the query
-            loading_items = loading_items_query.all()
+                # Also include records from the target date but not the excluded one
+                target_date_records = LoadingItem.objects.filter(
+                    loading_record__loading_date=target_date,
+                    brick_type=brick_type
+                ).exclude(loading_record=exclude_record)
+                
+                # Combine the queries
+                loading_items = list(loading_items_query) + list(target_date_records)
+            else:
+                loading_items = loading_items_query.all()
             
             # Calculate production totals
             bulk_produced = 0
@@ -1496,19 +1527,19 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
             packaged_stock = max(0, packaged - packaged_loaded)
             
             # Debug the calculation
-            logger.debug(f"Stock calculation for {brick_type.name}:")
-            logger.debug(f"- Bulk produced: {bulk_produced}")
-            logger.debug(f"- Packaged: {packaged}")
-            logger.debug(f"- Bulk loaded: {bulk_loaded}")
-            logger.debug(f"- Packaged loaded: {packaged_loaded}")
-            logger.debug(f"- Breakage: {breakage}")
-            logger.debug(f"- Final bulk stock: {bulk_stock}")
-            logger.debug(f"- Final packaged stock: {packaged_stock}")
+            print(f"Stock calculation for {brick_type.name}:")
+            print(f"- Bulk produced: {bulk_produced}")
+            print(f"- Packaged: {packaged}")
+            print(f"- Bulk loaded: {bulk_loaded}")
+            print(f"- Packaged loaded: {packaged_loaded}")
+            print(f"- Breakage: {breakage}")
+            print(f"- Final bulk stock: {bulk_stock}")
+            print(f"- Final packaged stock: {packaged_stock}")
             
             return bulk_stock, packaged_stock
             
         except Exception as e:
-            logger.error(f"Error calculating stock at date: {str(e)}")
+            print(f"Error calculating stock at date: {str(e)}")
             return 0, 0
     
     def get_prices_at_date(self, brick_type, date_str):
@@ -1534,12 +1565,12 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
             }
             
         except Exception as e:
-            logger.error(f"Error getting prices at date: {str(e)}")
+            print(f"Error getting prices at date: {str(e)}")
             return {'bulk': Decimal('0'), 'packaged': Decimal('0')}
 
 class LoadingRecordDeleteView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        logger.debug(f"Received delete request for loading record {pk}")
+        print(f"Received delete request for loading record {pk}")
         try:
             with transaction.atomic():
                 loading_record = get_object_or_404(LoadingRecord, pk=pk)
@@ -1561,7 +1592,7 @@ class LoadingRecordDeleteView(LoginRequiredMixin, View):
                 return JsonResponse({'success': True})
                 
         except Exception as e:
-            logger.error(f"Error deleting loading record: {str(e)}")
+            print(f"Error deleting loading record: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
@@ -1576,8 +1607,481 @@ class LatestLoadingDateView(LoginRequiredMixin, View):
                 'latest_date': latest_loading.loading_date.strftime('%Y-%m-%d') if latest_loading else None
             })
         except Exception as e:
-            logger.error(f"Error getting latest loading date: {str(e)}")
+            print(f"Error getting latest loading date: {str(e)}")
             return JsonResponse({
                 'success': False,
                 'error': str(e)
             }, status=400)
+
+class DashboardView(LoginRequiredMixin, View):
+    def get_historical_stock(self, as_of_date, selected_brick_type=None):
+        """Calculate stock levels as they were on the given date."""
+        print(f"Calculating historical stock as of {as_of_date}")
+        
+        # Get brick types to calculate for
+        if selected_brick_type:
+            brick_types = [selected_brick_type]
+        else:
+            brick_types = BrickType.objects.filter(is_active=True)
+        
+        stock_data = []
+        total_bulk = 0
+        total_packaged = 0
+        total_value = 0
+        
+        # Calculate stock for each brick type
+        for brick_type in brick_types:
+            # Get all production batches up to and including target date
+            batches = ProductionBatch.objects.filter(
+                production_date__lte=as_of_date
+            ).prefetch_related('brick_productions')
+            
+            # Get all loadings up to and including target date
+            loadings = LoadingRecord.objects.filter(
+                loading_date__lte=as_of_date
+            ).prefetch_related('items')
+            
+            # Calculate production totals
+            bulk_produced = 0
+            packaged = 0
+            
+            for batch in batches:
+                for prod in batch.brick_productions.filter(brick_type=brick_type):
+                    bulk_produced += prod.total_bricks_produced
+                    packaged += prod.bricks_packaged
+            
+            # Calculate loading totals
+            bulk_loaded = 0
+            packaged_loaded = 0
+            breakage = 0
+            
+            for loading in loadings:
+                for item in loading.items.filter(brick_type=brick_type):
+                    bulk_loaded += item.bulk_quantity
+                    packaged_loaded += item.packaged_quantity
+                    breakage += item.breakage
+            
+            # Calculate final stock levels
+            bulk_stock = max(0, (bulk_produced - packaged) - bulk_loaded - breakage)
+            packaged_stock = max(0, packaged - packaged_loaded)
+            
+            # Get prices at the target date
+            prices = self.get_prices_at_date(brick_type, as_of_date)
+            bulk_price = prices.get('bulk') or 0
+            packaged_price = prices.get('packaged') or 0
+            
+            # Calculate values
+            bulk_value = bulk_stock * bulk_price
+            packaged_value = packaged_stock * packaged_price
+            total_value_item = bulk_value + packaged_value
+            
+            # Add to totals
+            total_bulk += bulk_stock
+            total_packaged += packaged_stock
+            total_value += total_value_item
+            
+            stock_data.append({
+                'brick_type_id': str(brick_type.id),
+                'brick_type_name': brick_type.name,
+                'bulk_quantity': bulk_stock,
+                'packaged_quantity': packaged_stock,
+                'total_quantity': bulk_stock + packaged_stock,
+                'bulk_price': str(bulk_price),
+                'packaged_price': str(packaged_price),
+                'bulk_value': float(bulk_value),
+                'packaged_value': float(packaged_value),
+                'total_value': float(total_value_item),
+            })
+        
+        # Sort by total quantity
+        stock_data.sort(key=lambda x: x['total_quantity'], reverse=True)
+        
+        return {
+            'items': stock_data,
+            'total_bulk': total_bulk,
+            'total_packaged': total_packaged,
+            'total_value': float(total_value),
+        }
+
+    def get_prices_at_date(self, brick_type, target_date):
+        """Get prices effective at a given date"""
+        try:
+            # Convert to datetime if it's a date
+            if isinstance(target_date, datetime.date):
+                target_date = datetime.combine(target_date, datetime.min.time())
+                target_date = timezone.make_aware(target_date)
+            
+            bulk_price = BrickPriceHistory.objects.filter(
+                brick_type=brick_type,
+                is_packaged=False,
+                effective_date__lte=target_date
+            ).order_by('-effective_date').first()
+            
+            packaged_price = BrickPriceHistory.objects.filter(
+                brick_type=brick_type,
+                is_packaged=True,
+                effective_date__lte=target_date
+            ).order_by('-effective_date').first()
+            
+            return {
+                'bulk': bulk_price.price if bulk_price else Decimal('0'),
+                'packaged': packaged_price.price if packaged_price else Decimal('0')
+            }
+        except Exception as e:
+            print(f"Error getting prices at date: {str(e)}")
+            return {'bulk': Decimal('0'), 'packaged': Decimal('0')}
+    
+    def calculate_stock_values(self, stock_data):
+        """Add bulk and packaged values to stock data"""
+        bulk_value = 0
+        packaged_value = 0
+        
+        for item in stock_data['items']:
+            bulk_price = float(item['bulk_price']) if item['bulk_price'] else 0
+            packaged_price = float(item['packaged_price']) if item['packaged_price'] else 0
+            
+            bulk_value += item['bulk_quantity'] * bulk_price
+            packaged_value += item['packaged_quantity'] * packaged_price
+        
+        stock_data['bulk_value'] = bulk_value
+        stock_data['packaged_value'] = packaged_value
+        
+        return stock_data
+    
+    def get_production_data(self, start_date, end_date, selected_brick_type=None):
+        print(f"Fetching production data from {start_date} to {end_date}")
+        
+        # Get production batches in date range
+        batches_query = ProductionBatch.objects.filter(
+            production_date__gte=start_date,
+            production_date__lte=end_date
+        ).prefetch_related(
+            'brick_productions', 
+            'brick_productions__brick_type',
+            'energy_consumption'
+        ).order_by('production_date')
+        
+        print(f"Found {batches_query.count()} production batches in date range")
+        
+        # Filter by brick type if selected
+        if selected_brick_type:
+            # We still get all batches, but we'll only count the selected brick type
+            print(f"Filtering production data by brick type: {selected_brick_type.name}")
+        
+        # Calculate production stats
+        total_batches = batches_query.count()
+        total_bricks = 0
+        total_bulk = 0
+        total_packaged = 0
+        total_wagons = 0
+        production_by_date = {}
+        production_by_type = {}
+        energy_consumption = {}
+        
+        for batch in batches_query:
+            batch_date = batch.production_date.isoformat()
+            
+            # Initialize date entry if not exists
+            if batch_date not in production_by_date:
+                production_by_date[batch_date] = {
+                    'total_bricks': 0,
+                    'bulk': 0,
+                    'packaged': 0,
+                    'wagons': 0,
+                    'vpower': batch.effective_vpower,
+                }
+            
+            # Process each brick production in this batch
+            for prod in batch.brick_productions.all():
+                # Skip if filtering by brick type and this isn't the one
+                if selected_brick_type and prod.brick_type.id != selected_brick_type.id:
+                    continue
+                
+                brick_type_name = prod.brick_type.name
+                total_produced = prod.total_bricks_produced
+                packaged = prod.bricks_packaged
+                bulk = total_produced - packaged
+                
+                # Add to totals
+                total_bricks += total_produced
+                total_packaged += packaged
+                total_bulk += bulk
+                total_wagons += prod.wagons_produced
+                
+                # Add to date aggregates
+                production_by_date[batch_date]['total_bricks'] += total_produced
+                production_by_date[batch_date]['bulk'] += bulk
+                production_by_date[batch_date]['packaged'] += packaged
+                production_by_date[batch_date]['wagons'] += prod.wagons_produced
+                
+                # Add to type aggregates
+                if brick_type_name not in production_by_type:
+                    production_by_type[brick_type_name] = {
+                        'total_bricks': 0,
+                        'bulk': 0,
+                        'packaged': 0,
+                        'id': str(prod.brick_type.id),
+                    }
+                
+                production_by_type[brick_type_name]['total_bricks'] += total_produced
+                production_by_type[brick_type_name]['bulk'] += bulk
+                production_by_type[brick_type_name]['packaged'] += packaged
+            
+            # Process energy consumption for this batch
+            # (Only count full batch energy usage if filtering by brick type)
+            if not selected_brick_type:
+                for energy in batch.energy_consumption.all():
+                    energy_type_name = energy.energy_type.name
+                    
+                    if energy_type_name not in energy_consumption:
+                        energy_consumption[energy_type_name] = {
+                            'total_quantity': 0,
+                            'unit': energy.energy_type.unit,
+                            'id': str(energy.energy_type.id),
+                        }
+                    
+                    energy_consumption[energy_type_name]['total_quantity'] += float(energy.quantity)
+        
+        # Remove empty dates (could happen when filtering by brick type)
+        production_by_date = {date: data for date, data in production_by_date.items() 
+                            if data['total_bricks'] > 0}
+        
+        # Convert dates dictionary to sorted list
+        production_by_date_list = [{'date': date, **data} for date, data in production_by_date.items()]
+        production_by_date_list.sort(key=lambda x: x['date'])
+        
+        # Convert types dictionary to list sorted by total bricks
+        production_by_type_list = [{'name': name, **data} for name, data in production_by_type.items()]
+        production_by_type_list.sort(key=lambda x: x['total_bricks'], reverse=True)
+        
+        # Convert energy dictionary to list
+        energy_consumption_list = [{'name': name, **data} for name, data in energy_consumption.items()]
+        
+        # Calculate averages
+        avg_vpower = sum(item['vpower'] for item in production_by_date.values()) / len(production_by_date) if production_by_date else 0
+        avg_daily_production = total_bricks / len(production_by_date) if production_by_date else 0
+        avg_wagons_per_day = total_wagons / len(production_by_date) if production_by_date else 0
+        
+        return {
+            'total_batches': total_batches,
+            'total_bricks': total_bricks,
+            'total_bulk': total_bulk,
+            'total_packaged': total_packaged,
+            'total_wagons': total_wagons,
+            'by_date': production_by_date_list,
+            'by_type': production_by_type_list,
+            'energy_consumption': energy_consumption_list,
+            'avg_vpower': avg_vpower,
+            'avg_daily_production': avg_daily_production,
+            'avg_wagons_per_day': avg_wagons_per_day,
+        }
+    
+    def get_loading_data(self, start_date, end_date, selected_brick_type=None):
+        print(f"Fetching loading data from {start_date} to {end_date}")
+        
+        # Get loading records in date range
+        loading_records_query = LoadingRecord.objects.filter(
+            loading_date__gte=start_date,
+            loading_date__lte=end_date
+        ).prefetch_related('items', 'items__brick_type').order_by('loading_date')
+        
+        print(f"Found {loading_records_query.count()} loading records in date range")
+        
+        # Filter by brick type if selected (done during processing)
+        if selected_brick_type:
+            print(f"Filtering loading data by brick type: {selected_brick_type.name}")
+        
+        total_records = loading_records_query.count()
+        total_bulk = 0
+        total_packaged = 0
+        total_breakage = 0
+        total_value = 0
+        loading_by_date = {}
+        loading_by_type = {}
+        
+        for record in loading_records_query:
+            record_date = record.loading_date.isoformat()
+            
+            # Initialize date entry if not exists
+            if record_date not in loading_by_date:
+                loading_by_date[record_date] = {
+                    'bulk': 0,
+                    'packaged': 0,
+                    'breakage': 0,
+                    'value': 0,
+                }
+            
+            # Process each loading item
+            for item in record.items.all():
+                # Skip if filtering by brick type and this isn't the one
+                if selected_brick_type and item.brick_type.id != selected_brick_type.id:
+                    continue
+                
+                brick_type_name = item.brick_type.name
+                
+                # Calculate values
+                bulk_value = item.bulk_quantity * item.bulk_price
+                packaged_value = item.packaged_quantity * item.packaged_price
+                total_value_item = bulk_value + packaged_value
+                
+                # Add to totals
+                total_bulk += item.bulk_quantity
+                total_packaged += item.packaged_quantity
+                total_breakage += item.breakage
+                total_value += total_value_item
+                
+                # Add to date aggregates
+                loading_by_date[record_date]['bulk'] += item.bulk_quantity
+                loading_by_date[record_date]['packaged'] += item.packaged_quantity
+                loading_by_date[record_date]['breakage'] += item.breakage
+                loading_by_date[record_date]['value'] += float(total_value_item)
+                
+                # Add to type aggregates
+                if brick_type_name not in loading_by_type:
+                    loading_by_type[brick_type_name] = {
+                        'bulk': 0,
+                        'packaged': 0,
+                        'breakage': 0,
+                        'value': 0,
+                        'id': str(item.brick_type.id),
+                    }
+                
+                loading_by_type[brick_type_name]['bulk'] += item.bulk_quantity
+                loading_by_type[brick_type_name]['packaged'] += item.packaged_quantity
+                loading_by_type[brick_type_name]['breakage'] += item.breakage
+                loading_by_type[brick_type_name]['value'] += float(total_value_item)
+        
+        # Remove empty dates (could happen when filtering by brick type)
+        loading_by_date = {date: data for date, data in loading_by_date.items() 
+                         if data['bulk'] + data['packaged'] > 0}
+        
+        # Convert dates dictionary to sorted list
+        loading_by_date_list = [{'date': date, **data} for date, data in loading_by_date.items()]
+        loading_by_date_list.sort(key=lambda x: x['date'])
+        
+        # Convert types dictionary to list sorted by total value
+        loading_by_type_list = [{'name': name, **data} for name, data in loading_by_type.items()]
+        loading_by_type_list.sort(key=lambda x: x['value'], reverse=True)
+        
+        # Calculate averages
+        avg_daily_loading = (total_bulk + total_packaged) / len(loading_by_date) if loading_by_date else 0
+        avg_daily_value = total_value / len(loading_by_date) if loading_by_date else 0
+        
+        return {
+            'total_records': total_records,
+            'total_bulk': total_bulk,
+            'total_packaged': total_packaged,
+            'total_breakage': total_breakage,
+            'total_value': float(total_value),
+            'by_date': loading_by_date_list,
+            'by_type': loading_by_type_list,
+            'avg_daily_loading': avg_daily_loading,
+            'avg_daily_value': float(avg_daily_value),
+        }
+    
+    def calculate_kpis(self, production_data, loading_data, start_date, end_date):
+        print("Calculating KPIs")
+        
+        # Calculate date range length
+        date_range_days = (end_date - start_date).days + 1
+        
+        # Production efficiency
+        production_efficiency = {
+            'total_bricks': production_data['total_bricks'],
+            'avg_daily_production': production_data['avg_daily_production'],
+            'packaging_rate': (production_data['total_packaged'] / production_data['total_bricks'] * 100) if production_data['total_bricks'] > 0 else 0,
+            'avg_vpower': production_data['avg_vpower'],
+        }
+        
+        # Stock turnover
+        stock_turnover = 0
+        if production_data['total_bricks'] > 0:
+            stock_turnover = (loading_data['total_bulk'] + loading_data['total_packaged']) / production_data['total_bricks']
+        
+        # Breakage rate
+        breakage_rate = 0
+        if loading_data['total_bulk'] > 0:
+            breakage_rate = loading_data['total_breakage'] / loading_data['total_bulk'] * 100
+        
+        # Calculate overall KPIs
+        return {
+            'production_efficiency': production_efficiency,
+            'stock_turnover': float(stock_turnover),
+            'breakage_rate': float(breakage_rate),
+            'date_range_days': date_range_days,
+        }
+    
+    def get(self, request):
+        print("Loading production dashboard")
+        try:
+            # Get date range parameters (default to last 30 days)
+            today = timezone.now().date()
+            start_date_str = request.GET.get('start_date', (today - timedelta(days=30)).isoformat())
+            end_date_str = request.GET.get('end_date', today.isoformat())
+            
+            try:
+                start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+                end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+            except ValueError:
+                # Handle invalid date formats
+                start_date = today - timedelta(days=30)
+                end_date = today
+                print(f"Invalid date format, using default range: {start_date} to {end_date}")
+            
+            # Get selected brick type (if any)
+            selected_brick_type = request.GET.get('brick_type', None)
+            if selected_brick_type:
+                try:
+                    selected_brick_type = BrickType.objects.get(id=selected_brick_type)
+                    print(f"Filtering by brick type: {selected_brick_type.name}")
+                except (BrickType.DoesNotExist, ValueError):
+                    selected_brick_type = None
+            
+            # Get production data - only include data within the selected date range
+            production_data = self.get_production_data(start_date, end_date, selected_brick_type)
+            
+            # Get historical stock as of the end date (to show inventory at the end of period)
+            stock_data = self.get_historical_stock(end_date, selected_brick_type)
+            
+            # Calculate additional stock values
+            stock_data = self.calculate_stock_values(stock_data)
+            
+            # Get loading data - only include data within the selected date range
+            loading_data = self.get_loading_data(start_date, end_date, selected_brick_type)
+            
+            # Calculate KPIs
+            kpis = self.calculate_kpis(production_data, loading_data, start_date, end_date)
+            
+            # Get brick types for filters
+            brick_types = BrickType.objects.filter(is_active=True).order_by('name')
+            
+            # Serialize data for JavaScript
+            production_data_json = json.dumps(production_data, default=str)
+            stock_data_json = json.dumps(stock_data, default=str)
+            loading_data_json = json.dumps(loading_data, default=str)
+            kpis_json = json.dumps(kpis, default=str)
+            
+            context = {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat(),
+                'selected_brick_type': selected_brick_type,
+                'brick_types': brick_types,
+                'production_data_json': production_data_json,
+                'stock_data_json': stock_data_json, 
+                'loading_data_json': loading_data_json,
+                'kpis_json': kpis_json,
+                'production_data': production_data,
+                'stock_data': stock_data,
+                'loading_data': loading_data,
+                'kpis': kpis,
+            }
+            
+            return render(request, 'production/dashboard.html', context)
+        
+        except Exception as e:
+            print(f"Error loading dashboard: {str(e)}")
+            traceback.print_exc()
+            context = {
+                'error_message': f"Error loading dashboard: {str(e)}",
+            }
+            return render(request, 'production/dashboard.html', context)
