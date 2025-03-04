@@ -1631,6 +1631,8 @@ class DashboardView(LoginRequiredMixin, View):
         
         # Calculate stock for each brick type
         for brick_type in brick_types:
+            print(f"  Calculating stock for {brick_type.name}")
+            
             # Get all production batches up to and including target date
             batches = ProductionBatch.objects.filter(
                 production_date__lte=as_of_date
@@ -1650,6 +1652,8 @@ class DashboardView(LoginRequiredMixin, View):
                     bulk_produced += prod.total_bricks_produced
                     packaged += prod.bricks_packaged
             
+            print(f"    Production: {bulk_produced} total, {packaged} packaged")
+            
             # Calculate loading totals
             bulk_loaded = 0
             packaged_loaded = 0
@@ -1661,19 +1665,46 @@ class DashboardView(LoginRequiredMixin, View):
                     packaged_loaded += item.packaged_quantity
                     breakage += item.breakage
             
+            print(f"    Loading: {bulk_loaded} bulk, {packaged_loaded} packaged, {breakage} breakage")
+            
             # Calculate final stock levels
             bulk_stock = max(0, (bulk_produced - packaged) - bulk_loaded - breakage)
             packaged_stock = max(0, packaged - packaged_loaded)
             
+            print(f"    Remaining: {bulk_stock} bulk, {packaged_stock} packaged")
+            
             # Get prices at the target date
-            prices = self.get_prices_at_date(brick_type, as_of_date)
-            bulk_price = prices.get('bulk') or 0
-            packaged_price = prices.get('packaged') or 0
+            try:
+                # Get bulk price
+                bulk_price_record = BrickPriceHistory.objects.filter(
+                    brick_type=brick_type,
+                    is_packaged=False,
+                    effective_date__lte=as_of_date
+                ).order_by('-effective_date').first()
+                
+                # Get packaged price
+                packaged_price_record = BrickPriceHistory.objects.filter(
+                    brick_type=brick_type,
+                    is_packaged=True,
+                    effective_date__lte=as_of_date
+                ).order_by('-effective_date').first()
+                
+                bulk_price = bulk_price_record.price if bulk_price_record else Decimal('0')
+                packaged_price = packaged_price_record.price if packaged_price_record else Decimal('0')
+                
+                print(f"    Prices: bulk={bulk_price}, packaged={packaged_price}")
+            except Exception as e:
+                print(f"    Error getting prices: {str(e)}")
+                traceback.print_exc()
+                bulk_price = Decimal('0')
+                packaged_price = Decimal('0')
             
             # Calculate values
             bulk_value = bulk_stock * bulk_price
             packaged_value = packaged_stock * packaged_price
             total_value_item = bulk_value + packaged_value
+            
+            print(f"    Values: bulk={bulk_value}, packaged={packaged_value}, total={total_value_item}")
             
             # Add to totals
             total_bulk += bulk_stock
@@ -1696,6 +1727,8 @@ class DashboardView(LoginRequiredMixin, View):
         # Sort by total quantity
         stock_data.sort(key=lambda x: x['total_quantity'], reverse=True)
         
+        print(f"Total stock: {total_bulk} bulk, {total_packaged} packaged, value={total_value}")
+        
         return {
             'items': stock_data,
             'total_bulk': total_bulk,
@@ -1706,8 +1739,10 @@ class DashboardView(LoginRequiredMixin, View):
     def get_prices_at_date(self, brick_type, target_date):
         """Get prices effective at a given date"""
         try:
+            print(f"Getting prices for {brick_type.name} as of {target_date}")
+            
             # Convert to datetime if it's a date
-            if isinstance(target_date, datetime.date):
+            if isinstance(target_date, datetime.date) and not isinstance(target_date, datetime):
                 target_date = datetime.combine(target_date, datetime.min.time())
                 target_date = timezone.make_aware(target_date)
             
@@ -1723,28 +1758,49 @@ class DashboardView(LoginRequiredMixin, View):
                 effective_date__lte=target_date
             ).order_by('-effective_date').first()
             
-            return {
+            result = {
                 'bulk': bulk_price.price if bulk_price else Decimal('0'),
                 'packaged': packaged_price.price if packaged_price else Decimal('0')
             }
+            
+            print(f"  Found prices: bulk={result['bulk']}, packaged={result['packaged']}")
+            
+            return result
         except Exception as e:
             print(f"Error getting prices at date: {str(e)}")
+            traceback.print_exc()  # Add stack trace for better debugging
             return {'bulk': Decimal('0'), 'packaged': Decimal('0')}
     
     def calculate_stock_values(self, stock_data):
         """Add bulk and packaged values to stock data"""
+        print("Calculating stock values")
+        
         bulk_value = 0
         packaged_value = 0
         
         for item in stock_data['items']:
-            bulk_price = float(item['bulk_price']) if item['bulk_price'] else 0
-            packaged_price = float(item['packaged_price']) if item['packaged_price'] else 0
-            
-            bulk_value += item['bulk_quantity'] * bulk_price
-            packaged_value += item['packaged_quantity'] * packaged_price
+            try:
+                bulk_price = float(item['bulk_price']) if item['bulk_price'] else 0
+                packaged_price = float(item['packaged_price']) if item['packaged_price'] else 0
+                
+                item_bulk_value = item['bulk_quantity'] * bulk_price
+                item_packaged_value = item['packaged_quantity'] * packaged_price
+                
+                bulk_value += item_bulk_value
+                packaged_value += item_packaged_value
+                
+                print(f"  {item['brick_type_name']}: bulk={item_bulk_value}, packaged={item_packaged_value}, total={item_bulk_value + item_packaged_value}")
+            except Exception as e:
+                print(f"  Error calculating value for {item['brick_type_name']}: {str(e)}")
+                traceback.print_exc()
+        
+        total_value = bulk_value + packaged_value
         
         stock_data['bulk_value'] = bulk_value
         stock_data['packaged_value'] = packaged_value
+        stock_data['total_value'] = total_value
+        
+        print(f"Total stock values: bulk={bulk_value}, packaged={packaged_value}, total={total_value}")
         
         return stock_data
     
@@ -1979,7 +2035,7 @@ class DashboardView(LoginRequiredMixin, View):
             'avg_daily_value': float(avg_daily_value),
         }
     
-    def calculate_kpis(self, production_data, loading_data, start_date, end_date):
+    def calculate_kpis(self, production_data, loading_data, energy_data, start_date, end_date):
         print("Calculating KPIs")
         
         # Calculate date range length
@@ -2001,13 +2057,30 @@ class DashboardView(LoginRequiredMixin, View):
         # Breakage rate
         breakage_rate = 0
         if loading_data['total_bulk'] > 0:
-            breakage_rate = loading_data['total_breakage'] / loading_data['total_bulk'] * 100
+            breakage_rate = loading_data['total_breakage'] / (loading_data['total_bulk'] + loading_data['total_breakage']) * 100
+        
+        # Calculate breakage value (estimate based on average bulk price)
+        avg_bulk_price = 0
+        if loading_data['total_bulk'] > 0 and loading_data['total_value'] > 0:
+            # Estimate average bulk price from loading data
+            bulk_ratio = loading_data['total_bulk'] / (loading_data['total_bulk'] + loading_data['total_packaged'])
+            estimated_bulk_value = loading_data['total_value'] * bulk_ratio
+            avg_bulk_price = estimated_bulk_value / loading_data['total_bulk']
+        
+        breakage_value = loading_data['total_breakage'] * avg_bulk_price
+        
+        # Energy efficiency
+        energy_per_brick = 0
+        if production_data['total_bricks'] > 0 and energy_data['total_value'] > 0:
+            energy_per_brick = energy_data['total_value'] / production_data['total_bricks']
         
         # Calculate overall KPIs
         return {
             'production_efficiency': production_efficiency,
             'stock_turnover': float(stock_turnover),
             'breakage_rate': float(breakage_rate),
+            'breakage_value': float(breakage_value),
+            'energy_per_brick': float(energy_per_brick),
             'date_range_days': date_range_days,
         }
     
@@ -2037,6 +2110,9 @@ class DashboardView(LoginRequiredMixin, View):
                 except (BrickType.DoesNotExist, ValueError):
                     selected_brick_type = None
             
+            # Get all brick types for calculating metrics
+            brick_types = BrickType.objects.filter(is_active=True)
+            
             # Get production data - only include data within the selected date range
             production_data = self.get_production_data(start_date, end_date, selected_brick_type)
             
@@ -2049,8 +2125,14 @@ class DashboardView(LoginRequiredMixin, View):
             # Get loading data - only include data within the selected date range
             loading_data = self.get_loading_data(start_date, end_date, selected_brick_type)
             
+            # Get energy data - only include data within the selected date range
+            energy_data = self.get_energy_data(start_date, end_date, selected_brick_type)
+            
+            # Calculate breakage metrics
+            breakage_metrics = self.calculate_breakage_metrics(loading_data, brick_types)
+            
             # Calculate KPIs
-            kpis = self.calculate_kpis(production_data, loading_data, start_date, end_date)
+            kpis = self.calculate_kpis(production_data, loading_data, energy_data, start_date, end_date)
             
             # Get brick types for filters
             brick_types = BrickType.objects.filter(is_active=True).order_by('name')
@@ -2059,6 +2141,7 @@ class DashboardView(LoginRequiredMixin, View):
             production_data_json = json.dumps(production_data, default=str)
             stock_data_json = json.dumps(stock_data, default=str)
             loading_data_json = json.dumps(loading_data, default=str)
+            energy_data_json = json.dumps(energy_data, default=str)
             kpis_json = json.dumps(kpis, default=str)
             
             context = {
@@ -2069,11 +2152,14 @@ class DashboardView(LoginRequiredMixin, View):
                 'production_data_json': production_data_json,
                 'stock_data_json': stock_data_json, 
                 'loading_data_json': loading_data_json,
+                'energy_data_json': energy_data_json,
                 'kpis_json': kpis_json,
                 'production_data': production_data,
                 'stock_data': stock_data,
                 'loading_data': loading_data,
+                'energy_data': energy_data,
                 'kpis': kpis,
+                'breakage_metrics': breakage_metrics
             }
             
             return render(request, 'production/dashboard.html', context)
@@ -2085,3 +2171,330 @@ class DashboardView(LoginRequiredMixin, View):
                 'error_message': f"Error loading dashboard: {str(e)}",
             }
             return render(request, 'production/dashboard.html', context)
+
+    def get_energy_data(self, start_date, end_date, selected_brick_type=None):
+        """Get energy consumption data for the dashboard"""
+        print(f"Fetching energy consumption data from {start_date} to {end_date}")
+        
+        # Get all production batches in the date range
+        batches = ProductionBatch.objects.filter(
+            production_date__gte=start_date,
+            production_date__lte=end_date
+        ).prefetch_related(
+            'energy_consumption',
+            'energy_consumption__energy_type'
+        ).order_by('production_date')
+        
+        print(f"Found {batches.count()} production batches with energy data")
+        
+        # Initialize totals
+        total_quantity = 0
+        total_value = 0
+        energy_by_type = {}
+        energy_by_date = {}
+        
+        for batch in batches:
+            batch_date = batch.production_date.isoformat()
+            
+            # Skip this batch if we're filtering by brick type and it doesn't have production for that brick type
+            if selected_brick_type:
+                brick_productions = batch.brick_productions.filter(brick_type=selected_brick_type)
+                if not brick_productions.exists():
+                    continue
+            
+            # Initialize date entry if it doesn't exist
+            if batch_date not in energy_by_date:
+                energy_by_date[batch_date] = {
+                    'total_quantity': 0,
+                    'total_value': 0,
+                    'energy_types': {}
+                }
+            
+            # Process each energy consumption record
+            for energy in batch.energy_consumption.all():
+                energy_type_name = energy.energy_type.name
+                unit = energy.energy_type.unit
+                
+                # Calculate values
+                quantity = float(energy.quantity)
+                price = float(energy.price_at_time)
+                value = quantity * price
+                
+                # Add to totals
+                total_quantity += quantity
+                total_value += value
+                
+                # Add to type aggregates
+                if energy_type_name not in energy_by_type:
+                    energy_by_type[energy_type_name] = {
+                        'name': energy_type_name,
+                        'quantity': 0,
+                        'value': 0,
+                        'unit': unit,
+                        'id': str(energy.energy_type.id),
+                        'prices': []
+                    }
+                
+                energy_by_type[energy_type_name]['quantity'] += quantity
+                energy_by_type[energy_type_name]['value'] += value
+                energy_by_type[energy_type_name]['prices'].append(price)
+                
+                # Add to date aggregates
+                energy_by_date[batch_date]['total_quantity'] += quantity
+                energy_by_date[batch_date]['total_value'] += value
+                
+                # Add energy type breakdown for this date
+                if energy_type_name not in energy_by_date[batch_date]['energy_types']:
+                    energy_by_date[batch_date]['energy_types'][energy_type_name] = {
+                        'quantity': 0,
+                        'value': 0,
+                        'unit': unit
+                    }
+                
+                energy_by_date[batch_date]['energy_types'][energy_type_name]['quantity'] += quantity
+                energy_by_date[batch_date]['energy_types'][energy_type_name]['value'] += value
+        
+        # Calculate average price for each energy type
+        for energy_type in energy_by_type.values():
+            if energy_type['quantity'] > 0:
+                # Calculate average price from recorded prices
+                prices = energy_type['prices']
+                if prices:
+                    energy_type['avg_price'] = sum(prices) / len(prices)
+                else:
+                    energy_type['avg_price'] = 0
+            else:
+                energy_type['avg_price'] = 0
+            
+            # Remove prices list as it's no longer needed
+            del energy_type['prices']
+        
+        # Convert to sorted lists
+        energy_by_type_list = list(energy_by_type.values())
+        energy_by_type_list.sort(key=lambda x: x['value'], reverse=True)
+        
+        energy_by_date_list = [{'date': date, **data} for date, data in energy_by_date.items()]
+        energy_by_date_list.sort(key=lambda x: x['date'])
+        
+        return {
+            'total_quantity': total_quantity,
+            'total_value': total_value,
+            'by_type': energy_by_type_list,
+            'by_date': energy_by_date_list
+        }
+
+    def calculate_breakage_metrics(self, loading_data, brick_types):
+        """Calculate detailed breakage metrics"""
+        print("Calculating breakage metrics")
+        
+        # We need to calculate:
+        # 1. Total breakage value (using average bulk price)
+        # 2. Breakage by brick type
+        # 3. Breakage trends over time
+        
+        if not loading_data or not loading_data.get('by_date'):
+            print("No loading data available for breakage calculations")
+            return {
+                'total_breakage': 0,
+                'breakage_rate': 0,
+                'breakage_value': 0,
+                'by_type': [],
+                'by_date': []
+            }
+        
+        # Calculate average bulk price across all brick types for value estimation
+        total_bulk_value = 0
+        total_bulk_quantity = 0
+        
+        for brick_type in brick_types:
+            try:
+                # Get current price
+                prices = brick_type.get_current_prices()
+                bulk_price = prices.get('bulk_price') or 0
+                
+                # Get total quantity for this type
+                brick_data = None
+                for item in loading_data.get('by_type', []):
+                    if item.get('id') == str(brick_type.id):
+                        brick_data = item
+                        break
+                
+                if brick_data:
+                    total_bulk_quantity += brick_data.get('bulk', 0)
+                    total_bulk_value += brick_data.get('bulk', 0) * float(bulk_price)
+            except Exception as e:
+                print(f"Error processing brick type {brick_type.name}: {str(e)}")
+        
+        # Calculate average price
+        avg_bulk_price = total_bulk_value / total_bulk_quantity if total_bulk_quantity > 0 else 0
+        
+        # Calculate breakage value
+        breakage_value = loading_data.get('total_breakage', 0) * avg_bulk_price
+        
+        # Calculate overall breakage rate
+        total_bulk = loading_data.get('total_bulk', 0)
+        total_breakage = loading_data.get('total_breakage', 0)
+        
+        if total_bulk + total_breakage > 0:
+            breakage_rate = (total_breakage / (total_bulk + total_breakage)) * 100
+        else:
+            breakage_rate = 0
+        
+        # Calculate breakage by type
+        breakage_by_type = []
+        for item in loading_data.get('by_type', []):
+            if item.get('breakage', 0) > 0:
+                # Calculate breakage rate for this type
+                type_bulk = item.get('bulk', 0)
+                type_breakage = item.get('breakage', 0)
+                
+                if type_bulk + type_breakage > 0:
+                    type_rate = (type_breakage / (type_bulk + type_breakage)) * 100
+                else:
+                    type_rate = 0
+                
+                breakage_by_type.append({
+                    'name': item.get('name', 'Unknown'),
+                    'breakage': type_breakage,
+                    'rate': type_rate,
+                    'id': item.get('id')
+                })
+        
+        # Sort by breakage quantity
+        breakage_by_type.sort(key=lambda x: x['breakage'], reverse=True)
+        
+        # Calculate breakage trends over time
+        breakage_by_date = []
+        for item in loading_data.get('by_date', []):
+            date = item.get('date', '')
+            item_breakage = item.get('breakage', 0)
+            item_bulk = item.get('bulk', 0)
+            
+            # Calculate rate for this date
+            if item_bulk + item_breakage > 0:
+                item_rate = (item_breakage / (item_bulk + item_breakage)) * 100
+            else:
+                item_rate = 0
+            
+            breakage_by_date.append({
+                'date': date,
+                'breakage': item_breakage,
+                'rate': item_rate
+            })
+        
+        return {
+            'total_breakage': total_breakage,
+            'breakage_rate': breakage_rate,
+            'breakage_value': breakage_value,
+            'by_type': breakage_by_type,
+            'by_date': breakage_by_date
+        }
+
+def report_data(request):
+    """API endpoint to get report data for a given date range"""
+    try:
+        start_date_str = request.GET.get('start_date')
+        end_date_str = request.GET.get('end_date')
+        brick_type_id = request.GET.get('brick_type')
+        
+        # Parse dates
+        if start_date_str:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        else:
+            # Default to 30 days ago
+            start_date = timezone.now().date() - timedelta(days=30)
+            
+        if end_date_str:
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+        else:
+            # Default to today
+            end_date = timezone.now().date()
+            
+        # Get brick type if specified
+        selected_brick_type = None
+        if brick_type_id:
+            try:
+                selected_brick_type = BrickType.objects.get(id=brick_type_id)
+            except (BrickType.DoesNotExist, ValueError):
+                pass
+        
+        # Reuse DashboardView methods to gather the data
+        dashboard = DashboardView()
+        
+        # Get production data
+        production_data = dashboard.get_production_data(start_date, end_date, selected_brick_type)
+        
+        # Get historical stock as of the end date
+        stock_data = dashboard.get_historical_stock(end_date, selected_brick_type)
+        
+        # Calculate additional stock values
+        stock_data = dashboard.calculate_stock_values(stock_data)
+        
+        # Get loading data
+        loading_data = dashboard.get_loading_data(start_date, end_date, selected_brick_type)
+        
+        # Calculate KPIs - Check the actual arguments needed!
+        # Inspect the actual method signature and pass the correct arguments
+        # This may vary based on your implementation
+        try:
+            # Try with the signature we assumed
+            kpis = dashboard.calculate_kpis(production_data, loading_data, start_date, end_date)
+        except TypeError:
+            try:
+                # Try alternative signature options
+                kpis = dashboard.calculate_kpis(production_data, loading_data)
+            except TypeError:
+                # As a last resort, just create a basic KPIs structure
+                kpis = {
+                    'production_efficiency': {
+                        'total_bricks': production_data.get('total_bricks', 0),
+                        'avg_daily_production': production_data.get('avg_daily_production', 0),
+                        'avg_vpower': production_data.get('avg_vpower', 0),
+                        'packaging_rate': 0
+                    },
+                    'stock_turnover': 0,
+                    'breakage_rate': 0,
+                    'date_range_days': (end_date - start_date).days + 1
+                }
+                
+                # Try to calculate some values if possible
+                if production_data.get('total_bricks', 0) > 0:
+                    total_packaged = production_data.get('total_packaged', 0)
+                    kpis['production_efficiency']['packaging_rate'] = (total_packaged / production_data['total_bricks'] * 100)
+                
+                if production_data.get('total_bricks', 0) > 0:
+                    total_loaded = loading_data.get('total_bulk', 0) + loading_data.get('total_packaged', 0)
+                    kpis['stock_turnover'] = total_loaded / production_data['total_bricks']
+                
+                if loading_data.get('total_bulk', 0) > 0:
+                    breakage = loading_data.get('total_breakage', 0)
+                    kpis['breakage_rate'] = breakage / loading_data['total_bulk'] * 100
+        
+        # Energy data (if available)
+        energy_data = {}
+        if hasattr(dashboard, 'get_energy_data'):
+            energy_data = dashboard.get_energy_data(start_date, end_date, selected_brick_type)
+        
+        # Prepare response
+        data = {
+            'success': True,
+            'production_data': production_data,
+            'stock_data': stock_data,
+            'loading_data': loading_data,
+            'kpis': kpis,
+            'energy_data': energy_data,
+            'period': {
+                'start_date': start_date.isoformat(),
+                'end_date': end_date.isoformat()
+            }
+        }
+        
+        return JsonResponse(data)
+    
+    except Exception as e:
+        print(f"Error generating report data: {str(e)}")
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=400)

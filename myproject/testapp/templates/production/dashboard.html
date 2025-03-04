@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% load static %}
 {% block title %}Production Dashboard{% endblock %}
 
 {% block content %}
@@ -9,6 +9,7 @@
     <script type="application/json" id="stock-data-json">{{ stock_data_json|safe }}</script>
     <script type="application/json" id="loading-data-json">{{ loading_data_json|safe }}</script>
     <script type="application/json" id="kpis-json">{{ kpis_json|safe }}</script>
+    <script type="application/json" id="energy-data-json">{{ energy_data_json|safe }}</script>
     
     <!-- Header with Filters -->
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -57,6 +58,111 @@
                 <i class="fas fa-sync-alt me-1"></i> <span id="update-text">Update</span>
             </button>
         </form>
+    </div>
+
+    <div class="d-flex align-items-center ms-3">
+        <button type="button" class="btn btn-success" id="generate-report-btn">
+            <i class="fas fa-file-pdf me-1"></i> Generate Report
+        </button>
+    </div>
+
+    <!-- Report Generation Modal -->
+    <div class="modal fade" id="reportModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">Generate Production Report</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Select a date range for your report. The report will include production, loading, energy, and stock metrics.
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Report Period</label>
+                        <div class="d-flex align-items-center">
+                            <div class="input-group me-2">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-calendar-alt text-primary"></i>
+                                </span>
+                                <input type="date" id="report_start_date" class="form-control" required>
+                            </div>
+                            <span class="mx-2">to</span>
+                            <div class="input-group">
+                                <span class="input-group-text bg-light">
+                                    <i class="fas fa-calendar-alt text-primary"></i>
+                                </span>
+                                <input type="date" id="report_end_date" class="form-control" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Include Sections</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_summary" checked>
+                            <label class="form-check-label" for="include_summary">Executive Summary</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_production" checked>
+                            <label class="form-check-label" for="include_production">Production Details</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_loading" checked>
+                            <label class="form-check-label" for="include_loading">Loading Activity</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_energy" checked>
+                            <label class="form-check-label" for="include_energy">Energy Consumption</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_stock" checked>
+                            <label class="form-check-label" for="include_stock">Inventory Status</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="include_charts" checked>
+                            <label class="form-check-label" for="include_charts">Charts and Visualizations</label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Report Title</label>
+                        <input type="text" id="report_title" class="form-control" placeholder="Production Report" value="Production Report">
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="generate-pdf-btn">
+                        <i class="fas fa-file-pdf me-1"></i> Generate PDF
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Report Preview Modal (for the generated PDF) -->
+    <div class="modal fade" id="reportPreviewModal" tabindex="-1">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable"> <!-- Add modal-dialog-scrollable -->
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">Report Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0" style="max-height: 70vh; overflow-y: auto;"> <!-- Add max height and scrolling -->
+                    <div id="report-container" class="bg-white p-4">
+                        <!-- Report content will be inserted here -->
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-success" id="download-pdf-btn">
+                        <i class="fas fa-download me-1"></i> Download PDF
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Debug Panel (initially hidden) -->
@@ -164,6 +270,93 @@
         </div>
     </div>
 
+    <!-- New KPI Row: Breakage Metrics -->
+    <div class="row mb-4">
+        <!-- Breakage Percentage Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                Breakage Rate</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.breakage_rate|floatformat:2 }}%</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span>Of Total Bulk Bricks</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-broken-glass fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breakage Quantity Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                Total Breakage</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ loading_data.total_breakage }}</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span>Lost Inventory</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-bricks fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breakage Value Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-danger shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
+                                Breakage Value</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.breakage_value|floatformat:2 }} DA</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span>Estimated Loss</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Energy Consumption Card -->
+        <div class="col-xl-3 col-md-6 mb-4">
+            <div class="card border-left-primary shadow h-100 py-2">
+                <div class="card-body">
+                    <div class="row no-gutters align-items-center">
+                        <div class="col mr-2">
+                            <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
+                                Energy Cost</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ energy_data.total_value|floatformat:2 }} DA</div>
+                            <div class="text-xs text-muted mt-2">
+                                <span>Total Energy Consumption</span>
+                            </div>
+                        </div>
+                        <div class="col-auto">
+                            <i class="fas fa-plug fa-2x text-gray-300"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Remaining Quantities Cards Row -->
     <div class="row mb-4">
         <div class="col-xl-6 mb-4">
@@ -177,12 +370,12 @@
                                 <div class="col-6">
                                     <div class="text-xs font-weight-bold">Bulk Bricks:</div>
                                     <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_bulk }}</div>
-                                    <div class="text-xs text-muted">Value: {{ stock_data.bulk_value|default:0|floatformat:2 }}</div>
+                                    <div class="text-xs text-muted">Value: {{ stock_data.bulk_value|default:0|floatformat:2 }} DA</div>
                                 </div>
                                 <div class="col-6">
                                     <div class="text-xs font-weight-bold">Packaged Bricks:</div>
                                     <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_packaged }}</div>
-                                    <div class="text-xs text-muted">Value: {{ stock_data.packaged_value|default:0|floatformat:2 }}</div>
+                                    <div class="text-xs text-muted">Value: {{ stock_data.packaged_value|default:0|floatformat:2 }} DA</div>
                                 </div>
                             </div>
                         </div>
@@ -201,7 +394,7 @@
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
                                 Total Inventory Value</div>
-                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_value|default:0|floatformat:2 }}</div>
+                            <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_value|default:0|floatformat:2 }} DA</div>
                             <div class="text-xs text-muted mt-2">As of {{ end_date }}</div>
                         </div>
                         <div class="col-auto">
@@ -333,6 +526,106 @@
         </div>
     </div>
 
+    <!-- New Charts Row: VPower & Breakage Evolution -->
+    <div class="row mb-4">
+        <!-- VPower Evolution Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-warning">VPower Evolution</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="vpowerChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="vpowerChartOptions">
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('vpowerChart', 'vpower-evolution')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="vpowerChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Breakage Evolution Chart -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-danger">Breakage Evolution</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="breakageChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="breakageChartOptions">
+                            <li><button class="dropdown-item breakage-view-toggle active" data-view="quantity">By Quantity</button></li>
+                            <li><button class="dropdown-item breakage-view-toggle" data-view="rate">By Rate</button></li>
+                            <li><div class="dropdown-divider"></div></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('breakageChart', 'breakage-evolution')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="breakageChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Energy Consumption Charts Row -->
+    <div class="row mb-4">
+        <!-- Energy Consumption By Type -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption By Type</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="energyTypeChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="energyTypeChartOptions">
+                            <li><button class="dropdown-item energy-view-toggle active" data-view="quantity">By Quantity</button></li>
+                            <li><button class="dropdown-item energy-view-toggle" data-view="value">By Value</button></li>
+                            <li><div class="dropdown-divider"></div></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTypeChart', 'energy-by-type')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="energyTypeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Energy Consumption Over Time -->
+        <div class="col-lg-6 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption Evolution</h6>
+                    <div class="dropdown no-arrow">
+                        <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="energyTimeChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="energyTimeChartOptions">
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTimeChart', 'energy-evolution')">Download Image</button></li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="energyTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Data Tables Row -->
     <div class="row">
         <!-- Recent Production -->
@@ -419,12 +712,61 @@
             </div>
         </div>
     </div>
+    
+    <!-- Energy Consumption Data Table -->
+    <div class="row">
+        <div class="col-12 mb-4">
+            <div class="card shadow">
+                <div class="card-header py-3 d-flex align-items-center justify-content-between">
+                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption Summary</h6>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Energy Type</th>
+                                    <th>Unit</th>
+                                    <th>Quantity</th>
+                                    <th>Cost per Unit</th>
+                                    <th>Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for item in energy_data.by_type %}
+                                <tr>
+                                    <td>{{ item.name }}</td>
+                                    <td>{{ item.unit }}</td>
+                                    <td>{{ item.quantity|floatformat:2 }}</td>
+                                    <td>{{ item.avg_price|floatformat:2 }} DA</td>
+                                    <td>{{ item.value|floatformat:2 }} DA</td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center">No energy consumption data available</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                            <tfoot class="table-light">
+                                <tr>
+                                    <th colspan="4" class="text-end">Total Energy Cost:</th>
+                                    <th>{{ energy_data.total_value|floatformat:2 }} DA</th>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.6.0/dist/chart.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
 
 <script>
 const DashboardManager = {
@@ -435,11 +777,14 @@ const DashboardManager = {
     stockData: null,
     loadingData: null,
     kpis: null,
+    energyData: null,
     // View settings
     views: {
         production: 'total',
         inventory: 'quantity',
-        loading: 'quantity'
+        loading: 'quantity',
+        breakage: 'quantity',
+        energy: 'quantity'
     },
     // Chart colors
     colors: {
@@ -466,16 +811,23 @@ const DashboardManager = {
             const stockElem = document.getElementById('stock-data-json');
             const loadingElem = document.getElementById('loading-data-json');
             const kpisElem = document.getElementById('kpis-json');
+            const energyElem = document.getElementById('energy-data-json');
             
             if (productionElem) this.productionData = JSON.parse(productionElem.textContent);
             if (stockElem) this.stockData = JSON.parse(stockElem.textContent);
             if (loadingElem) this.loadingData = JSON.parse(loadingElem.textContent);
             if (kpisElem) this.kpis = JSON.parse(kpisElem.textContent);
+            if (energyElem) this.energyData = JSON.parse(energyElem.textContent);
             
             this.setupDebug();
             this.setupEventListeners();
             this.initCharts();
             this.initInventoryEvolutionChart();
+            
+            // Initialize new charts
+            this.initVPowerChart();
+            this.initBreakageChart();
+            this.initEnergyCharts();
         } catch (e) {
             console.error('Error initializing dashboard:', e);
             this.debug('Error initializing dashboard: ' + e.message);
@@ -492,6 +844,9 @@ const DashboardManager = {
         }
         if (this.loadingData) {
             this.debug('Loading data: ' + (this.loadingData.total_bulk + this.loadingData.total_packaged) + ' total loadings');
+        }
+        if (this.energyData) {
+            this.debug('Energy data: ' + this.energyData.total_value + ' DA total cost');
         }
     },
     
@@ -539,6 +894,26 @@ const DashboardManager = {
                 e.target.classList.add('active');
                 this.views.loading = e.target.dataset.view;
                 this.updateLoadingChart();
+            });
+        });
+        
+        // Breakage view toggle
+        document.querySelectorAll('.breakage-view-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.breakage-view-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.views.breakage = e.target.dataset.view;
+                this.updateBreakageChart();
+            });
+        });
+        
+        // Energy view toggle
+        document.querySelectorAll('.energy-view-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                document.querySelectorAll('.energy-view-toggle').forEach(b => b.classList.remove('active'));
+                e.target.classList.add('active');
+                this.views.energy = e.target.dataset.view;
+                this.updateEnergyTypeChart();
             });
         });
     },
@@ -979,6 +1354,344 @@ const DashboardManager = {
         chart.update();
     },
     
+    initVPowerChart() {
+        const ctx = document.getElementById('vpowerChart');
+        if (!ctx) {
+            this.debug('VPower chart element not found');
+            return;
+        }
+        
+        if (!this.productionData || !this.productionData.by_date) {
+            this.debug('No production data available for VPower chart');
+            return;
+        }
+        
+        // Process data
+        const labels = this.productionData.by_date.map(item => item.date);
+        const vpowerData = this.productionData.by_date.map(item => item.vpower);
+        
+        // Create chart
+        this.charts.vpower = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'VPower',
+                    data: vpowerData,
+                    backgroundColor: this.colors.warning,
+                    borderColor: this.colors.warning,
+                    tension: 0.1,
+                    fill: false,
+                    pointRadius: 4,
+                    pointHoverRadius: 6
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'VPower (minutes)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `VPower: ${context.parsed.y}`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+    
+    initBreakageChart() {
+        const ctx = document.getElementById('breakageChart');
+        if (!ctx) {
+            this.debug('Breakage chart element not found');
+            return;
+        }
+        
+        if (!this.loadingData || !this.loadingData.by_date) {
+            this.debug('No loading data available for Breakage chart');
+            return;
+        }
+        
+        // Process data
+        const labels = this.loadingData.by_date.map(item => item.date);
+        const breakageData = this.loadingData.by_date.map(item => item.breakage);
+        
+        // Calculate breakage rate for each date
+        const breakageRateData = this.loadingData.by_date.map(item => {
+            const totalBulk = item.bulk + item.breakage;
+            if (totalBulk === 0) return 0;
+            return (item.breakage / totalBulk * 100);
+        });
+        
+        // Create chart
+        this.charts.breakage = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Breakage Quantity',
+                    data: breakageData,
+                    backgroundColor: this.colors.danger,
+                    borderColor: this.colors.danger,
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Quantity'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store different dataset configs for switching views
+        this.breakageDatasets = {
+            quantity: [{
+                label: 'Breakage Quantity',
+                data: breakageData,
+                backgroundColor: this.colors.danger,
+                borderColor: this.colors.danger,
+                tension: 0.1,
+                fill: false
+            }],
+            rate: [{
+                label: 'Breakage Rate (%)',
+                data: breakageRateData,
+                backgroundColor: this.colors.warning,
+                borderColor: this.colors.warning,
+                tension: 0.1,
+                fill: false
+            }]
+        };
+    },
+    
+    updateBreakageChart() {
+        if (!this.charts.breakage) return;
+        
+        const chart = this.charts.breakage;
+        chart.data.datasets = this.breakageDatasets[this.views.breakage];
+        
+        // Update y-axis title
+        chart.options.scales.y.title.text = this.views.breakage === 'quantity' ? 'Quantity' : 'Rate (%)';
+        
+        chart.update();
+    },
+    
+    initEnergyCharts() {
+        this.initEnergyTypeChart();
+        this.initEnergyTimeChart();
+    },
+    
+    initEnergyTypeChart() {
+        const ctx = document.getElementById('energyTypeChart');
+        if (!ctx) {
+            this.debug('Energy type chart element not found');
+            return;
+        }
+        
+        if (!this.energyData || !this.energyData.by_type) {
+            this.debug('No energy data available for Energy Type chart');
+            return;
+        }
+        
+        // Process data
+        const labels = this.energyData.by_type.map(item => item.name);
+        const quantityData = this.energyData.by_type.map(item => item.quantity);
+        const valueData = this.energyData.by_type.map(item => item.value);
+        
+        // Generate colors
+        const colors = this.generateColors(labels.length);
+        
+        // Create chart
+        this.charts.energyType = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: quantityData,
+                    backgroundColor: colors,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.parsed || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value.toFixed(2)} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Store the datasets for views switching
+        this.energyTypeDatasets = {
+            quantity: [{
+                data: quantityData,
+                backgroundColor: colors,
+                hoverOffset: 4
+            }],
+            value: [{
+                data: valueData,
+                backgroundColor: colors,
+                hoverOffset: 4
+            }]
+        };
+    },
+    
+    updateEnergyTypeChart() {
+        if (!this.charts.energyType) return;
+        
+        const chart = this.charts.energyType;
+        chart.data.datasets = this.energyTypeDatasets[this.views.energy];
+        
+        // Update tooltip callback for appropriate view
+        if (this.views.energy === 'quantity') {
+            chart.options.plugins.tooltip.callbacks.label = function(context) {
+                const label = context.label || '';
+                const value = context.parsed || 0;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                return `${label}: ${value.toFixed(2)} (${percentage}%)`;
+            };
+        } else {
+            chart.options.plugins.tooltip.callbacks.label = function(context) {
+                const label = context.label || '';
+                const value = context.parsed || 0;
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                return `${label}: ${value.toFixed(2)} DA (${percentage}%)`;
+            };
+        }
+        
+        chart.update();
+    },
+    
+    initEnergyTimeChart() {
+        const ctx = document.getElementById('energyTimeChart');
+        if (!ctx) {
+            this.debug('Energy time chart element not found');
+            return;
+        }
+        
+        if (!this.energyData || !this.energyData.by_date) {
+            this.debug('No energy data available for Energy Time chart');
+            return;
+        }
+        
+        // Get all unique energy types from the date data
+        const dates = this.energyData.by_date.map(item => item.date);
+        const energyTypes = [...new Set(this.energyData.by_date.flatMap(item => 
+            Object.keys(item.energy_types || {})
+        ))];
+        
+        // Create datasets for each energy type
+        const datasets = energyTypes.map((type, index) => {
+            // Generate color from the palette
+            const color = this.generateColors(energyTypes.length)[index];
+            
+            // Get data for this type across all dates
+            const data = dates.map(date => {
+                const dateData = this.energyData.by_date.find(item => item.date === date);
+                if (!dateData || !dateData.energy_types || !dateData.energy_types[type]) {
+                    return 0;
+                }
+                return dateData.energy_types[type].value;
+            });
+            
+            return {
+                label: type,
+                data: data,
+                backgroundColor: color,
+                borderColor: color,
+                borderWidth: 1
+            };
+        });
+        
+        // Create chart
+        this.charts.energyTime = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: dates,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Cost (DA)'
+                        },
+                        stacked: true
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Date'
+                        },
+                        stacked: true
+                    }
+                },
+                plugins: {
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.dataset.label || '';
+                                if (label) {
+                                    label += ': ';
+                                }
+                                label += context.parsed.y.toFixed(2) + ' DA';
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    },
+    
     initInventoryEvolutionChart() {
         // Initialize inventory evolution chart
         const ctx = document.getElementById('inventoryEvolutionChart');
@@ -1146,6 +1859,7 @@ function setupAutoFilter() {
         });
     });
 }
+window.DashboardManager = DashboardManager;
 
 document.addEventListener('DOMContentLoaded', () => {
     // Make sure the DOM is fully loaded
@@ -1155,4 +1869,5 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 300);
 });
 </script>
+<script src="{% static 'js/report-generator.js' %}"></script>
 {% endblock %}

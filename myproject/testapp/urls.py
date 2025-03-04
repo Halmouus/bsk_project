@@ -384,6 +384,8 @@ urlpatterns = [
 
     # Production Dashboard URLs
     path('production/dashboard/', views_production.DashboardView.as_view(), name='production-dashboard'),
+    # Report API endpoint
+    path('production/api/report-data/', views_production.report_data, name='production-report-data'),
 
     # Brick Management URLs
     path('production/brick-types/', views_production.BrickTypeListView.as_view(), name='brick-type-list'),
