@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import CashExpense, Check, Contract, ContractInvoice, DirectDebit, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, VATDeclaration, get_supplier_balance, CashConfiguration, CashDeposit, CashPayment, Invoice
+from .models import CashExpense, Check, Contract, ContractInvoice, CustomBankRecord, DirectDebit, IRDeclaration, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, StampRightDeclaration, VATDeclaration, get_supplier_balance, CashConfiguration, CashDeposit, CashPayment, Invoice
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -97,6 +97,10 @@ class AccountingView(View):
             start_date = request.GET.get('start_date')
             end_date = request.GET.get('end_date')
             
+            print(f"\n=== AccountingView Filter ===")
+            print(f"Start Date: {start_date}")
+            print(f"End Date: {end_date}")
+            
             # Get accounting entries
             entries = AccountingEntry.get_entries(
                 bank_account=bank_account,
@@ -105,7 +109,7 @@ class AccountingView(View):
             )
             
             entries = [entry for entry in entries if entry['journal_code'] != '06']
-
+            
             context = {
                 'bank_account': bank_account,
                 'entries': entries,
@@ -113,10 +117,11 @@ class AccountingView(View):
                 'total_credit': sum(entry['credit'] or 0 for entry in entries)
             }
             
-            if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+            if is_ajax:
                 html = render_to_string(
                     'bank/partials/accounting_table.html',
-                    context,
+                    {'entries': entries},
                     request=request
                 )
                 return JsonResponse({'html': html})
@@ -124,6 +129,8 @@ class AccountingView(View):
             return render(request, 'bank/accounting.html', context)
             
         except Exception as e:
+            print(f"Error in AccountingView: {str(e)}")
+            print(traceback.format_exc())
             return JsonResponse({'error': str(e)}, status=400)
 
 class OtherOperationsView(View):
@@ -165,6 +172,76 @@ class OtherOperationsView(View):
             
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
+
+class CustomBankRecordView(View):
+    """Handle CRUD operations for custom bank records"""
+    
+    def post(self, request):
+        try:
+            data = json.loads(request.body)
+            print("\n=== Creating Custom Bank Record ===")
+            print(f"Data: {data}")
+            
+            with transaction.atomic():
+                # Handle decimal fields
+                decimal_fields = ['debit', 'credit']
+                for field in decimal_fields:
+                    if data.get(field):
+                        data[field] = Decimal(str(data[field]))
+                    else:
+                        data[field] = None
+                
+                # Create record
+                record = CustomBankRecord.objects.create(
+                    bank_account_id=data['bank_account_id'],
+                    date=data['date'],
+                    bank_label=data['bank_label'],
+                    accounting_label=data['accounting_label'],
+                    reference=data.get('reference', ''),
+                    notes=data.get('notes', ''),
+                    debit=data['debit'],
+                    credit=data['credit'],
+                    account_code=data['account_code'],
+                    created_by=request.user
+                )
+                
+                # Debug: Verify record creation
+                print(f"Created record: {record.id}")
+                print(f"Bank account: {record.bank_account_id}")
+                print(f"Date: {record.date}")
+                print(f"Bank label: {record.bank_label}")
+                print(f"Accounting label: {record.accounting_label}")
+                print(f"Debit: {record.debit}")
+                print(f"Credit: {record.credit}")
+                print(f"Account code: {record.account_code}")
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Custom record created successfully',
+                    'id': str(record.id)
+                })
+                
+        except Exception as e:
+            print(f"Error creating custom record: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+    
+    def delete(self, request, record_id):
+        try:
+            record = get_object_or_404(CustomBankRecord, id=record_id)
+            record.delete()
+            return JsonResponse({
+                'status': 'success',
+                'message': 'Custom record deleted successfully'
+            })
+        except Exception as e:
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
         
 
 class CalendarView(View):
@@ -218,6 +295,7 @@ class CalendarView(View):
     def _build_calendar_data(self, year, month, bank_accounts):
         print(f"\n=== Building Calendar Data for {month}/{year} ===")
         print(f"Processing banks: {[b.account_number for b in bank_accounts]}")
+        
 
         # Get calendar weeks
         cal = monthcalendar(year, month)
@@ -322,6 +400,34 @@ class CalendarView(View):
                     for f in vat_declaration_forecasts:
                         print(f"VAT forecast: credit={f.credit}, debit={f.debit}")
 
+                    ir_forecasts = ForecastStatement.objects.filter(
+                        bank_account=bank,
+                        date=current_date,
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type='ir_declaration'
+                    )
+                    print(f"\n=== IR Forecast Query for {current_date} ===")
+                    print(f"Bank: {bank.account_number}")
+                    print(f"Found forecasts: {ir_forecasts.count()}")
+                    print(f"IR forecasts exists(): {ir_forecasts.exists()}")
+                    for f in ir_forecasts:
+                        print(f"IR forecast: credit={f.credit}, debit={f.debit}")
+
+                    stamp_right_forecasts = ForecastStatement.objects.filter(
+                        bank_account=bank,
+                        date=current_date,
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type='stamp_right_declaration'
+                    )
+                    print(f"\n=== Stamp Right Forecast Query for {current_date} ===")
+                    print(f"Bank: {bank.account_number}")
+                    print(f"Found forecasts: {stamp_right_forecasts.count()}")
+                    print(f"Stamp right forecasts exists(): {stamp_right_forecasts.exists()}")
+                    for f in stamp_right_forecasts:
+                        print(f"Stamp right forecast: credit={f.credit}, debit={f.debit}")
+
                     # Calculate receipt forecast impact for this day
                     day_receipt_impact = sum(
                         (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
@@ -340,9 +446,21 @@ class CalendarView(View):
                         for f in vat_declaration_forecasts
                     )
 
+                    # Calculate IR impact for this day
+                    day_ir_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in ir_forecasts
+                    )
+
+                    # Calculate Stamp Right impact for this day
+                    day_stamp_right_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in stamp_right_forecasts
+                    )
+
                     # Update cumulative impacts
                     bank_forecasts[bank.id] += day_receipt_impact
-                    supplier_forecasts[bank.id] += day_payment_impact + day_vat_impact
+                    supplier_forecasts[bank.id] += day_payment_impact + day_vat_impact + day_ir_impact + day_stamp_right_impact
 
                     # Calculate total forecasted balance
                     forecasted_balance = actual_balance + bank_forecasts[bank.id] + supplier_forecasts[bank.id]
@@ -388,9 +506,21 @@ class CalendarView(View):
                             'label': f.label,
                             'source_type': "vat_declaration"
                         } for f in vat_declaration_forecasts if f.debit] if vat_declaration_forecasts else [],
+                        'ir_payments': [{
+                            'amount': float(f.debit),
+                            'label': f.label,
+                            'source_type': "ir_declaration"
+                        } for f in ir_forecasts if f.debit] if ir_forecasts else [],
+                        'stamp_right_payments': [{
+                            'amount': float(f.debit),
+                            'label': f.label,
+                            'source_type': "stamp_right_declaration"
+                        } for f in stamp_right_forecasts if f.debit] if stamp_right_forecasts else [],
                         'has_forecasts': bool(expected_payments or discounted_receipts),
                         'has_payment_forecasts': supplier_payment_forecasts.exists(),
                         'has_vat_forecasts': vat_declaration_forecasts.exists(),
+                        'has_ir_forecasts': ir_forecasts.exists(),
+                        'has_stamp_right_forecasts': stamp_right_forecasts.exists(),
                         'has_contract_forecasts': bool(supplier_payment_forecasts.filter(source_type='contract_domiciliation'))
                     })
 
@@ -471,6 +601,17 @@ class CalendarView(View):
                 if vat_declaration and vat_declaration.status == 'declared':
                     filtered_forecasts.append(forecast)
                     print(f"Added VAT declaration forecast: {forecast.label}")
+            elif forecast.source_type == 'ir_declaration':
+                ir_declaration = IRDeclaration.objects.filter(id=forecast.source_id).first()
+                if ir_declaration:
+                    filtered_forecasts.append(forecast)
+                    print(f"Added IR declaration forecast: {forecast.label}")
+            elif forecast.source_type == 'stamp_right_declaration':
+                stamp_right_declaration = StampRightDeclaration.objects.filter(id=forecast.source_id).first()
+                if stamp_right_declaration:
+                    filtered_forecasts.append(forecast)
+                    print(f"Added Stamp Right declaration forecast: {forecast.label}")
+                    
 
         expected = Decimal('0.00')
         discounted = Decimal('0.00')
@@ -482,7 +623,7 @@ class CalendarView(View):
             print(f"Source type: {forecast.source_type}")
             print(f"Source ID: {forecast.source_id}")
             
-            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation' or forecast.source_type == 'vat_declaration':
+            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation' or forecast.source_type == 'vat_declaration' or forecast.source_type == 'ir_declaration' or forecast.source_type == 'stamp_right_declaration':
                 amount = forecast.debit or Decimal('0.00')
                 payments += amount
                 print(f"Added to payments total: {payments}")
@@ -808,6 +949,78 @@ class PendingForecastsView(View):
                         print(f"Declaration {forecast.source_id} not found")
                         continue
                     
+                elif forecast.source_type == 'ir_declaration':
+                    print("\n=== Processing IR Declaration Forecast ===")
+                    try:
+                        declaration = None
+                        # Check if forecast has a valid source_id
+                        if forecast.source_id:
+                            declaration = IRDeclaration.objects.filter(id=forecast.source_id).first()
+                            print(f"Looking up declaration with ID: {forecast.source_id}")
+                            
+                        if declaration:
+                            print(f"IR Declaration found: {declaration.period_month}/{declaration.period_year}")
+                            period = f"{declaration.period_month:02d}/{declaration.period_year}"
+                        else:
+                            # Try to extract period from the label
+                            print(f"No declaration found, parsing from label: {forecast.label}")
+                            label_parts = forecast.label.split()
+                            period = label_parts[-1] if len(label_parts) > 1 else "Unknown"
+                            print(f"Extracted period: {period}")
+                        
+                        forecast_data = {
+                            'type': 'IR Payment',
+                            'number': period,
+                            'source_id': str(forecast.id),  # Use forecast ID if no declaration
+                            'source_type': forecast.source_type,
+                            'bank': bank.get_bank_display(),
+                            'due_date': forecast.date.strftime('%Y-%m-%d'),
+                            'amount': float(forecast.debit or 0),
+                            'status': declaration.status if declaration else 'pending',
+                            'status_display': declaration.get_status_display() if declaration else 'Pending'
+                        }
+                        
+                        forecasts_data.append(forecast_data)
+                        print(f"Added IR forecast: {forecast.label}, amount: {forecast.debit}")
+                    except Exception as e:
+                        print(f"Error processing IR declaration: {str(e)}")
+                        print(traceback.format_exc())
+                        continue
+                
+                elif forecast.source_type == 'stamp_right_declaration':
+                    print("\n=== Processing Stamp Rights Declaration Forecast ===")
+                    try:
+                        declaration = StampRightDeclaration.objects.get(id=forecast.source_id)
+                        print(f"Stamp Rights Declaration: {declaration.period_month}/{declaration.period_year}")
+                        
+                        forecast_data = {
+                            'type': 'Stamp Rights Payment',
+                            'payment_type': 'Stamp Rights Declaration',
+                            'number': forecast.reference,
+                            'status': declaration.status,
+                            'status_display': declaration.get_status_display(),
+                            'source_id': str(declaration.id),
+                            'bank': bank.get_bank_display(),
+                            'amount': float(forecast.debit or 0),
+                            'due_date': forecast.date.strftime('%Y-%m-%d'),
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                            'declaration': {
+                                'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                                'ref': forecast.reference,
+                                'invoices_amount': float(declaration.invoices_amount),
+                                'tax_amount': float(declaration.tax_amount)
+                            }
+                        }
+                        forecasts_data.append(forecast_data)
+                        print(f"Added Stamp Rights forecast: {forecast.label}, amount: {forecast.debit}")
+                    except StampRightDeclaration.DoesNotExist:
+                        print(f"Declaration {forecast.source_id} not found")
+                        continue
+                    except Exception as e:
+                        print(f"Error processing Stamp Rights declaration: {str(e)}")
+                        print(traceback.format_exc())
+                        continue
+                        
                 # Get receipt first
                 receipt = None
                 if forecast.source_type == 'checkreceipt':

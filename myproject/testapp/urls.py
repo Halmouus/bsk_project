@@ -1,5 +1,7 @@
 from django.urls import path, include
 
+from . import views_ir, views_stamp_rights
+
 
 from .views_users import initialize_user_profiles, user_management, user_activity, create_user, user_permissions
 
@@ -77,7 +79,7 @@ from .views_presentation import (
 )
 
 from .views_statement import (
-    BankStatementView, AccountingView, ContractPaymentActionView, OtherOperationsView, CalendarView, CalendarForecastView, PendingForecastsView,
+    BankStatementView, AccountingView, ContractPaymentActionView, CustomBankRecordView, OtherOperationsView, CalendarView, CalendarForecastView, PendingForecastsView,
     SupplierForecastView
 )
 
@@ -254,6 +256,10 @@ urlpatterns = [
     path('presentations/autocomplete/', 
          PresentationAutocompleteView.as_view(), name='presentation-autocomplete'),
 
+    # Custom Bank Record URLs
+    path('bank-accounts/custom-records/', CustomBankRecordView.as_view(), name='custom-bank-record-create'),
+    path('bank-accounts/custom-records/<uuid:record_id>/', CustomBankRecordView.as_view(), name='custom-bank-record-delete'),
+
 
     # Cash Management URLs
     path('cash/', CashConfigurationView.as_view(), name='cash-configuration'),
@@ -335,6 +341,8 @@ urlpatterns = [
     path('calendar/forecasts/', CalendarForecastView.as_view(), name='calendar-forecasts'),
     path('calendar/supplier-forecasts/', SupplierForecastView.as_view(), name='supplier_forecasts'),
     path('calendar/vat-forecasts/', VATForecastView.as_view(), name='vat-forecasts'),
+    path('calendar/ir-forecasts/', views_ir.IRForecastView.as_view(), name='ir-forecasts'),
+    path('calendar/stamp-right-forecasts/', views_stamp_rights.StampRightForecastView.as_view(), name='stamp-right-forecasts'),
 
     path('bank/pending-forecasts/<str:bank_id>/', PendingForecastsView.as_view(), name='pending_forecasts'),
 
@@ -361,6 +369,25 @@ urlpatterns = [
         VATDeductionDetailsView.as_view(), 
         name='vat-deduction-details'),  
     path('vat/<uuid:declaration_id>/delete/', VATDeclarationDeleteView.as_view(),name='vat-delete'),
+
+
+    # IR (Income Tax) URLs
+    path('tax/ir/', views_ir.IRListView.as_view(), name='ir-list'),
+    path('tax/ir/config/', views_ir.IRConfigFormView.as_view(), name='ir-config'),
+    path('tax/ir/declaration/new/', views_ir.IRDeclarationFormView.as_view(), name='ir-declaration-new'),
+    path('tax/ir/declaration/<uuid:declaration_id>/', views_ir.IRDeclarationFormView.as_view(), name='ir-declaration-edit'),
+    path('tax/ir/declaration/<uuid:declaration_id>/status/', views_ir.IRDeclarationStatusView.as_view(), name='ir-declaration-status'),
+    path('tax/ir/declaration/<uuid:declaration_id>/delete/', views_ir.IRDeclarationDeleteView.as_view(), name='ir-declaration-delete'),
+    path('tax/ir/calendar/<uuid:declaration_id>/status/', views_ir.IRCalendarStatusView.as_view(), name='ir-calendar-status'),
+
+    # Stamp Rights URLs
+    path('tax/stamp_rights/', views_stamp_rights.StampRightListView.as_view(), name='stamp-right-list'),
+    path('tax/stamp_rights/config/', views_stamp_rights.StampRightConfigFormView.as_view(), name='stamp-right-config'),
+    path('tax/stamp_rights/declaration/new/', views_stamp_rights.StampRightDeclarationFormView.as_view(), name='stamp-right-declaration-new'),
+    path('tax/stamp_rights/declaration/<uuid:declaration_id>/', views_stamp_rights.StampRightDeclarationFormView.as_view(), name='stamp-right-declaration-edit'),
+    path('tax/stamp_rights/declaration/<uuid:declaration_id>/status/', views_stamp_rights.StampRightDeclarationStatusView.as_view(), name='stamp-right-declaration-status'),
+    path('tax/stamp_rights/declaration/<uuid:declaration_id>/delete/', views_stamp_rights.StampRightDeclarationDeleteView.as_view(), name='stamp-right-declaration-delete'),
+    path('tax/stamp_rights/calendar/<uuid:declaration_id>/status/', views_stamp_rights.StampRightCalendarStatusView.as_view(), name='stamp-right-calendar-status'),
 
     # Pay URLs    
     path('pay/config/', PayConfigurationView.as_view(), name='pay-config'),

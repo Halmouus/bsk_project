@@ -1,5 +1,7 @@
+
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% load i18n %}
 {% block title %}Bank Calendar{% endblock %}
 
 {% block content %}
@@ -132,6 +134,7 @@
                                                 <span class="balance-amount {% if bank_info.balance < 0 %}negative{% endif %}">
                                                     {{ bank_info.balance|format_balance }}
                                                 </span>
+                                                
                                                 {% if bank_info.has_forecasts %}
                                                     <button class="forecast-details-btn" 
                                                             data-bs-toggle="modal" 
@@ -161,6 +164,27 @@
                                                         <i class="fas fa-percent"></i>
                                                     </button>
                                                 {% endif %}
+                                                
+                                                {% if bank_info.has_ir_forecasts %}
+                                                    <button class="ir-forecast-btn ms-2" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#irForecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">
+                                                        <i class="fas fa-money-check-alt"></i>
+                                                    </button>
+                                                {% endif %}
+
+                                                {% if bank_info.has_stamp_right_forecasts %}
+                                                    <button class="stamp-rights-forecast-btn ms-2" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#stampRightsForecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">    
+                                                        <i class="fas fa-stamp"></i>
+                                                    </button>
+                                                {% endif %}
+                                                
                                             </div>
                                         </div>
                                     {% endfor %}
@@ -217,6 +241,52 @@
                     <h5 class="modal-title">
                         <i class="fas fa-percent me-2"></i>
                         VAT Payments
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="forecast-totals mt-3">
+                        <h6 class="text-end">Total: <span class="total-amount"></span></h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- IR Forecast Modal -->
+    <div class="modal fade" id="irForecastModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-money-check-alt me-2"></i>
+                        {% trans "IR Payments" %}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="forecast-totals mt-3">
+                        <h6 class="text-end">Total: <span class="total-amount"></span></h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stamp Rights Forecast Modal -->
+    <div class="modal fade" id="stampRightsForecastModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-stamp me-2"></i>
+                        {% trans "Stamp Rights Payments" %}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -1434,6 +1504,39 @@
     border-radius: 4px;
     font-weight: 600;
 }
+
+.ir-forecast-btn {
+    background: none;
+    border: none;
+    color: #6B5B95;  /* Purple color for IR */
+    cursor: pointer;
+    padding: 4px;
+    transition: all 0.2s ease;
+}
+
+.ir-forecast-btn:hover {
+    color: #563d7c;
+    transform: scale(1.1);
+}
+
+.stamp-rights-forecast-btn {
+    background: none;
+    border: none;
+    color: #9C7C38;  /* Gold color for Stamp Rights */
+    cursor: pointer;
+    padding: 4px;
+    transition: all 0.2s ease;
+}
+
+.stamp-rights-forecast-btn:hover {
+    color: #785A1A;
+    transform: scale(1.1);
+}
+
+.forecast-item .badge-primary {
+    background-color: #6B5B95;
+    color: white;
+}
      
 </style>
 {% endblock %}
@@ -1460,7 +1563,7 @@
         loadSelectedBanks();
         addTooltips();
         ['forecastModal', 'paymentForecastModal', 'paymentModal', 'checkRejectionModal', 
-        'checkPaymentModal', 'pendingForecastsModal', 'vatForecastModal'].forEach(addModalCleanup);
+        'checkPaymentModal', 'pendingForecastsModal', 'vatForecastModal', 'irForecastModal' ,'stampRightsForecastModal'].forEach(addModalCleanup);
 
         document.addEventListener('click', function(e) {
             if (e.target.closest('.mark-receipt-paid')) {
@@ -1593,6 +1696,22 @@
                 loadVATForecasts(date, bankId);
             });
         });
+
+        document.querySelectorAll('.ir-forecast-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                loadIRForecasts(date, bankId);
+            });
+        });
+
+        document.querySelectorAll('.stamp-rights-forecast-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                loadStampRightsForecasts(date, bankId);
+            });
+        });
     }
     
     function renderCalendar(data) {
@@ -1710,6 +1829,36 @@
                                 vatForecastBtn.appendChild(vatIcon);
                                 
                                 balanceInfo.appendChild(vatForecastBtn);
+                            }
+
+                            if (bank.has_ir_forecasts) {
+                                const irForecastBtn = document.createElement('button');
+                                irForecastBtn.classList.add('ir-forecast-btn', 'ms-2');
+                                irForecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                irForecastBtn.setAttribute('data-bs-target', '#irForecastModal');
+                                irForecastBtn.setAttribute('data-date', day.date);
+                                irForecastBtn.setAttribute('data-bank', bank.bank.id);
+
+                                const irIcon = document.createElement('i');
+                                irIcon.classList.add('fas', 'fa-money-check-alt');
+                                irForecastBtn.appendChild(irIcon);
+
+                                balanceInfo.appendChild(irForecastBtn);
+                            }
+
+                            if (bank.has_stamp_right_forecasts) {
+                                const stampRightForecastBtn = document.createElement('button');
+                                stampRightForecastBtn.classList.add('stamp-rights-forecast-btn', 'ms-2');
+                                stampRightForecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                stampRightForecastBtn.setAttribute('data-bs-target', '#stampRightsForecastModal');
+                                stampRightForecastBtn.setAttribute('data-date', day.date);
+                                stampRightForecastBtn.setAttribute('data-bank', bank.bank.id);
+
+                                const stampRightIcon = document.createElement('i');
+                                stampRightIcon.classList.add('fas', 'fa-stamp');
+                                stampRightForecastBtn.appendChild(stampRightIcon);
+
+                                balanceInfo.appendChild(stampRightForecastBtn);
                             }
                             
                             bankBalanceCard.appendChild(balanceInfo);
@@ -2123,6 +2272,168 @@
             });
     }
 
+    function loadIRForecasts(date, bankId) {
+        console.log(`Loading IR forecasts for date: ${date}, bank ID: ${bankId}`);
+        fetch(`/testapp/calendar/ir-forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const modalBody = document.querySelector('#irForecastModal .modal-body');
+                    const forecastList = modalBody.querySelector('.forecast-list');
+                    const totalSpan = modalBody.querySelector('.total-amount');
+                    
+                    let content = '';
+                    let totalAmount = 0;
+                    
+                    if (data.forecasts && data.forecasts.length > 0) {
+                        data.forecasts.forEach(forecast => {
+                            totalAmount += forecast.amount;
+                            
+                            content += `
+                                <div class="forecast-item mb-3">
+                                    <div class="card">
+                                        <div class="card-header d-flex justify-content-between align-items-center bg-primary bg-opacity-10">
+                                            <div>
+                                                <h6 class="mb-1">IR Declaration ${forecast.period}</h6>
+                                                <div class="mt-1">
+                                                    <span class="badge bg-primary">
+                                                        ${forecast.is_declared ? 'Declared' : 'Forecast'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="amount fw-bold mb-1">${formatAmount(forecast.amount)}</div>
+                                                <small class="text-muted">Due: ${forecast.due_date}</small>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between">
+                                                    <span class="text-muted">Tax Amount:</span>
+                                                    <span class="text-danger">${formatAmount(forecast.amount)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            ${forecast.is_declared ? `
+                                                <div class="d-flex gap-2 justify-content-end mt-3">
+                                                    <button class="btn btn-sm btn-success mark-ir-paid" 
+                                                            data-declaration-id="${forecast.declaration_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-ir-rejected" 
+                                                            data-declaration-id="${forecast.declaration_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        forecastList.innerHTML = content;
+                        totalSpan.textContent = formatAmount(totalAmount);
+                    } else {
+                        forecastList.innerHTML = '<div class="text-center text-muted">No IR forecasts for this date</div>';
+                        totalSpan.textContent = formatAmount(0);
+                    }
+                } else {
+                    const modalBody = document.querySelector('#irForecastModal .modal-body');
+                    modalBody.innerHTML = '<div class="error-message">Failed to load IR forecast details</div>';
+                }
+            })
+            .catch(error => {
+                console.error("Error loading IR forecasts:", error);
+                const modalBody = document.querySelector('#irForecastModal .modal-body');
+                modalBody.innerHTML = '<div class="error-message">Failed to load IR forecast details</div>';
+            });
+    }
+
+    function loadStampRightsForecasts(date, bankId) {
+        console.log(`Loading Stamp Rights forecasts for date: ${date}, bank ID: ${bankId}`);
+        fetch(`/testapp/calendar/stamp-right-forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    const modalBody = document.querySelector('#stampRightsForecastModal .modal-body');
+                    const forecastList = modalBody.querySelector('.forecast-list');
+                    const totalSpan = modalBody.querySelector('.total-amount');
+                    
+                    let content = '';
+                    let totalAmount = 0;
+                    
+                    if (data.forecasts && data.forecasts.length > 0) {
+                        data.forecasts.forEach(forecast => {
+                            totalAmount += forecast.amount;
+                            
+                            content += `
+                                <div class="forecast-item mb-3">
+                                    <div class="card">
+                                        <div class="card-header d-flex justify-content-between align-items-center bg-primary bg-opacity-10">
+                                            <div>
+                                                <h6 class="mb-1">Stamp Rights Declaration ${forecast.period}</h6>
+                                                <div class="mt-1">
+                                                    <span class="badge bg-primary">
+                                                        ${forecast.is_declared ? 'Declared' : 'Forecast'}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="amount fw-bold mb-1">${formatAmount(forecast.amount)}</div>
+                                                <small class="text-muted">Due: ${forecast.due_date}</small>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <div class="mb-3">
+                                                <div class="d-flex justify-content-between">
+                                                    <span class="text-muted">Tax Amount:</span>
+                                                    <span class="text-danger">${formatAmount(forecast.amount)}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            ${forecast.is_declared ? `
+                                                <div class="d-flex gap-2 justify-content-end mt-3">
+                                                    <button class="btn btn-sm btn-success mark-stamp-right-paid" 
+                                                            data-declaration-id="${forecast.declaration_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-stamp-right-rejected" 
+                                                            data-declaration-id="${forecast.declaration_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        forecastList.innerHTML = content;
+                        totalSpan.textContent = formatAmount(totalAmount);
+                    } else {
+                        forecastList.innerHTML = '<div class="text-center text-muted">No Stamp Rights forecasts for this date</div>';
+                        totalSpan.textContent = formatAmount(0);
+                    }
+                } else {
+                    const modalBody = document.querySelector('#stampRightsForecastModal .modal-body');
+                    modalBody.innerHTML = '<div class="error-message">Failed to load Stamp Rights forecast details</div>';
+                }
+            })
+            .catch(error => {
+                console.error("Error loading Stamp Rights forecasts:", error);
+                const modalBody = document.querySelector('#stampRightsForecastModal .modal-body');
+                modalBody.innerHTML = '<div class="error-message">Failed to load Stamp Rights forecast details</div>';
+            });
+    }
+
+
+
     // Helper function with debug logging
     function getStatusColor(status) {
         console.log('Getting color for status:', status);
@@ -2153,14 +2464,17 @@
     function addTooltips() {
         console.log("=== Starting addTooltips() ===");
         
+        
         document.querySelectorAll('.calendar-day').forEach(async (day) => {
             // Get both receipt and supplier payment forecast buttons
             const receiptBtns = day.querySelectorAll('.forecast-details-btn');
             const supplierBtns = day.querySelectorAll('.payment-forecast-btn');
             const vatBtns = day.querySelectorAll('.vat-forecast-btn');
-            if (receiptBtns.length === 0 && supplierBtns.length === 0 && vatBtns.length === 0) return;
+            const irBtns = day.querySelectorAll('.ir-forecast-btn');
+            const stampRightBtns = day.querySelectorAll('.stamp-rights-forecast-btn');
+            if (receiptBtns.length === 0 && supplierBtns.length === 0 && vatBtns.length === 0 && irBtns.length === 0 && stampRightBtns.length === 0) return;
             
-            console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons`);
+            console.log(`\nProcessing day with ${receiptBtns.length} receipt buttons and ${supplierBtns.length} payment buttons and ${vatBtns.length} vat buttons and ${irBtns.length} ir buttons and ${stampRightBtns.length} stamp right buttons`);
             
             const tooltip = document.createElement('div');
             tooltip.className = 'calendar-tooltip';
@@ -2192,6 +2506,14 @@
                 //vat
                 let total_vat_payments = 0;
                 let total_vat_count = 0;
+
+                //ir
+                let total_ir_payments = 0;
+                let total_ir_count = 0;
+
+                //stamp right
+                let total_stamp_right_payments = 0;
+                let total_stamp_right_count = 0;
 
                 // Process receipt forecasts
                 for (const btn of receiptBtns) {
@@ -2262,14 +2584,50 @@
                             total_vat_count++;
                             console.log(`Adding ${forecast.amount} to VAT payments`);
                         });
+                    } else {
+                        console.error('Error fetching VAT forecasts:', data);
+                    }
+                }
+
+                // Process IR forecasts
+                for (const btn of irBtns) {
+                    console.log("Processing IR forecasts for bank:", btn.dataset.bank);
+                    
+                    const response = await fetch(
+                        `/testapp/calendar/ir-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`
+                    );
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        data.forecasts.forEach(forecast => {
+                            total_ir_payments += forecast.amount;
+                            total_ir_count++;
+                            console.log(`Adding ${forecast.amount} to IR payments`);
+                        });
+                    }
+                }
+
+                //stamp right
+                for (const btn of stampRightBtns) {
+                    console.log("Processing stamp right forecasts for bank:", btn.dataset.bank);
+                    
+                    const response = await fetch(`/testapp/calendar/stamp-right-forecasts/?date=${btn.dataset.date}&bank=${btn.dataset.bank}`);
+                    const data = await response.json();
+                    if (data.status === 'success') {
+                        data.forecasts.forEach(forecast => {
+                            total_stamp_right_payments += forecast.amount;
+                            total_stamp_right_count++;
+                            console.log(`Adding ${forecast.amount} to stamp right payments`);
+                        });
                     }
                 }
 
                 const receipt_total = total_expected;
-                const payment_total = total_chq_payments + total_lcn_payments + total_direct_debits + total_vat_payments;
+                const payment_total = total_chq_payments + total_lcn_payments + total_direct_debits + total_vat_payments + total_ir_payments + total_stamp_right_payments;
                 console.log(`payment_total = ${total_chq_payments} + ${total_lcn_payments} + ${total_direct_debits} + ${total_vat_payments}`);
                 console.log(`receipt_total = ${total_expected}`);
                 console.log(`total_vat_payments = ${total_vat_payments}`);
+                console.log(`total_ir_payments = ${total_ir_payments}`);
                 console.log(`total chq_payments = ${total_chq_payments}`);
                 console.log(`total lcn_payments = ${total_lcn_payments}`);
                 console.log(`total direct_debits = ${total_direct_debits}`);
@@ -2311,6 +2669,7 @@
                                 <span>LCN Payments (${total_lcn_count})</span>
                                 <span class="text-danger">${formatBalance(total_lcn_payments)}</span>
                             </div>
+                            
                             ${total_direct_debits > 0 ? `
                                 <div class="tooltip-row">
                                     <span>Direct Debits (${total_direct_count})</span>
@@ -2321,6 +2680,18 @@
                                 <div class="tooltip-row">
                                     <span>VAT Payments (${total_vat_count})</span>
                                     <span class="text-danger">${formatBalance(total_vat_payments)}</span>
+                                </div>
+                            ` : ''}
+                            ${total_ir_payments > 0 ? `
+                                <div class="tooltip-row">
+                                    <span>IR Payments (${total_ir_count})</span>
+                                    <span class="text-danger">${formatBalance(total_ir_payments)}</span>
+                                </div>
+                            ` : ''}
+                            ${total_stamp_right_payments > 0 ? `
+                                <div class="tooltip-row">
+                                    <span>Stamp Rights Payments (${total_stamp_right_count})</span>
+                                    <span class="text-danger">${formatBalance(total_stamp_right_payments)}</span>
                                 </div>
                             ` : ''}
                             <div class="tooltip-row total">
@@ -3041,6 +3412,182 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
                                     </div>
                                 </div>
                             `;
+                        } else if (forecast.type === 'IR Payment') {
+                            const statusClass = forecast.status === 'paid' ? 'bg-success' : 
+                            forecast.status === 'rejected' ? 'bg-danger' : 
+                            forecast.status === 'declared' ? 'bg-primary' : 'bg-secondary';
+                        
+                            html += `
+                            <div class="forecast-item mb-3">
+                                        <div class="card">
+                                            <div class="card-header bg-primary bg-opacity-10">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <div>
+                                                        <h6 class="mb-0">IR Payment ${forecast.number}</h6>
+                                                        <span class="badge ${statusClass} mt-1">${forecast.status_display}</span>
+                                                    </div>
+                                                    <span class="text-danger fw-bold">${formatAmount(forecast.amount)}</span>
+                                                </div>
+                                            </div>
+                                            <div class="card-body">
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Due Date:</strong> ${forecast.due_date}
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <strong>Bank:</strong> ${forecast.bank}
+                                                    </div>
+                                                </div>
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <strong>Reference:</strong> ${forecast.number}
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <strong>Tax Amount:</strong> ${formatAmount(forecast.amount)}
+                                                    </div>
+                                                </div>
+                                                
+                                                ${forecast.status === 'declared' ? `
+                                                    <div class="d-flex justify-content-end mt-3">
+                                                        <button class="btn btn-sm btn-success me-2 mark-ir-paid" 
+                                                                data-declaration-id="${forecast.source_id}"
+                                                                data-due-date="${forecast.due_date}">
+                                                            <i class="fas fa-check me-1"></i>Mark as Paid
+                                                        </button>
+                                                        <button class="btn btn-sm btn-danger mark-ir-rejected" 
+                                                                data-declaration-id="${forecast.source_id}"
+                                                                data-due-date="${forecast.due_date}">
+                                                            <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                        </button>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;         
+                    } else if (forecast.type === 'Stamp Rights Payment') {
+                        html += `
+                            <div class="forecast-item mb-3">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-header border-0 d-flex justify-content-between align-items-center bg-gradient-primary py-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="text-white">
+                                                <i class="fas fa-stamp me-2"></i> Stamp Rights Declaration
+                                            </div>
+                                            <div class="ms-2 text-white opacity-75">
+                                                ${forecast.status_display || 'Pending'}
+                                            </div>
+                                        </div>
+                                        <div class="text-white fw-bold">
+                                            ${formatBalance(forecast.amount)}
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <!-- Primary Info Section -->
+                                        <div class="p-3 bg-white border-bottom">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                                        <span class="badge bg-primary mt-1">
+                                                            ${forecast.declaration ? forecast.declaration.ref : forecast.number}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                                        <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                                        <span class="badge bg-primary mt-1">
+                                                            ${formatBalance(forecast.amount)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Details Grid -->
+                                        <div class="row g-0">
+                                            <div class="col-md-6 border-end">
+                                                <!-- Declaration Details -->
+                                                <div class="p-3 border-bottom">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-stamp text-muted me-2"></i>
+                                                        Declaration Details
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Period</span>
+                                                            <span class="fw-semibold">${forecast.declaration ? forecast.declaration.period : forecast.number}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Bank</span>
+                                                            <span>${forecast.bank}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <!-- Stamp Rights Amounts -->
+                                                <div class="p-3">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-calculator text-muted me-2"></i>
+                                                        Stamp Rights Summary
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        ${forecast.declaration ? `
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Invoices Amount</span>
+                                                                <span class="badge bg-success">
+                                                                    ${formatBalance(forecast.declaration.invoices_amount)}
+                                                                </span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Tax Amount</span>
+                                                                <span class="badge bg-danger">
+                                                                    ${formatBalance(forecast.declaration.tax_amount)}
+                                                                </span>
+                                                            </div>
+                                                        ` : `
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Tax Amount</span>
+                                                                <span class="badge bg-danger">
+                                                                    ${formatBalance(forecast.amount)}
+                                                                </span>
+                                                            </div>
+                                                        `}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Action Buttons -->
+                                        ${forecast.status === 'declared' ? `
+                                            <div class="p-3 bg-light border-top">
+                                                <div class="d-flex justify-content-end">
+                                                    <button class="btn btn-sm btn-success me-2 mark-stamp-right-paid" 
+                                                            data-declaration-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-check me-1"></i>Mark as Paid
+                                                    </button>
+                                                    <button class="btn btn-sm btn-danger mark-stamp-right-rejected" 
+                                                            data-declaration-id="${forecast.source_id}"
+                                                            data-due-date="${forecast.due_date}">
+                                                        <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
                     } else {
                         const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
                         const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';
@@ -3260,6 +3807,150 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
             
             const rejectionModal = new bootstrap.Modal(document.getElementById('checkRejectionModal'));
             rejectionModal.show();
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-ir-paid')) {
+            const button = e.target.closest('.mark-ir-paid');
+            const declarationId = button.dataset.declarationId;
+            const dueDate = button.dataset.dueDate;
+            
+            if (confirm('Mark this IR declaration as paid?')) {
+                fetch(`/testapp/tax/ir/declaration/${declarationId}/status/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        status: 'paid',
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('success', data.message);
+                        // Close modal and reload calendar
+                        bootstrap.Modal.getInstance(document.getElementById('irForecastModal')).hide();
+                        updateCalendar();
+                    } else {
+                        showToast('error', data.message || 'Error marking as paid');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('error', 'Error marking as paid');
+                });
+            }
+        }
+        
+        if (e.target.closest('.mark-ir-rejected')) {
+            const button = e.target.closest('.mark-ir-rejected');
+            const declarationId = button.dataset.declarationId;
+            const dueDate = button.dataset.dueDate;
+            
+            if (confirm('Mark this IR declaration as rejected?')) {
+                fetch(`/testapp/tax/ir/declaration/${declarationId}/status/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        status: 'rejected',
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('success', data.message);
+                        // Close modal and reload calendar
+                        bootstrap.Modal.getInstance(document.getElementById('irForecastModal')).hide();
+                        updateCalendar();
+                    } else {
+                        showToast('error', data.message || 'Error marking as rejected');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('error', 'Error marking as rejected');
+                });
+            }
+        }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-stamp-right-paid')) {
+            const button = e.target.closest('.mark-stamp-right-paid');
+            const declarationId = button.dataset.declarationId;
+            const dueDate = button.dataset.dueDate;
+            
+            if (confirm('Mark this Stamp Rights declaration as paid?')) {
+                fetch(`/testapp/tax/stamp_rights/declaration/${declarationId}/status/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        status: 'paid',
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('success', data.message);
+                        // Close modal and reload calendar
+                        bootstrap.Modal.getInstance(document.getElementById('stampRightsForecastModal')).hide();
+                        updateCalendar();
+                    } else {
+                        showToast('error', data.message || 'Error marking as paid');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('error', 'Error marking as paid');
+                });
+            }
+        }
+        
+        if (e.target.closest('.mark-stamp-right-rejected')) {
+            const button = e.target.closest('.mark-stamp-right-rejected');
+            const declarationId = button.dataset.declarationId;
+            const dueDate = button.dataset.dueDate;
+            
+            if (confirm('Mark this Stamp Rights declaration as rejected?')) {
+                fetch(`/testapp/tax/stamp_rights/declaration/${declarationId}/status/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify({
+                        status: 'rejected',
+                        date: new Date().toISOString().split('T')[0]
+                    })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        showToast('success', data.message);
+                        // Close modal and reload calendar
+                        bootstrap.Modal.getInstance(document.getElementById('stampRightsForecastModal')).hide();
+                        updateCalendar();
+                    } else {
+                        showToast('error', data.message || 'Error marking as rejected');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showToast('error', 'Error marking as rejected');
+                });
+            }
         }
     });
 

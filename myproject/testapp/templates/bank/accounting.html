@@ -75,6 +75,33 @@ $(document).ready(function() {
             showToast('Start date must be before or equal to end date', 'error');
             return;
         }
+
+        // Add loading state
+        $('#accountingTableBody').html('<tr><td colspan="8" class="text-center"><div class="spinner-border text-primary" role="status"></div></td></tr>');
+        
+        // Make AJAX request
+        $.ajax({
+            url: window.location.pathname,
+            method: 'GET',
+            data: startDate || endDate ? {
+                start_date: startDate,
+                end_date: endDate
+            } : {},
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            success: function(response) {
+                if (response && response.html) {
+                    $('#accountingTableBody').html(response.html);
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Filter error:', error);
+                $('#accountingTableBody').html('<tr><td colspan="8" class="text-center text-danger">Error loading data</td></tr>');
+                showToast('Failed to filter accounting entries', 'error');
+            }
+        });
+    });
         
         $.get(window.location.pathname, $(this).serialize())
             .done(function(response) {

@@ -475,6 +475,22 @@
                             href="{% url 'vat-list' %}">
                                 <i class="fas fa-file-invoice-dollar me-2"></i> {% trans "VAT" %}
                             </a>
+                            <a class="nav-link {% if 'ir' in request.path %}active{% endif %}" 
+                            href="{% url 'ir-list' %}">
+                                <i class="fas fa-money-check-alt me-2"></i> {% trans "IR" %}
+                            </a>
+                            <a class="nav-link {% if 'stamp-rights' in request.path %}active{% endif %}" 
+                            href="{% url 'stamp-right-list' %}">
+                                <i class="fas fa-stamp me-2"></i> {% trans "Stamp Rights" %}
+                            </a>
+                            <a class="nav-link {% if 'payment-delay' in request.path %}active{% endif %}" 
+                            href="#" onclick="showComingSoon(event)">
+                                <i class="fas fa-hourglass-half me-2"></i> {% trans "Payment Delay" %}
+                            </a>
+                            <a class="nav-link {% if 'is' in request.path %}active{% endif %}" 
+                            href="#" onclick="showComingSoon(event)">
+                                <i class="fas fa-percentage me-2"></i> {% trans "IS" %}
+                            </a>
                         </div>
                     </div>
                 </li>
@@ -664,6 +680,11 @@
         toastContainer.find('.toast').on('hidden.bs.toast', function() {
             toastContainer.remove();
         });
+    }
+
+    function showComingSoon(event) {
+        event.preventDefault();
+        showToast('This feature is coming soon!', 'info');
     }
 </script>
 

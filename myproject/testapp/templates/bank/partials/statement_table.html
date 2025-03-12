@@ -57,6 +57,10 @@
                 <button class="btn btn-sm btn-danger" onclick="deleteBankFee('{{ entry.source_id }}')">
                     <i class="fas fa-trash"></i>
                 </button>
+            {% elif entry.source_type == 'custom_record' %}
+                <button class="btn btn-sm btn-danger" onclick="deleteCustomRecord('{{ entry.source_id }}')">
+                    <i class="fas fa-trash"></i>
+                </button>
             {% else %}
                 <button class="btn btn-sm btn-danger" onclick="deleteTransfer('{{ entry.source_id }}')">
                     <i class="fas fa-trash"></i>
@@ -104,6 +108,17 @@
                             <strong>Related Presentation:</strong><br>
                             {{ entry.details.related_presentation|default:"None" }}
                         </div>
+                    </div>
+                {% elif entry.source_type == 'custom_record' %}
+                    <div class="row">
+                        {% if entry.notes %}
+                        <div class="col-md-12">
+                            <div class="detail-item">
+                                <div class="detail-label"><i class="fas fa-sticky-note me-2"></i>Notes</div>
+                                <div class="detail-value">{{ entry.notes }}</div>
+                            </div>
+                        </div>
+                        {% endif %}
                     </div>
                 {% elif entry.type == 'CASH' %}
                     <div class="row">

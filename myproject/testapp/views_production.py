@@ -2433,6 +2433,12 @@ def report_data(request):
         # Get loading data
         loading_data = dashboard.get_loading_data(start_date, end_date, selected_brick_type)
         
+        # Get brick type details for daily production
+        production_data = add_daily_brick_type_details(production_data, start_date, end_date, selected_brick_type)
+        
+        # Get brick type details for daily loading
+        loading_data = add_daily_loading_brick_type_details(loading_data, start_date, end_date, selected_brick_type)
+        
         # Calculate KPIs - Check the actual arguments needed!
         # Inspect the actual method signature and pass the correct arguments
         # This may vary based on your implementation
@@ -2498,3 +2504,162 @@ def report_data(request):
             'success': False,
             'error': str(e)
         }, status=400)
+
+def add_daily_brick_type_details(production_data, start_date, end_date, selected_brick_type=None):
+    """Add detailed brick type information for each production day"""
+    print("Adding daily brick type details to production data")
+    
+    # Create dictionary to store brick type details for each day
+    daily_brick_types = {}
+    
+    try:
+        # Query all production batches in the date range
+        batches = ProductionBatch.objects.filter(
+            production_date__gte=start_date,
+            production_date__lte=end_date
+        ).prefetch_related(
+            'brick_productions',
+            'brick_productions__brick_type'
+        )
+        
+        print(f"Found {batches.count()} production batches to process")
+        
+        # Process each batch to extract brick type details
+        for batch in batches:
+            date_str = batch.production_date.isoformat()
+            
+            # Initialize dict for this date if not exists
+            if date_str not in daily_brick_types:
+                daily_brick_types[date_str] = {}
+                
+            # Process each brick production in this batch
+            for prod in batch.brick_productions.all():
+                # Skip if we're filtering by brick type and this isn't the one
+                if selected_brick_type and prod.brick_type.id != selected_brick_type.id:
+                    continue
+                
+                brick_type = prod.brick_type
+                brick_type_name = brick_type.name
+                
+                # Calculate values for this brick type
+                total_produced = prod.total_bricks_produced
+                packaged = prod.bricks_packaged
+                bulk = total_produced - packaged
+                wagons = prod.wagons_produced
+                
+                # Add to daily brick type details
+                if brick_type_name not in daily_brick_types[date_str]:
+                    daily_brick_types[date_str][brick_type_name] = {
+                        'id': str(brick_type.id),
+                        'name': brick_type_name,
+                        'industrial_code': brick_type.industrial_code,
+                        'bulk': 0,
+                        'packaged': 0,
+                        'wagons': 0
+                    }
+                
+                # Add values
+                daily_brick_types[date_str][brick_type_name]['bulk'] += bulk
+                daily_brick_types[date_str][brick_type_name]['packaged'] += packaged
+                daily_brick_types[date_str][brick_type_name]['wagons'] += wagons
+        
+        # Add daily brick type details to production data
+        production_data['daily_brick_types'] = daily_brick_types
+        
+        # Also add brick_type details including industrial_code to each brick type
+        # in the by_type list for easy access in the frontend
+        if 'by_type' in production_data:
+            for brick_item in production_data['by_type']:
+                try:
+                    brick_type = BrickType.objects.get(id=brick_item['id'])
+                    brick_item['industrial_code'] = brick_type.industrial_code
+                except Exception as e:
+                    print(f"Error getting industrial code for brick type {brick_item['id']}: {e}")
+                    brick_item['industrial_code'] = brick_item['name']
+        
+        print(f"Added brick type details for {len(daily_brick_types)} days")
+        
+    except Exception as e:
+        print(f"Error adding daily brick type details: {str(e)}")
+        traceback.print_exc()
+    
+    return production_data
+
+def add_daily_loading_brick_type_details(loading_data, start_date, end_date, selected_brick_type=None):
+    """Add detailed brick type information for each loading day"""
+    print("Adding daily brick type details to loading data")
+    
+    # Create dictionary to store brick type details for each day
+    daily_brick_types = {}
+    
+    try:
+        # Query all loading records in the date range
+        loading_records = LoadingRecord.objects.filter(
+            loading_date__gte=start_date,
+            loading_date__lte=end_date
+        ).prefetch_related(
+            'items',
+            'items__brick_type'
+        )
+        
+        print(f"Found {loading_records.count()} loading records to process")
+        
+        # Process each loading record to extract brick type details
+        for record in loading_records:
+            date_str = record.loading_date.isoformat()
+            
+            # Initialize dict for this date if not exists
+            if date_str not in daily_brick_types:
+                daily_brick_types[date_str] = {}
+                
+            # Process each loading item in this record
+            for item in record.items.all():
+                # Skip if we're filtering by brick type and this isn't the one
+                if selected_brick_type and item.brick_type.id != selected_brick_type.id:
+                    continue
+                
+                brick_type = item.brick_type
+                brick_type_name = brick_type.name
+                
+                # Get values for this loading item
+                bulk = item.bulk_quantity
+                packaged = item.packaged_quantity
+                breakage = item.breakage
+                
+                # Add to daily brick type details
+                if brick_type_name not in daily_brick_types[date_str]:
+                    daily_brick_types[date_str][brick_type_name] = {
+                        'id': str(brick_type.id),
+                        'name': brick_type_name,
+                        'industrial_code': brick_type.industrial_code,
+                        'bulk': 0,
+                        'packaged': 0,
+                        'breakage': 0
+                    }
+                
+                # Add values
+                daily_brick_types[date_str][brick_type_name]['bulk'] += bulk
+                daily_brick_types[date_str][brick_type_name]['packaged'] += packaged
+                daily_brick_types[date_str][brick_type_name]['breakage'] += breakage
+        
+        # Add daily brick type details to loading data
+        loading_data['daily_brick_types'] = daily_brick_types
+        
+        # Also add brick_type details including industrial_code to each brick type
+        # in the by_type list for easy access in the frontend
+        if 'by_type' in loading_data:
+            for brick_item in loading_data['by_type']:
+                try:
+                    brick_type = BrickType.objects.get(id=brick_item['id'])
+                    brick_item['industrial_code'] = brick_type.industrial_code
+                except Exception as e:
+                    print(f"Error getting industrial code for brick type {brick_item['id']}: {e}")
+                    brick_item['industrial_code'] = brick_item['name']
+        
+        print(f"Added brick type details for {len(daily_brick_types)} days")
+        
+    except Exception as e:
+        print(f"Error adding daily loading brick type details: {str(e)}")
+        traceback.print_exc()
+    
+    return loading_data

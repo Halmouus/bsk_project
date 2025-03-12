@@ -1,3 +1,4 @@
+import json
 from django import template
 from django.template.defaultfilters import floatformat
 from decimal import InvalidOperation, Decimal
@@ -143,3 +144,8 @@ def replace(value, arg):
     if len(args) != 2:
         return value
     return value.replace(args[0], args[1])
+
+@register.filter
+def json_encode(data):
+    """Encode data as JSON string"""
+    return json.dumps(data)

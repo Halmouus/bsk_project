@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% load i18n %}
 {% block title %}Brick Types Management{% endblock %}
 
 {% block content %}
@@ -7,8 +7,8 @@
     <!-- Header with improved styling -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 mb-0 text-gray-800">Brick Types Management</h1>
-            <p class="text-muted small">Manage all brick types, dimensions, and pricing</p>
+            <h1 class="h3 mb-0 text-gray-800">{% trans "Brick Types Management" %}</h1>
+            <p class="text-muted small">{% trans "Manage all brick types, dimensions, and pricing" %}</p>
         </div>
         <button type="button" class="btn btn-primary" onclick="BrickManager.openCreateModal()">
             <i class="fas fa-plus me-2"></i> New Brick Type
@@ -28,7 +28,7 @@
     <!-- Main Table with improved styling -->
     <div class="card shadow">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold text-primary">Brick Types</h6>
+            <h6 class="m-0 font-weight-bold text-primary">{% trans "Brick Types" %}</h6>
             <div class="input-group w-50">
                 <span class="input-group-text bg-light">
                     <i class="fas fa-search text-gray-500"></i>
@@ -41,14 +41,14 @@
                 <table class="table table-hover align-middle" id="brickTable">
                     <thead class="table-light">
                         <tr>
-                            <th onclick="BrickManager.sortTable(0)" class="sortable">Name <i class="fas fa-sort ms-1 text-muted"></i></th>
-                            <th onclick="BrickManager.sortTable(1)" class="sortable">Industrial Code <i class="fas fa-sort ms-1 text-muted"></i></th>
-                            <th>Dimensions (L×W×H)</th>
-                            <th>Bricks per Wagon</th>
-                            <th>Bulk Price</th>
-                            <th>Packaged Price</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Actions</th>
+                            <th onclick="BrickManager.sortTable(0)" class="sortable">{% trans "Name" %} <i class="fas fa-sort ms-1 text-muted"></i></th>
+                            <th onclick="BrickManager.sortTable(1)" class="sortable">{% trans "Industrial Code" %} <i class="fas fa-sort ms-1 text-muted"></i></th>
+                            <th>{% trans "Dimensions (L×W×H)" %}</th>
+                            <th>{% trans "Bricks per Wagon" %}</th>
+                            <th>{% trans "Bulk Price" %}</th>
+                            <th>{% trans "Packaged Price" %}</th>
+                            <th class="text-center">{% trans "Status" %}</th>
+                            <th class="text-center">{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -100,8 +100,8 @@
                 <!-- Empty state message -->
                 <div id="emptyState" class="text-center p-5 d-none">
                     <i class="fas fa-cube fa-3x text-muted mb-3"></i>
-                    <h5 class="text-muted">No brick types found</h5>
-                    <p class="text-muted">Try different search criteria or add a new brick type</p>
+                    <h5 class="text-muted">{% trans "No brick types found" %}</h5>
+                    <p class="text-muted">{% trans "Try different search criteria or add a new brick type" %}</p>
                 </div>
             </div>
         </div>
@@ -113,7 +113,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-light">
-                <h5 class="modal-title">New Brick Type</h5>
+                <h5 class="modal-title">{% trans "New Brick Type" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -124,52 +124,52 @@
                     <div class="row mb-4">
                         <div class="col-md-6">
                             <label for="brickName" class="form-label fw-bold">
-                                <i class="fas fa-cube me-1 text-primary"></i> Name*
+                                <i class="fas fa-cube me-1 text-primary"></i> {% trans "Name" %}*
                             </label>
                             <input type="text" name="name" id="brickName" class="form-control" placeholder="Enter brick name" required>
-                            <small class="text-muted">The main name used to identify this brick type</small>
+                            <small class="text-muted">{% trans "The main name used to identify this brick type" %}</small>
                         </div>
                         <div class="col-md-6">
                             <label for="brickCode" class="form-label fw-bold">
-                                <i class="fas fa-barcode me-1 text-primary"></i> Industrial Code*
+                                <i class="fas fa-barcode me-1 text-primary"></i> {% trans "Industrial Code" %}*
                             </label>
                             <input type="text" name="industrial_code" id="brickCode" class="form-control" placeholder="Enter industrial code" required>
-                            <small class="text-muted">The unique industrial reference code</small>
+                            <small class="text-muted">{% trans "The unique industrial reference code" %}</small>
                         </div>
                     </div>
 
                     <div class="card mb-4 border-light">
                         <div class="card-header bg-light py-2">
                             <h6 class="m-0 fw-bold">
-                                <i class="fas fa-ruler-combined me-1 text-success"></i> Dimensions & Capacity
+                                <i class="fas fa-ruler-combined me-1 text-success"></i> {% trans "Dimensions & Capacity" %}
                             </h6>
                         </div>
                         <div class="card-body bg-light bg-opacity-25">
                             <div class="alert alert-info alert-sm py-2">
                                 <i class="fas fa-info-circle me-1"></i> 
-                                <small>Enter the physical dimensions of the brick and its capacity in production wagons.</small>
+                                <small>{% trans "Enter the physical dimensions of the brick and its capacity in production wagons." %}</small>
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-4">
-                                    <label for="brickLength" class="form-label fw-bold">Length (cm)*</label>
+                                    <label for="brickLength" class="form-label fw-bold">{% trans "Length (cm)" %}*</label>
                                     <input type="number" step="0.01" min="0" name="length" id="brickLength" class="form-control" placeholder="0.00" required>
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="brickWidth" class="form-label fw-bold">Width (cm)*</label>
+                                    <label for="brickWidth" class="form-label fw-bold">{% trans "Width (cm)" %}*</label>
                                     <input type="number" step="0.01" min="0" name="width" id="brickWidth" class="form-control" placeholder="0.00" required>
                                 </div>
                                 <div class="col-md-4">
-                                    <label for="brickHeight" class="form-label fw-bold">Height (cm)*</label>
+                                    <label for="brickHeight" class="form-label fw-bold">{% trans "Height (cm)" %}*</label>
                                     <input type="number" step="0.01" min="0" name="height" id="brickHeight" class="form-control" placeholder="0.00" required>
                                 </div>
                             </div>
                             
                             <div class="mt-3">
                                 <label for="bricksPerWagon" class="form-label fw-bold">
-                                    <i class="fas fa-truck-loading me-1 text-warning"></i> Bricks per Wagon*
+                                    <i class="fas fa-truck-loading me-1 text-warning"></i> {% trans "Bricks per Wagon" %}*
                                 </label>
                                 <input type="number" min="1" name="bricks_per_wagon" id="bricksPerWagon" class="form-control" placeholder="Enter number of bricks" required>
-                                <small class="text-muted">The number of bricks that fit in a standard production wagon</small>
+                                <small class="text-muted">{% trans "The number of bricks that fit in a standard production wagon" %}</small>
                             </div>
                         </div>
                     </div>
@@ -177,41 +177,41 @@
                     <div class="card mb-4 border-light">
                         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                             <h6 class="m-0 fw-bold">
-                                <i class="fas fa-money-bill-wave me-1 text-success"></i> Pricing Information
+                                <i class="fas fa-money-bill-wave me-1 text-success"></i> {% trans "Pricing Information" %}
                             </h6>
                             <div style="width: 180px;">
                                 <label for="priceEffectiveDate" class="form-label fw-bold">
-                                    <i class="fas fa-calendar-alt me-1 text-secondary"></i> Effective Date
+                                    <i class="fas fa-calendar-alt me-1 text-secondary"></i> {% trans "Effective Date" %}
                                 </label>
                                 <input type="date" name="price_effective_date" id="priceEffectiveDate" class="form-control">
-                                <small class="text-muted"><i class="fas fa-info-circle me-1"></i> Today used if blank</small>
+                                <small class="text-muted"><i class="fas fa-info-circle me-1"></i> {% trans "Today used if blank" %}</small>
                             </div>
                         </div>
                         <div class="card-body bg-light bg-opacity-25">
                             <div class="alert alert-warning alert-sm py-2">
                                 <i class="fas fa-exclamation-triangle me-1"></i> 
-                                <small>Setting prices creates a new price point in the history with the effective date.</small>
+                                <small>{% trans "Setting prices creates a new price point in the history with the effective date." %}</small>
                             </div>
                             <div class="row g-3">
                                 <div class="col-md-6">
                                     <label for="bulkPrice" class="form-label fw-bold">
-                                        <i class="fas fa-boxes me-1 text-primary"></i> Bulk Price
+                                        <i class="fas fa-boxes me-1 text-primary"></i> {% trans "Bulk Price" %}
                                     </label>
                                     <div class="input-group">
                                         <input type="number" step="0.01" min="0" name="bulk_price" id="bulkPrice" class="form-control" placeholder="0.00">
                                         <span class="input-group-text bg-light">per unit</span>
                                     </div>
-                                    <small class="text-muted">Price per brick when sold in bulk</small>
+                                    <small class="text-muted">{% trans "Price per brick when sold in bulk" %}</small>
                                 </div>
                                 <div class="col-md-6">
                                     <label for="packagedPrice" class="form-label fw-bold">
-                                        <i class="fas fa-box me-1 text-primary"></i> Packaged Price
+                                        <i class="fas fa-box me-1 text-primary"></i> {% trans "Packaged Price" %}
                                     </label>
                                     <div class="input-group">
                                         <input type="number" step="0.01" min="0" name="packaged_price" id="packagedPrice" class="form-control" placeholder="0.00">
                                         <span class="input-group-text bg-light">per unit</span>
                                     </div>
-                                    <small class="text-muted">Price per brick when sold packaged</small>
+                                    <small class="text-muted">{% trans "Price per brick when sold packaged" %}</small>
                                 </div>
                             </div>
                         </div>
@@ -220,19 +220,19 @@
                     <div class="d-flex mb-3 align-items-center">
                         <div class="form-check form-switch me-3">
                             <input class="form-check-input" type="checkbox" id="isActive" name="is_active" checked>
-                            <label class="form-check-label fw-bold" for="isActive">Active</label>
+                            <label class="form-check-label fw-bold" for="isActive">{% trans "Active" %}</label>
                         </div>
                         <small class="text-muted bg-light py-1 px-2 rounded">
-                            <i class="fas fa-info-circle me-1"></i> Inactive brick types won't appear in production forms
+                            <i class="fas fa-info-circle me-1"></i> {% trans "Inactive brick types won't appear in production forms" %}
                         </small>
                     </div>
 
                     <div class="mb-3">
                         <label for="brickNotes" class="form-label fw-bold">
-                            <i class="fas fa-sticky-note me-1 text-warning"></i> Notes
+                            <i class="fas fa-sticky-note me-1 text-warning"></i> {% trans "Notes" %}
                         </label>
                         <textarea name="notes" id="brickNotes" class="form-control" placeholder="Add any relevant notes here" rows="3"></textarea>
-                        <small class="text-muted">Additional information about this brick type (optional)</small>
+                        <small class="text-muted">{% trans "Additional information about this brick type (optional)" %}</small>
                     </div>
                 </form>
             </div>
@@ -253,31 +253,31 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-light">
-                <h5 class="modal-title">Price History</h5>
+                <h5 class="modal-title">{% trans "Price History" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <h6 id="brickTypeInfo" class="mb-4">Loading...</h6>
+                <h6 id="brickTypeInfo" class="mb-4">{% trans "Loading..." %}</h6>
                 
                 <div class="row">
                     <div class="col-md-6">
                         <div class="card mb-3">
                             <div class="card-header bg-light py-2">
-                                <h6 class="m-0 font-weight-bold text-primary">Bulk Price History</h6>
+                                <h6 class="m-0 font-weight-bold text-primary">{% trans "Bulk Price History" %}</h6>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
                                     <table class="table mb-0" id="bulkPriceTable">
                                         <thead class="table-light">
                                             <tr>
-                                                <th>Price</th>
-                                                <th>Effective Date</th>
-                                                <th>Notes</th>
+                                                <th>{% trans "Price" %}</th>
+                                                <th>{% trans "Effective Date" %}</th>
+                                                <th>{% trans "Notes" %}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td colspan="3" class="text-center">Loading...</td>
+                                                <td colspan="3" class="text-center">{% trans "Loading..." %}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -288,21 +288,21 @@
                     <div class="col-md-6">
                         <div class="card mb-3">
                             <div class="card-header bg-light py-2">
-                                <h6 class="m-0 font-weight-bold text-primary">Packaged Price History</h6>
+                                <h6 class="m-0 font-weight-bold text-primary">{% trans "Packaged Price History" %}</h6>
                             </div>
                             <div class="card-body p-0">
                                 <div class="table-responsive">
                                     <table class="table mb-0" id="packagedPriceTable">
                                         <thead class="table-light">
                                             <tr>
-                                                <th>Price</th>
-                                                <th>Effective Date</th>
-                                                <th>Notes</th>
+                                                <th>{% trans "Price" %}</th>
+                                                <th>{% trans "Effective Date" %}</th>
+                                                <th>{% trans "Notes" %}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             <tr>
-                                                <td colspan="3" class="text-center">Loading...</td>
+                                                <td colspan="3" class="text-center">{% trans "Loading..." %}</td>
                                             </tr>
                                         </tbody>
                                     </table>
@@ -313,7 +313,7 @@
                 </div>
             </div>
             <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>

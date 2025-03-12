@@ -1,0 +1,125 @@
+<!-- testapp/templates/tax/stamp_rights/config_form.html -->
+{% load accounting_filters %}
+{% load i18n %}
+
+<div class="modal-header">
+    <h5 class="modal-title">
+        <i class="fas fa-cog me-2"></i> {% trans "Stamp Rights Configuration" %}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<div class="modal-body">
+    <form id="stampRightConfigForm">
+        {% csrf_token %}
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Basic Settings" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="accounting_code" class="form-label">{% trans "Accounting Code" %}</label>
+                        <input type="text" class="form-control" id="accounting_code" name="accounting_code" 
+                            value="{{ config.accounting_code|default:'44526' }}" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="journal_code" class="form-label">{% trans "Journal Code" %}</label>
+                        <input type="text" class="form-control" id="journal_code" name="journal_code" 
+                            value="{{ config.journal_code|default:'06' }}" required>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-12">
+                        <label for="domiciliation_bank" class="form-label">{% trans "Domiciliation Bank" %}</label>
+                        <select class="form-control" id="domiciliation_bank" name="domiciliation_bank" required>
+                            <option value="">{% trans "Select Bank" %}</option>
+                            {% for bank in bank_accounts %}
+                            <option value="{{ bank.id }}" {% if config and config.domiciliation_bank.id == bank.id %}selected{% endif %}>
+                                {{ bank.bank }} - {{ bank.account_number }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Tax Settings" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="tax_rate" class="form-label">{% trans "Tax Rate (%)" %}</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="tax_rate" name="tax_rate" 
+                                value="{{ config.tax_rate|default:'0.25' }}" required>
+                            <span class="input-group-text">%</span>
+                        </div>
+                        <small class="text-muted">{% trans "Tax rate applied to invoice amounts" %}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="default_amount" class="form-label">{% trans "Default Tax Amount" %}</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="default_amount" name="default_amount" 
+                                value="{{ config.default_amount|default:'0.00' }}" required>
+                            <span class="input-group-text">MAD</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Declaration Settings" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="declaration_day" class="form-label">{% trans "Declaration Day" %}</label>
+                        <input type="number" class="form-control" id="declaration_day" name="declaration_day" 
+                            value="{{ config.declaration_day|default:20 }}" min="1" max="31" required>
+                        <small class="text-muted">{% trans "Day of the month (will adjust to last day for shorter months)" %}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="frequency" class="form-label">{% trans "Declaration Frequency" %}</label>
+                        <select class="form-control" id="frequency" name="frequency" required>
+                            <option value="monthly" {% if config and config.frequency == 'monthly' %}selected{% endif %}>
+                                {% trans "Monthly" %}
+                            </option>
+                            <option value="quarterly" {% if config and config.frequency == 'quarterly' %}selected{% endif %}>
+                                {% trans "Quarterly" %}
+                            </option>
+                            <option value="biannual" {% if config and config.frequency == 'biannual' %}selected{% endif %}>
+                                {% trans "Bi-annual" %}
+                            </option>
+                            <option value="annual" {% if config and config.frequency == 'annual' %}selected{% endif %}>
+                                {% trans "Annual" %}
+                            </option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+        {% trans "Cancel" %}
+    </button>
+    <button type="button" class="btn btn-primary" id="saveStampRightConfig">
+        <i class="fas fa-save me-2"></i> {% trans "Save Configuration" %}
+    </button>
+</div>
+
+<script>
+// Format decimal inputs to handle both comma and period as decimal separators
+$(document).ready(function() {
+    $('#tax_rate, #default_amount').on('input', function() {
+        // Allow both comma and period during input
+        $(this).val($(this).val().replace(/[^0-9.,]/g, ''));
+    });
+});
+</script>
