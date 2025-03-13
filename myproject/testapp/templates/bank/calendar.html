@@ -523,6 +523,102 @@
             </div>
         </div>
     </div>
+
+    <!-- IR Status Modal -->
+    <div class="modal fade" id="irStatusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="irStatusModalTitle">Update IR Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="irStatusForm">
+                        <input type="hidden" id="irDeclarationId">
+                        <input type="hidden" id="irStatusAction">
+                        
+                        <div class="mb-3">
+                            <label for="irStatusDate" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="irStatusDate" 
+                                   value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        
+                        <!-- Rejection cause field (shown only for rejection) -->
+                        <div class="mb-3" id="irRejectionCauseGroup" style="display: none;">
+                            <label for="irRejectionCause" class="form-label">Rejection Cause</label>
+                            <select class="form-control" id="irRejectionCause" required>
+                                <option value="">Select a cause...</option>
+                                <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                                <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                                <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                                <option value="TECHNICAL_ERROR">Technical Error</option>
+                                <option value="BANK_ERROR">Bank Processing Error</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Notes field for rejection -->
+                        <div class="mb-3" id="irRejectionNotesGroup" style="display: none;">
+                            <label for="irRejectionNotes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="irRejectionNotes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmIRStatus">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stamp Rights Status Modal -->
+    <div class="modal fade" id="stampRightsStatusModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="stampRightsStatusModalTitle">Update Stamp Rights Status</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="stampRightsStatusForm">
+                        <input type="hidden" id="stampRightsDeclarationId">
+                        <input type="hidden" id="stampRightsStatusAction">
+                        
+                        <div class="mb-3">
+                            <label for="stampRightsStatusDate" class="form-label">Date</label>
+                            <input type="date" class="form-control" id="stampRightsStatusDate" 
+                                value="{% now 'Y-m-d' %}" required>
+                        </div>
+                        
+                        <!-- Rejection cause field (shown only for rejection) -->
+                        <div class="mb-3" id="stampRightsRejectionCauseGroup" style="display: none;">
+                            <label for="stampRightsRejectionCause" class="form-label">Rejection Cause</label>
+                            <select class="form-control" id="stampRightsRejectionCause" required>
+                                <option value="">Select a cause...</option>
+                                <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                                <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                                <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                                <option value="TECHNICAL_ERROR">Technical Error</option>
+                                <option value="BANK_ERROR">Bank Processing Error</option>
+                                <option value="OTHER">Other</option>
+                            </select>
+                        </div>
+                        
+                        <!-- Notes field for rejection -->
+                        <div class="mb-3" id="stampRightsRejectionNotesGroup" style="display: none;">
+                            <label for="stampRightsRejectionNotes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="stampRightsRejectionNotes" rows="3"></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="confirmStampRightsStatus">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
     
 <style>
     /* Base Styles */
@@ -1563,8 +1659,8 @@
         loadSelectedBanks();
         addTooltips();
         ['forecastModal', 'paymentForecastModal', 'paymentModal', 'checkRejectionModal', 
-        'checkPaymentModal', 'pendingForecastsModal', 'vatForecastModal', 'irForecastModal' ,'stampRightsForecastModal'].forEach(addModalCleanup);
-
+        'checkPaymentModal', 'pendingForecastsModal', 'vatForecastModal', 'irForecastModal',
+        'stampRightsStatusModal', 'stampRightsForecastModal', 'unpaidMarkingModal'].forEach(addModalCleanup);
         document.addEventListener('click', function(e) {
             if (e.target.closest('.mark-receipt-paid')) {
                 const button = e.target.closest('.mark-receipt-paid');
@@ -3413,42 +3509,102 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
                                 </div>
                             `;
                         } else if (forecast.type === 'IR Payment') {
-                            const statusClass = forecast.status === 'paid' ? 'bg-success' : 
-                            forecast.status === 'rejected' ? 'bg-danger' : 
-                            forecast.status === 'declared' ? 'bg-primary' : 'bg-secondary';
-                        
                             html += `
-                            <div class="forecast-item mb-3">
-                                        <div class="card">
-                                            <div class="card-header bg-primary bg-opacity-10">
-                                                <div class="d-flex justify-content-between align-items-center">
-                                                    <div>
-                                                        <h6 class="mb-0">IR Payment ${forecast.number}</h6>
-                                                        <span class="badge ${statusClass} mt-1">${forecast.status_display}</span>
-                                                    </div>
-                                                    <span class="text-danger fw-bold">${formatAmount(forecast.amount)}</span>
+                                <div class="forecast-item mb-3">
+                                    <div class="card border-0 shadow-sm">
+                                        <div class="card-header border-0 d-flex justify-content-between align-items-center bg-gradient-primary py-3">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="text-white">
+                                                    <i class="fas fa-money-check-alt me-2"></i> IR Declaration
+                                                </div>
+                                                <div class="ms-2 text-white opacity-75">
+                                                    ${forecast.status_display || 'Pending'}
                                                 </div>
                                             </div>
-                                            <div class="card-body">
-                                                <div class="row mb-3">
-                                                    <div class="col-md-6">
-                                                        <strong>Due Date:</strong> ${forecast.due_date}
+                                            <div class="text-white fw-bold">
+                                                ${formatBalance(forecast.amount)}
+                                            </div>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            <!-- Primary Info Section -->
+                                            <div class="p-3 bg-white border-bottom">
+                                                <div class="row g-3">
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                                            <span class="badge bg-primary mt-1">
+                                                                ${forecast.number}
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                    <div class="col-md-6">
-                                                        <strong>Bank:</strong> ${forecast.bank}
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                                            <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-4">
+                                                        <div class="d-flex flex-column">
+                                                            <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                                            <span class="badge bg-primary mt-1">
+                                                                ${formatBalance(forecast.amount)}
+                                                            </span>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                <div class="row mb-3">
-                                                    <div class="col-md-6">
-                                                        <strong>Reference:</strong> ${forecast.number}
-                                                    </div>
-                                                    <div class="col-md-6">
-                                                        <strong>Tax Amount:</strong> ${formatAmount(forecast.amount)}
+                                            </div>
+
+                                            <!-- Details Grid -->
+                                            <div class="row g-0">
+                                                <div class="col-md-6 border-end">
+                                                    <!-- Declaration Details -->
+                                                    <div class="p-3 border-bottom">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-money-check-alt text-muted me-2"></i>
+                                                            Declaration Details
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Period</span>
+                                                                <span class="fw-semibold">${forecast.period}</span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Bank</span>
+                                                                <span>${forecast.bank}</span>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                                
-                                                ${forecast.status === 'declared' ? `
-                                                    <div class="d-flex justify-content-end mt-3">
+
+                                                <div class="col-md-6">
+                                                    <!-- IR Amounts -->
+                                                    <div class="p-3">
+                                                        <h6 class="section-title d-flex align-items-center">
+                                                            <i class="fas fa-calculator text-muted me-2"></i>
+                                                            IR Summary
+                                                        </h6>
+                                                        <div class="bg-light rounded-3 p-3">
+                                                            <div class="d-flex justify-content-between mb-2">
+                                                                <span class="text-muted">Salary Amount</span>
+                                                                <span class="badge bg-success">
+                                                                    ${formatBalance(forecast.salary_amount || 0)}
+                                                                </span>
+                                                            </div>
+                                                            <div class="d-flex justify-content-between">
+                                                                <span class="text-muted">Tax Amount</span>
+                                                                <span class="badge bg-danger">
+                                                                    ${formatBalance(forecast.amount)}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Action Buttons -->
+                                            ${forecast.status === 'declared' ? `
+                                                <div class="p-3 bg-light border-top">
+                                                    <div class="d-flex justify-content-end">
                                                         <button class="btn btn-sm btn-success me-2 mark-ir-paid" 
                                                                 data-declaration-id="${forecast.source_id}"
                                                                 data-due-date="${forecast.due_date}">
@@ -3460,11 +3616,12 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
                                                             <i class="fas fa-times me-1"></i>Mark as Rejected
                                                         </button>
                                                     </div>
-                                                ` : ''}
-                                            </div>
+                                                </div>
+                                            ` : ''}
                                         </div>
                                     </div>
-                                `;         
+                                </div>
+                            `;
                     } else if (forecast.type === 'Stamp Rights Payment') {
                         html += `
                             <div class="forecast-item mb-3">
@@ -3811,39 +3968,29 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
     });
 
     document.addEventListener('click', function(e) {
+        // IR Status Handlers
         if (e.target.closest('.mark-ir-paid')) {
             const button = e.target.closest('.mark-ir-paid');
             const declarationId = button.dataset.declarationId;
             const dueDate = button.dataset.dueDate;
             
-            if (confirm('Mark this IR declaration as paid?')) {
-                fetch(`/testapp/tax/ir/declaration/${declarationId}/status/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        status: 'paid',
-                        date: new Date().toISOString().split('T')[0]
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showToast('success', data.message);
-                        // Close modal and reload calendar
-                        bootstrap.Modal.getInstance(document.getElementById('irForecastModal')).hide();
-                        updateCalendar();
-                    } else {
-                        showToast('error', data.message || 'Error marking as paid');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showToast('error', 'Error marking as paid');
-                });
-            }
+            // Set up modal for paid status
+            document.getElementById('irDeclarationId').value = declarationId;
+            document.getElementById('irStatusAction').value = 'paid';
+            document.getElementById('irStatusModalTitle').textContent = 'Mark IR as Paid';
+            
+            // Hide rejection fields
+            document.getElementById('irRejectionCauseGroup').style.display = 'none';
+            document.getElementById('irRejectionNotesGroup').style.display = 'none';
+            
+            // Default date to today
+            const dateInput = document.getElementById('irStatusDate');
+            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.min = dueDate; // Can't be before due date
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('irStatusModal'));
+            modal.show();
         }
         
         if (e.target.closest('.mark-ir-rejected')) {
@@ -3851,71 +3998,122 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
             const declarationId = button.dataset.declarationId;
             const dueDate = button.dataset.dueDate;
             
-            if (confirm('Mark this IR declaration as rejected?')) {
-                fetch(`/testapp/tax/ir/declaration/${declarationId}/status/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        status: 'rejected',
-                        date: new Date().toISOString().split('T')[0]
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showToast('success', data.message);
-                        // Close modal and reload calendar
-                        bootstrap.Modal.getInstance(document.getElementById('irForecastModal')).hide();
-                        updateCalendar();
-                    } else {
-                        showToast('error', data.message || 'Error marking as rejected');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showToast('error', 'Error marking as rejected');
-                });
-            }
+            // Set up modal for rejected status
+            document.getElementById('irDeclarationId').value = declarationId;
+            document.getElementById('irStatusAction').value = 'rejected';
+            document.getElementById('irStatusModalTitle').textContent = 'Mark IR as Rejected';
+            
+            // Show rejection fields
+            document.getElementById('irRejectionCauseGroup').style.display = 'block';
+            document.getElementById('irRejectionNotesGroup').style.display = 'block';
+            
+            // Default date to today
+            const dateInput = document.getElementById('irStatusDate');
+            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.min = dueDate; // Can't be before due date
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('irStatusModal'));
+            modal.show();
         }
+        
+    });
+
+    // Add confirm handler for IR status modal
+    document.getElementById('confirmIRStatus').addEventListener('click', function() {
+        const declarationId = document.getElementById('irDeclarationId').value;
+        const status = document.getElementById('irStatusAction').value;
+        const date = document.getElementById('irStatusDate').value;
+        
+        if (!date) {
+            showToast('error', 'Please select a date');
+            return;
+        }
+        
+        let data = {
+            status: status,
+            date: date
+        };
+        
+        // Add rejection cause and notes if rejecting
+        if (status === 'rejected') {
+            const rejectionCause = document.getElementById('irRejectionCause').value;
+            const rejectionNotes = document.getElementById('irRejectionNotes').value;
+            
+            if (!rejectionCause) {
+                showToast('error', 'Please select a rejection cause');
+                return;
+            }
+            
+            data.rejection_cause = rejectionCause;
+            data.rejection_notes = rejectionNotes;
+        }
+        
+        // Submit the status update
+        fetch(`/testapp/tax/ir/declaration/${declarationId}/status/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                // Close the modal
+                bootstrap.Modal.getInstance(document.getElementById('irStatusModal')).hide();
+                
+                // Show success message
+                showToast('success', result.message);
+                
+                // Refresh the forecasts
+                if (document.getElementById('irForecastModal').classList.contains('show')) {
+                    bootstrap.Modal.getInstance(document.getElementById('irForecastModal')).hide();
+                }
+                
+                // Refresh pending forecasts if opened
+                if (document.getElementById('pendingForecastsModal').classList.contains('show')) {
+                    const currentBank = document.getElementById('pendingForecastsModal').dataset.bankId;
+                    viewPendingForecasts(currentBank);
+                } else {
+                    // Otherwise refresh calendar
+                    updateCalendar();
+                }
+            } else {
+                showToast('error', result.message || 'Error updating status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', 'Failed to update status');
+        });
     });
 
     document.addEventListener('click', function(e) {
+        // Stamp Rights Handlers
         if (e.target.closest('.mark-stamp-right-paid')) {
             const button = e.target.closest('.mark-stamp-right-paid');
             const declarationId = button.dataset.declarationId;
             const dueDate = button.dataset.dueDate;
             
-            if (confirm('Mark this Stamp Rights declaration as paid?')) {
-                fetch(`/testapp/tax/stamp_rights/declaration/${declarationId}/status/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        status: 'paid',
-                        date: new Date().toISOString().split('T')[0]
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showToast('success', data.message);
-                        // Close modal and reload calendar
-                        bootstrap.Modal.getInstance(document.getElementById('stampRightsForecastModal')).hide();
-                        updateCalendar();
-                    } else {
-                        showToast('error', data.message || 'Error marking as paid');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showToast('error', 'Error marking as paid');
-                });
-            }
+            // Set up modal for paid status
+            document.getElementById('stampRightsDeclarationId').value = declarationId;
+            document.getElementById('stampRightsStatusAction').value = 'paid';
+            document.getElementById('stampRightsStatusModalTitle').textContent = 'Mark Stamp Rights as Paid';
+            
+            // Hide rejection fields
+            document.getElementById('stampRightsRejectionCauseGroup').style.display = 'none';
+            document.getElementById('stampRightsRejectionNotesGroup').style.display = 'none';
+            
+            // Default date to today
+            const dateInput = document.getElementById('stampRightsStatusDate');
+            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.min = dueDate; // Can't be before due date
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('stampRightsStatusModal'));
+            modal.show();
         }
         
         if (e.target.closest('.mark-stamp-right-rejected')) {
@@ -3923,35 +4121,96 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
             const declarationId = button.dataset.declarationId;
             const dueDate = button.dataset.dueDate;
             
-            if (confirm('Mark this Stamp Rights declaration as rejected?')) {
-                fetch(`/testapp/tax/stamp_rights/declaration/${declarationId}/status/`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                    },
-                    body: JSON.stringify({
-                        status: 'rejected',
-                        date: new Date().toISOString().split('T')[0]
-                    })
-                })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.status === 'success') {
-                        showToast('success', data.message);
-                        // Close modal and reload calendar
-                        bootstrap.Modal.getInstance(document.getElementById('stampRightsForecastModal')).hide();
-                        updateCalendar();
-                    } else {
-                        showToast('error', data.message || 'Error marking as rejected');
-                    }
-                })
-                .catch(error => {
-                    console.error('Error:', error);
-                    showToast('error', 'Error marking as rejected');
-                });
-            }
+            // Set up modal for rejected status
+            document.getElementById('stampRightsDeclarationId').value = declarationId;
+            document.getElementById('stampRightsStatusAction').value = 'rejected';
+            document.getElementById('stampRightsStatusModalTitle').textContent = 'Mark Stamp Rights as Rejected';
+            
+            // Show rejection fields
+            document.getElementById('stampRightsRejectionCauseGroup').style.display = 'block';
+            document.getElementById('stampRightsRejectionNotesGroup').style.display = 'block';
+            
+            // Default date to today
+            const dateInput = document.getElementById('stampRightsStatusDate');
+            dateInput.value = new Date().toISOString().split('T')[0];
+            dateInput.min = dueDate; // Can't be before due date
+            
+            // Show the modal
+            const modal = new bootstrap.Modal(document.getElementById('stampRightsStatusModal'));
+            modal.show();
         }
+        
+    });
+
+    // Add modal confirm handler
+    document.getElementById('confirmStampRightsStatus').addEventListener('click', function() {
+        const declarationId = document.getElementById('stampRightsDeclarationId').value;
+        const status = document.getElementById('stampRightsStatusAction').value;
+        const date = document.getElementById('stampRightsStatusDate').value;
+        
+        if (!date) {
+            showToast('error', 'Please select a date');
+            return;
+        }
+        
+        let data = {
+            status: status,
+            date: date
+        };
+        
+        // Add rejection cause and notes if rejecting
+        if (status === 'rejected') {
+            const rejectionCause = document.getElementById('stampRightsRejectionCause').value;
+            const rejectionNotes = document.getElementById('stampRightsRejectionNotes').value;
+            
+            if (!rejectionCause) {
+                showToast('error', 'Please select a rejection cause');
+                return;
+            }
+            
+            data.rejection_cause = rejectionCause;
+            data.rejection_notes = rejectionNotes;
+        }
+        
+        // Submit the status update
+        fetch(`/testapp/tax/stamp_rights/declaration/${declarationId}/status/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            },
+            body: JSON.stringify(data)
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.status === 'success') {
+                // Close the modal
+                bootstrap.Modal.getInstance(document.getElementById('stampRightsStatusModal')).hide();
+                
+                // Show success message
+                showToast('success', result.message);
+                
+                // Refresh the forecasts
+                if (document.getElementById('stampRightsForecastModal').classList.contains('show')) {
+                    bootstrap.Modal.getInstance(document.getElementById('stampRightsForecastModal')).hide();
+                }
+                
+                // Refresh pending forecasts if opened
+                if (document.getElementById('pendingForecastsModal').classList.contains('show')) {
+                    const currentBank = document.getElementById('pendingForecastsModal').dataset.bankId;
+                    viewPendingForecasts(currentBank);
+                } else {
+                    // Otherwise refresh calendar
+                    updateCalendar();
+                }
+            } else {
+                showToast('error', result.message || 'Error updating status');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', 'Failed to update status');
+        });
     });
 
     // Handle check payment confirmation

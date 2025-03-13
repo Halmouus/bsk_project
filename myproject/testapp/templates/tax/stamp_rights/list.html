@@ -149,6 +149,26 @@
                         <input type="date" class="form-control" id="statusDate" 
                                value="{% now 'Y-m-d' %}" required>
                     </div>
+                    
+                    <!-- Rejection cause field (shown only for rejection) -->
+                    <div class="mb-3" id="rejectionCauseGroup" style="display: none;">
+                        <label for="rejectionCause" class="form-label">Rejection Cause</label>
+                        <select class="form-control" id="rejectionCause" required>
+                            <option value="">Select a cause...</option>
+                            <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                            <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                            <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                            <option value="TECHNICAL_ERROR">Technical Error</option>
+                            <option value="BANK_ERROR">Bank Processing Error</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+                    
+                    <!-- Notes field for rejection -->
+                    <div class="mb-3" id="rejectionNotesGroup" style="display: none;">
+                        <label for="rejectionNotes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="rejectionNotes" rows="3"></textarea>
+                    </div>
                 </form>
             </div>
             <div class="modal-footer">
@@ -228,10 +248,14 @@ $(document).ready(function() {
         $('#statusAction').val('paid');
         $('#statusModalTitle').text('Mark as Paid');
         
+        // Hide rejection-specific fields
+        $('#rejectionCauseGroup, #rejectionNotesGroup').hide();
+        $('#rejectionCause').prop('required', false);
+        
         const modal = new bootstrap.Modal(document.getElementById('statusModal'));
         modal.show();
     });
-    
+
     // Mark as rejected button
     $('.mark-rejected').click(function() {
         const declarationId = $(this).data('id');
@@ -239,24 +263,44 @@ $(document).ready(function() {
         $('#statusAction').val('rejected');
         $('#statusModalTitle').text('Mark as Rejected');
         
+        // Show rejection-specific fields
+        $('#rejectionCauseGroup, #rejectionNotesGroup').show();
+        $('#rejectionCause').prop('required', true);
+        
         const modal = new bootstrap.Modal(document.getElementById('statusModal'));
         modal.show();
     });
-    
+
     // Confirm status change
     $('#confirmStatus').click(function() {
         const declarationId = $('#declarationId').val();
         const status = $('#statusAction').val();
         const date = $('#statusDate').val();
         
+        let data = {
+            status: status,
+            date: date
+        };
+        
+        // Add rejection cause and notes for rejected status
+        if (status === 'rejected') {
+            const rejectionCause = $('#rejectionCause').val();
+            const rejectionNotes = $('#rejectionNotes').val();
+            
+            if (!rejectionCause) {
+                showToast('error', 'Rejection cause is required');
+                return;
+            }
+            
+            data.rejection_cause = rejectionCause;
+            data.rejection_notes = rejectionNotes;
+        }
+        
         $.ajax({
-            url: `/testapp/tax/stamp_rights/declaration/${declarationId}/status/`,
+            url: `/testapp/tax/stamp-rights/declaration/${declarationId}/status/`,
             type: 'POST',
             contentType: 'application/json',
-            data: JSON.stringify({
-                status: status,
-                date: date
-            }),
+            data: JSON.stringify(data),
             success: function(response) {
                 bootstrap.Modal.getInstance(document.getElementById('statusModal')).hide();
                 showToast('success', response.message);

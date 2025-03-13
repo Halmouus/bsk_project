@@ -373,6 +373,127 @@
                             </div>
                         </div>
                     </div>
+                    {% elif entry.type == 'IR_PAYMENT' %}
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card border-primary mb-0">
+                                <div class="card-header bg-primary d-flex align-items-center">
+                                    <i class="fas fa-money-check-alt text-white"></i>&nbsp;&nbsp;
+                                    <h6 class="mb-0 ms-2 text-white">IR Payment Details</h6>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="row">
+                                        <!-- Period & Payment Info -->
+                                        <div class="col-md-6 border-end">
+                                            <div class="d-flex align-items-center mb-3">
+                                                <span class="badge bg-info p-2"><i class="fas fa-calendar"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Period</span>
+                                                    <span class="fw-bold">{{ entry.period }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center mb-3">
+                                                <span class="badge bg-warning p-2"><i class="fas fa-clock"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Due Date</span>
+                                                    <span>{{ entry.due_date }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge bg-success p-2"><i class="fas fa-check-circle"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Paid Date</span>
+                                                    <span>{{ entry.date }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Financial Info -->
+                                        <div class="col-md-6">
+                                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-dollar-sign text-muted"></i>&nbsp;&nbsp;
+                                                    <span>Salary Amount</span>
+                                                </div>
+                                                <span class="fw-bold">{{ entry.salary_amount|format_balance }}</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-hand-holding-usd text-danger"></i>&nbsp;&nbsp;
+                                                    <span>Tax Amount</span>
+                                                </div>
+                                                <span class="fw-bold fs-5 text-danger">{{ entry.tax_amount|format_balance }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% elif entry.type == 'STAMP_PAYMENT' %}
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card border-purple mb-0" style="border-color: #6f42c1">
+                                <div class="card-header d-flex align-items-center" style="background-color: #6f42c1">
+                                    <i class="fas fa-stamp text-white"></i>&nbsp;&nbsp;
+                                    <h6 class="mb-0 ms-2 text-white">Stamp Rights Payment Details</h6>
+                                </div>
+                                <div class="card-body p-3">
+                                    <div class="row">
+                                        <!-- Period & Payment Info -->
+                                        <div class="col-md-6 border-end">
+                                            <div class="d-flex align-items-center mb-3">
+                                                <span class="badge rounded-pill bg-info p-2"><i class="fas fa-calendar"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Period</span>
+                                                    <span class="fw-bold">{{ entry.period }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center mb-3">
+                                                <span class="badge rounded-pill bg-warning p-2"><i class="fas fa-clock"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Due Date</span>
+                                                    <span>{{ entry.due_date }}</span>
+                                                </div>
+                                            </div>
+                                            <div class="d-flex align-items-center">
+                                                <span class="badge rounded-pill bg-success p-2"><i class="fas fa-check-circle"></i></span>&nbsp;&nbsp;
+                                                <div class="ms-2">
+                                                    <span class="d-block text-muted small">Paid Date</span>
+                                                    <span>{{ entry.date }}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Financial Info -->
+                                        <div class="col-md-6">
+                                            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-file-invoice text-primary"></i>&nbsp;&nbsp;
+                                                    <span>Invoices Amount</span>
+                                                </div>
+                                                <span class="fw-bold">{{ entry.invoices_amount|format_balance }}</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-percentage text-muted"></i>&nbsp;&nbsp;
+                                                    <span>Tax Rate</span>
+                                                </div>
+                                                <span class="fw-bold">0.25%</span>
+                                            </div>
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="fas fa-money-bill-wave text-danger"></i>&nbsp;&nbsp;
+                                                    <span>Tax Amount</span>
+                                                </div>
+                                                <span class="fw-bold fs-5 text-danger">{{ entry.tax_amount|format_balance }}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     {% elif 'CHECK' in entry.type or 'LCN' in entry.type %}
                     <div class="row">
                         <div class="col-md-6">

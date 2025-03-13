@@ -161,11 +161,16 @@
         let taxRate = '{{ config.tax_rate|default:"0.25" }}';
         taxRate = parseFloat(taxRate.replace(',', '.'));
         
-        let taxAmount = (parseFloat(invoicesAmount || 0) * taxRate / 100).toFixed(2);
+        // Calculate tax amount as a percentage and round up to the nearest integer
+        let taxAmount = Math.ceil(parseFloat(invoicesAmount || 0) * taxRate / 100);
+        
+        // Convert to string for formatting
+        taxAmount = taxAmount.toString();
         
         // Format with user's locale preference (comma or period)
         if (document.getElementById('invoices_amount').value.includes(',')) {
-            taxAmount = taxAmount.replace('.', ',');
+            // If we need decimal places, we would use: taxAmount = taxAmount.replace('.', ',');
+            // But with Math.ceil() we're working with integers
         }
         
         document.getElementById('tax_amount').value = taxAmount;

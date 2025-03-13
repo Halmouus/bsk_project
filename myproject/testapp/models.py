@@ -1,4 +1,5 @@
 import calendar
+import math
 import os
 import uuid
 from django.db import models, transaction
@@ -4400,6 +4401,10 @@ class BankStatement(models.Model):
                         'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
                         'source_type': 'ir_declaration',
                         'source_id': declaration.id,
+                        'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                        'salary_amount': float(declaration.salary_amount),
+                        'tax_amount': float(declaration.tax_amount),
+                        'due_date': declaration.due_date.strftime('%Y-%m-%d'),
                         'can_delete': False,
                         'can_transfer': False,
                         'is_transferred': False,
@@ -4446,6 +4451,10 @@ class BankStatement(models.Model):
                     'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
                     'source_type': 'stamp_right_declaration',
                     'source_id': declaration.id,
+                    'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                    'invoices_amount': float(declaration.invoices_amount),
+                    'tax_amount': float(declaration.tax_amount),
+                    'due_date': declaration.due_date.strftime('%Y-%m-%d'),
                     'can_delete': False,
                     'can_transfer': False,
                     'is_transferred': False,
@@ -8617,6 +8626,15 @@ class IRDeclaration(BaseModel):
         ('paid', 'Paid'),
         ('rejected', 'Rejected')
     ]
+
+    REJECTION_CAUSES = [
+        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
+        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
+        ('SIGNATURE_MISMATCH', 'Signature Mismatch'),
+        ('TECHNICAL_ERROR', 'Technical Error'),
+        ('BANK_ERROR', 'Bank Processing Error'),
+        ('OTHER', 'Other')
+    ]
     
     period_month = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]
@@ -8642,6 +8660,17 @@ class IRDeclaration(BaseModel):
         null=True,
         blank=True,
         help_text="Date when the declaration was paid"
+    )
+    rejection_cause = models.CharField(
+        max_length=20,
+        choices=REJECTION_CAUSES,
+        null=True,
+        blank=True,
+        help_text="Reason for rejection"
+    )
+    rejection_notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about rejection"
     )
     rejection_date = models.DateField(
         null=True,
@@ -8816,13 +8845,19 @@ class IRDeclaration(BaseModel):
         
         print("IR declaration marked as paid")
 
-    def mark_as_rejected(self, rejection_date=None):
-        """Mark declaration as rejected"""
+    def mark_as_rejected(self, rejection_date=None, rejection_cause=None, rejection_notes=None):
+        """Mark declaration as rejected with cause and notes"""
         print(f"\n=== Marking IR declaration {self.period_month}/{self.period_year} as rejected ===")
         
         self.status = 'rejected'
         self.rejection_date = rejection_date or timezone.now().date()
         self.payment_date = None
+        
+        # Store rejection cause and notes
+        if rejection_cause:
+            self.rejection_cause = rejection_cause
+        if rejection_notes:
+            self.rejection_notes = rejection_notes
         
         # Update forecast (will be deleted)
         self._update_forecast()
@@ -8918,6 +8953,15 @@ class StampRightDeclaration(BaseModel):
         ('paid', 'Paid'),
         ('rejected', 'Rejected')
     ]
+
+    REJECTION_CAUSES = [
+        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
+        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
+        ('SIGNATURE_MISMATCH', 'Signature Mismatch'),
+        ('TECHNICAL_ERROR', 'Technical Error'),
+        ('BANK_ERROR', 'Bank Processing Error'),
+        ('OTHER', 'Other')
+    ]
     
     period_month = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]
@@ -8953,6 +8997,17 @@ class StampRightDeclaration(BaseModel):
         blank=True,
         help_text="Additional notes"
     )
+    rejection_cause = models.CharField(
+        max_length=20,
+        choices=REJECTION_CAUSES,
+        null=True,
+        blank=True,
+        help_text="Reason for rejection"
+    )
+    rejection_notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about rejection"
+    )
     forecast = models.ForeignKey(
         'ForecastStatement',
         on_delete=models.SET_NULL,
@@ -8968,8 +9023,11 @@ class StampRightDeclaration(BaseModel):
         # Calculate tax amount based on rate from configuration
         config = StampRightConfiguration.get_config()
         if not self.tax_amount or self.tax_amount == 0:
-            self.tax_amount = (self.invoices_amount * config.tax_rate) / Decimal('100.0')
-            print(f"Calculated tax amount: {self.tax_amount} (rate: {config.tax_rate}%)")
+            # Calculate tax amount and round up to the nearest integer
+            raw_tax_amount = (self.invoices_amount * config.tax_rate) / Decimal('100.0')
+            self.tax_amount = Decimal(math.ceil(raw_tax_amount))
+            print(f"Calculated tax amount: {self.tax_amount} (rounded up from {raw_tax_amount}, rate: {config.tax_rate}%)")
+        
         
         if not self.due_date:
             day = config.declaration_day
@@ -9121,19 +9179,26 @@ class StampRightDeclaration(BaseModel):
         
         print("Stamp Rights declaration marked as paid")
 
-    def mark_as_rejected(self, rejection_date=None):
-        """Mark declaration as rejected"""
+    def mark_as_rejected(self, rejection_date=None, rejection_cause=None, rejection_notes=None):
+        """Mark declaration as rejected with cause and notes"""
         print(f"\n=== Marking Stamp Rights declaration {self.period_month}/{self.period_year} as rejected ===")
         
         self.status = 'rejected'
         self.rejection_date = rejection_date or timezone.now().date()
         self.payment_date = None
         
+        # Store rejection cause and notes
+        if rejection_cause:
+            self.rejection_cause = rejection_cause
+        if rejection_notes:
+            self.rejection_notes = rejection_notes
+        
         # Update forecast (will be deleted)
         self._update_forecast()
         self.save()
         
         print("Stamp Rights declaration marked as rejected")
+
 
     def __str__(self):
         return f"Stamp Rights Declaration {self.period_month:02d}/{self.period_year}"

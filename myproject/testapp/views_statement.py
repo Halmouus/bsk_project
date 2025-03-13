@@ -970,18 +970,42 @@ class PendingForecastsView(View):
                         
                         forecast_data = {
                             'type': 'IR Payment',
-                            'number': period,
-                            'source_id': str(forecast.id),  # Use forecast ID if no declaration
-                            'source_type': forecast.source_type,
+                            'payment_type': 'IR Declaration',
+                            'number': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
+                            'status': declaration.status,
+                            'status_display': dict(IRDeclaration.STATUS_CHOICES).get(declaration.status, declaration.status),
+                            'source_id': str(declaration.id),  # Make sure this is a string
                             'bank': bank.get_bank_display(),
-                            'due_date': forecast.date.strftime('%Y-%m-%d'),
                             'amount': float(forecast.debit or 0),
-                            'status': declaration.status if declaration else 'pending',
-                            'status_display': declaration.get_status_display() if declaration else 'Pending'
+                            'due_date': forecast.date.strftime('%Y-%m-%d'),
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                            'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                            'salary_amount': float(declaration.salary_amount),
+                            'tax_amount': float(declaration.tax_amount)
                         }
                         
                         forecasts_data.append(forecast_data)
                         print(f"Added IR forecast: {forecast.label}, amount: {forecast.debit}")
+                    except IRDeclaration.DoesNotExist:
+                        print(f"IR Declaration not found with ID: {forecast.source_id}")
+                        # For debugging only - check if forecast source ID is valid
+                        try:
+                            if forecast.source_id:
+                                print(f"Source ID format: {type(forecast.source_id)} - {forecast.source_id}")
+                                # Try to see if we can find it with different casting
+                                if isinstance(forecast.source_id, str):
+                                    try:
+                                        # Convert string to UUID
+                                        from uuid import UUID
+                                        uuid_obj = UUID(forecast.source_id)
+                                        declaration = IRDeclaration.objects.filter(id=uuid_obj).first()
+                                        if declaration:
+                                            print(f"Found with UUID conversion: {declaration.id}")
+                                    except Exception as e:
+                                        print(f"UUID conversion failed: {e}")
+                        except Exception as e:
+                            print(f"Error checking source ID: {e}")
+                        continue
                     except Exception as e:
                         print(f"Error processing IR declaration: {str(e)}")
                         print(traceback.format_exc())

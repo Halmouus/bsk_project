@@ -292,7 +292,11 @@ class IRDeclarationStatusView(View):
                 declaration.mark_as_paid(status_date)
                 message = f"Declaration {declaration.period_month:02d}/{declaration.period_year} marked as paid"
             else:
-                declaration.mark_as_rejected(status_date)
+                # Extract rejection cause and notes
+                rejection_cause = data.get('rejection_cause')
+                rejection_notes = data.get('rejection_notes', '')
+                
+                declaration.mark_as_rejected(status_date, rejection_cause, rejection_notes)
                 message = f"Declaration {declaration.period_month:02d}/{declaration.period_year} marked as rejected"
             
             return JsonResponse({
