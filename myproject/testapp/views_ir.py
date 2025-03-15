@@ -256,10 +256,18 @@ class IRDeclarationFormView(View):
                 # Save will handle forecast creation
                 declaration.save()
             
-            return JsonResponse({
-                'status': 'success',
-                'message': 'Declaration saved successfully'
-            })
+            # Return response with declaration ID for new declarations
+            if not declaration_id:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Declaration saved successfully',
+                    'declaration_id': str(declaration.id)
+                })
+            else:
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Declaration updated successfully'
+                })
             
         except Exception as e:
             return JsonResponse({
@@ -453,6 +461,110 @@ class IRForecastView(View):
 
         except Exception as e:
             print(f"Error in IRForecastView: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class IRDocumentUploadView(View):
+    """View for uploading IR declaration or payment documents"""
+    def post(self, request, declaration_id):
+        try:
+            declaration = get_object_or_404(IRDeclaration, id=declaration_id)
+            
+            document_type = request.POST.get('document_type')
+            if document_type not in ['declaration', 'payment']:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Invalid document type'
+                }, status=400)
+                
+            file = request.FILES.get('document')
+            if not file:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'No file uploaded'
+                }, status=400)
+            
+            # Check file size (limit to 10MB)
+            if file.size > 10 * 1024 * 1024:  # 10MB in bytes
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'File size exceeds 10MB limit'
+                }, status=400)
+                
+            # Check file type (optional)
+            allowed_extensions = ['pdf', 'jpg', 'jpeg', 'png']
+            file_extension = file.name.split('.')[-1].lower()
+            if file_extension not in allowed_extensions:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': f'Invalid file type. Allowed types: {", ".join(allowed_extensions)}'
+                }, status=400)
+            
+            # Delete existing document if present
+            if document_type == 'declaration' and declaration.declaration_document:
+                declaration.declaration_document.delete()
+            elif document_type == 'payment' and declaration.payment_document:
+                declaration.payment_document.delete()
+            
+            # Set the appropriate document field
+            if document_type == 'declaration':
+                declaration.declaration_document = file
+            else:  # payment
+                declaration.payment_document = file
+                
+            declaration.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': f'Document uploaded successfully',
+                'document_url': declaration.declaration_document.url if document_type == 'declaration' else declaration.payment_document.url
+            })
+            
+        except Exception as e:
+            print(f"Error uploading document: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        
+class IRDocumentDeleteView(View):
+    """View for deleting IR declaration or payment documents"""
+    def post(self, request, declaration_id):
+        try:
+            declaration = get_object_or_404(IRDeclaration, id=declaration_id)
+            
+            data = json.loads(request.body)
+            document_type = data.get('document_type')
+            
+            if document_type not in ['declaration', 'payment']:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Invalid document type'
+                }, status=400)
+                
+            # Delete the appropriate document
+            if document_type == 'declaration':
+                if declaration.declaration_document:
+                    declaration.declaration_document.delete()
+                    declaration.declaration_document = None
+            else:  # payment
+                if declaration.payment_document:
+                    declaration.payment_document.delete()
+                    declaration.payment_document = None
+                    
+            declaration.save()
+            
+            return JsonResponse({
+                'status': 'success',
+                'message': f'{document_type.capitalize()} document deleted successfully'
+            })
+            
+        except Exception as e:
+            print(f"Error deleting document: {str(e)}")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',

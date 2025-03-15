@@ -1,0 +1,93 @@
+{% load accounting_filters %}
+{% load i18n %}
+
+<div class="modal-header">
+    <h5 class="modal-title">
+        <i class="fas fa-exclamation-circle me-2"></i> {{ title }}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<div class="modal-body">
+    <form id="fineForm">
+        {% csrf_token %}
+        <input type="hidden" id="fineDeclarationId" value="{{ declaration.id }}">
+        {% if fine %}
+        <input type="hidden" id="fineId" value="{{ fine.id }}">
+        {% endif %}
+        
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="fineAmount" class="form-label">{% trans "Fine Amount" %}</label>
+                <div class="input-group">
+                    <input type="text" class="form-control decimal-input" id="fineAmount" name="fineAmount" 
+                        value="{{ fine.amount|default:'0.00' }}" required>
+                    <span class="input-group-text">MAD</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label for="fineDate" class="form-label">{% trans "Fine Date" %}</label>
+                <input type="date" class="form-control" id="fineDate" name="fineDate" 
+                       value="{{ fine.fine_date|date:'Y-m-d'|default:'' }}" required>
+            </div>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <label for="fineReference" class="form-label">{% trans "Reference" %}</label>
+                <input type="text" class="form-control" id="fineReference" name="fineReference" 
+                       value="{{ fine.reference|default:'' }}">
+            </div>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-12">
+                <label for="fineDescription" class="form-label">{% trans "Description" %}</label>
+                <textarea class="form-control" id="fineDescription" name="fineDescription" rows="3">{{ fine.description|default:'' }}</textarea>
+            </div>
+        </div>
+        
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="finePaid" name="finePaid" 
+                           {% if fine and fine.paid %}checked{% endif %}>
+                    <label class="form-check-label" for="finePaid">
+                        {% trans "Fine Paid" %}
+                    </label>
+                </div>
+            </div>
+            <div class="col-md-6 payment-date-container" style="display: none;">
+                <label for="finePaymentDate" class="form-label">{% trans "Payment Date" %}</label>
+                <input type="date" class="form-control" id="finePaymentDate" name="finePaymentDate" 
+                       value="{{ fine.payment_date|date:'Y-m-d'|default:'' }}">
+            </div>
+        </div>
+    </form>
+</div>
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+        {% trans "Cancel" %}
+    </button>
+    <button type="button" class="btn btn-primary" id="saveFine">
+        <i class="fas fa-save me-2"></i> {% trans "Save Fine" %}
+    </button>
+</div>
+
+<script>
+// Format decimal inputs
+$(document).ready(function() {
+    $('.decimal-input').on('input', function() {
+        // Allow both comma and period during input
+        $(this).val($(this).val().replace(/[^0-9.,]/g, ''));
+    });
+    
+    // Toggle payment date visibility
+    $('#finePaid').change(function() {
+        if ($(this).is(':checked')) {
+            $('.payment-date-container').show();
+        } else {
+            $('.payment-date-container').hide();
+        }
+    }).trigger('change');
+});
+</script>

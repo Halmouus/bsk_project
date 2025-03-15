@@ -1,6 +1,7 @@
 from django.urls import path, include
 
-from . import views_ir, views_stamp_rights
+
+from . import views_ir, views_stamp_rights, views_other_taxes
 
 
 from .views_users import initialize_user_profiles, user_management, user_activity, create_user, user_permissions
@@ -379,6 +380,8 @@ urlpatterns = [
     path('tax/ir/declaration/<uuid:declaration_id>/status/', views_ir.IRDeclarationStatusView.as_view(), name='ir-declaration-status'),
     path('tax/ir/declaration/<uuid:declaration_id>/delete/', views_ir.IRDeclarationDeleteView.as_view(), name='ir-declaration-delete'),
     path('tax/ir/calendar/<uuid:declaration_id>/status/', views_ir.IRCalendarStatusView.as_view(), name='ir-calendar-status'),
+    path('tax/ir/declaration/<uuid:declaration_id>/upload-document/', views_ir.IRDocumentUploadView.as_view(), name='ir-document-upload'),
+    path('tax/ir/declaration/<uuid:declaration_id>/delete-document/', views_ir.IRDocumentDeleteView.as_view(), name='ir-document-delete'),
 
     # Stamp Rights URLs
     path('tax/stamp_rights/', views_stamp_rights.StampRightListView.as_view(), name='stamp-right-list'),
@@ -388,7 +391,37 @@ urlpatterns = [
     path('tax/stamp_rights/declaration/<uuid:declaration_id>/status/', views_stamp_rights.StampRightDeclarationStatusView.as_view(), name='stamp-right-declaration-status'),
     path('tax/stamp_rights/declaration/<uuid:declaration_id>/delete/', views_stamp_rights.StampRightDeclarationDeleteView.as_view(), name='stamp-right-declaration-delete'),
     path('tax/stamp_rights/calendar/<uuid:declaration_id>/status/', views_stamp_rights.StampRightCalendarStatusView.as_view(), name='stamp-right-calendar-status'),
+    path('tax/stamp-rights/declaration/<uuid:declaration_id>/upload-document/', views_stamp_rights.StampRightDocumentUploadView.as_view(), name='stamp-right-document-upload'),
+    path('tax/stamp-rights/declaration/<uuid:declaration_id>/delete-document/', views_stamp_rights.StampRightDocumentDeleteView.as_view(), name='stamp-right-document-delete'),
 
+    # Professional Tax URLs
+    path('tax/professional/', views_other_taxes.OtherTaxListView.as_view(), {'tax_type': 'professional'}, name='professional-tax-list'),
+    path('tax/professional/config/', views_other_taxes.OtherTaxConfigFormView.as_view(), {'tax_type': 'professional'}, name='professional-tax-config'),
+    path('tax/professional/declaration/new/', views_other_taxes.OtherTaxDeclarationFormView.as_view(), {'tax_type': 'professional'}, name='professional-tax-declaration-new'),
+    path('tax/professional/declaration/<uuid:declaration_id>/', views_other_taxes.OtherTaxDeclarationFormView.as_view(), {'tax_type': 'professional'}, name='professional-tax-declaration-edit'),
+    path('tax/professional/declaration/<uuid:declaration_id>/status/', views_other_taxes.OtherTaxDeclarationStatusView.as_view(), {'tax_type': 'professional'}, name='professional-tax-declaration-status'),
+    path('tax/professional/declaration/<uuid:declaration_id>/delete/', views_other_taxes.OtherTaxDeclarationDeleteView.as_view(), {'tax_type': 'professional'}, name='professional-tax-declaration-delete'),
+    path('tax/professional/declaration/<uuid:declaration_id>/fine/add/', views_other_taxes.TaxFineFormView.as_view(), {'tax_type': 'professional'}, name='professional-tax-fine-add'),
+    path('tax/professional/declaration/<uuid:declaration_id>/fine/<uuid:fine_id>/', views_other_taxes.TaxFineFormView.as_view(), {'tax_type': 'professional'}, name='professional-tax-fine-edit'),
+    path('tax/professional/declaration/<uuid:declaration_id>/fine/<uuid:fine_id>/delete/', views_other_taxes.TaxFineDeleteView.as_view(), {'tax_type': 'professional'}, name='professional-tax-fine-delete'),
+    path('tax/professional/declaration/<uuid:declaration_id>/upload-document/', views_other_taxes.OtherTaxDocumentUploadView.as_view(), {'tax_type': 'professional'}, name='professional-tax-document-upload'),
+    path('tax/professional/declaration/<uuid:declaration_id>/delete-document/', views_other_taxes.OtherTaxDocumentDeleteView.as_view(), {'tax_type': 'professional'}, name='professional-tax-document-delete'),
+    path('tax/professional/forecasts/', views_other_taxes.OtherTaxForecastView.as_view(), {'tax_type': 'professional'}, name='professional-tax-forecasts'),
+
+    # Communal Tax URLs
+    path('tax/communal/', views_other_taxes.OtherTaxListView.as_view(), {'tax_type': 'communal'}, name='communal-tax-list'),
+    path('tax/communal/config/', views_other_taxes.OtherTaxConfigFormView.as_view(), {'tax_type': 'communal'}, name='communal-tax-config'),
+    path('tax/communal/declaration/new/', views_other_taxes.OtherTaxDeclarationFormView.as_view(), {'tax_type': 'communal'}, name='communal-tax-declaration-new'),
+    path('tax/communal/declaration/<uuid:declaration_id>/', views_other_taxes.OtherTaxDeclarationFormView.as_view(), {'tax_type': 'communal'}, name='communal-tax-declaration-edit'),
+    path('tax/communal/declaration/<uuid:declaration_id>/status/', views_other_taxes.OtherTaxDeclarationStatusView.as_view(), {'tax_type': 'communal'}, name='communal-tax-declaration-status'),
+    path('tax/communal/declaration/<uuid:declaration_id>/delete/', views_other_taxes.OtherTaxDeclarationDeleteView.as_view(), {'tax_type': 'communal'}, name='communal-tax-declaration-delete'),
+    path('tax/communal/declaration/<uuid:declaration_id>/fine/add/', views_other_taxes.TaxFineFormView.as_view(), {'tax_type': 'communal'}, name='communal-tax-fine-add'),
+    path('tax/communal/declaration/<uuid:declaration_id>/fine/<uuid:fine_id>/', views_other_taxes.TaxFineFormView.as_view(), {'tax_type': 'communal'}, name='communal-tax-fine-edit'),
+    path('tax/communal/declaration/<uuid:declaration_id>/fine/<uuid:fine_id>/delete/', views_other_taxes.TaxFineDeleteView.as_view(), {'tax_type': 'communal'}, name='communal-tax-fine-delete'),
+    path('tax/communal/declaration/<uuid:declaration_id>/upload-document/', views_other_taxes.OtherTaxDocumentUploadView.as_view(), {'tax_type': 'communal'}, name='communal-tax-document-upload'),
+    path('tax/communal/declaration/<uuid:declaration_id>/delete-document/', views_other_taxes.OtherTaxDocumentDeleteView.as_view(), {'tax_type': 'communal'}, name='communal-tax-document-delete'),
+    path('tax/communal/forecasts/', views_other_taxes.OtherTaxForecastView.as_view(), {'tax_type': 'communal'}, name='communal-tax-forecasts'),
+    
     # Pay URLs    
     path('pay/config/', PayConfigurationView.as_view(), name='pay-config'),
     path('pay/', PayListView.as_view(), name='pay-list'),

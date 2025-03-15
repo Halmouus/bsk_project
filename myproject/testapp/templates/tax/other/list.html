@@ -1,0 +1,986 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+{% load i18n %}
+
+{% block title %}{{ tax_type_display }} Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-file-invoice-dollar me-2"></i> {% trans tax_type_display %} Management</h2>
+        <div class="d-flex gap-2">
+            <button id="configButton" class="btn btn-info">
+                <i class="fas fa-cog me-2"></i> {% trans "Configuration" %}
+            </button>
+            <button id="newDeclarationBtn" class="btn btn-primary" {% if not configured %}disabled{% endif %}>
+                <i class="fas fa-plus me-2"></i> {% trans "New Declaration" %}
+            </button>
+        </div>
+    </div>
+
+    {% if not configured %}
+    <div class="alert alert-warning">
+        <i class="fas fa-exclamation-triangle me-2"></i>
+        {% trans "Please configure" %} {{ tax_type_display }} {% trans "settings first" %}
+    </div>
+    {% endif %}
+
+    <!-- Declarations Table -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">{{ tax_type_display }} {% trans "Declarations" %}</h5>
+        </div>
+        <div class="card-body">
+            <div>
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>{% trans "Year" %}</th>
+                            <th>{% trans "Amount" %}</th>
+                            <th>{% trans "Paid Amount" %}</th>
+                            <th>{% trans "Due Date" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Payment Method" %}</th>
+                            <th class="text-center">{% trans "Actions" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for declaration in declarations %}
+                        <tr>
+                            <td>{{ declaration.year }}</td>
+                            <td>{{ declaration.amount|format_balance }}</td>
+                            <td>{{ declaration.paid_amount|format_balance }}</td>
+                            <td>{{ declaration.due_date|date:"Y-m-d" }}</td>
+                            <td>
+                                {% if declaration.status == 'declared' %}
+                                <span class="badge bg-primary text-white">{% trans "Declared" %}</span>
+                                {% elif declaration.status == 'partially_paid' %}
+                                <span class="badge bg-warning text-dark">{% trans "Partially Paid" %}</span>
+                                {% elif declaration.status == 'paid' %}
+                                <span class="badge bg-success text-white">{% trans "Paid" %}</span>
+                                {% elif declaration.status == 'rejected' %}
+                                <span class="badge bg-danger text-white">{% trans "Rejected" %}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if declaration.payment_method %}
+                                {{ declaration.get_payment_method_display }}
+                                {% else %}
+                                <span class="text-muted">{% trans "None" %}</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-center">
+                                <div class="btn-group">
+                                    {% if declaration.status != 'paid' %}
+                                    <button class="btn btn-sm btn-primary edit-declaration" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Edit Declaration' %}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-success add-payment" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Add Payment' %}">
+                                        <i class="fas fa-money-bill-wave"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-warning add-fine" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Add Fine' %}">
+                                        <i class="fas fa-exclamation-circle"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-danger mark-rejected" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Mark as Rejected' %}">
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger delete-declaration" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Delete Declaration' %}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-info view-declaration" data-id="{{ declaration.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% endif %}
+                                    
+                                    <!-- Document dropdown -->
+                                    {% if declaration.tax_notice_document or declaration.payment_receipt_document %}
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle" 
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="fas fa-file-alt"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            {% if declaration.tax_notice_document %}
+                                            <li>
+                                                <a class="dropdown-item view-document" href="#" 
+                                                   data-document-url="{{ declaration.tax_notice_document.url }}" 
+                                                   data-document-type="tax_notice">
+                                                    <i class="fas fa-file-pdf me-2"></i> View Tax Notice
+                                                </a>
+                                            </li>
+                                            {% else %}
+                                            <li>
+                                                <span class="dropdown-item disabled">
+                                                    <i class="fas fa-file-pdf me-2"></i> No Tax Notice
+                                                </span>
+                                            </li>
+                                            {% endif %}
+                                            
+                                            {% if declaration.payment_receipt_document %}
+                                            <li>
+                                                <a class="dropdown-item view-document" href="#" 
+                                                   data-document-url="{{ declaration.payment_receipt_document.url }}"
+                                                   data-document-type="payment_receipt">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> View Payment Receipt
+                                                </a>
+                                            </li>
+                                            {% else %}
+                                            <li>
+                                                <span class="dropdown-item disabled">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> No Payment Receipt
+                                                </span>
+                                            </li>
+                                            {% endif %}
+                                        </ul>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center">
+                                {% if configured %}
+                                {% trans "No declarations found. Create your first declaration." %}
+                                {% else %}
+                                {% trans "Please configure" %} {{ tax_type_display }} {% trans "settings first" %}
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Configuration Modal -->
+<div class="modal fade" id="configModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" id="configModalContent">
+            <!-- Content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Declaration Modal -->
+<div class="modal fade" id="declarationModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content" id="declarationModalContent">
+            <!-- Content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Payment Modal -->
+<div class="modal fade" id="paymentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Payment</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="paymentForm">
+                    <input type="hidden" id="declarationId">
+                    
+                    <div class="mb-3">
+                        <label for="paymentAmount" class="form-label">Payment Amount</label>
+                        <input type="text" class="form-control" id="paymentAmount" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="paymentMethod" class="form-label">Payment Method</label>
+                        <select class="form-control" id="paymentMethod" required>
+                            <option value="">Select Method</option>
+                            <option value="direct_debit">Direct Debit</option>
+                            <option value="check">Check</option>
+                            <option value="lcn">LCN</option>
+                            <option value="cash">Cash</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="paymentDate" class="form-label">Payment Date</label>
+                        <input type="date" class="form-control" id="paymentDate" 
+                               value="{% now 'Y-m-d' %}" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmPayment">Confirm Payment</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Fine Modal -->
+<div class="modal fade" id="fineModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content" id="fineModalContent">
+            <!-- Content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Rejection Modal -->
+<div class="modal fade" id="rejectionModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Mark as Rejected</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="rejectionForm">
+                    <input type="hidden" id="rejectionDeclarationId">
+                    
+                    <div class="mb-3">
+                        <label for="rejectionDate" class="form-label">Rejection Date</label>
+                        <input type="date" class="form-control" id="rejectionDate" 
+                               value="{% now 'Y-m-d' %}" required>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="rejectionCause" class="form-label">Rejection Cause</label>
+                        <select class="form-control" id="rejectionCause" required>
+                            <option value="">Select Cause</option>
+                            <option value="INSUFFICIENT_FUNDS">Insufficient Funds</option>
+                            <option value="ACCOUNT_CLOSED">Account Closed/Frozen</option>
+                            <option value="SIGNATURE_MISMATCH">Signature Mismatch</option>
+                            <option value="TECHNICAL_ERROR">Technical Error</option>
+                            <option value="BANK_ERROR">Bank Error</option>
+                            <option value="OTHER">Other</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="rejectionNotes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="rejectionNotes" rows="3"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmRejection">Confirm</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Preview Modal -->
+<div class="modal fade" id="documentPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentPreviewTitle">Document Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="document-preview-container" style="height: 70vh;">
+                    <!-- Document will be embedded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" id="downloadDocumentBtn" target="_blank">
+                    <i class="fas fa-download me-2"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TAX_URLS = {
+    config: "{% url tax_type|add:'-tax-config' %}",
+    newDeclaration: "{% url tax_type|add:'-tax-declaration-new' %}",
+    declarationBase: "/testapp/tax/{{ tax_type }}/declaration/",
+    documentUploadBase: "/testapp/tax/{{ tax_type }}/declaration/",
+    documentDeleteBase: "/testapp/tax/{{ tax_type }}/declaration/",
+    fineAddBase: "/testapp/tax/{{ tax_type }}/declaration/",
+    fineEditBase: "/testapp/tax/{{ tax_type }}/declaration/",
+    fineDeleteBase: "/testapp/tax/{{ tax_type }}/declaration/"
+};
+$(document).ready(function() {
+    $('[data-bs-toggle="tooltip"]').tooltip();
+    // Configuration modal
+    $('#configButton').click(function() {   
+        let url = TAX_URLS.config;
+        
+        $.get(url)
+            .done(function(response) {
+                $('#configModalContent').html(response.html);
+                $('#configModal').modal('show');
+                
+                // Save button handler
+                $('#saveConfig').click(function() {
+                    // Format decimal values
+                    let defaultAmount = $('#default_amount').val().replace(',', '.');
+                    
+                    const formData = {
+                        accounting_code: $('#accounting_code').val(),
+                        journal_code: $('#journal_code').val(),
+                        domiciliation_bank: $('#domiciliation_bank').val(),
+                        forecast_bank: $('#forecast_bank').val(),
+                        default_amount: defaultAmount,
+                        due_month: $('#due_month').val(),
+                        due_day: $('#due_day').val(),
+                        fines_accounting_code: $('#fines_accounting_code').val()
+                    };
+                    
+                    $.ajax({
+                        url: url,
+                        type: 'POST',
+                        contentType: 'application/json',
+                        data: JSON.stringify(formData),
+                        success: function(response) {
+                            $('#configModal').modal('hide');
+                            showToast('success', response.message);
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 1000);
+                        },
+                        error: function(xhr) {
+                            showToast('error', xhr.responseJSON?.message || 'Error saving configuration');
+                        }
+                    });
+                });
+            })
+            .fail(function() {
+                showToast('error', 'Failed to load configuration form');
+            });
+    });
+    
+    // New declaration button
+    $('#newDeclarationBtn').click(function() {
+        loadDeclarationForm();
+    });
+    
+    // Edit declaration button
+    $(document).on('click', '.edit-declaration', function() {
+        const declarationId = $(this).data('id');
+        loadDeclarationForm(declarationId);
+    });
+    
+    // View declaration button
+    $(document).on('click', '.view-declaration', function() {
+        const declarationId = $(this).data('id');
+        loadDeclarationForm(declarationId, true);
+    });
+    
+    // Add payment button
+    $(document).on('click', '.add-payment', function() {
+        const declarationId = $(this).data('id');
+        $('#declarationId').val(declarationId);
+        
+        const modal = $('#paymentModal');
+        modal.modal('show');
+    });
+    
+    // Add fine button
+    $(document).on('click', '.add-fine', function() {
+        let declarationId = $(this).data('id');
+
+        // If we're inside the declaration modal, get ID from the form
+        if (!declarationId && $('#declarationForm').length) {
+            // Try to get from a hidden input in the form
+            declarationId = $('#fineDeclarationId').val();
+        }
+        
+        // Check if we have a valid ID
+        if (!declarationId || declarationId === 'undefined') {
+            showToast('error', 'Unable to determine declaration ID. Please try again.');
+            return;
+        }
+        
+        let url = TAX_URLS.fineAddBase + declarationId + '/fine/add/';
+        
+        $.get(url)
+            .done(function(response) {
+                $('#fineModalContent').html(response.html);
+                $('#fineModal').modal('show');
+                
+                // Setup fine form handlers
+                setupFineFormHandlers();
+            })
+            .fail(function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Failed to load fine form');
+            });
+    });
+    
+    // Mark as rejected button
+    $(document).on('click', '.mark-rejected', function() {
+        const declarationId = $(this).data('id');
+        $('#rejectionDeclarationId').val(declarationId);
+        
+        const modal = $('#rejectionModal');
+        modal.modal('show');
+    });
+    
+    // Delete declaration button
+    $(document).on('click', '.delete-declaration', function() {
+        const declarationId = $(this).data('id');
+        
+        if (confirm('Are you sure you want to delete this declaration?')) {
+            let url = TAX_URLS.declarationBase + declarationId + '/delete/';
+            
+            $.ajax({
+                url: url,
+                type: 'POST',
+                success: function(response) {
+                    showToast('success', response.message);
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1000);
+                },
+                error: function(xhr) {
+                    showToast('error', xhr.responseJSON?.message || 'Error deleting declaration');
+                }
+            });
+        }
+    });
+    
+    // Confirm payment button
+    $('#confirmPayment').click(function() {
+        const declarationId = $('#declarationId').val();
+        const amount = $('#paymentAmount').val();
+        const method = $('#paymentMethod').val();
+        const date = $('#paymentDate').val();
+        
+        if (!amount || !method || !date) {
+            showToast('error', 'Please fill all required fields');
+            return;
+        }
+        
+        let url = TAX_URLS.declarationBase + declarationId + '/status/';
+        
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                status: 'partially_paid',
+                amount: amount,
+                payment_method: method,
+                date: date
+            }),
+            success: function(response) {
+                const paymentModal = $('#paymentModal');
+                if (paymentModal) {
+                    paymentModal.modal('hide');
+                }
+                showToast('success', response.message);
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1000);
+            },
+            error: function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Error adding payment');
+            }
+        });
+    });
+    
+    // Confirm rejection button
+    $('#confirmRejection').click(function() {
+        const declarationId = $('#rejectionDeclarationId').val();
+        const date = $('#rejectionDate').val();
+        const cause = $('#rejectionCause').val();
+        const notes = $('#rejectionNotes').val();
+        
+        if (!date || !cause) {
+            showToast('error', 'Please fill all required fields');
+            return;
+        }
+        
+        let url = TAX_URLS.declarationBase + declarationId + '/status/';
+        
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                status: 'rejected',
+                date: date,
+                rejection_cause: cause,
+                rejection_notes: notes
+            }),
+            success: function(response) {
+                const rejectionModal = $('#rejectionModal');
+                if (rejectionModal) {
+                    rejectionModal.modal('hide');
+                }
+                showToast('success', response.message);
+                setTimeout(function() {
+                    window.location.reload();
+                }, 1000);
+            },
+            error: function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Error rejecting declaration');
+            }
+        });
+    });
+    
+    // View document handler
+    $(document).on('click', '.view-document', function(e) {
+        e.preventDefault();
+        
+        const documentUrl = $(this).data('document-url');
+        const documentType = $(this).data('document-type');
+        
+        // Set modal title
+        let title = 'Document Preview';
+        if (documentType === 'tax_notice') {
+            title = 'Tax Notice Preview';
+        } else if (documentType === 'payment_receipt') {
+            title = 'Payment Receipt Preview';
+        }
+        
+        $('#documentPreviewTitle').text(title);
+        
+        // Set download link
+        $('#downloadDocumentBtn').attr('href', documentUrl);
+        
+        // Set preview content
+        const fileExt = documentUrl.split('.').pop().toLowerCase();
+        
+        if (['pdf'].includes(fileExt)) {
+            // PDF preview
+            $('.document-preview-container').html(`
+                <object data="${documentUrl}" type="application/pdf" width="100%" height="100%">
+                    <embed src="${documentUrl}" type="application/pdf">
+                    <p>This browser does not support PDFs. Please <a href="${documentUrl}" target="_blank">download the PDF</a> to view it.</p>
+                </object>
+            `);
+        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(fileExt)) {
+            // Image preview
+            $('.document-preview-container').html(`
+                <div class="text-center">
+                    <img src="${documentUrl}" class="img-fluid" style="max-height: 70vh;" alt="Document Preview">
+                </div>
+            `);
+        } else {
+            // Other file types
+            $('.document-preview-container').html(`
+                <div class="text-center p-5">
+                    <i class="fas fa-file fa-4x mb-3"></i>
+                    <p>This file type cannot be previewed directly. Please download to view.</p>
+                </div>
+            `);
+        }
+        
+        // Show the modal
+        const modal = $('#documentPreviewModal');
+        modal.modal('show');
+    });
+    
+    // Function to load declaration form
+    function loadDeclarationForm(declarationId = null, viewOnly = false) {
+        let url;
+        
+        if (declarationId) {
+            url = TAX_URLS.declarationBase + declarationId + '/';
+        } else {
+            url = TAX_URLS.newDeclaration;
+        }
+            
+        $.get(url)
+            .done(function(response) {
+                // Load form HTML
+                $('#declarationModalContent').html(response.html);
+                
+                // If view-only
+                if (viewOnly) {
+                    // Disable all form controls except file inputs
+                    $('#declarationForm input, #declarationForm select, #declarationForm textarea')
+                        .not('input[type="file"]').prop('disabled', true);
+                    
+                    // Rename the save button for document uploads only
+                    $('#saveDeclaration').text('Upload Documents')
+                        .removeClass('btn-primary')
+                        .addClass('btn-success');
+                    
+                    // Modify the save button click handler to only process documents
+                    $('#saveDeclaration').off('click').on('click', function() {
+                        // Get declaration ID
+                        const declId = declarationId;
+                        let hasUploads = false;
+                        
+                        // Check if there are file uploads
+                        const taxNoticeFile = $('#taxNoticeDocument')[0]?.files[0];
+                        const paymentReceiptFile = $('#paymentReceiptDocument')[0]?.files[0];
+                        
+                        if (taxNoticeFile) {
+                            hasUploads = true;
+                            uploadDocument('tax_notice', declId, taxNoticeFile);
+                        }
+                        
+                        if (paymentReceiptFile) {
+                            hasUploads = true;
+                            uploadDocument('payment_receipt', declId, paymentReceiptFile);
+                        }
+                        
+                        if (hasUploads) {
+                            showToast('success', 'Documents uploaded successfully');
+                            setTimeout(function() {
+                                // Close modal and refresh
+                                const declarationModal = $('#declarationModal');
+                                if (declarationModal) {
+                                    declarationModal.modal('hide');
+                                }
+                                window.location.reload();
+                            }, 1000);
+                        } else {
+                            showToast('warning', 'No documents selected for upload');
+                        }
+                    });
+                } else {
+                    // Regular mode (not view-only) - handle normal save
+                    $('#saveDeclaration').off('click').on('click', function() {
+                        saveDeclaration(declarationId);
+                    });
+                }
+                
+                // Show modal
+                const modal = $('#declarationModal');
+                modal.modal('show');
+                
+                // Set up document delete handlers
+                setupDocumentHandlers(declarationId);
+                
+                // Set up fine handlers if viewing an existing declaration
+                if (declarationId) {
+                    setupFineHandlers(declarationId);
+                }
+            })
+            .fail(function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Failed to load declaration form');
+            });
+    }
+    
+    // Function to save declaration
+    function saveDeclaration(declarationId = null) {
+        // Format fields
+        let amount = $('#amount').val().replace(',', '.');
+        
+        const formData = {
+            year: $('#year').val(),
+            amount: amount,
+            payment_method: $('#payment_method').val(),
+            notes: $('#notes').val()
+        };
+        
+        let url;
+        if (declarationId) {
+            url = TAX_URLS.declarationBase + declarationId + '/';
+        } else {
+            url = TAX_URLS.newDeclaration;
+        }
+        
+        $.ajax({
+            url: url,
+            type: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify(formData),
+            success: function(response) {
+                // Get saved declaration ID
+                const savedDeclarationId = response.declaration_id || declarationId;
+                
+                // Check if we have files to upload
+                const hasTaxNotice = $('#taxNoticeDocument')[0]?.files?.length > 0;
+                const hasPaymentReceipt = $('#paymentReceiptDocument')[0]?.files?.length > 0;
+                
+                if (savedDeclarationId && (hasTaxNotice || hasPaymentReceipt)) {
+                    let uploadPromises = [];
+                    
+                    // Add upload promises if files are selected
+                    if (hasTaxNotice) {
+                        uploadPromises.push(uploadDocument('tax_notice', savedDeclarationId, $('#taxNoticeDocument')[0].files[0]));
+                    }
+                    
+                    if (hasPaymentReceipt) {
+                        uploadPromises.push(uploadDocument('payment_receipt', savedDeclarationId, $('#paymentReceiptDocument')[0].files[0]));
+                    }
+                    
+                    // Wait for all uploads to complete
+                    Promise.all(uploadPromises.map(p => p.catch(e => e)))
+                        .then(() => {
+                            const declarationModal = $('#declarationModal');
+                            if (declarationModal) {
+                                declarationModal.modal('hide');
+                            }
+                            
+                            showToast('success', response.message);
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 500);
+                        })
+                        .catch(errors => {
+                            console.error('Error uploading documents:', errors);
+                            // Still hide modal and show success for declaration save
+                            const declarationModal = $('#declarationModal');
+                            if (declarationModal) {
+                                declarationModal.modal('hide');
+                            }
+                            
+                            showToast('success', response.message + ' (Some document uploads may have failed)');
+                            setTimeout(function() {
+                                window.location.reload();
+                            }, 1000);
+                        });
+                } else {
+                    // No documents to upload, proceed immediately
+                    const declarationModal = $('#declarationModal');
+                    if (declarationModal) {
+                        declarationModal.modal('hide');
+                    }
+                    
+                    showToast('success', response.message);
+                    setTimeout(function() {
+                        window.location.reload();
+                    }, 1000);
+                }
+            },
+            error: function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Error saving declaration');
+            }
+        });
+    }
+    
+    // Helper function to upload documents
+    function uploadDocument(documentType, declarationId, file) {
+        // Client-side file size validation (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+            showToast('error', `${documentType === 'tax_notice' ? 'Tax notice' : 'Payment receipt'} exceeds 10MB size limit`);
+            return Promise.reject('File too large');
+        }
+        
+        // Client-side file type validation
+        const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        if (!allowedExtensions.includes(fileExtension)) {
+            showToast('error', `Invalid file type. Allowed types: ${allowedExtensions.join(', ')}`);
+            return Promise.reject('Invalid file type');
+        }
+        
+        const formData = new FormData();
+        formData.append('document_type', documentType);
+        formData.append('document', file);
+        
+        let url;
+        url = TAX_URLS.documentUploadBase + declarationId + '/upload-document/';
+        
+        return $.ajax({
+            url: url,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.status === 'success') {
+                    return Promise.resolve(response);
+                } else {
+                    showToast('error', `Error uploading ${documentType === 'tax_notice' ? 'tax notice' : 'payment receipt'}: ${response.message}`);
+                    return Promise.reject(response.message);
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || `Error uploading ${documentType === 'tax_notice' ? 'tax notice' : 'payment receipt'}`;
+                showToast('error', errorMsg);
+                return Promise.reject(errorMsg);
+            }
+        });
+    }
+    
+    // Setup document handlers
+    function setupDocumentHandlers(declarationId) {
+        // Delete document handler
+        $(document).on('click', '.delete-document', function() {
+            if (confirm('Are you sure you want to delete this document?')) {
+                const documentType = $(this).data('document-type');
+                
+                let url;
+                url = TAX_URLS.documentDeleteBase + declarationId + '/delete-document/';
+                
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        document_type: documentType
+                    }),
+                    success: function(response) {
+                        showToast('success', response.message);
+                        // Update UI to remove document reference
+                        if (documentType === 'tax_notice') {
+                            $('.tax-notice-container').html('<input type="file" class="form-control" id="taxNoticeDocument" name="taxNoticeDocument">');
+                        } else {
+                            $('.payment-receipt-container').html('<input type="file" class="form-control" id="paymentReceiptDocument" name="paymentReceiptDocument">');
+                        }
+                    },
+                    error: function(xhr) {
+                        showToast('error', xhr.responseJSON?.message || 'Error deleting document');
+                    }
+                });
+            }
+        });
+    }
+    
+    // Setup fine handlers
+    function setupFineHandlers(declarationId) {
+        // Edit fine button
+        $(document).on('click', '.edit-fine', function() {
+            const fineId = $(this).data('fine-id');
+            
+            let url;
+            url = TAX_URLS.fineEditBase + declarationId + '/fine/' + fineId + '/';
+            
+            $.get(url)
+                .done(function(response) {
+                    $('#fineModalContent').html(response.html);
+                    $('#fineModal').modal('show');
+                    
+                    // Setup fine form handlers
+                    setupFineFormHandlers();
+                })
+                .fail(function(xhr) {
+                    showToast('error', xhr.responseJSON?.message || 'Failed to load fine form');
+                });
+        });
+        
+        // Delete fine button
+        $(document).on('click', '.delete-fine', function() {
+            if (confirm('Are you sure you want to delete this fine?')) {
+                const fineId = $(this).data('fine-id');
+                
+                let url;
+                url = TAX_URLS.fineDeleteBase + declarationId + '/fine/' + fineId + '/delete/';
+                
+                $.ajax({
+                    url: url,
+                    type: 'POST',
+                    success: function(response) {
+                        showToast('success', response.message);
+                        // Remove fine from list
+                        $(`#fine-${fineId}`).remove();
+                    },
+                    error: function(xhr) {
+                        showToast('error', xhr.responseJSON?.message || 'Error deleting fine');
+                    }
+                });
+            }
+        });
+    }
+    
+    // Setup fine form handlers
+    function setupFineFormHandlers() {
+        // Save fine button
+        $('#saveFine').off('click').on('click', function() {
+            const declarationId = $('#fineDeclarationId').val();
+            const fineId = $('#fineId').val();
+            
+            // Format fields
+            let amount = $('#fineAmount').val().replace(',', '.');
+            
+            const formData = {
+                amount: amount,
+                fine_date: $('#fineDate').val(),
+                reference: $('#fineReference').val(),
+                description: $('#fineDescription').val(),
+                paid: $('#finePaid').is(':checked'),
+                payment_date: $('#finePaymentDate').val()
+            };
+            
+            let url;
+            if (fineId) {
+                url = TAX_URLS.fineEditBase + declarationId + '/fine/' + fineId + '/';
+            } else {
+                url = TAX_URLS.fineAddBase + declarationId + '/fine/add/';
+            }
+            
+            $.ajax({
+                url: url,
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(formData),
+                success: function(response) {
+                    const fineModal = $('#fineModal');
+                    if (fineModal) {
+                        fineModal.modal('hide');
+                    }
+                    
+                    showToast('success', response.message);
+                    
+                    // If we're editing an existing declaration, refresh the fines list
+                    if ($('#finesList').length) {
+                        loadDeclarationForm(declarationId);
+                    } else {
+                        // Otherwise reload the page
+                        setTimeout(function() {
+                            window.location.reload();
+                        }, 1000);
+                    }
+                },
+                error: function(xhr) {
+                    showToast('error', xhr.responseJSON?.message || 'Error saving fine');
+                }
+            });
+        });
+        
+        // Toggle payment date field visibility based on paid checkbox
+        $('#finePaid').change(function() {
+            if ($(this).is(':checked')) {
+                $('.payment-date-container').show();
+            } else {
+                $('.payment-date-container').hide();
+            }
+        }).trigger('change');
+    }
+
+    function showToast(type, message) {
+        // Map type to Bootstrap color classes
+        const colorMap = {
+            'success': 'bg-success text-white',
+            'error': 'bg-danger text-white',
+            'warning': 'bg-warning text-dark',
+            'info': 'bg-info text-white'
+        };
+        
+        const colorClass = colorMap[type] || 'bg-primary text-white';
+        
+        const toast = `
+            <div class="toast ${colorClass}" role="alert" aria-live="assertive" aria-atomic="true">
+                <div class="toast-header">
+                    <strong class="me-auto">${type.charAt(0).toUpperCase() + type.slice(1)}</strong>
+                    <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+                </div>
+                <div class="toast-body">
+                    ${message}
+                </div>
+            </div>
+        `;
+        
+        const toastContainer = $('<div>', {
+            class: 'position-fixed top-0 end-0 p-3',
+            style: 'z-index: 1070'
+        }).html(toast);
+        
+        $('body').append(toastContainer);
+        $(toastContainer).find('.toast').toast({
+            autohide: true,
+            delay: 5000
+        }).toast('show');
+        
+        $(toastContainer).find('.toast').on('hidden.bs.toast', function() {
+            toastContainer.remove();
+        });
+    }
+});
+</script>
+{% endblock %}

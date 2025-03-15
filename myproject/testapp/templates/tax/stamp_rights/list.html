@@ -33,7 +33,7 @@
             <h5 class="mb-0">{% trans "Stamp Rights Declarations" %}</h5>
         </div>
         <div class="card-body">
-            <div class="table-responsive">
+            <div>
                 <table class="table table-hover">
                     <thead>
                         <tr>
@@ -90,10 +90,60 @@
                                     <button class="btn btn-sm btn-success mark-paid" data-id="{{ declaration.id }}">
                                         <i class="fas fa-check"></i>
                                     </button>
+                                    <button class="btn btn-sm btn-info view-declaration" data-id="{{ declaration.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% elif declaration.status == 'paid' %}
+                                    <button class="btn btn-sm btn-info view-declaration" data-id="{{ declaration.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    
+                                    <!-- Document dropdown - ONLY for paid declarations with documents -->
+                                    {% if declaration.declaration_document or declaration.payment_document %}
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-success dropdown-toggle" 
+                                                data-bs-toggle="dropdown" aria-expanded="false">
+                                            <i class="fas fa-file-alt"></i>
+                                        </button>
+                                        <ul class="dropdown-menu">
+                                            {% if declaration.declaration_document %}
+                                            <li>
+                                                <a class="dropdown-item view-document" href="#" 
+                                                   data-document-url="{{ declaration.declaration_document.url }}" 
+                                                   data-document-type="declaration">
+                                                    <i class="fas fa-file-pdf me-2"></i> View Declaration Document
+                                                </a>
+                                            </li>
+                                            {% else %}
+                                            <li>
+                                                <span class="dropdown-item disabled">
+                                                    <i class="fas fa-file-pdf me-2"></i> No Declaration Document
+                                                </span>
+                                            </li>
+                                            {% endif %}
+                                            
+                                            {% if declaration.payment_document %}
+                                            <li>
+                                                <a class="dropdown-item view-document" href="#" 
+                                                   data-document-url="{{ declaration.payment_document.url }}"
+                                                   data-document-type="payment">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> View Payment Receipt
+                                                </a>
+                                            </li>
+                                            {% else %}
+                                            <li>
+                                                <span class="dropdown-item disabled">
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> No Payment Receipt
+                                                </span>
+                                            </li>
+                                            {% endif %}
+                                        </ul>
+                                    </div>
                                     {% endif %}
                                 </div>
                             </td>
                         </tr>
+                        {% endif %}
                         {% empty %}
                         <tr>
                             <td colspan="7" class="text-center">
@@ -178,11 +228,121 @@
         </div>
     </div>
 </div>
+
+<!-- Document Preview Modal -->
+<div class="modal fade" id="documentPreviewModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentPreviewTitle">Document Preview</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="document-preview-container" style="height: 70vh;">
+                    <!-- Document will be embedded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" id="downloadDocumentBtn" target="_blank">
+                    <i class="fas fa-download me-2"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="closeDocumentPreview">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
 $(document).ready(function() {
+    // Add this function at the top to handle modals correctly
+    function closeModal(modalElement) {
+        if (!modalElement) return;
+        
+        // Use jQuery method directly since bootstrap.Modal.getInstance is not available
+        try {
+            $(modalElement).modal('hide');
+        } catch (e) {
+            console.error('Failed to close modal', e);
+        }
+    }
+    
+    // Make this function available globally
+    window.closeModal = closeModal;
+    
+    // Add the styles to fix dropdown scrolling/display issues
+    $('head').append(`
+        <style>
+            .dropdown-menu {
+                max-height: none !important;
+                overflow: visible !important;
+                position: absolute !important;
+                z-index: 1000000 !important;
+            }
+            
+            .btn-group .dropdown-menu {
+                min-width: 200px !important;
+            }
+        </style>
+    `);
+    
+    // Fix document upload for stamp_rights
+    window.originalUploadDocument = window.uploadDocument;
+    window.uploadDocument = function(formType, declarationId, documentType, file) {
+        // Client-side file size validation (10MB limit)
+        if (file.size > 10 * 1024 * 1024) {
+            showToast('error', `${documentType.charAt(0).toUpperCase() + documentType.slice(1)} document exceeds 10MB size limit`);
+            return Promise.reject('File too large');
+        }
+        
+        // Client-side file type validation
+        const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+        const fileExtension = file.name.split('.').pop().toLowerCase();
+        if (!allowedExtensions.includes(fileExtension)) {
+            showToast('error', `Invalid file type. Allowed types: ${allowedExtensions.join(', ')}`);
+            return Promise.reject('Invalid file type');
+        }
+        
+        const formData = new FormData();
+        formData.append('document_type', documentType);
+        formData.append('document', file);
+        
+        // Use the correct URL format for stamp_rights
+        const url = formType === 'stamp_rights' ? 
+            `/testapp/tax/stamp-rights/declaration/${declarationId}/upload-document/` : 
+            `/testapp/tax/${formType}/declaration/${declarationId}/upload-document/`;
+        
+        console.log("Using URL:", url);
+        
+        return $.ajax({
+            url: url,
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.status === 'success') {
+                    console.log(`${documentType} document uploaded successfully`);
+                    return Promise.resolve(response);
+                } else {
+                    showToast('error', `Error uploading ${documentType} document: ${response.message}`);
+                    return Promise.reject(response.message);
+                }
+            },
+            error: function(xhr) {
+                const errorMsg = xhr.responseJSON?.message || `Error uploading ${documentType} document`;
+                showToast('error', errorMsg);
+                return Promise.reject(errorMsg);
+            }
+        });
+    };
+    
+    // Fix all modal close handlers
+    $('#closeDocumentPreview').off('click').on('click', function() {
+        closeModal(document.getElementById('documentPreviewModal'));
+    });
+    
     // Configuration modal
     $('#configButton').click(function() {
         $.get('{% url "stamp-right-config" %}')
@@ -241,6 +401,12 @@ $(document).ready(function() {
         loadDeclarationForm(declarationId);
     });
     
+    // View declaration button (view-only mode)
+    $('.view-declaration').click(function() {
+        const declarationId = $(this).data('id');
+        loadDeclarationForm(declarationId, true); // true = view-only mode
+    });
+    
     // Mark as paid button
     $('.mark-paid').click(function() {
         const declarationId = $(this).data('id');
@@ -255,7 +421,7 @@ $(document).ready(function() {
         const modal = new bootstrap.Modal(document.getElementById('statusModal'));
         modal.show();
     });
-
+    
     // Mark as rejected button
     $('.mark-rejected').click(function() {
         const declarationId = $(this).data('id');
@@ -270,7 +436,7 @@ $(document).ready(function() {
         const modal = new bootstrap.Modal(document.getElementById('statusModal'));
         modal.show();
     });
-
+    
     // Confirm status change
     $('#confirmStatus').click(function() {
         const declarationId = $('#declarationId').val();
@@ -302,7 +468,7 @@ $(document).ready(function() {
             contentType: 'application/json',
             data: JSON.stringify(data),
             success: function(response) {
-                bootstrap.Modal.getInstance(document.getElementById('statusModal')).hide();
+                closeModal(document.getElementById('statusModal'));
                 showToast('success', response.message);
                 setTimeout(function() {
                     window.location.reload();
@@ -335,28 +501,131 @@ $(document).ready(function() {
     });
     
     // Function to load declaration form
-    function loadDeclarationForm(declarationId = null) {
+    function loadDeclarationForm(declarationId = null, viewOnly = false) {
         const url = declarationId 
             ? `/testapp/tax/stamp_rights/declaration/${declarationId}/`
             : '{% url "stamp-right-declaration-new" %}';
             
         $.get(url)
             .done(function(response) {
+                // Load form HTML
                 $('#stampRightDeclarationModalContent').html(response.html);
-                const modal = new bootstrap.Modal(document.getElementById('stampRightDeclarationModal'));
-                modal.show();
                 
-                // Save button handler
-                $('#saveStampRightDeclaration').click(function() {
-                    // Convert comma to period in decimal values
-                    let invoicesAmount = $('#invoices_amount').val().replace(',', '.');
-                    let taxAmount = $('#tax_amount').val().replace(',', '.');
+                // If view-only (paid or rejected declaration)
+                if (viewOnly) {
+                    // For paid/rejected declarations, we need to keep file upload functionality
                     
+                    // 1. Disable all form controls except file inputs
+                    $('#stampRightDeclarationForm input, #stampRightDeclarationForm select, #stampRightDeclarationForm textarea')
+                        .not('input[type="file"]').prop('disabled', true);
+                    
+                    // 2. If save button is hidden by template (for paid/rejected), add a document upload button
+                    if ($('#saveStampRightDeclaration').length === 0 || $('#saveStampRightDeclaration').is(':hidden')) {
+                        // Remove any existing buttons first
+                        $('#stampRightDeclarationModal .modal-footer button').remove();
+                        
+                        // Add upload button
+                        $('#stampRightDeclarationModal .modal-footer').append(
+                            '<button type="button" class="btn btn-success" id="uploadStampRightDocuments">' +
+                            '<i class="fas fa-file-upload me-2"></i> Upload Documents</button>'
+                        );
+                        
+                        // Add a single close button
+                        $('#stampRightDeclarationModal .modal-footer').append(
+                            '<button type="button" class="btn btn-secondary" id="closeStampRightDeclaration" data-bs-dismiss="modal">' +
+                            '<i class="fas fa-times me-2"></i> Close</button>'
+                        );
+                        
+                        // Handle document upload button click
+                        $('#uploadStampRightDocuments').off('click').on('click', function() {
+                            // Get declaration ID
+                            const declId = declarationId;
+                            let hasUploads = false;
+                            
+                            // Check if there are file uploads
+                            const declarationFile = $('#declarationDocument')[0]?.files[0];
+                            const paymentFile = $('#paymentDocument')[0]?.files[0];
+                            
+                            if (declarationFile) {
+                                hasUploads = true;
+                                uploadDocument('stamp_rights', declId, 'declaration', declarationFile);
+                            }
+                            
+                            if (paymentFile) {
+                                hasUploads = true;
+                                uploadDocument('stamp_rights', declId, 'payment', paymentFile);
+                            }
+                            
+                            if (hasUploads) {
+                                showToast('success', 'Documents uploaded successfully');
+                                setTimeout(function() {
+                                    // Close modal and refresh
+                                    closeModal(document.getElementById('stampRightDeclarationModal'));
+                                    window.location.reload();
+                                }, 1000);
+                            } else {
+                                showToast('warning', 'No documents selected for upload');
+                            }
+                        });
+                        
+                        // Ensure the close button works
+                        $('#closeStampRightDeclaration').off('click').on('click', function() {
+                            closeModal(document.getElementById('stampRightDeclarationModal'));
+                        });
+                    } else {
+                        // Rename the existing save button for document uploads
+                        $('#saveStampRightDeclaration').text('Upload Documents')
+                            .removeClass('btn-primary')
+                            .addClass('btn-success')
+                            .attr('data-declaration-id', declarationId);
+                        
+                        // Remove any extra buttons and just keep one close button
+                        $('#stampRightDeclarationModal .modal-footer button.btn-secondary').not(':first').remove();
+                        
+                        // Modify the save button click handler to only process documents
+                        $('#saveStampRightDeclaration').off('click').on('click', function() {
+                            // Get declaration ID
+                            const declId = declarationId;
+                            let hasUploads = false;
+                            
+                            // Check if there are file uploads
+                            const declarationFile = $('#declarationDocument')[0]?.files[0];
+                            const paymentFile = $('#paymentDocument')[0]?.files[0];
+                            
+                            if (declarationFile) {
+                                hasUploads = true;
+                                uploadDocument('stamp_rights', declId, 'declaration', declarationFile);
+                            }
+                            
+                            if (paymentFile) {
+                                hasUploads = true;
+                                uploadDocument('stamp_rights', declId, 'payment', paymentFile);
+                            }
+                            
+                            if (hasUploads) {
+                                showToast('success', 'Documents uploaded successfully');
+                                setTimeout(function() {
+                                    // Close modal and refresh
+                                    closeModal(document.getElementById('stampRightDeclarationModal'));
+                                    window.location.reload();
+                                }, 1000);
+                            } else {
+                                showToast('warning', 'No documents selected for upload');
+                            }
+                        });
+                    }
+                } else {
+                    // Regular mode (not view-only) - handle normal save operation
+                    $('#saveStampRightDeclaration').off('click').on('click', function() {
+                        // Convert comma to period in decimal values
+                        let invoicesAmount = $('#invoices_amount').val().replace(',', '.');
+                        let taxAmount = $('#tax_amount').val().replace(',', '.');
+                        
                     const formData = {
                         period_month: $('#period_month').val(),
                         period_year: $('#period_year').val(),
-                        invoices_amount: invoicesAmount,
-                        tax_amount: taxAmount,
+                            invoices_amount: invoicesAmount,
+                            tax_amount: taxAmount,
                         notes: $('#notes').val()
                     };
                     
@@ -368,22 +637,194 @@ $(document).ready(function() {
                         contentType: 'application/json',
                         data: JSON.stringify(formData),
                         success: function(response) {
-                            modal.hide();
-                            showToast('success', response.message);
-                            setTimeout(function() {
-                                window.location.reload();
-                            }, 1000);
+                                // Handle document uploads if any
+                                const savedDeclarationId = response.declaration_id || declarationId;
+                                
+                                // Check if we have files to upload
+                                const hasDeclarationDoc = $('#declarationDocument')[0]?.files?.length > 0;
+                                const hasPaymentDoc = $('#paymentDocument')[0]?.files?.length > 0;
+                                
+                                if (savedDeclarationId && (hasDeclarationDoc || hasPaymentDoc)) {
+                                    let uploadPromises = [];
+                                    
+                                    // Add upload promises if files are selected
+                                    if (hasDeclarationDoc) {
+                                        uploadPromises.push(uploadDocument('stamp_rights', savedDeclarationId, 'declaration', $('#declarationDocument')[0].files[0]));
+                                    }
+                                    
+                                    if (hasPaymentDoc) {
+                                        uploadPromises.push(uploadDocument('stamp_rights', savedDeclarationId, 'payment', $('#paymentDocument')[0].files[0]));
+                                    }
+                                    
+                                    // Wait for all uploads to complete
+                                    Promise.all(uploadPromises.map(p => p.catch(e => e)))
+                                        .then(() => {
+                                            closeModal(document.getElementById('stampRightDeclarationModal'));
+                                            
+                                            showToast('success', response.message);
+                                            setTimeout(function() {
+                                                window.location.reload();
+                                            }, 500);
+                                        })
+                                        .catch(errors => {
+                                            console.error('Error uploading documents:', errors);
+                                            // Still hide modal and show success for declaration save
+                                            closeModal(document.getElementById('stampRightDeclarationModal'));
+                                            
+                                            showToast('success', response.message + ' (Some document uploads may have failed)');
+                                            setTimeout(function() {
+                                                window.location.reload();
+                                            }, 1000);
+                                        });
+                                } else {
+                                    // No documents to upload, proceed immediately
+                                    closeModal(document.getElementById('stampRightDeclarationModal'));
+                                    
+                                    showToast('success', response.message);
+                                    setTimeout(function() {
+                                        window.location.reload();
+                                    }, 1000);
+                                }
                         },
                         error: function(xhr) {
                             showToast('error', xhr.responseJSON?.message || 'Error saving declaration');
                         }
                     });
                 });
+                }
+                
+                // Show modal
+                const modal = new bootstrap.Modal(document.getElementById('stampRightDeclarationModal'));
+                modal.show();
+                
+                // Add backdrop cleanup
+                addBackdropCleanup();
+                
+                // Set up document handlers
+                setupDocumentHandlers('stamp_rights', declarationId);
             })
             .fail(function(xhr) {
                 showToast('error', xhr.responseJSON?.message || 'Failed to load declaration form');
             });
     }
+    
+    // View document handler
+    $(document).on('click', '.view-document', function(e) {
+        e.preventDefault();
+        
+        const documentUrl = $(this).data('document-url');
+        const documentType = $(this).data('document-type');
+        
+        // Set the document title
+        let title = 'Document Preview';
+        if (documentType === 'declaration') {
+            title = 'Declaration Document Preview';
+        } else if (documentType === 'payment') {
+            title = 'Payment Receipt Preview';
+        }
+        
+        $('#documentPreviewTitle').text(title);
+        
+        // Set the download URL
+        $('#downloadDocumentBtn').attr('href', documentUrl);
+        
+        // Load the document in the preview container
+        $('.document-preview-container').empty().append(
+            `<embed src="${documentUrl}" type="application/pdf" width="100%" height="100%">`
+        );
+        
+        // Show the modal
+        const previewModal = new bootstrap.Modal(document.getElementById('documentPreviewModal'));
+        previewModal.show();
+    });
+    
+    // Function to set up document handlers
+    function setupDocumentHandlers(formType, declarationId) {
+        if (!declarationId) return;
+        
+        // Delete document handler
+        $(document).on('click', '.delete-document', function() {
+            if (confirm('Are you sure you want to delete this document?')) {
+                const docDeclarationId = $(this).data('declaration-id');
+                const documentType = $(this).data('document-type');
+                
+                $.ajax({
+                    url: `/testapp/tax/${formType}/declaration/${docDeclarationId}/delete-document/`,
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        document_type: documentType
+                    }),
+                    success: function(response) {
+                        if (response.status === 'success') {
+                            showToast('success', response.message);
+                            // Reload the form to update document links
+                            loadDeclarationForm(docDeclarationId);
+                        } else {
+                            showToast('error', response.message || 'Error deleting document');
+                        }
+                    },
+                    error: function(xhr) {
+                        showToast('error', xhr.responseJSON?.message || 'Error deleting document');
+                    }
+                });
+            }
+        });
+    }
+    
+    // Add addBackdropCleanup function
+    if (typeof addBackdropCleanup !== 'function') {
+        window.addBackdropCleanup = function() {
+            // Get all modals
+            const modals = document.querySelectorAll('.modal');
+            
+            // Add hidden.bs.modal event listener to each modal
+            modals.forEach(modal => {
+                modal.addEventListener('hidden.bs.modal', function() {
+                    // Remove all .modal-backdrop elements
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    backdrops.forEach(backdrop => {
+                        backdrop.remove();
+                    });
+                    
+                    // Fix body styling
+                    document.body.classList.remove('modal-open');
+                    document.body.style.paddingRight = '';
+                    document.body.style.overflow = '';
+                });
+            });
+        };
+    }
+    
+    // Initialize addBackdropCleanup on page load
+    addBackdropCleanup();
+    
+    // Make sure dropdown toggling works
+    document.querySelectorAll('.dropdown-toggle').forEach(function(dropdownToggle) {
+        dropdownToggle.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const dropdownMenu = this.nextElementSibling;
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+                if (menu !== dropdownMenu) {
+                    menu.classList.remove('show');
+                }
+            });
+            
+            // Toggle the clicked dropdown
+            dropdownMenu.classList.toggle('show');
+        });
+    });
+    
+    // Hide dropdowns when clicking elsewhere
+    document.addEventListener('click', function(e) {
+        if (!e.target.matches('.dropdown-toggle') && !e.target.closest('.dropdown-menu')) {
+            document.querySelectorAll('.dropdown-menu.show').forEach(function(menu) {
+                menu.classList.remove('show');
+            });
+        }
+    });
 });
 </script>
 {% endblock %}

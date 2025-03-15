@@ -50,6 +50,7 @@
 
         /* Sidebar Styling */
         #sidebar {
+            overflow-y: auto;
             width: var(--sidebar-width);
             height: 100vh;
             position: fixed;
@@ -59,7 +60,19 @@
             transition: transform var(--transition-speed);
             z-index: 1000;
         }
+        
+        #sidebar::-webkit-scrollbar {
+            width: 5px;
+        }
 
+        #sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        #sidebar::-webkit-scrollbar-thumb {
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 10px;
+        }
         #sidebar.collapsed {
             transform: translateX(-100%);
         }
@@ -478,6 +491,14 @@
                             <a class="nav-link {% if 'ir' in request.path %}active{% endif %}" 
                             href="{% url 'ir-list' %}">
                                 <i class="fas fa-money-check-alt me-2"></i> {% trans "IR" %}
+                            </a>
+                            <a class="nav-link {% if 'professional-tax' in request.path %}active{% endif %}" 
+                            href="{% url 'professional-tax-list' %}">
+                                <i class="fas fa-building me-2"></i> {% trans "Professional Tax" %}
+                            </a>
+                            <a class="nav-link {% if 'communal-tax' in request.path %}active{% endif %}" 
+                            href="{% url 'communal-tax-list' %}">
+                                <i class="fas fa-city me-2"></i> {% trans "Communal Tax" %}
                             </a>
                             <a class="nav-link {% if 'stamp-rights' in request.path %}active{% endif %}" 
                             href="{% url 'stamp-right-list' %}">

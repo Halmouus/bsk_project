@@ -5392,7 +5392,7 @@ class AccountingEntry(models.Model):
         
         print("\n=== Getting Stamp Rights Accounting Entries ===")
         stamp_rights = StampRightDeclaration.objects.filter(
-            status=StampRightDeclaration.PAID
+            status='paid'
         )
 
         if start_date:
@@ -8635,6 +8635,22 @@ class IRDeclaration(BaseModel):
         ('BANK_ERROR', 'Bank Processing Error'),
         ('OTHER', 'Other')
     ]
+
+    declaration_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload declaration receipt"
+    )
+
+    payment_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload payment receipt"
+    )
     
     period_month = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]
@@ -8727,7 +8743,7 @@ class IRDeclaration(BaseModel):
             print(f"Not creating forecast for {self.status} declaration")
             return
         
-        # Delete any existing forecasts for this period (important new step)
+        # Delete ALL existing forecasts for this period (important new step)
         existing_forecasts = ForecastStatement.objects.filter(
             bank_account=IRConfiguration.get_config().domiciliation_bank,
             label__icontains=f"{self.period_month:02d}/{self.period_year}",
@@ -8962,7 +8978,23 @@ class StampRightDeclaration(BaseModel):
         ('BANK_ERROR', 'Bank Processing Error'),
         ('OTHER', 'Other')
     ]
-    
+
+    declaration_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload declaration receipt"
+    )
+
+    payment_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload payment receipt"
+    )
+
     period_month = models.PositiveSmallIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(12)]
     )
@@ -9061,7 +9093,7 @@ class StampRightDeclaration(BaseModel):
             print(f"Not creating forecast for {self.status} declaration")
             return
         
-        # Delete any existing forecasts for this period
+        # Delete ALL existing forecasts for this period
         existing_forecasts = ForecastStatement.objects.filter(
             bank_account=StampRightConfiguration.get_config().domiciliation_bank,
             label__icontains=f"{self.period_month:02d}/{self.period_year}",
@@ -9208,3 +9240,503 @@ class StampRightDeclaration(BaseModel):
         unique_together = ['period_month', 'period_year']
         verbose_name = "Stamp Rights Declaration"
         verbose_name_plural = "Stamp Rights Declarations"
+
+
+class OtherTaxConfiguration(BaseModel):
+    """Configuration for other taxes like Professional and Communal taxes"""
+    
+    TAX_TYPE_CHOICES = [
+        ('professional', 'Professional Tax'),
+        ('communal', 'Communal Tax'),
+    ]
+    
+    tax_type = models.CharField(
+        max_length=20,
+        choices=TAX_TYPE_CHOICES,
+        unique=True,
+        help_text="Type of tax"
+    )
+    
+    accounting_code = models.CharField(
+        max_length=10,
+        validators=[
+            RegexValidator(r'^\d{4,10}$', 'Account code must be 4-10 digits')
+        ],
+        help_text="Accounting code for tax operations"
+    )
+    
+    journal_code = models.CharField(
+        max_length=2,
+        validators=[
+            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+        ],
+        help_text="Journal code for accounting entries"
+    )
+    
+    domiciliation_bank = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='other_tax_configurations',
+        null=True,
+        blank=True,
+        help_text="Bank account used for tax payments if using direct debit"
+    )
+
+    forecast_bank = models.ForeignKey(
+        'BankAccount',
+        on_delete=models.PROTECT,
+        related_name='other_tax_forecasts',
+        null=True,
+        blank=True,
+        help_text="Bank account used for tax payment forecasts"
+    )
+    
+    default_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Default tax amount for forecasts"
+    )
+    
+    due_month = models.PositiveSmallIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Month when the tax is due"
+    )
+    
+    due_day = models.PositiveSmallIntegerField(
+        default=20,
+        validators=[MinValueValidator(1), MaxValueValidator(31)],
+        help_text="Day of the month when tax declarations are due"
+    )
+    
+    fines_accounting_code = models.CharField(
+        max_length=10,
+        validators=[
+            RegexValidator(r'^\d{4,10}$', 'Account code must be 4-10 digits')
+        ],
+        help_text="Accounting code for tax fines"
+    )
+    
+    @classmethod
+    def get_config(cls, tax_type):
+        """Get config for specific tax type"""
+        print(f"\n=== Getting {tax_type} Tax Configuration ===")
+        config = cls.objects.filter(tax_type=tax_type).first()
+        if not config:
+            raise ValidationError(f"{tax_type.title()} Tax Configuration must be set up")
+        return config
+    
+    def __str__(self):
+        return f"{self.get_tax_type_display()} Configuration"
+
+    class Meta:
+        verbose_name = "Other Tax Configuration"
+        verbose_name_plural = "Other Tax Configurations"
+
+
+class OtherTaxDeclaration(BaseModel):
+    """Declaration for other taxes like Professional and Communal"""
+    
+    TAX_TYPE_CHOICES = [
+        ('professional', 'Professional Tax'),
+        ('communal', 'Communal Tax'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('declared', 'Declared'),
+        ('partially_paid', 'Partially Paid'),
+        ('paid', 'Paid'),
+        ('rejected', 'Rejected')
+    ]
+    
+    PAYMENT_METHOD_CHOICES = [
+        ('direct_debit', 'Direct Debit'),
+        ('check', 'Check'),
+        ('lcn', 'LCN'),
+        ('cash', 'Cash'),
+    ]
+    
+    REJECTION_CAUSES = [
+        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
+        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
+        ('SIGNATURE_MISMATCH', 'Signature Mismatch'),
+        ('TECHNICAL_ERROR', 'Technical Error'),
+        ('BANK_ERROR', 'Bank Processing Error'),
+        ('OTHER', 'Other')
+    ]
+    
+    tax_type = models.CharField(
+        max_length=20,
+        choices=TAX_TYPE_CHOICES,
+        help_text="Type of tax"
+    )
+    
+    year = models.PositiveSmallIntegerField(
+        help_text="Tax year"
+    )
+    
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        help_text="Total tax amount"
+    )
+    
+    due_date = models.DateField(
+        help_text="Date when the tax is due"
+    )
+    
+    status = models.CharField(
+        max_length=15,
+        choices=STATUS_CHOICES,
+        default='declared'
+    )
+    
+    payment_method = models.CharField(
+        max_length=15,
+        choices=PAYMENT_METHOD_CHOICES,
+        null=True,
+        blank=True,
+        help_text="Method used to pay the tax"
+    )
+    
+    payment_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when the tax was paid"
+    )
+    
+    rejection_cause = models.CharField(
+        max_length=20,
+        choices=REJECTION_CAUSES,
+        null=True,
+        blank=True,
+        help_text="Reason for rejection"
+    )
+    
+    rejection_notes = models.TextField(
+        blank=True,
+        help_text="Additional notes about rejection"
+    )
+    
+    rejection_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when the payment was rejected"
+    )
+    
+    notes = models.TextField(
+        blank=True,
+        help_text="Additional notes"
+    )
+    
+    forecast = models.ForeignKey(
+        'ForecastStatement',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='other_tax_declaration'
+    )
+    
+    # Document fields
+    tax_notice_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload tax notice document"
+    )
+    
+    payment_receipt_document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[validate_file_size],
+        null=True,
+        blank=True,
+        help_text="Upload payment receipt document"
+    )
+    
+    # For balance tracking
+    paid_amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        help_text="Amount already paid"
+    )
+    
+    def save(self, *args, **kwargs):
+        print("\n=== Saving OtherTaxDeclaration ===")
+        print(f"Type: {self.tax_type}")
+        print(f"Year: {self.year}")
+        print(f"Amount: {self.amount}")
+        
+        # Calculate due date if not set
+        if not self.due_date:
+            config = OtherTaxConfiguration.get_config(self.tax_type)
+            day = config.due_day
+            month = config.due_month
+            
+            # Create date with specified day, or last day of month if out of range
+            last_day = calendar.monthrange(self.year, month)[1]
+            if day > last_day:
+                self.due_date = datetime.date(self.year, month, last_day)
+            else:
+                self.due_date = datetime.date(self.year, month, day)
+            
+            print(f"Set due date to {self.due_date}")
+        
+        # Update status based on paid_amount
+        if self.paid_amount >= self.amount:
+            self.status = 'paid'
+        elif self.paid_amount > 0:
+            self.status = 'partially_paid'
+        
+        # Create forecast   
+        if self.status != 'paid':
+            self._update_forecast()
+        
+        super().save(*args, **kwargs)
+    
+    def _update_forecast(self):
+        """Update or create forecast for this declaration"""
+        print("\n=== Updating Tax Forecast ===")
+        
+        # Delete old forecast if exists
+        if self.forecast:
+            print(f"Deleting old forecast: {self.forecast.id}")
+            self.forecast.delete()
+            self.forecast = None
+        
+        # Don't create forecast for paid declarations
+        if self.status == 'paid':
+            print(f"Not creating forecast for paid declaration")
+            return
+        
+        # Get config
+        config = OtherTaxConfiguration.get_config(self.tax_type)
+        
+        # Determine which bank to use
+        bank_to_use = None
+        if self.payment_method == 'direct_debit' and config.domiciliation_bank:
+            bank_to_use = config.domiciliation_bank
+        elif config.forecast_bank:
+            bank_to_use = config.forecast_bank
+        
+        # Make sure bank is configured
+        if not bank_to_use:
+            print(f"No bank configured for {self.tax_type} forecasts")
+            return
+        print("Current year: ", self.year)
+        
+        # Delete ALL existing forecasts for this tax type, including current and ALL future years
+        existing_forecasts = ForecastStatement.objects.filter(
+            source_type=f"{self.tax_type}_tax",
+            date__gte=datetime.date(self.year, 1, 1),  # From January 1st of current year
+            is_processed=False
+        )
+        
+        if existing_forecasts.exists():
+            print(f"Deleting {existing_forecasts.count()} existing forecasts for this tax type")
+            existing_forecasts.delete()
+        
+        # Get remaining amount including unpaid fines using the remaining_amount property
+        remaining_amount = self.remaining_amount
+        
+        # Create new forecast
+        if remaining_amount > 0:
+            forecast = ForecastStatement.objects.create(
+                bank_account=bank_to_use,
+                date=self.due_date,
+                label=f"{self.tax_type.title()} Tax {self.year}",
+                debit=remaining_amount,
+                reference=f"{self.tax_type[:3].upper()}-{self.year}",
+                source_type=f"{self.tax_type}_tax",
+                source_id=self.id,
+                amount=remaining_amount
+            )
+            
+            self.forecast = forecast
+            print(f"Created new forecast: {forecast.id}")
+        
+        # Generate next year's forecast
+        self._generate_future_forecast()
+    
+    def _generate_future_forecast(self):
+        """Generate forecast for the next tax year"""
+        print("\n=== Generating Future Tax Forecast ===")
+        
+        config = OtherTaxConfiguration.get_config(self.tax_type)
+        next_year = self.year + 1
+        
+        # Check if declaration already exists for next year
+        if OtherTaxDeclaration.objects.filter(
+            tax_type=self.tax_type,
+            year=next_year
+        ).exists():
+            print(f"Declaration already exists for {next_year}, skipping")
+            return
+        
+        # Determine which bank to use
+        bank_to_use = config.forecast_bank or config.domiciliation_bank
+        if not bank_to_use:
+            print(f"No bank configured for {self.tax_type} forecasts")
+            return
+            
+        # Calculate due date for next year
+        day = config.due_day
+        month = config.due_month
+        last_day = calendar.monthrange(next_year, month)[1]
+        if day > last_day:
+            due_date = datetime.date(next_year, month, last_day)
+        else:
+            due_date = datetime.date(next_year, month, day)
+        
+        # Check for ANY existing forecasts for next year, using more comprehensive checks
+        existing_forecast = ForecastStatement.objects.filter(
+            source_type=f"{self.tax_type}_tax",
+            date__year=next_year,
+            is_processed=False
+        ).first()
+        
+        if existing_forecast:
+            print(f"Forecast already exists for {next_year}, deleting and recreating")
+            existing_forecast.delete()
+        
+        # Create forecast with default amount
+        forecast = ForecastStatement.objects.create(
+            bank_account=bank_to_use,
+            date=due_date,
+            label=f"{self.tax_type.title()} Tax Forecast {next_year}",
+            debit=config.default_amount,
+            reference=f"{self.tax_type[:3].upper()}-{next_year}",
+            source_type=f"{self.tax_type}_tax",
+            source_id=uuid.uuid4(),
+            amount=config.default_amount
+        )
+        
+        print(f"Created forecast for next year {next_year}")
+    
+    def add_payment(self, amount, payment_method, payment_date=None):
+        """Add a payment to the declaration"""
+        print(f"\n=== Adding Payment to {self.tax_type.title()} Tax {self.year} ===")
+        print(f"Amount: {amount}")
+        print(f"Method: {payment_method}")
+        
+        if not payment_date:
+            payment_date = timezone.now().date()
+        
+        # Update paid amount
+        self.paid_amount += amount
+        
+        # Update payment details
+        self.payment_method = payment_method
+        self.payment_date = payment_date
+        
+        # Update status
+        if self.paid_amount >= self.amount:
+            self.status = 'paid'
+        else:
+            self.status = 'partially_paid'
+        
+        self.save()
+        
+        return True
+    
+    def mark_as_rejected(self, rejection_date=None, rejection_cause=None, rejection_notes=None):
+        """Mark declaration as rejected with cause and notes"""
+        print(f"\n=== Marking {self.tax_type.title()} Tax {self.year} as rejected ===")
+        
+        self.status = 'rejected'
+        self.rejection_date = rejection_date or timezone.now().date()
+        
+        # Store rejection cause and notes
+        if rejection_cause:
+            self.rejection_cause = rejection_cause
+        if rejection_notes:
+            self.rejection_notes = rejection_notes
+        
+        # Update forecast
+        if self.payment_method == 'direct_debit':
+            self._update_forecast()
+        
+        self.save()
+        
+        print("Tax declaration marked as rejected")
+    
+    @property
+    def remaining_amount(self):
+        """Get remaining amount to pay"""
+        # Start with base tax amount remaining
+        base_remaining = self.amount - self.paid_amount
+        
+        # Add unpaid fines amount
+        unpaid_fines_total = Decimal('0.00')
+        for fine in self.fines.filter(paid=False):
+            unpaid_fines_total += fine.amount
+        
+        return base_remaining + unpaid_fines_total
+    
+    def __str__(self):
+        return f"{self.get_tax_type_display()} {self.year}"
+    
+    class Meta:
+        ordering = ['-year']
+        unique_together = ['tax_type', 'year']
+        verbose_name = "Other Tax Declaration"
+        verbose_name_plural = "Other Tax Declarations"
+
+
+class TaxFine(BaseModel):
+    """Fine entry for tax declarations"""
+    
+    declaration = models.ForeignKey(
+        OtherTaxDeclaration, 
+        on_delete=models.CASCADE,
+        related_name='fines'
+    )
+    
+    amount = models.DecimalField(
+        max_digits=15,
+        decimal_places=2,
+        help_text="Fine amount"
+    )
+    
+    fine_date = models.DateField(
+        default=timezone.now,
+        help_text="Date when the fine was applied"
+    )
+    
+    reference = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Reference number or code for the fine"
+    )
+    
+    description = models.TextField(
+        blank=True,
+        help_text="Description or reason for the fine"
+    )
+    
+    paid = models.BooleanField(
+        default=False,
+        help_text="Whether the fine has been paid"
+    )
+    
+    payment_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Date when the fine was paid"
+    )
+    
+    def save(self, *args, **kwargs):
+        """Override save to update declaration"""
+        super().save(*args, **kwargs)
+        
+        # Update declaration forecast if fine is not paid and using direct debit
+        if not self.paid and self.declaration.payment_method == 'direct_debit':
+            self.declaration._update_forecast()
+    
+    def __str__(self):
+        return f"Fine {self.amount} for {self.declaration}"
+    
+    class Meta:
+        verbose_name = "Tax Fine"
+        verbose_name_plural = "Tax Fines"

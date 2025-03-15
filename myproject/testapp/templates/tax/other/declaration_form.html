@@ -1,0 +1,253 @@
+{% load accounting_filters %}
+{% load i18n %}
+
+<div class="modal-header">
+    <h5 class="modal-title">
+        <i class="fas fa-file-invoice-dollar me-2"></i> {{ title }}
+        {% if declaration and declaration.status in 'paid,rejected' %}
+            <span class="badge {% if declaration.status == 'paid' %}bg-success{% elif declaration.status == 'partially_paid' %}bg-warning{% else %}bg-danger{% endif %}">
+                {{ declaration.get_status_display }}
+            </span>
+        {% endif %}
+    </h5>
+    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+</div>
+<div class="modal-body">
+    <form id="declarationForm">
+        {% csrf_token %}
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Declaration Information" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="year" class="form-label">{% trans "Year" %}</label>
+                        <input type="number" class="form-control" id="year" name="year" 
+                               value="{{ declaration.year|default:current_year }}" 
+                               {% if declaration and declaration.status in 'paid,rejected' %}disabled{% endif %} 
+                               required min="2000" max="2100">
+                    </div>
+                    <div class="col-md-6">
+                        <label for="amount" class="form-label">{% trans "Tax Amount" %}</label>
+                        <div class="input-group">
+                            <input type="text" class="form-control decimal-input" id="amount" name="amount" 
+                                value="{{ declaration.amount|default:'0.00' }}" 
+                                {% if declaration and declaration.status in 'paid,rejected' %}disabled{% endif %}
+                                required>
+                            <span class="input-group-text">MAD</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="payment_method" class="form-label">{% trans "Payment Method" %}</label>
+                        <select class="form-control" id="payment_method" name="payment_method"
+                                {% if declaration and declaration.status in 'paid,rejected' %}disabled{% endif %}>
+                            <option value="">{% trans "Select Method" %}</option>
+                            {% for value, label in payment_methods %}
+                            <option value="{{ value }}" {% if declaration and declaration.payment_method == value %}selected{% endif %}>
+                                {{ label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="due_date" class="form-label">{% trans "Due Date" %}</label>
+                        <input type="text" class="form-control" id="due_date" 
+                               value="{{ declaration.due_date|date:'Y-m-d'|default:'' }}" disabled>
+                        <small class="text-muted">{% trans "Auto-calculated from configuration" %}</small>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <label for="notes" class="form-label">{% trans "Notes" %}</label>
+                        <textarea class="form-control" id="notes" name="notes" rows="3" 
+                        {% if declaration and declaration.status in 'paid,rejected' %}disabled{% endif %}>{{ declaration.notes|default:'' }}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if declaration %}
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Payment Status" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label class="form-label">{% trans "Current Status" %}</label>
+                        <div>
+                            {% if declaration.status == 'declared' %}
+                            <span class="badge bg-primary">{% trans "Declared" %}</span>
+                            {% elif declaration.status == 'partially_paid' %}
+                            <span class="badge bg-warning">{% trans "Partially Paid" %}</span>
+                            {% elif declaration.status == 'paid' %}
+                            <span class="badge bg-success">{% trans "Paid" %}</span>
+                            {% elif declaration.status == 'rejected' %}
+                            <span class="badge bg-danger">{% trans "Rejected" %}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">{% trans "Payment Method" %}</label>
+                        <div>
+                            {% if declaration.payment_method %}
+                            {{ declaration.get_payment_method_display }}
+                            {% else %}
+                            <span class="text-muted">{% trans "None" %}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <label class="form-label">{% trans "Amount Paid" %}</label>
+                        <div>{{ declaration.paid_amount|format_balance }}</div>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">{% trans "Remaining Amount" %}</label>
+                        <div>{{ declaration.remaining_amount|format_balance }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Fines Section -->
+        <div class="card mb-3">
+            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                <h6 class="mb-0">{% trans "Fines & Penalties" %}</h6>
+                {% if declaration.status != 'paid' %}
+                <button type="button" class="btn btn-sm btn-warning add-fine" data-declaration-id="{{ declaration.id }}">
+                    <i class="fas fa-plus me-1"></i> {% trans "Add Fine" %}
+                </button>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                <div id="finesList">
+                    {% if fines %}
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>{% trans "Date" %}</th>
+                                <th>{% trans "Amount" %}</th>
+                                <th>{% trans "Reference" %}</th>
+                                <th>{% trans "Paid" %}</th>
+                                <th>{% trans "Actions" %}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for fine in fines %}
+                            <tr id="fine-{{ fine.id }}">
+                                <td>{{ fine.fine_date|date:"Y-m-d" }}</td>
+                                <td>{{ fine.amount|format_balance }}</td>
+                                <td>{{ fine.reference|default:"-" }}</td>
+                                <td>
+                                    {% if fine.paid %}
+                                    <span class="badge bg-success">{% trans "Paid" %}</span>
+                                    {% else %}
+                                    <span class="badge bg-danger">{% trans "Unpaid" %}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if declaration.status != 'paid' %}
+                                    <button type="button" class="btn btn-sm btn-primary edit-fine" data-declaration-id="{{ declaration.id }}" data-fine-id="{{ fine.id }}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-sm btn-danger delete-fine" data-declaration-id="{{ declaration.id }}" data-fine-id="{{ fine.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    {% else %}
+                                    <button type="button" class="btn btn-sm btn-info view-fine" data-declaration-id="{{ declaration.id }}" data-fine-id="{{ fine.id }}">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <p class="text-muted text-center">{% trans "No fines recorded" %}</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="card mb-3">
+            <div class="card-header bg-light">
+                <h6 class="mb-0">{% trans "Documents" %}</h6>
+            </div>
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <label for="taxNoticeDocument" class="form-label">{% trans "Tax Notice Document" %}</label>
+                        <div class="tax-notice-container">
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="taxNoticeDocument" name="taxNoticeDocument" 
+                                       accept=".pdf,.jpg,.jpeg,.png">
+                                {% if declaration and declaration.tax_notice_document %}
+                                    <button type="button" class="btn btn-outline-primary view-document" 
+                                            data-document-url="{{ declaration.tax_notice_document.url }}"
+                                            data-document-type="tax_notice">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger delete-document" 
+                                            data-declaration-id="{{ declaration.id }}"
+                                            data-document-type="tax_notice">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <small class="text-muted">{% trans "Maximum file size: 10MB" %}</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="paymentReceiptDocument" class="form-label">{% trans "Payment Receipt" %}</label>
+                        <div class="payment-receipt-container">
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="paymentReceiptDocument" name="paymentReceiptDocument" 
+                                       accept=".pdf,.jpg,.jpeg,.png">
+                                {% if declaration and declaration.payment_receipt_document %}
+                                    <button type="button" class="btn btn-outline-primary view-document" 
+                                            data-document-url="{{ declaration.payment_receipt_document.url }}"
+                                            data-document-type="payment_receipt">
+                                        <i class="fas fa-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn btn-outline-danger delete-document" 
+                                            data-declaration-id="{{ declaration.id }}"
+                                            data-document-type="payment_receipt">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <small class="text-muted">{% trans "Maximum file size: 10MB" %}</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </form>
+</div>
+<div class="modal-footer">
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+        {% trans "Cancel" %}
+    </button>
+    {% if not declaration or declaration.status not in 'paid' %}
+    <button type="button" class="btn btn-primary" id="saveDeclaration">
+        <i class="fas fa-save me-2"></i> {% trans "Save Declaration" %}
+    </button>
+    {% endif %}
+</div>
+
+<script>
+// Format decimal inputs to handle both comma and period as decimal separators
+$(document).ready(function() {
+    $('.decimal-input').on('input', function() {
+        // Allow both comma and period during input
+        $(this).val($(this).val().replace(/[^0-9.,]/g, ''));
+    });
+});
+</script>
