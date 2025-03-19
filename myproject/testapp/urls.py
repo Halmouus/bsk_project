@@ -1,7 +1,7 @@
 from django.urls import path, include
 
 
-from . import views_ir, views_stamp_rights, views_other_taxes
+from . import views_ir, views_stamp_rights, views_other_taxes, views_checkers
 
 
 from .views_users import initialize_user_profiles, user_management, user_activity, create_user, user_permissions
@@ -421,7 +421,13 @@ urlpatterns = [
     path('tax/communal/declaration/<uuid:declaration_id>/upload-document/', views_other_taxes.OtherTaxDocumentUploadView.as_view(), {'tax_type': 'communal'}, name='communal-tax-document-upload'),
     path('tax/communal/declaration/<uuid:declaration_id>/delete-document/', views_other_taxes.OtherTaxDocumentDeleteView.as_view(), {'tax_type': 'communal'}, name='communal-tax-document-delete'),
     path('tax/communal/forecasts/', views_other_taxes.OtherTaxForecastView.as_view(), {'tax_type': 'communal'}, name='communal-tax-forecasts'),
-    
+    path('tax/other/<str:tax_type>/declaration/<uuid:declaration_id>/payments/', 
+        views_other_taxes.DeclarationPaymentsView.as_view(), 
+        name='other-tax-payments'),
+
+    # Tax Declaration Autocomplete
+    path('tax-declarations/autocomplete/', views_checkers.TaxDeclarationAutocompleteView.as_view(), name='tax-declaration-autocomplete'),
+
     # Pay URLs    
     path('pay/config/', PayConfigurationView.as_view(), name='pay-config'),
     path('pay/', PayListView.as_view(), name='pay-list'),

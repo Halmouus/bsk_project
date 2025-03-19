@@ -111,6 +111,10 @@
                             <input type="radio" name="payment_type" value="supplier">
                             Pay Supplier
                         </label>
+                        <label class="btn btn-outline-primary">
+                            <input type="radio" name="payment_type" value="tax">
+                            Pay Tax
+                        </label>
                     </div>
                 </div>
 
@@ -119,6 +123,7 @@
                     {% csrf_token %}
                     <input type="hidden" id="checker_id" name="checker_id">
                     <input type="hidden" id="is_supplier_payment" value="false">
+                    <input type="hidden" id="is_tax_payment" value="false">
                     
                     <div class="row">
                         <div class="col-md-6">
@@ -237,6 +242,62 @@
                             Payment allocations can be managed after creating the check.
                         </div>
                     </div>
+                    
+                    <!-- Tax Section (shown for tax payments) -->
+                    <div id="tax-payment-section" style="display: none;">
+                        <div class="row">
+                            <div class="col-md-12">
+                                <div class="form-group">
+                                    <label>Tax Declaration</label>
+                                    <input type="text" class="form-control" id="tax-declaration" 
+                                           placeholder="Search tax declaration...">
+                                    <input type="hidden" id="tax-declaration-id">
+                                    <input type="hidden" id="tax-declaration-type">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="alert alert-info">
+                            <i class="fas fa-info-circle"></i>
+                            Select a tax declaration to pay. Amount, due date, and suggested beneficiary will be filled automatically.
+                            You can modify the beneficiary if needed.
+                        </div>
+
+                     <!-- Tax Payment Summary Cards -->
+                        <div class="row mb-4">
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Total Amount</h6>
+                                        <h4 id="tax-total-amount">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Checks Issued</h6>
+                                        <h4 id="tax-issued-amount">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Checks Paid</h6>
+                                        <h4 id="tax-paid-amount">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="card bg-light">
+                                    <div class="card-body">
+                                        <h6 class="text-muted">Remaining to Issue</h6>
+                                        <h4 id="tax-remaining-amount">-</h4>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
                     <div class="row">
                         <div class="col-md-6">
@@ -259,8 +320,7 @@
 
                     <div class="form-group">
                         <label>Observation</label>
-                        <textarea class="form-control" name="observation" rows="2">
-                        </textarea>
+                        <textarea class="form-control" name="observation" rows="2"></textarea>
                     </div>
                 </form>
             </div>
@@ -421,26 +481,152 @@ const PaymentSystem = {
 
         this.setupValidation();
         this.setupPositionValidation();
-        this.setupAutoComplete();
+        this.setupRegularBeneficiaryAutocomplete(); // Changed from setupAutoComplete
+        this.setupInvoiceAutocomplete(); // New method to handle just invoices
+        this.setupTaxDeclarationAutocomplete(); // New method to handle tax declarations
         this.setupPaymentTypeToggle();
         this.bindEvents();
         console.log("[PaymentSystem] Initialization complete");
     },
 
+    setupInvoiceAutocomplete() {
+        console.log("[PaymentSystem] Setting up invoice autocomplete");
+        
+        // Invoice Autocomplete
+        this.invoiceInput.autocomplete({
+            minLength: 0,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                const supplierId = $('#supplier_id').val();
+                if (!supplierId) return response([]);
+                
+                console.log("[PaymentSystem] Fetching invoices for supplier:", supplierId);
+
+                try {
+                    const data = await $.get('/testapp/invoices/autocomplete/', {
+                        term: request.term,
+                        supplier: supplierId
+                    });
+                    response(data);
+                } catch (error) {
+                    console.error('[PaymentSystem] Invoice fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                console.log("[PaymentSystem] Invoice selected:", ui.item);
+                this.handleInvoiceSelect(ui.item);
+                return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid invoice selection - resetting");
+                    this.invoiceInput.val('');
+                    $('#invoice_id').val('');
+                    this.resetPaymentInfo();
+                }
+            }
+        });
+    },
+
+    // New method to set up just the tax declaration autocomplete
+    setupTaxDeclarationAutocomplete() {
+        console.log("[PaymentSystem] Setting up tax declaration autocomplete");
+        
+        // Tax Declaration Autocomplete
+        $('#tax-declaration').autocomplete({
+            minLength: 0,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                try {
+                    console.log("[PaymentSystem] Fetching tax declarations");
+                    const data = await $.get('/testapp/tax-declarations/autocomplete/', {
+                        term: request.term
+                    });
+                    response(data);
+                } catch (error) {
+                    console.error('[PaymentSystem] Tax declaration fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                console.log("[PaymentSystem] Tax declaration selected:", ui.item);
+                $('#tax-declaration').val(ui.item.label);
+                $('#tax-declaration-id').val(ui.item.id);
+                $('#tax-declaration-type').val(ui.item.type);
+                
+                // Store amount in data attribute for validation
+                $('#tax-declaration').data('amount', ui.item.amount);
+                console.log("[PaymentSystem] Stored tax declaration amount:", ui.item.amount);
+
+                // Update summary cards
+                $('#tax-total-amount').text(formatMoney(ui.item.total_amount || 0));
+                $('#tax-issued-amount').text(formatMoney(ui.item.issued_amount || 0));
+                $('#tax-paid-amount').text(formatMoney((ui.item.total_amount || 0) - (ui.item.amount || 0) - (ui.item.issued_amount || 0)));
+                $('#tax-remaining-amount').text(formatMoney(ui.item.amount || 0));
+                
+                // Auto-fill amount and due date
+                this.amountInput.val(ui.item.amount.toFixed(2));
+                this.amountInput.trigger('input'); // Trigger validation
+                $('[name="payment_due"]').val(ui.item.due_date || '');
+                
+                return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid tax declaration - resetting");
+                    $('#tax-declaration').val('');
+                    $('#tax-declaration-id').val('');
+                    $('#tax-declaration-type').val('');
+                    $('#tax-declaration').removeData('amount');
+                }
+            }
+        }).autocomplete("instance")._renderItem = function(ul, item) {
+            return $("<li>")
+                .append(`<div class="p-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>${item.label}</strong>
+                        <span>${formatMoney(item.amount)}</span>
+                    </div>
+                    <small class="text-muted">Due: ${item.due_date || 'Not set'}</small>
+                </div>`)
+                .appendTo(ul);
+        };
+    },
+
     setupPaymentTypeToggle() {
         console.log("[PaymentSystem] Setting up payment type toggle");
         $('input[name="payment_type"]').on('change', (e) => {
-            const isSupplierPayment = e.target.value === 'supplier';
+            const paymentType = e.target.value;
+            const isSupplierPayment = paymentType === 'supplier';
+            const isTaxPayment = paymentType === 'tax';
+            
             $('#is_supplier_payment').val(isSupplierPayment);
-            console.log("[PaymentSystem] Payment type changed:", isSupplierPayment ? 'supplier' : 'invoice');
+            $('#is_tax_payment').val(isTaxPayment);
+            
+            console.log("[PaymentSystem] Payment type changed:", paymentType);
             
             // Toggle sections
-            $('#invoice-section').toggle(!isSupplierPayment);
+            $('#invoice-section').toggle(paymentType === 'invoice');
             $('#supplier-section').toggle(isSupplierPayment);
+            $('#tax-payment-section').toggle(isTaxPayment);
             
             // Reset form fields
-            this.invoiceInput.val('');
-            $('#invoice_id').val('');
+            if (paymentType === 'invoice' || paymentType === 'tax') {
+                this.invoiceInput.val('');
+                $('#invoice_id').val('');
+            }
+            
+            // Reset the beneficiary field
+            this.beneficiaryInput.val('');
+            $('#supplier_id').val('');
+            
+            // Reinitialize autocomplete with filtering for tax payments
+            if (isTaxPayment) {
+                this.setupTaxBeneficiaryAutocomplete();
+            } else {
+                this.setupRegularBeneficiaryAutocomplete();
+            }
             
             // Keep amount if within new limits
             const currentAmount = this.amountInput.val();
@@ -448,6 +634,109 @@ const PaymentSystem = {
                 this.validateAmount(currentAmount);
             }
         });
+    },
+
+    setupTaxBeneficiaryAutocomplete() {
+        console.log("[PaymentSystem] Setting up tax beneficiary autocomplete");
+        
+        // Destroy existing autocomplete if any
+        if (this.beneficiaryInput.autocomplete("instance")) {
+            this.beneficiaryInput.autocomplete("destroy");
+        }
+        
+        // Create new autocomplete that filters by service="tax collection"
+        this.beneficiaryInput.autocomplete({
+            minLength: 0,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                try {
+                    const data = await $.get('/testapp/suppliers/autocomplete/', {
+                        term: request.term,
+                        service: 'tax collection'
+                    });
+                    response(data.map(item => ({
+                        label: item.label,
+                        value: item.value 
+                    })));
+                } catch (error) {
+                    console.error('[PaymentSystem] Supplier fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                console.log("[PaymentSystem] Tax collector selected:", ui.item);
+                $('#supplier_id').val(ui.item.value);
+                this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
+                return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid tax collector selection - resetting");
+                    this.beneficiaryInput.val('');
+                    $('#supplier_id').val('');
+                }
+            }
+        });
+        
+        // Add placeholder text to hint at tax collectors
+        this.beneficiaryInput.attr('placeholder', 'Search tax collector...');
+    },
+
+    setupRegularBeneficiaryAutocomplete() {
+        console.log("[PaymentSystem] Setting up regular beneficiary autocomplete");
+        
+        // Destroy existing autocomplete if any
+        if (this.beneficiaryInput.autocomplete("instance")) {
+            this.beneficiaryInput.autocomplete("destroy");
+        }
+        
+        // Create regular autocomplete with no service filter
+        this.beneficiaryInput.autocomplete({
+            minLength: 0,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                try {
+                    const data = await $.get('/testapp/suppliers/autocomplete/', {
+                        term: request.term
+                    });
+                    response(data.map(item => ({
+                        label: item.label,
+                        value: item.value 
+                    })));
+                } catch (error) {
+                    console.error('[PaymentSystem] Supplier fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                console.log("[PaymentSystem] Supplier selected:", ui.item);
+                $('#supplier_id').val(ui.item.value);
+                this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
+                
+                const isSupplierPayment = $('input[name="payment_type"]:checked').val() === 'supplier';
+                if (isSupplierPayment) {
+                    this.loadSupplierBalance(ui.item.value);
+                } else {
+                    this.invoiceInput.prop('disabled', false).val('');
+                    $('#invoice_id').val('');
+                    this.resetPaymentInfo();
+                }
+                return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid supplier selection - resetting");
+                    this.beneficiaryInput.val('');
+                    $('#supplier_id').val('');
+                    this.invoiceInput.prop('disabled', true).val('');
+                    $('#invoice_id').val('');
+                    this.resetPaymentInfo();
+                }
+            }
+        });
+        
+        // Reset placeholder text
+        this.beneficiaryInput.attr('placeholder', 'Search supplier...');
     },
 
     setupPositionValidation() {
@@ -584,9 +873,11 @@ const PaymentSystem = {
                 this.beneficiaryInput.val(ui.item.label.split(' (')[0]);
                 
                 const isSupplierPayment = $('input[name="payment_type"]:checked').val() === 'supplier';
+                const isTaxPayment = $('input[name="payment_type"]:checked').val() === 'tax';
+                
                 if (isSupplierPayment) {
                     this.loadSupplierBalance(ui.item.value);
-                } else {
+                } else if (!isTaxPayment) {
                     this.invoiceInput.prop('disabled', false).val('');
                     $('#invoice_id').val('');
                     this.resetPaymentInfo();
@@ -640,6 +931,68 @@ const PaymentSystem = {
                 }
             }
         });
+        
+        // Tax Declaration Autocomplete
+        $('#tax-declaration').autocomplete({
+            minLength: 0,
+            appendTo: this.modal,
+            source: async (request, response) => {
+                try {
+                    console.log("[PaymentSystem] Fetching tax declarations");
+                    const data = await $.get('/testapp/tax-declarations/autocomplete/', {
+                        term: request.term
+                    });
+                    response(data);
+                } catch (error) {
+                    console.error('[PaymentSystem] Tax declaration fetch failed:', error);
+                    response([]);
+                }
+            },
+            select: (_, ui) => {
+                console.log("[PaymentSystem] Tax declaration selected:", ui.item);
+                $('#tax-declaration').val(ui.item.label);
+                $('#tax-declaration-id').val(ui.item.id);
+                $('#tax-declaration-type').val(ui.item.type);
+                
+                // Auto-fill amount and due date
+                this.amountInput.val(ui.item.amount.toFixed(2)).removeClass('is-invalid');
+                $('[name="payment_due"]').val(ui.item.due_date || '');
+                
+                // Suggest appropriate beneficiary based on tax type
+                const suggestedBeneficiaries = {
+                    'vat': 'DGI - VAT Payments',
+                    'ir': 'DGI - Income Tax',
+                    'stamp_right': 'DGI - Stamp Rights',
+                    'other_tax': 'Tax Authority'
+                };
+                
+                // Update the beneficiary field with suggestion
+                const suggestedBeneficiary = suggestedBeneficiaries[ui.item.type] || 'Tax Authority';
+                this.beneficiaryInput.val(suggestedBeneficiary);
+                // Clear the supplier ID so a new one will be created if needed
+                $('#supplier_id').val('');
+                
+                return false;
+            },
+            change: (event, ui) => {
+                if (!ui.item) {
+                    console.log("[PaymentSystem] Invalid tax declaration - resetting");
+                    $('#tax-declaration').val('');
+                    $('#tax-declaration-id').val('');
+                    $('#tax-declaration-type').val('');
+                }
+            }
+        }).autocomplete("instance")._renderItem = function(ul, item) {
+            return $("<li>")
+                .append(`<div class="p-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>${item.label}</strong>
+                        <span>${formatMoney(item.amount)}</span>
+                    </div>
+                    <small class="text-muted">Due: ${item.due_date || 'Not set'}</small>
+                </div>`)
+                .appendTo(ul);
+        };
     },
 
     async loadSupplierBalance(supplierId) {
@@ -703,17 +1056,25 @@ const PaymentSystem = {
             const amount = parseFloat(rawValue) || 0;
             console.log("[PaymentSystem] Parsed amount:", amount);
 
-            const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
-            const maxText = isSupplierPayment ? 
-                $('#supplier-balance').text() : 
-                $('#amount-available').text();
-                
-            const maxAmount = parseFloat(
-                maxText
-                    .replace(/[^0-9,-]+/g, '')
-                    .replace(/\s|(?<=\d)\./g, '')
-                    .replace(',', '.')
-            ) || 0;
+            const is_tax_payment = $('#is_tax_payment').val() === 'true';
+            let maxAmount = 0;
+            
+            if (is_tax_payment) {
+                // For tax payments, get max from tax declaration data
+                maxAmount = parseFloat($('#tax-declaration').data('amount') || 0);
+            } else {
+                const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
+                const maxText = isSupplierPayment ? 
+                    $('#supplier-balance').text() : 
+                    $('#amount-available').text();
+                    
+                maxAmount = parseFloat(
+                    maxText
+                        .replace(/[^0-9,-]+/g, '')
+                        .replace(/\s|(?<=\d)\./g, '')
+                        .replace(',', '.')
+                ) || 0;
+            }
 
             console.log("[PaymentSystem] Max amount:", maxAmount);
 
@@ -773,18 +1134,41 @@ const PaymentSystem = {
         console.log("[PaymentSystem] Validating amount:", amount);
         if (!amount || amount <= 0) return false;
         
-        const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
-        const maxText = isSupplierPayment ? 
-            $('#supplier-balance').text() : 
-            $('#amount-available').text();
-            
-        const maxAmount = parseFloat(
-            maxText
-                .replace(/[^0-9,-]+/g, '')
-                .replace(/\s|(?<=\d)\./g, '')
-                .replace(',', '.')
-        ) || 0;
+        const is_tax_payment = $('#is_tax_payment').val() === 'true';
+        const is_supplier_payment = $('#is_supplier_payment').val() === 'true';
         
+        let maxAmount = 0;
+        
+        if (is_tax_payment) {
+            // For tax payments, get amount from the tax declaration
+            const taxDeclarationId = $('#tax-declaration-id').val();
+            if (taxDeclarationId) {
+                // Use the amount directly from the selected tax declaration
+                const taxDeclarationAmount = parseFloat($('#tax-declaration').data('amount')) || 0;
+                console.log("[PaymentSystem] Tax declaration amount:", taxDeclarationAmount);
+                maxAmount = taxDeclarationAmount;
+            }
+        } else if (is_supplier_payment) {
+            // For supplier payments, use supplier balance
+            const balanceText = $('#supplier-balance').text();
+            maxAmount = parseFloat(
+                balanceText
+                    .replace(/[^0-9,-]+/g, '')
+                    .replace(/\s|(?<=\d)\./g, '')
+                    .replace(',', '.')
+            ) || 0;
+        } else {
+            // For invoice payments, use available amount on invoice
+            const availableText = $('#amount-available').text();
+            maxAmount = parseFloat(
+                availableText
+                    .replace(/[^0-9,-]+/g, '')
+                    .replace(/\s|(?<=\d)\./g, '')
+                    .replace(',', '.')
+            ) || 0;
+        }
+        
+        console.log("[PaymentSystem] Max amount:", maxAmount);
         return amount <= maxAmount;
     },
 
@@ -807,14 +1191,54 @@ const PaymentSystem = {
             const data = {
                 checker_id: formData.get('checker_id'),
                 position: formData.get('position'),
-                is_supplier_payment: $('#is_supplier_payment').val() === 'true',
                 supplier_id: $('#supplier_id').val(),
-                invoice_id: formData.get('invoice_id'),
-                amount: formData.get('amount'),
+                creation_date: formData.get('creation_date'),
                 payment_due: formData.get('payment_due'),
-                observation: formData.get('observation'),
-                creation_date: formData.get('creation_date')
+                amount: formData.get('amount'),
+                observation: formData.get('observation')
             };
+
+            // Add payment type specifics
+            const is_tax_payment = $('#is_tax_payment').val() === 'true';
+            const is_supplier_payment = $('#is_supplier_payment').val() === 'true';
+            
+            if (is_tax_payment) {
+                data.is_tax_payment = true;
+                data.tax_declaration_id = $('#tax-declaration-id').val();
+                data.tax_declaration_type = $('#tax-declaration-type').val();
+                
+                if (!data.tax_declaration_id || !data.tax_declaration_type) {
+                    alert('Please select a tax declaration');
+                    this.saving = false;
+                    $('#save-payment').prop('disabled', false);
+                    return;
+                }
+                
+                // Validate amount doesn't exceed remaining to issue
+                const remainingToIssue = parseFloat($('#tax-remaining-amount').text()
+                    .replace(/[^0-9,-]+/g, '')
+                    .replace(/\s|(?<=\d)\./g, '')
+                    .replace(',', '.')) || 0;
+                
+                if (parseFloat(data.amount) > remainingToIssue) {
+                    alert(`Amount exceeds remaining amount to issue (${formatMoney(remainingToIssue)})`);
+                    this.saving = false;
+                    $('#save-payment').prop('disabled', false);
+                    return;
+                }
+            } else if (is_supplier_payment) {
+                data.is_supplier_payment = true;
+            } else {
+                // Invoice payment
+                data.invoice_id = formData.get('invoice_id');
+                
+                if (!data.invoice_id) {
+                    alert('Please select an invoice');
+                    this.saving = false;
+                    $('#save-payment').prop('disabled', false);
+                    return;
+                }
+            }
 
             console.log("[PaymentSystem] Sending payment data:", data);
 
@@ -838,10 +1262,10 @@ const PaymentSystem = {
             this.modal.modal('hide');
             
             // For supplier payments, open allocation modal
-            if (data.is_supplier_payment) {
+            if (is_supplier_payment) {
                 AllocationSystem.openModal(result.check_id);
             } else {
-                // For invoice payments, just reload the page
+                // For invoice or tax payments, just reload the page
                 location.reload();
             }
             
@@ -857,16 +1281,24 @@ const PaymentSystem = {
     validateForm() {
         console.log("[PaymentSystem] Validating form");
         
-        // Basic validations
-        const supplierId = $('#supplier_id').val();
-        if (!supplierId) {
-            console.log("[PaymentSystem] No supplier selected");
-            alert('Please select a supplier');
+        const is_tax_payment = $('#is_tax_payment').val() === 'true';
+        const is_supplier_payment = $('#is_supplier_payment').val() === 'true';
+        
+        // Beneficiary is required for all payment types
+        const beneficiary = this.beneficiaryInput.val();
+        if (!beneficiary) {
+            console.log("[PaymentSystem] No beneficiary entered");
+            alert('Please enter a beneficiary');
             return false;
         }
-
-        const isSupplierPayment = $('#is_supplier_payment').val() === 'true';
-        if (!isSupplierPayment && !$('#invoice_id').val()) {
+        
+        if (is_tax_payment) {
+            if (!$('#tax-declaration-id').val() || !$('#tax-declaration-type').val()) {
+                console.log("[PaymentSystem] No tax declaration selected");
+                alert('Please select a tax declaration');
+                return false;
+            }
+        } else if (!is_supplier_payment && !$('#invoice_id').val()) {
             console.log("[PaymentSystem] No invoice selected for invoice payment");
             alert('Please select an invoice');
             return false;

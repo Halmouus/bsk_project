@@ -5,7 +5,7 @@ from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView
 
 from .decorators import require_permission
-from .models import BankCheckTemplate, CheckAllocation, Checker, Check, Invoice, Supplier, BankAccount, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit
+from .models import BankCheckTemplate, CheckAllocation, Checker, Check, ForecastStatement, IRDeclaration, Invoice, StampRightDeclaration, Supplier, BankAccount, VATDeclaration, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit, OtherTaxDeclaration
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
 from django.http import JsonResponse, HttpResponse
@@ -22,6 +22,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from decimal import Decimal
 import traceback
+from . import models
 
 
 
@@ -359,13 +360,93 @@ class CheckCreateView(View):
             initial_signatures = position_sigs.get('signatures', [])
             print(f"Found pre-signed signatures for position {position}: {initial_signatures}")
             
-            # Get supplier
-            supplier = get_object_or_404(Supplier, pk=data['supplier_id'])
+            # Handle different payment types
+            is_tax_payment = data.get('is_tax_payment', False)
+            is_supplier_payment = data.get('is_supplier_payment', False) and not is_tax_payment
             
-            # Handle supplier payment vs invoice payment
-            is_supplier_payment = data.get('is_supplier_payment', False)
+            # Initialize variables for validation
             cause = None
-            if not is_supplier_payment:
+            
+            # Handle beneficiary/supplier based on payment type
+            if is_tax_payment:
+                print("Creating tax payment check")
+                # Validate tax payment data
+                if not data.get('tax_declaration_type') or not data.get('tax_declaration_id'):
+                    raise ValidationError("Tax declaration type and ID are required for tax payments")
+                    
+                print(f"Tax payment: Type={data['tax_declaration_type']}, ID={data['tax_declaration_id']}")
+                
+                # Handle beneficiary - either use supplied ID or create from name
+                if 'supplier_id' in data and data['supplier_id']:
+                    # Use existing supplier if ID provided
+                    supplier = get_object_or_404(Supplier, pk=data['supplier_id'])
+                    print(f"Using existing supplier for tax payment: {supplier.name}")
+                else:
+                    # Get or create supplier based on beneficiary name
+                    beneficiary_name = data.get('beneficiary', 'Tax Authority')
+                    
+                    # Get suggested beneficiary name based on tax type
+                    suggested_names = {
+                        'vat': 'DGI - VAT Payments',
+                        'ir': 'DGI - Income Tax',
+                        'stamp_right': 'DGI - Stamp Rights',
+                        'other_tax': 'Tax Authority'
+                    }
+                    
+                    if not beneficiary_name:
+                        beneficiary_name = suggested_names.get(data['tax_declaration_type'], 'Tax Authority')
+                    
+                    try:
+                        supplier = Supplier.objects.get(name=beneficiary_name)
+                        print(f"Found existing supplier with name: {beneficiary_name}")
+                    except Supplier.DoesNotExist:
+                        print(f"Creating new supplier with name: {beneficiary_name}")
+                        # Create a simple supplier record for this tax authority
+                        supplier = Supplier.objects.create(
+                            name=beneficiary_name,
+                            accounting_code=f"4455{data['tax_declaration_type'][:2].upper()}",
+                            if_code="12345678",  # Placeholder
+                            ice_code="123456789012345",  # Placeholder 
+                            rc_code="12345",  # Placeholder
+                            rc_center="Tax Authority",
+                            service="Tax Collection",
+                            delay_convention=0  # No delay for tax payments
+                        )
+                
+                # Delete existing forecasts for this tax declaration
+                tax_type_to_forecast = {
+                    'vat': 'vat_declaration',
+                    'ir': 'ir_declaration',
+                    'stamp_right': 'stamp_right_declaration',
+                    'other_tax': f"other_tax_tax"
+                }
+                
+                forecast_type = tax_type_to_forecast.get(data['tax_declaration_type'])
+                if forecast_type:
+                    print(f"Deleting forecasts for {forecast_type} with ID {data['tax_declaration_id']}")
+                    ForecastStatement.objects.filter(
+                        source_type=forecast_type,
+                        source_id=data['tax_declaration_id'],
+                        is_processed=False
+                    ).delete()
+                    
+            elif is_supplier_payment:
+                print("Creating supplier payment check")
+                # Get supplier and validate
+                supplier = get_object_or_404(Supplier, pk=data['supplier_id'])
+                
+                # Validate supplier payment 
+                supplier_balance = get_supplier_balance(supplier)
+                if Decimal(str(data['amount'])) > supplier_balance['balance']:
+                    raise ValidationError(
+                        f"Amount {data['amount']} exceeds supplier's unpaid balance "
+                        f"{supplier_balance['balance']}"
+                    )
+                    
+            else:
+                # Direct invoice payment
+                print("Creating invoice payment check")
+                supplier = get_object_or_404(Supplier, pk=data['supplier_id'])
                 cause = get_object_or_404(Invoice, pk=data['invoice_id'])
                 if cause.supplier != supplier:
                     raise ValidationError("Invoice supplier must match selected supplier")
@@ -382,30 +463,27 @@ class CheckCreateView(View):
                 creation_date=data.get('creation_date', timezone.now().date()),
                 beneficiary=supplier,
                 is_supplier_payment=is_supplier_payment,
+                is_tax_payment=is_tax_payment,
                 cause=cause,
-                amount_due=cause.total_amount if cause else 0,
+                amount_due=cause.total_amount if cause else Decimal(str(data['amount'])),
                 payment_due=data.get('payment_due'),
                 amount=Decimal(str(data['amount'])),
                 observation=data.get('observation', ''),
                 signatures=initial_signatures
             )
             
-             # For supplier payments, validate that amount doesn't exceed total unpaid
-            if is_supplier_payment:
-                supplier_balance = get_supplier_balance(supplier)
-                if Decimal(str(data['amount'])) > supplier_balance['balance']:
-                    raise ValidationError(
-                        f"Amount {data['amount']} exceeds supplier's unpaid balance "
-                        f"{supplier_balance['balance']}"
-                    )
+            # Add tax-specific fields if needed
+            if is_tax_payment:
+                check.tax_declaration_type = data['tax_declaration_type']
+                check.tax_declaration_id = data['tax_declaration_id']
             
             check.save()
 
-            # Handle immediate allocation if provided
+            # Handle immediate allocation if provided for supplier payments
             if is_supplier_payment and data.get('allocations'):
                 for allocation in data['allocations']:
                     CheckAllocation.objects.create(
-                        check=check,
+                        payment=check,
                         invoice_id=allocation['invoice_id'],
                         amount=Decimal(str(allocation['amount']))
                     )
@@ -414,7 +492,8 @@ class CheckCreateView(View):
                 'message': 'Check created successfully',
                 'check_id': str(check.id),
                 'is_supplier_payment': is_supplier_payment,
-                'available_amount': float(check.get_available_amount())
+                'is_tax_payment': is_tax_payment,
+                'available_amount': float(check.get_available_amount()) if is_supplier_payment else 0
             })
             
         except ValidationError as e:
@@ -422,6 +501,7 @@ class CheckCreateView(View):
             return JsonResponse({'error': str(e)}, status=400)
         except Exception as e:
             print("Error in check creation:", str(e))
+            print(traceback.format_exc())
             return JsonResponse({'error': str(e)}, status=400)
 
 
@@ -564,10 +644,18 @@ class CheckStatusView(View):
 
 def supplier_autocomplete(request):
     query = request.GET.get('term', '')
-    suppliers = Supplier.objects.filter(
+    service_filter = request.GET.get('service', None)
+    
+    suppliers_query = Supplier.objects.filter(
         Q(name__icontains=query) | 
         Q(accounting_code__icontains=query)
-    )[:10]
+    )
+    
+    # Filter by service if specified
+    if service_filter:
+        suppliers_query = suppliers_query.filter(service__icontains=service_filter)
+    
+    suppliers = suppliers_query[:10]
     
     supplier_list = [{
         "label": f"{supplier.name} ({supplier.accounting_code})",
@@ -575,6 +663,114 @@ def supplier_autocomplete(request):
     } for supplier in suppliers]
     
     return JsonResponse(supplier_list, safe=False)
+
+def get_unpaid_tax_declarations():
+    """Get all unpaid tax declarations of different types"""
+    tax_declarations = []
+    
+    # Get OtherTaxDeclarations
+    print("Fetching OtherTaxDeclarations...")
+    other_taxes = OtherTaxDeclaration.objects.exclude(status='paid')
+    for tax in other_taxes:
+        # Calculate total amount including fines
+        fines_total = sum(fine.amount for fine in tax.fines.all() if not fine.paid)
+        
+        # Calculate REMAINING amount due (not the full amount)
+        remaining = tax.amount - tax.paid_amount
+        
+        # Find checks already issued but not paid/cancelled
+        issued_check_amount = Check.objects.filter(
+            is_tax_payment=True,
+            tax_declaration_type='other_tax',
+            tax_declaration_id=tax.id
+        ).exclude(
+            status__in=['paid', 'cancelled', 'rejected', 'unpaid']
+        ).aggregate(models.Sum('amount'))['amount__sum'] or 0
+        
+        print(f"Tax {tax.id}: Total={tax.amount}, Paid={tax.paid_amount}, Issued checks={issued_check_amount}")
+        
+        # Calculate true remaining amount to issue
+        remaining_to_issue = remaining + fines_total - issued_check_amount
+        
+        if remaining_to_issue <= 0:
+            continue
+        
+        # Include details about tax
+        tax_name = f"{tax.get_tax_type_display()} Tax {tax.year}"
+        
+        tax_declarations.append({
+            'id': str(tax.id),
+            'type': 'other_tax',
+            'subtype': tax.tax_type,
+            'label': tax_name,
+            'amount': float(remaining_to_issue),
+            'base_amount': float(remaining),
+            'fines_amount': float(fines_total),
+            'total_amount': float(remaining + fines_total),
+            'issued_amount': float(issued_check_amount),
+            'due_date': tax.due_date.strftime('%Y-%m-%d')
+        })
+    
+    
+    # Get IRDeclarations
+    print("Fetching IRDeclarations...")
+    ir_taxes = IRDeclaration.objects.exclude(status='paid')
+    for tax in ir_taxes:
+        tax_declarations.append({
+            'id': str(tax.id),
+            'type': 'ir',
+            'label': f"IR {tax.period_month:02d}/{tax.period_year}",
+            'amount': float(tax.tax_amount),
+            'due_date': tax.due_date.strftime('%Y-%m-%d')
+        })
+    
+    # Get StampRightDeclarations
+    print("Fetching StampRightDeclarations...")
+    stamp_taxes = StampRightDeclaration.objects.exclude(status='paid')
+    for tax in stamp_taxes:
+        tax_declarations.append({
+            'id': str(tax.id),
+            'type': 'stamp_right',
+            'label': f"Stamp Rights {tax.period_month:02d}/{tax.period_year}",
+            'amount': float(tax.tax_amount),
+            'due_date': tax.due_date.strftime('%Y-%m-%d')
+        })
+    
+    # Get VATDeclarations
+    print("Fetching VATDeclarations...")
+    vat_taxes = VATDeclaration.objects.filter(status='declared')
+    for tax in vat_taxes:
+        net_vat = tax.total_invoiced_vat - tax.total_deducted_vat
+        if net_vat <= 0:
+            continue
+        
+        tax_declarations.append({
+            'id': str(tax.id),
+            'type': 'vat',
+            'label': f"VAT {tax.period_month:02d}/{tax.period_year}",
+            'amount': float(net_vat),
+            'due_date': tax.due_date.strftime('%Y-%m-%d')
+        })
+    
+    print(f"Found {len(tax_declarations)} unpaid tax declarations")
+    return tax_declarations
+
+@method_decorator(csrf_exempt, name='dispatch')
+@method_decorator(require_permission('can_view_checks'), name='dispatch')
+class TaxDeclarationAutocompleteView(View):
+    def get(self, request):
+        query = request.GET.get('term', '')
+        print(f"Tax declaration search query: {query}")
+        
+        tax_declarations = get_unpaid_tax_declarations()
+        
+        # Filter by query if provided
+        if query:
+            tax_declarations = [tax for tax in tax_declarations 
+                              if query.lower() in tax['label'].lower()]
+        
+        print(f"Returning {len(tax_declarations)} matching tax declarations")
+        return JsonResponse(tax_declarations, safe=False)
 
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(require_permission('can_manage_checks'), name='dispatch')
@@ -950,6 +1146,16 @@ class CheckDetailView(View):
     def get(self, request, check_id):
         try:
             check = Check.objects.get(id=check_id)
+            
+            # Check if HTML is requested
+            if request.headers.get('X-Requested-With') == 'XMLHttpRequest' and request.GET.get('format') == 'html':
+                return JsonResponse({
+                    'html': render_to_string(
+                        'checker/check_details_modal.html',
+                        {'check': check},
+                        request=request
+                    )
+                })
             data = {
                 "creation_date": check.creation_date.strftime("%Y-%m-%d") if check.creation_date else None,
                 "printed_at": check.printed_at.strftime("%Y-%m-%d") if check.printed_at else None,

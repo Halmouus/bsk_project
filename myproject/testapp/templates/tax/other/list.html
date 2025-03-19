@@ -76,9 +76,13 @@
                                     <button class="btn btn-sm btn-primary edit-declaration" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Edit Declaration' %}">
                                         <i class="fas fa-edit"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-success add-payment" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Add Payment' %}">
-                                        <i class="fas fa-money-bill-wave"></i>
-                                    </button>
+                                    <button class="btn btn-sm btn-info view-payments" 
+                                        data-id="{{ declaration.id }}" 
+                                        data-tax-type="{{ tax_type }}"
+                                        data-bs-toggle="tooltip" 
+                                        title="{% trans 'View Payments' %}">
+                                    <i class="fas fa-money-check-alt"></i>
+                                </button>
                                     <button class="btn btn-sm btn-warning add-fine" data-id="{{ declaration.id }}" data-bs-toggle="tooltip" title="{% trans 'Add Fine' %}">
                                         <i class="fas fa-exclamation-circle"></i>
                                     </button>
@@ -223,6 +227,24 @@
     <div class="modal-dialog">
         <div class="modal-content" id="fineModalContent">
             <!-- Content will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Payments Modal -->
+<div class="modal fade" id="paymentsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Payment Details</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="payments-modal-content">
+                <!-- Content will be loaded here -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -374,7 +396,14 @@ $(document).ready(function() {
         const declarationId = $(this).data('id');
         loadDeclarationForm(declarationId, true);
     });
-    
+
+    // View payments button
+    $(document).on('click', '.view-payments', function() {
+        const declarationId = $(this).data('id');
+        const taxType = $(this).data('tax-type');
+        viewDeclarationPayments(declarationId, taxType);
+    });
+
     // Add payment button
     $(document).on('click', '.add-payment', function() {
         const declarationId = $(this).data('id');
@@ -382,6 +411,25 @@ $(document).ready(function() {
         
         const modal = $('#paymentModal');
         modal.modal('show');
+    });
+
+    $(document).on('click', '.view-check-details', function(e) {
+        e.preventDefault();
+        const checkId = $(this).data('check-id');
+        
+        $.ajax({
+            url: `/testapp/checks/${checkId}/details/`,
+            type: 'GET',
+            data: { format: 'html' },
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            success: function(response) {
+                $('#check-details-content').html(response.html);
+                $('#checkDetailsModal').modal('show');
+            },
+            error: function() {
+                showToast('error', 'Failed to load check details');
+            }
+        });
     });
     
     // Add fine button
@@ -579,7 +627,22 @@ $(document).ready(function() {
         const modal = $('#documentPreviewModal');
         modal.modal('show');
     });
-    
+
+    // Function to load payments
+    function viewDeclarationPayments(declarationId, taxType) {
+        console.log(`Viewing payments for ${taxType} declaration: ${declarationId}`);
+        
+        // Fetch payment details and show in the payments modal
+        $.get(`/testapp/tax/other/${taxType}/declaration/${declarationId}/payments/`)
+            .done(function(response) {
+                $('#payments-modal-content').html(response.html);
+                $('#paymentsModal').modal('show');
+            })
+            .fail(function(xhr) {
+                showToast('error', xhr.responseJSON?.message || 'Failed to load payment details');
+            });
+    }
+        
     // Function to load declaration form
     function loadDeclarationForm(declarationId = null, viewOnly = false) {
         let url;

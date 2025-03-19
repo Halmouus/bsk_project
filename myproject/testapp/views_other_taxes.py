@@ -7,7 +7,8 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
-
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
 from .models import OtherTaxConfiguration, OtherTaxDeclaration, TaxFine, ForecastStatement, BankAccount, Check
 from datetime import date, datetime
 import calendar
@@ -144,8 +145,13 @@ class OtherTaxDeclarationFormView(View):
         
         # Get all fines if this is an existing declaration
         fines = []
+        linked_checks = []
         if declaration:
             fines = declaration.fines.all().order_by('-fine_date')
+            # Get linked checks using the GenericRelation
+            linked_checks = declaration.checks.all().select_related(
+                'checker', 'checker__bank_account'
+            )
         
         return JsonResponse({
             'html': render_to_string(
@@ -158,6 +164,7 @@ class OtherTaxDeclarationFormView(View):
                     'tax_type': tax_type,
                     'tax_type_display': dict(OtherTaxDeclaration.TAX_TYPE_CHOICES).get(tax_type, tax_type.title()),
                     'fines': fines,
+                    'linked_checks': linked_checks,  # Add this line
                     'payment_methods': OtherTaxDeclaration.PAYMENT_METHOD_CHOICES
                 },
                 request=request
@@ -634,6 +641,60 @@ class OtherTaxForecastView(View):
 
         except Exception as e:
             print(f"Error in OtherTaxForecastView: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+        
+@method_decorator(csrf_exempt, name='dispatch')
+class DeclarationPaymentsView(View):
+    """View for displaying payment details for a tax declaration"""
+    def get(self, request, tax_type, declaration_id):
+        try:
+            declaration = get_object_or_404(OtherTaxDeclaration, id=declaration_id)
+            
+            # Get linked checks
+            linked_checks = declaration.checks.all().select_related(
+                'checker', 'checker__bank_account'
+            )
+            
+            # Calculate payment values
+            payment_percentage = 0
+            remaining_amount = declaration.amount
+            
+            if declaration.status == 'partially_paid' and hasattr(declaration, 'paid_amount') and declaration.paid_amount and declaration.amount > 0:
+                payment_percentage = round((declaration.paid_amount / declaration.amount) * 100)
+                remaining_amount = declaration.amount - declaration.paid_amount
+            
+            # Calculate total fines amount
+            fines = declaration.fines.all()
+            total_fines = sum(fine.amount for fine in fines)
+            
+            # Calculate total checks amount
+            total_checks_amount = sum(check.amount for check in linked_checks)
+            
+            # Calculate grand total (declaration + fines)
+            grand_total = declaration.amount + total_fines
+            
+            return JsonResponse({
+                'html': render_to_string(
+                    'tax/other/payment_details.html',
+                    {
+                        'declaration': declaration,
+                        'linked_checks': linked_checks,
+                        'tax_type': tax_type,
+                        'payment_percentage': payment_percentage,
+                        'remaining_amount': remaining_amount,
+                        'total_fines': total_fines,
+                        'total_checks_amount': total_checks_amount,
+                        'grand_total': grand_total
+                    },
+                    request=request
+                )
+            })
+        except Exception as e:
+            print(f"Error in DeclarationPaymentsView: {str(e)}")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',

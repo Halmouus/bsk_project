@@ -16,7 +16,7 @@ from decimal import Decimal
 from django.db.models import Q
 import logging
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from itertools import groupby
 from operator import itemgetter
 import traceback
@@ -1723,6 +1723,17 @@ class Check(BaseModel):
         validators=[MinValueValidator(Decimal('0.01'))]
     )
     is_supplier_payment = models.BooleanField(default=False)
+    is_tax_payment = models.BooleanField(default=False)
+    tax_declaration_type = models.CharField(max_length=50, null=True, blank=True)
+    tax_declaration_id = models.UUIDField(null=True, blank=True)
+    content_type = models.ForeignKey(
+        ContentType, 
+        on_delete=models.SET_NULL, 
+        null=True, blank=True,
+        related_name="tax_checks"
+    )
+    object_id = models.UUIDField(null=True, blank=True)
+    tax_declaration = GenericForeignKey('content_type', 'object_id')
 
     observation = models.TextField(blank=True)
     delivered = models.BooleanField(default=False)
@@ -1844,6 +1855,65 @@ class Check(BaseModel):
                         self.amount_due = 0
                 else:
                     self.amount_due = 0
+                    
+            # If this is a tax payment check, delete any existing tax forecast
+            if self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type:
+                print(f"Tax payment check detected, type: {self.tax_declaration_type}")
+                print(f"Deleting any existing tax forecasts for declaration: {self.tax_declaration_id}")
+                
+                # Map tax declaration types to forecast source types
+                forecast_type_mapping = {
+                    'other_tax': {
+                        'professional': 'professional_tax',
+                        'communal': 'communal_tax',
+                        # Add other subtypes
+                        'default': 'other_tax'
+                    },
+                    'ir': 'ir_declaration',
+                    'stamp_right': 'stamp_right_declaration',
+                    'vat': 'vat_declaration'
+                }
+                
+                source_type = None
+                if self.tax_declaration_type == 'other_tax':
+                    # For OtherTaxDeclaration, we need the subtype
+                    try:
+                        tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
+                        source_type = forecast_type_mapping['other_tax'].get(
+                            tax.tax_type,
+                            forecast_type_mapping['other_tax']['default']
+                        )
+                    except Exception as e:
+                        print(f"Error getting tax subtype: {str(e)}")
+                        source_type = forecast_type_mapping['other_tax']['default']
+                else:
+                    source_type = forecast_type_mapping.get(self.tax_declaration_type)
+
+                if source_type:
+                    try:
+                        deleted_count = ForecastStatement.objects.filter(
+                            source_type=source_type,
+                            source_id=self.tax_declaration_id,
+                            is_processed=False
+                        ).delete()[0]
+                        print(f"Deleted {deleted_count} forecasts for tax declaration")
+                    except Exception as e:
+                        print(f"Error deleting tax forecasts: {str(e)}")
+        
+        # If this is a tax payment, sync the generic fields
+        if self.is_tax_payment and self.tax_declaration_type and self.tax_declaration_id:
+            if self.tax_declaration_type == 'other_tax':
+                model_class = OtherTaxDeclaration
+            elif self.tax_declaration_type == 'ir':
+                model_class = IRDeclaration
+            elif self.tax_declaration_type == 'stamp_right':
+                model_class = StampRightDeclaration
+            elif self.tax_declaration_type == 'vat':
+                model_class = VATDeclaration
+            
+            # Set content_type and object_id
+            self.content_type = ContentType.objects.get_for_model(model_class)
+            self.object_id = self.tax_declaration_id
         
         print(f"Final signatures before save: {getattr(self, 'signatures', [])}")
         super().save(*args, **kwargs)
@@ -1860,6 +1930,76 @@ class Check(BaseModel):
             self.checker.current_position = int(self.position) + 1
             self.checker.save()
 
+        # Handle tax payment processing when marked as paid
+        if self.status == 'paid' and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type:
+            print(f"\n=== Processing Tax Payment ===")
+            print(f"Tax declaration type: {self.tax_declaration_type}")
+            print(f"Tax declaration ID: {self.tax_declaration_id}")
+            print(f"Amount: {self.amount}")
+            
+            try:
+                # Process different tax types
+                if self.tax_declaration_type == 'other_tax':
+                            tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
+                            
+                            # Debug information 
+                            print(f"Current tax state - amount: {tax.amount}, paid: {tax.paid_amount}")
+                            print(f"Fines: {[{'id': str(fine.id), 'amount': fine.amount, 'paid': fine.paid} for fine in tax.fines.all()]}")
+                            
+                            # Add payment with specific check reference
+                            tax.add_payment(
+                                self.amount, 
+                                'check', 
+                                self.paid_at.date() if self.paid_at else None,
+                                check_reference=f"{self.checker.bank_account.bank}-{self.position}"
+                            )
+                            
+                            # Log updated tax state
+                            print(f"Updated tax state - amount: {tax.amount}, paid: {tax.paid_amount}")
+                            
+                            # Update fines status if part of the payment was for fines
+                            unpaid_fines = tax.fines.filter(paid=False)
+                            if unpaid_fines.exists() and tax.paid_amount >= tax.amount:
+                                # All base amount is paid, so remaining payment goes to fines
+                                remaining = self.amount - (tax.amount - tax.paid_amount)
+                                if remaining > 0:
+                                    for fine in unpaid_fines:
+                                        if remaining >= fine.amount:
+                                            fine.paid = True
+                                            fine.payment_date = self.paid_at.date() if self.paid_at else timezone.now().date()
+                                            fine.save()
+                                            remaining -= fine.amount
+                                            print(f"Marked fine {fine.id} as paid")
+                                        else:
+                                            break
+                            
+                            print(f"Updated OtherTaxDeclaration payment: {tax.id}")
+                elif self.tax_declaration_type == 'ir':
+                    tax = IRDeclaration.objects.get(id=self.tax_declaration_id)
+                    tax.payment_method = 'check'
+                    tax.payment_date = self.paid_at.date() if self.paid_at else None
+                    tax.status = 'paid'
+                    tax.save()
+                    print(f"Updated IRDeclaration payment: {tax.id}")
+                elif self.tax_declaration_type == 'stamp_right':
+                    tax = StampRightDeclaration.objects.get(id=self.tax_declaration_id)
+                    tax.payment_method = 'check'
+                    tax.payment_date = self.paid_at.date() if self.paid_at else None
+                    tax.status = 'paid'
+                    tax.save()
+                    print(f"Updated StampRightDeclaration payment: {tax.id}")
+                elif self.tax_declaration_type == 'vat':
+                    from .models import VATDeclaration  # Import here to avoid circular imports
+                    tax = VATDeclaration.objects.get(id=self.tax_declaration_id)
+                    tax.payment_date = self.paid_at.date() if self.paid_at else None
+                    tax.status = 'paid'
+                    tax.save()
+                    print(f"Updated VATDeclaration payment: {tax.id}")
+            except Exception as e:
+                print(f"Error updating tax payment status: {str(e)}")
+                print(traceback.format_exc())
+
+        # Regular payment forecast handling
         if self.payment_due:
             print(f"[Check Save] Initial payment_due: {self.payment_due} (type: {type(self.payment_due)})")
             
@@ -1870,7 +2010,7 @@ class Check(BaseModel):
                     print(f"[Check Save] Converted payment_due to date: {self.payment_due}")
                 except ValueError as e:
                     print(f"[Check Save] Error converting payment_due date: {e}")
-                    return super().save(*args, **kwargs)
+                    return
 
             # Delete existing forecast if any
             ForecastStatement.objects.filter(
@@ -1907,6 +2047,7 @@ class Check(BaseModel):
                         date=current_date,
                         label=f"Expected payment to {self.beneficiary.name}",
                         debit=self.amount,
+                        amount=self.amount,
                         reference=f"Payment #{self.position}",
                         source_type='supplier_check',
                         source_id=self.id
@@ -1932,9 +2073,29 @@ class Check(BaseModel):
             raise ValidationError(
                 f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
             )
-        
 
-        if not self.is_supplier_payment and not self.cause:
+        # Check payment type validation
+        payment_types = sum([
+            not self.is_supplier_payment and not self.is_tax_payment and bool(self.cause),
+            bool(self.is_supplier_payment),
+            bool(self.is_tax_payment)
+        ])
+        
+        if payment_types > 1:
+            raise ValidationError(_("Check can only be one payment type: invoice, supplier, or tax"))
+        
+        if payment_types == 0:
+            raise ValidationError(_("Check must be either an invoice, supplier, or tax payment"))
+        
+        # Tax payment validation
+        if self.is_tax_payment:
+            if not self.tax_declaration_type or not self.tax_declaration_id:
+                raise ValidationError(_("Tax declaration type and ID are required for tax payments"))
+            if self.cause:
+                raise ValidationError(_("Tax payments cannot specify a direct cause"))
+        
+        # Invoice payment validation
+        if not self.is_supplier_payment and not self.is_tax_payment and not self.cause:
             raise ValidationError(_("Invoice is required for direct invoice payments"))
             
         if self.is_supplier_payment and self.cause:
@@ -1944,7 +2105,7 @@ class Check(BaseModel):
             raise ValidationError(_("Invoice supplier must match check beneficiary"))
             
         # Validate amount for invoice payments
-        if not self.is_supplier_payment and self.cause:
+        if not self.is_supplier_payment and not self.is_tax_payment and self.cause:
             if self.amount > self.cause.amount_available_for_payment:
                 raise ValidationError(_("Amount exceeds invoice's available amount"))
             
@@ -1965,9 +2126,7 @@ class Check(BaseModel):
                     changed_fields.append(field)
             
             if changed_fields:
-                raise ValidationError(_(f"Cannot modify {', '.join(changed_fields)} after check is printed"))
-
-        
+                raise ValidationError(_(f"Cannot modify {', '.join(changed_fields)} after check is printed"))        
         super().clean()
 
     class Meta:
@@ -9461,6 +9620,13 @@ class OtherTaxDeclaration(BaseModel):
         default=Decimal('0.00'),
         help_text="Amount already paid"
     )
+
+    checks = GenericRelation(
+        'Check',
+        content_type_field='content_type',
+        object_id_field='object_id',
+        related_query_name='other_tax_declaration'
+    )
     
     def save(self, *args, **kwargs):
         print("\n=== Saving OtherTaxDeclaration ===")
@@ -9492,6 +9658,9 @@ class OtherTaxDeclaration(BaseModel):
         # Create forecast   
         if self.status != 'paid':
             self._update_forecast()
+        
+        if kwargs.get('update_fields') != ['paid_amount', 'status']:
+            self.calculate_payment_status()
         
         super().save(*args, **kwargs)
     
@@ -9614,6 +9783,59 @@ class OtherTaxDeclaration(BaseModel):
         
         print(f"Created forecast for next year {next_year}")
     
+    def get_linked_checks(self):
+        """Get all checks linked to this tax declaration"""
+        from .models import Check  # Import here to avoid circular imports
+        return Check.objects.filter(
+            is_tax_payment=True,
+            tax_declaration_type='other_tax',
+            tax_declaration_id=self.id
+        ).select_related('checker', 'checker__bank_account')
+    
+    def calculate_payment_status(self):
+        """Recalculate payment status based on linked checks"""
+        checks = self.get_linked_checks()
+        paid_checks = checks.filter(status='paid')
+        
+        # Calculate total paid amount from checks
+        paid_amount = sum(check.amount for check in paid_checks)
+        
+        # Update fields
+        self.paid_amount = paid_amount
+        
+        # Update status
+        if paid_amount >= self.amount:
+            self.status = 'paid'
+        elif paid_amount > 0:
+            self.status = 'partially_paid'
+        else:
+            self.status = 'declared'
+            
+        self.save(update_fields=['paid_amount', 'status'])
+        
+        return self.status
+        
+    def get_payment_summary(self):
+        """Get summary of payments for this tax declaration"""
+        checks = self.get_linked_checks()
+        
+        total_checks = checks.count()
+        paid_checks = checks.filter(status='paid').count()
+        pending_checks = checks.exclude(status__in=['paid', 'cancelled', 'rejected']).count()
+        
+        total_amount = sum(check.amount for check in checks)
+        paid_amount = sum(check.amount for check in checks.filter(status='paid'))
+        pending_amount = sum(check.amount for check in checks.exclude(status__in=['paid', 'cancelled', 'rejected']))
+            
+        return {
+            'total_checks': total_checks,
+            'paid_checks': paid_checks,
+            'pending_checks': pending_checks,
+            'total_amount': total_amount,
+            'paid_amount': paid_amount,
+            'pending_amount': pending_amount
+        }
+        
     def add_payment(self, amount, payment_method, payment_date=None):
         """Add a payment to the declaration"""
         print(f"\n=== Adding Payment to {self.tax_type.title()} Tax {self.year} ===")
