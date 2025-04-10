@@ -1,6 +1,8 @@
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
+from myproject.testapp.models import Check
+
 def create_check(
     checker,
     position,

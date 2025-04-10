@@ -5,7 +5,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
-from .models import CashExpense, Check, Contract, ContractInvoice, CustomBankRecord, DirectDebit, IRDeclaration, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, StampRightDeclaration, VATDeclaration, get_supplier_balance, CashConfiguration, CashDeposit, CashPayment, Invoice
+from .models import CashExpense, Check, Contract, ContractInvoice, CustomBankRecord, DirectDebit, IRDeclaration, OtherTaxDeclaration, PresentationReceipt, BankAccount, BankStatement, AccountingEntry, BankFeeType, ForecastStatement, CheckReceipt, LCN, ReceiptHistory, ContentType, StampRightDeclaration, TaxFine, VATDeclaration, get_supplier_balance, CashConfiguration, CashDeposit, CashPayment, Invoice
 import json
 from decimal import Decimal
 from django.db.models import Q
@@ -428,6 +428,22 @@ class CalendarView(View):
                     for f in stamp_right_forecasts:
                         print(f"Stamp right forecast: credit={f.credit}, debit={f.debit}")
 
+                    other_tax_forecast_types = ['other_tax', 'communal_tax', 'professional_tax']
+                    other_tax_forecasts = ForecastStatement.objects.filter(
+                        bank_account=bank,
+                        date=current_date,
+                        date__gte=timezone.now().date(),
+                        is_processed=False,
+                        source_type__in=other_tax_forecast_types
+                    )
+                    print(f"\n=== Other Tax Forecast Query for {current_date} ===")
+                    print(f"Bank: {bank.account_number}")
+                    print(f"Found forecasts: {other_tax_forecasts.count()}")
+                    print(f"Tax types found: {list(other_tax_forecasts.values_list('source_type', flat=True))}")
+                    print(f"Other tax forecasts exists(): {other_tax_forecasts.exists()}")
+                    for f in other_tax_forecasts:
+                        print(f"Other tax forecast: credit={f.credit}, debit={f.debit}")
+
                     # Calculate receipt forecast impact for this day
                     day_receipt_impact = sum(
                         (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
@@ -458,9 +474,15 @@ class CalendarView(View):
                         for f in stamp_right_forecasts
                     )
 
+                    # Calculate Other Tax impact for this day
+                    day_other_tax_impact = sum(
+                        (f.credit or Decimal('0.00')) - (f.debit or Decimal('0.00'))
+                        for f in other_tax_forecasts
+                    )
+
                     # Update cumulative impacts
                     bank_forecasts[bank.id] += day_receipt_impact
-                    supplier_forecasts[bank.id] += day_payment_impact + day_vat_impact + day_ir_impact + day_stamp_right_impact
+                    supplier_forecasts[bank.id] += day_payment_impact + day_vat_impact + day_ir_impact + day_stamp_right_impact + day_other_tax_impact
 
                     # Calculate total forecasted balance
                     forecasted_balance = actual_balance + bank_forecasts[bank.id] + supplier_forecasts[bank.id]
@@ -521,7 +543,8 @@ class CalendarView(View):
                         'has_vat_forecasts': vat_declaration_forecasts.exists(),
                         'has_ir_forecasts': ir_forecasts.exists(),
                         'has_stamp_right_forecasts': stamp_right_forecasts.exists(),
-                        'has_contract_forecasts': bool(supplier_payment_forecasts.filter(source_type='contract_domiciliation'))
+                        'has_contract_forecasts': bool(supplier_payment_forecasts.filter(source_type='contract_domiciliation')),
+                        'has_other_tax_forecasts': other_tax_forecasts.exists()
                     })
 
                 week_data.append({
@@ -611,6 +634,13 @@ class CalendarView(View):
                 if stamp_right_declaration:
                     filtered_forecasts.append(forecast)
                     print(f"Added Stamp Right declaration forecast: {forecast.label}")
+            elif forecast.source_type in ['other_tax', 'communal_tax', 'professional_tax']:
+                other_tax_declaration = OtherTaxDeclaration.objects.filter(id=forecast.source_id).first()
+                if other_tax_declaration:
+                    filtered_forecasts.append(forecast)
+                    print(f"Added Other Tax declaration forecast: {forecast.label}")
+                    
+                    
                     
 
         expected = Decimal('0.00')
@@ -623,7 +653,7 @@ class CalendarView(View):
             print(f"Source type: {forecast.source_type}")
             print(f"Source ID: {forecast.source_id}")
             
-            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation' or forecast.source_type == 'vat_declaration' or forecast.source_type == 'ir_declaration' or forecast.source_type == 'stamp_right_declaration':
+            if forecast.source_type == 'supplier_check' or forecast.source_type == 'contract_domiciliation' or forecast.source_type == 'vat_declaration' or forecast.source_type == 'ir_declaration' or forecast.source_type == 'stamp_right_declaration' or forecast.source_type in ['other_tax', 'communal_tax', 'professional_tax']:
                 amount = forecast.debit or Decimal('0.00')
                 payments += amount
                 print(f"Added to payments total: {payments}")
@@ -974,7 +1004,7 @@ class PendingForecastsView(View):
                             'number': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
                             'status': declaration.status,
                             'status_display': dict(IRDeclaration.STATUS_CHOICES).get(declaration.status, declaration.status),
-                            'source_id': str(declaration.id),  # Make sure this is a string
+                            'source_id': str(declaration.id),
                             'bank': bank.get_bank_display(),
                             'amount': float(forecast.debit or 0),
                             'due_date': forecast.date.strftime('%Y-%m-%d'),
@@ -1042,6 +1072,78 @@ class PendingForecastsView(View):
                         continue
                     except Exception as e:
                         print(f"Error processing Stamp Rights declaration: {str(e)}")
+                        print(traceback.format_exc())
+                        continue
+                
+                elif forecast.source_type in ['communal_tax', 'professional_tax', 'other_tax']:
+                    print(f"\n=== Processing Tax Declaration Forecast ===")
+                    print(f"Source type: {forecast.source_type}, Source ID: {forecast.source_id}")
+                    
+                    try:
+                        declaration = OtherTaxDeclaration.objects.get(id=forecast.source_id)
+                        
+                        # Get display name based on source type
+                        display_name = "Other Tax"
+                        if forecast.source_type == 'communal_tax':
+                            display_name = "Communal Tax"
+                        elif forecast.source_type == 'professional_tax':
+                            display_name = "Professional Tax"
+                        
+                        # Find associated checks
+                        associated_checks = Check.objects.filter(
+                            tax_declaration_id=declaration.id,
+                            tax_declaration_type='other_tax'
+                        ).exclude(status__in=['cancelled', 'rejected']).order_by('-creation_date')
+                        fines = TaxFine.objects.filter(declaration=declaration)
+                        fines_total = sum(fine.amount for fine in fines)
+                        latest_check = associated_checks.first()
+                        
+                        # Create forecast data object
+                        forecast_data = {
+                            'type': f"{display_name} Payment",
+                            'payment_type': display_name,
+                            'number': f"{display_name.replace(' ', '')}-{declaration.year}",
+                            'status': declaration.status,
+                            'status_display': dict(OtherTaxDeclaration.STATUS_CHOICES).get(declaration.status, declaration.status),
+                            'source_id': str(declaration.id),
+                            'bank': bank.get_bank_display(),
+                            'amount': float(forecast.debit or 0),
+                            'due_date': forecast.date.strftime('%Y-%m-%d'),
+                            'forecast_date': forecast.date.strftime('%Y-%m-%d'),
+                            'fines': float(fines_total),
+                            'declaration': {
+                                'tax_type': declaration.tax_type,
+                                'tax_type_display': display_name,
+                                'year': declaration.year,
+                                'amount': float(forecast.debit + declaration.paid_amount),
+                                'paid_amount': float(declaration.paid_amount),
+                                'remaining_amount': float(forecast.debit)
+                            },
+                            'has_check': associated_checks.exists()
+                        }
+                        
+                        # Add check information if available
+                        if latest_check:
+                            forecast_data['check'] = {
+                                'id': str(latest_check.id),
+                                'reference': f"{latest_check.checker.bank_account.bank}-{latest_check.position}",
+                                'status': latest_check.status,
+                                'status_display': latest_check.get_status_display(),
+                                'amount': float(latest_check.amount),
+                                'creation_date': latest_check.creation_date.strftime('%Y-%m-%d'),
+                                'delivered_at': latest_check.delivered_at.strftime('%Y-%m-%d') if latest_check.delivered_at else None,
+                                'can_mark_paid': latest_check.status == 'delivered',
+                                'can_mark_rejected': latest_check.status == 'delivered'
+                            }
+                        
+                        forecasts_data.append(forecast_data)
+                        print(f"Added tax forecast data for {display_name}")
+                        
+                    except OtherTaxDeclaration.DoesNotExist:
+                        print(f"Declaration {forecast.source_id} not found")
+                        continue
+                    except Exception as e:
+                        print(f"Error processing tax forecast: {str(e)}")
                         print(traceback.format_exc())
                         continue
                         

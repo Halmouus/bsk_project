@@ -1,4 +1,5 @@
 import calendar
+import math
 import os
 import uuid
 from django.db import models, transaction
@@ -15,7 +16,7 @@ from decimal import Decimal
 from django.db.models import Q
 import logging
 from django.contrib.contenttypes.models import ContentType
-from django.contrib.contenttypes.fields import GenericForeignKey
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from itertools import groupby
 from operator import itemgetter
 import traceback
@@ -27,263 +28,592 @@ import re
 
 logger = logging.getLogger(__name__)
 
-MOROCCAN_BANKS = [
-    ('ATW', 'Attijariwafa Bank'),
-    ('BCP', 'Banque Populaire'),
-    ('BOA', 'Bank of Africa'),
-    ('CAM', 'Crédit Agricole du Maroc'),
-    ('CIH', 'CIH Bank'),
-    ('BMCI', 'BMCI'),
-    ('SGM', 'Société Générale Maroc'),
-    ('CDM', 'Crédit du Maroc'),
-    ('ABB', 'Al Barid Bank'),
-    ('CFG', 'CFG Bank'),
-    ('ABM', 'Arab Bank Maroc'),
-    ('CTB', 'Citibank Maghreb')
-]
 
-INVOICE_TYPES = [
-    ('ENERGY', 'Energy'),
-    ('INSURANCE', 'Insurance'),
-    ('LEASING', 'Leasing'),
-    ('UTILITIES', 'Water/Electricity'),
-    ('TELECOM', 'Phone/Internet'),
-    ('RENT', 'Rent'),
-    ('SERVICE', 'Services'),
-    ('LOAN', 'Bank Loan'),
-    ('SOCIAL', 'Social Security'),
-    ('RETIREMENT', 'Retirement'),
-    ('OTHER', 'Other')
-]
-
-INVOICE_STATUS = [
-    ('ORIGINAL', 'Original'),
-    ('COPY', 'Copy')
-]
-class BankAccount(BaseModel):
-    BANK_CHOICES = [
-        ('ATW', 'Attijariwafa Bank'),
-        ('BCP', 'Banque Populaire'),
-        ('BOA', 'Bank of Africa'),
-        ('CAM', 'Crédit Agricole du Maroc'),
-        ('CIH', 'CIH Bank'),
-        ('BMCI', 'BMCI'),
-        ('SGM', 'Société Générale Maroc'),
-        ('CDM', 'Crédit du Maroc'),
-        ('ABB', 'Al Barid Bank'),
-        ('CFG', 'CFG Bank'),
-        ('ABM', 'Arab Bank Maroc'),
-        ('CTB', 'Citibank Maghreb')
+class Invoice(BaseModel):
+    INVOICE_TYPE_CHOICES = [
+        ('invoice', 'Invoice'),
+        ('credit_note', 'Credit Note'),
     ]
-
-    ACCOUNT_TYPE = [
-        ('national', 'National'),
-        ('international', 'International')
-    ]
-
-    bank = models.CharField(max_length=4, choices=BANK_CHOICES)
-    account_number = models.CharField(
-        max_length=30,
-        validators=[
-            MinLengthValidator(10, _('Account number must be at least 10 characters')),
-            RegexValidator(r'^\d+$', _('Only numeric characters allowed'))
-        ]
+    ref = models.CharField(max_length=50, unique=True)
+    date = models.DateField()
+    supplier = models.ForeignKey(Supplier, on_delete=models.PROTECT)
+    status = models.CharField(
+        max_length=25, choices=[('draft', 'Draft'), ('final', 'Finalized'), ('paid', 'Paid')], default='draft'
     )
-    accounting_number = models.CharField(
+    payment_due_date = models.DateField(null=True, blank=True)
+    exported_at = models.DateTimeField(null=True, blank=True)
+    export_history = models.ManyToManyField('ExportRecord', blank=True, related_name='invoices')
+    invoice_type = models.CharField(
+        max_length=20,
+        choices=INVOICE_TYPES,
+        default='OTHER'
+    )
+    doc_status = models.CharField(
         max_length=10,
+        choices=INVOICE_STATUS,
+        default='ORIGINAL'
+    )
+    special_index = models.IntegerField(null=True, blank=True)
+    document = models.FileField(
+        upload_to=get_upload_path,
         validators=[
-            MinLengthValidator(5, _('Accounting number must be at least 5 characters')),
-            RegexValidator(r'^\d+$', _('Only numeric characters allowed'))
-        ]
-    )
-    journal_number = models.CharField(
-        max_length=2,
-        validators=[
-            RegexValidator(r'^\d{2}$', _('Must be exactly 2 digits'))
-        ]
-    )
-    city = models.CharField(max_length=100)
-    if_code = models.CharField(
-        max_length=25, 
-        blank=True, 
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
         null=True,
-        validators=[RegexValidator(r'^[0-9]*$', _('Only numeric characters are allowed.'))]
+        blank=True
     )
-    ice_code = models.CharField(
-        max_length=15, 
-        blank=True, 
-        null=True,
-        validators=[
-            RegexValidator(r'^[0-9]{15}$', _('ICE code must be exactly 15 digits'))
-        ]
-    )
-    account_type = models.CharField(max_length=15, choices=ACCOUNT_TYPE)
-    is_active = models.BooleanField(default=True)
-
-    is_current = models.BooleanField(
-        default=False,
-        help_text=_("Determines if accounting operations are recorded on this account")
-    )
-    bank_overdraft = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        null=True,
+    delivery_notes = models.ManyToManyField(
+        DeliveryNote,
         blank=True,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text=_("Maximum allowed overdraft amount")
+        related_name='invoices'
     )
-    overdraft_fee = models.DecimalField(
+    reception_notes = models.ManyToManyField(
+        ReceptionNote,
+        blank=True,
+        related_name='invoices'
+    )
+
+
+    PAYMENT_STATUS_CHOICES = [
+        ('not_paid', 'Not Paid'),
+        ('partially_paid', 'Partially Paid'),
+        ('paid', 'Paid')
+    ]
+
+    payment_status = models.CharField(
+        max_length=25,
+        choices=PAYMENT_STATUS_CHOICES,
+        default='not_paid'
+    )
+    
+    type = models.CharField(
+        max_length=25,
+        choices=INVOICE_TYPE_CHOICES,
+        default='invoice'
+    )
+
+    
+    vat_deduction_rate = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text=_("Fee applied for overdraft usage")
+        default=Decimal('100.00'),
+        validators=[
+            MinValueValidator(Decimal('0.00')),
+            MaxValueValidator(Decimal('100.00'))
+        ],
+        help_text=_("Percentage of VAT that can be deducted")
     )
-    has_check_discount_line = models.BooleanField(
+
+    non_deductible_vat = models.BooleanField(
         default=False,
-        help_text=_("Indicates if this account can discount checks")
+        help_text=_("If true, VAT from this invoice cannot be deducted")
     )
-    check_discount_line_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
+
+    original_invoice = models.ForeignKey(
+        'self',
         null=True,
         blank=True,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text=_("Maximum amount available for check discounting")
+        on_delete=models.PROTECT,
+        related_name='credit_notes'
     )
-    has_lcn_discount_line = models.BooleanField(
+    cash_payment_allowed = models.BooleanField(
         default=False,
-        help_text=_("Indicates if this account can discount LCNs")
-    )
-    lcn_discount_line_amount = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text=_("Maximum amount available for LCN discounting")
-    )
-    stamp_fee_per_receipt = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        validators=[MinValueValidator(Decimal('0.00'))],
-        help_text=_("Stamp fee charged per presented receipt")
+        help_text="If True, this invoice can be paid by cash"
     )
 
-    def get_available_check_discount_line(self):
-        """Calculate remaining check discount line amount"""
-        if not self.has_check_discount_line or not self.check_discount_line_amount:
-            return Decimal('0.00')
-            
-        # Get all discounted checks for this account
-        total_discounted = PresentationReceipt.objects.filter(
-            presentation__bank_account=self,
-            presentation__presentation_type='DISCOUNT',
-            checkreceipt__isnull=False  # Ensure it's a check
-        ).exclude(
-            recorded_status__in=['UNPAID', 'PAID'] # Only count currently discounted
-        ).aggregate(
-            total=models.Sum('amount')
-        )['total'] or Decimal('0.00')
-        
-        return self.check_discount_line_amount - total_discounted
-
-    def get_available_lcn_discount_line(self):
-        """Calculate remaining LCN discount line amount"""
-        if not self.has_lcn_discount_line or not self.lcn_discount_line_amount:
-            return Decimal('0.00')
-            
-        discounted_amount = PresentationReceipt.objects.filter(
-            presentation__bank_account=self,
-            presentation__presentation_type='DISCOUNT',
-            lcn__isnull=False,  # Ensure it's an LCN
-            lcn__status='DISCOUNTED'  # Only count currently discounted
-        ).exclude(
-            lcn__status__in=['UNPAID', 'PAID', 'COMPENSATED']
-        ).aggregate(
-            total=models.Sum('amount')
-        )['total'] or Decimal('0.00')
-        
-        return self.lcn_discount_line_amount - discounted_amount
-    
-    def get_current_balance(self):
-        """Get current balance for the account"""
-        from .models import BankStatement  # Import here to avoid circular import
-        return BankStatement.calculate_balance_until(self, timezone.now().date())
-
-    def create_supplier(self):
-        """Create or update supplier for bank account"""
-        print(f"\n=== Creating/Updating Bank Supplier ===")
-        print(f"Bank: {self.bank} - {self.account_number}")
-        
-        # Only create supplier if IF/ICE codes are provided
-        if not (self.if_code and self.ice_code):
-            print("Missing IF/ICE codes, skipping supplier creation")
-            return None
-            
-        supplier, created = Supplier.objects.update_or_create(
-            ice_code=self.ice_code,
-            defaults={
-                'name': f"{self.get_bank_display()}",
-                'if_code': self.if_code,
-                'rc_code': self.if_code,  # Use IF code as RC
-                'rc_center': self.city,
-                'accounting_code': self.accounting_number,
-                'service': 'Banking',
-                'delay_convention': 0,  # No delay for bank payments
-                'is_regulated': True
-            }
-        )
-        
-        print(f"Supplier {'created' if created else 'updated'}: {supplier.name}")
-        return supplier
-
-    def clean(self):
-        super().clean()
-
-        # Only validate if either code is provided
-        if self.if_code or self.ice_code:
-            if not (self.if_code and self.ice_code):
-                raise ValidationError(_("Both IF and ICE codes must be provided for bank suppliers"))
-                
-            # Validate IF code is numeric
-            if not self.if_code.isdigit():
-                raise ValidationError({
-                    'if_code': _("IF code must be numeric")
-                })
-            
-            # Validate ICE code has exactly 15 digits
-            if len(self.ice_code) != 15 or not self.ice_code.isdigit():
-                raise ValidationError({
-                    'ice_code': _("ICE code must contain exactly 15 digits")
-                })
-            
-        if self.has_check_discount_line and not self.check_discount_line_amount:
-            raise ValidationError({
-                'check_discount_line_amount': _('Amount required when check discount line is enabled')
-            })
-        if self.has_lcn_discount_line and not self.lcn_discount_line_amount:
-            raise ValidationError({
-                'lcn_discount_line_amount': _('Amount required when LCN discount line is enabled')
-            })
-    
     def save(self, *args, **kwargs):
-        """Override save to create supplier"""
+        print(f"\n=== Saving Invoice {self.ref} ===")
+        print(f"Cash payment allowed: {self.cash_payment_allowed}")
+        if not self.special_index:
+            # Get the last index for this type this year
+            year = self.date.year
+            last_index = Invoice.objects.filter(
+                invoice_type=self.invoice_type,
+                date__year=year
+            ).aggregate(Max('special_index'))['special_index__max'] or 0
+            self.special_index = last_index + 1
+
+        if self.type == 'invoice':  # Only calculate payment_due_date for regular invoices
+            if not self.payment_due_date:
+                self.payment_due_date = self.date + timedelta(days=self.supplier.delay_convention)
+        else:  # For credit notes
+            self.payment_due_date = None
+
         super().save(*args, **kwargs)
-        if self.if_code and self.ice_code:
-            self.create_supplier()
+    
+    @property
+    def archive_index(self):
+        """Returns the formatted archive index"""
+        return f"{self.special_index}-{self.date.strftime('%y')}"
 
     class Meta:
-        ordering = ['bank', 'account_number']
+        constraints = [
+            models.CheckConstraint(
+                check=Q(
+                    Q(type='invoice', original_invoice__isnull=True) |
+                    Q(type='credit_note', original_invoice__isnull=False)
+                ),
+                name='credit_note_must_have_original_invoice'
+            )
+        ]
+        permissions = [
+        ("can_export_invoice", "Can export invoice"),
+        ("can_unexport_invoice", "Can unexport invoice"),
+        ]
 
+    @property
+    def fiscal_label(self):
+        """Generate a combined fiscal label from all related products."""
+        products = [(item.product.fiscal_label, item.quantity * item.unit_price) 
+                    for item in self.products.all()]
+        unique_labels = []
+        seen = set()
+        
+        # Sort by value and get unique labels
+        for label, _ in sorted(products, key=lambda x: x[1], reverse=True):
+            if label not in seen:
+                unique_labels.append(label)
+                seen.add(label)
+        
+        top_labels = unique_labels[:3]
+        if len(unique_labels) > 3:
+            top_labels.append('...')
+        
+        return " - ".join(top_labels)
+    
+    @property
+    def raw_amount(self):
+        """Calculate the total amount before tax, considering reduction rate for each product."""
+        return sum(
+            [
+                (item.quantity * item.unit_price * (1 - item.reduction_rate / 100))
+                for item in self.products.all()
+            ]
+        )
+
+    @property
+    def total_tax_amount(self):
+        """Calculate the total tax amount for the invoice considering different VAT rates."""
+        return sum(
+            [
+                (item.quantity * item.unit_price * (1 - item.reduction_rate / 100) * item.vat_rate / 100)
+                for item in self.products.all()
+            ]
+        )
+
+    @property
+    def total_amount(self):
+        """Calculate the total amount of the invoice including tax."""
+        from decimal import Decimal
+        try:
+            raw = sum(
+                [
+                    (item.quantity * item.unit_price * (1 - item.reduction_rate / 100))
+                    for item in self.products.all()
+                ]
+            )
+            tax = sum(
+                [
+                    (item.quantity * item.unit_price * (1 - item.reduction_rate / 100) * item.vat_rate / 100)
+                    for item in self.products.all()
+                ]
+            )
+            return Decimal(str(raw + tax))
+        except Exception as e:
+            print(f"Error calculating total_amount: {e}")
+            return Decimal('0')
+    
+    @property
+    def net_amount(self):
+        """Calculate net amount after credit notes"""
+        credit_notes_total = sum(
+            cn.total_amount for cn in self.credit_notes.all()
+        )
+        return self.total_amount - credit_notes_total
+
+    @property
+    def has_credit_notes(self):
+        """Check if invoice has any credit notes"""
+        return self.credit_notes.exists()
+    
+    @property
+    def can_be_credited(self):
+        """Check if invoice can have more credit notes"""
+        if self.type == 'credit_note':
+            return False
+        if self.payment_status == 'paid':
+            return False
+        credit_notes_total = sum(cn.total_amount for cn in self.credit_notes.all())
+        return credit_notes_total < self.total_amount
+    
+    def get_cash_payment_status(self):
+        """Get cash payment details"""
+        total_cash_paid = sum(
+            payment.amount for payment in self.cash_payments.all()
+        )
+        return {
+            'total_paid': total_cash_paid,
+            'remaining': max(Decimal('0.00'), self.total_amount - total_cash_paid)
+        }
+
+    def clean(self):
+        """Custom clean method to validate credit notes"""
+        super().clean()
+        if self.pk:  # Only check if invoice exists
+            delivery_refs = self.delivery_notes.values_list('ref', flat=True)
+            if len(delivery_refs) != len(set(delivery_refs)):
+                raise ValidationError(_("Duplicate delivery notes are not allowed"))
+            
+            reception_refs = self.reception_notes.values_list('ref', flat=True)
+            if len(reception_refs) != len(set(reception_refs)):
+                raise ValidationError("Duplicate reception notes are not allowed")
+            
+        if self.type == 'credit_note':
+            if not self.original_invoice:
+                raise ValidationError(_("Credit note must reference an original invoice"))
+            if self.original_invoice.type != 'invoice':
+                raise ValidationError(_("Cannot create credit note for another credit note"))
+            if self.supplier != self.original_invoice.supplier:
+                raise ValidationError(_("Credit note must have same supplier as original invoice"))
+        
+        if self.cash_payment_allowed and self.total_amount > Decimal('5000.00'):
+            raise ValidationError("Invoices over 5000 cannot be paid by cash")
+    
+    @property
+    def has_documents(self):
+        """Check if invoice has any documents attached"""
+        return bool(
+            self.document or 
+            self.delivery_notes.filter(document__isnull=False).exists() or
+            self.reception_notes.filter(document__isnull=False).exists()
+        )
+
+    def get_all_documents(self):
+        """Get all related documents"""
+        documents = []
+        if self.document:
+            documents.append({
+                'type': 'Invoice',
+                'ref': self.ref,
+                'date': self.date,
+                'url': self.document.url,
+                'filename': os.path.basename(self.document.name)
+            })
+        
+        for note in self.delivery_notes.all():
+            if note.document:
+                documents.append({
+                    'type': 'BL',
+                    'ref': note.ref,
+                    'date': note.date,
+                    'url': note.document.url,
+                    'filename': note.filename
+                })
+        
+        for note in self.reception_notes.all():
+            if note.document:
+                documents.append({
+                    'type': 'BR',
+                    'ref': note.ref,
+                    'date': note.date,
+                    'url': note.document.url,
+                    'filename': note.filename
+                })
+        
+        return sorted(documents, key=lambda x: x['date'], reverse=True)
+
+    def get_credited_quantities(self):
+        """Get total credited quantities per product"""
+        credited_quantities = {}
+        for credit_note in self.credit_notes.all():
+            for item in credit_note.products.all():
+                if item.product_id in credited_quantities:
+                    credited_quantities[item.product_id] += item.quantity
+                else:
+                    credited_quantities[item.product_id] = item.quantity
+        return credited_quantities
+
+    def get_available_quantities(self):
+        """Get available quantities that can still be credited"""
+        original_quantities = {
+            item.product_id: item.quantity 
+            for item in self.products.all()
+        }
+        credited_quantities = self.get_credited_quantities()
+        
+        return {
+            product_id: original_quantities[product_id] - credited_quantities.get(product_id, 0)
+            for product_id in original_quantities
+        }
+    @property
+    def amount_available_for_payment(self):
+        """Calculate amount still available for payment"""
+        net_amount = self.net_amount
+        
+        # Calculate total from direct checks - including draft
+        direct_checks_amount = sum(
+            check.amount 
+            for check in Check.objects.filter(
+                cause=self
+            ).exclude(
+                status='cancelled'  # Only exclude cancelled checks
+            )
+        ) or Decimal('0')
+        
+        # Calculate total from allocated checks - including draft
+        allocated_amount = sum(
+            allocation.amount 
+            for allocation in CheckAllocation.objects.filter(
+                invoice=self
+            ).exclude(
+                payment__status='cancelled'  # Only exclude cancelled allocations
+            )
+        ) or Decimal('0')
+        
+        # Calculate total payments and available amount
+        total_payments = direct_checks_amount + allocated_amount
+        return max(Decimal('0'), net_amount - total_payments)
+    
+    def get_payment_details(self):
+        """Calculate comprehensive payment details"""
+        print("\n=== Getting Payment Details ===")
+        print(f"Invoice: {self.ref}")
+        
+        # Get all non-cancelled checks for this invoice
+        valid_checks = Check.objects.filter(
+            cause=self
+        ).exclude(
+            status='cancelled'
+        )
+        print(f"Direct checks found: {valid_checks.count()}")
+
+        # Calculate direct payment amounts
+        pending_amount = sum(c.amount for c in valid_checks.filter(status='pending'))
+        delivered_amount = sum(c.amount for c in valid_checks.filter(status='delivered'))
+        paid_amount = sum(c.amount for c in valid_checks.filter(status='paid'))
+        total_issued = sum(c.amount for c in valid_checks)
+
+        print(f"Direct payments - Pending: {pending_amount}, Delivered: {delivered_amount}, Paid: {paid_amount}")
+
+        # Get allocations
+        print(f"Looking for allocations with invoice_id: {self.id}")
+        allocations = CheckAllocation.objects.filter(invoice_id=self.id)
+        print(f"Raw allocations found: {allocations.count()}")
+        print("Allocation details:")
+        for alloc in allocations:
+            print(f"Allocation ID: {alloc.id}")
+            print(f"Check ID: {alloc.payment.id if hasattr(alloc, 'payment') else 'No payment'}")
+            print(f"Check status: {alloc.payment.status if hasattr(alloc, 'payment') else 'No status'}")
+
+        # Get valid allocations
+        valid_allocations = CheckAllocation.objects.filter(
+            invoice_id=self.id,
+            payment__status__in=['pending', 'delivered', 'paid', 'draft']
+        ).select_related('payment')
+        print(f"Allocations found: {valid_allocations.count()}")
+
+        # Add allocated amounts
+        alloc_pending = sum(a.amount for a in valid_allocations.filter(payment__status='pending'))
+        alloc_delivered = sum(a.amount for a in valid_allocations.filter(payment__status='delivered'))
+        alloc_paid = sum(a.amount for a in valid_allocations.filter(payment__status='paid'))
+        total_allocated = sum(a.amount for a in valid_allocations)
+
+        print(f"Allocated payments - Pending: {alloc_pending}, Delivered: {alloc_delivered}, Paid: {alloc_paid}")
+
+        cash_payments = self.cash_payments.all()
+        cash_paid_amount = sum(payment.amount for payment in cash_payments)
+        print(f"Cash payments found: {cash_payments.count()}, Total: {cash_paid_amount}")
+
+        # Get contract payments if this is a contract invoice
+        direct_debit_amount = Decimal('0')
+        direct_debit_details = None
+        contract_invoice = ContractInvoice.objects.filter(invoice=self).select_related('contract', 'contract__domiciliation_bank').first()
+
+        if contract_invoice and contract_invoice.contract.is_domiciled:
+            print(f"Found contract invoice for contract: {contract_invoice.contract.reference}")
+            
+            # Get all non-rejected direct debits to subtract from amount_to_issue
+            non_rejected_debits = DirectDebit.objects.filter(
+                invoice=contract_invoice
+            ).exclude(status=DirectDebit.REJECTED)
+            
+            # Subtract from total_issued (both pending and processed)
+            total_issued += sum(dd.amount for dd in non_rejected_debits)
+            
+            direct_debit_details = {
+                'contract_ref': contract_invoice.contract.reference,
+                'bank': contract_invoice.contract.domiciliation_bank.bank,
+                'account': contract_invoice.contract.domiciliation_bank.account_number,
+            }
+        
+        
+
+        # Update totals with allocations only (direct debits handled in view)
+        pending_amount += alloc_pending
+        delivered_amount += alloc_delivered
+        paid_amount += alloc_paid + cash_paid_amount
+        total_issued += total_allocated + cash_paid_amount
+
+        net_amount = self.net_amount
+        amount_to_issue = net_amount - total_issued  # Now total_issued includes non-rejected direct debits
+        remaining_to_pay = net_amount - paid_amount
+        payment_percentage = (paid_amount / net_amount * 100) if net_amount else 0
+
+        print(f"Final totals:")
+        print(f"Net amount: {net_amount}")
+        print(f"Total issued: {total_issued}")
+        print(f"Amount to issue: {amount_to_issue}")
+        print(f"Remaining to pay: {remaining_to_pay}")
+        print(f"Payment percentage: {payment_percentage}%")
+
+        # Prepare check details
+        checks = []
+        
+        # Add direct checks
+        for check in valid_checks:
+            checks.append({
+                'id': str(check.id),
+                'type': 'direct',
+                'reference': f"{check.checker.bank_account.bank}-{check.position}",
+                'amount': float(check.amount),
+                'status': check.status,
+                'created_at': check.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': check.delivered_at.strftime('%Y-%m-%d') if check.delivered_at else None,
+                'paid_at': check.paid_at.strftime('%Y-%m-%d') if check.paid_at else None,
+            })
+        
+        # Add allocated checks
+        for allocation in valid_allocations:
+            checks.append({
+                'id': str(allocation.payment.id),
+                'type': 'allocation',
+                'reference': f"{allocation.payment.checker.bank_account.bank}-{allocation.payment.position}",
+                'total_amount': float(allocation.payment.amount),
+                'allocated_amount': float(allocation.amount),
+                'status': allocation.payment.status,
+                'created_at': allocation.payment.creation_date.strftime('%Y-%m-%d'),
+                'delivered_at': allocation.payment.delivered_at.strftime('%Y-%m-%d') if allocation.payment.delivered_at else None,
+                'paid_at': allocation.payment.paid_at.strftime('%Y-%m-%d') if allocation.payment.paid_at else None,
+            })
+        
+        for payment in cash_payments:
+            checks.append({
+                'id': str(payment.id),
+                'type': 'cash',
+                'reference': payment.reference,
+                'amount': float(payment.amount),
+                'status': 'paid',
+                'created_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'delivered_at': payment.payment_date.strftime('%Y-%m-%d'),
+                'paid_at': payment.payment_date.strftime('%Y-%m-%d'),
+            })
+
+        print(f"Total checks to display: {len(checks)}")
+        print("=== End Payment Details ===\n")
+
+        return {
+            'total_amount': float(net_amount),
+            'pending_amount': float(pending_amount),
+            'delivered_amount': float(delivered_amount),
+            'paid_amount': float(paid_amount),
+            'amount_to_issue': float(amount_to_issue),
+            'remaining_to_pay': float(remaining_to_pay),
+            'payment_percentage': float(payment_percentage),
+            'payment_status': self.get_payment_status(paid_amount),
+            'checks': checks,
+            'direct_debit': direct_debit_details,
+            'direct_debit_amount': float(direct_debit_amount)
+        }
+    def get_payment_status(self, paid_amount=None):
+        """Determine payment status based on paid amount"""
+        if paid_amount is None:
+            paid_amount = sum(c.amount for c in Check.objects.filter(
+                cause=self, 
+                status='paid'
+            ).exclude(status='cancelled'))    
+
+        if paid_amount >= self.total_amount:
+            return 'paid'
+        elif paid_amount > 0:
+            return 'partially_paid'
+        return 'not_paid'
+
+
+    @property
+    def payments_summary(self):
+        payments = Check.objects.filter(cause=self).exclude(status='cancelled')
+        return {
+            'pending_amount': sum(p.amount for p in payments.filter(status='pending')),
+            'delivered_amount': sum(p.amount for p in payments.filter(status='delivered')),
+            'paid_amount': sum(p.amount for p in payments.filter(status='paid')),
+            'percentage_paid': (sum(p.amount for p in payments.filter(status='paid')) / self.total_amount * 100) if self.total_amount else 0,
+            'remaining_amount': self.total_amount - sum(p.amount for p in payments.filter(status='paid')),
+            'amount_to_issue': self.total_amount - sum(p.amount for p in payments.exclude(status='cancelled'))
+        }
+
+    def update_payment_status(self):
+        """Update payment status based on all payment types"""
+        print(f"\n=== Updating Payment Status for Invoice {self.ref} ===")
+        total_payments = Decimal('0')
+        
+        # Direct check payments - only count PAID checks
+        direct_checks = Check.objects.filter(
+            cause=self,
+            status='paid'  # Only count paid checks
+        ).exclude(
+            status='cancelled'
+        )
+        total_payments += sum(check.amount for check in direct_checks)
+        
+        # Allocated payments - only count from PAID checks
+        allocations = CheckAllocation.objects.filter(
+            invoice=self,
+            payment__status='paid'  # Only count allocations from paid checks
+        )
+        total_payments += sum(allocation.amount for allocation in allocations)
+
+        # Cash payments
+        cash_payments = CashPayment.objects.filter(invoice=self)
+        total_payments += sum(payment.amount for payment in cash_payments)
+
+        contract_invoice = hasattr(self, 'contract_invoice') and self.contract_invoice
+        if contract_invoice:
+            direct_debit_paid = DirectDebit.objects.filter(
+                invoice=contract_invoice,
+                status=DirectDebit.PROCESSED
+            ).aggregate(total=Sum('amount'))['total'] or Decimal('0')
+            
+            print(f"Direct debit payments: {direct_debit_paid}")
+            total_payments += direct_debit_paid
+        
+        # Determine status
+        if total_payments >= self.net_amount:
+            self.payment_status = 'paid'
+        elif total_payments > 0:
+            self.payment_status = 'partially_paid'
+        else:
+            self.payment_status = 'not_paid'
+            
+        self.save()
+
+
+    def get_remaining_amount(self):
+        """Get remaining amount to be paid"""
+        # Get total from cash payments
+        cash_payments_total = Decimal('0')
+        for payment in self.cash_payments.all():
+            cash_payments_total += payment.amount
+        
+        # Get total from other payment types (checks, etc.)
+        other_payments = self.get_payment_details()['paid_amount']
+        
+        # Return remaining amount
+        return max(Decimal('0'), self.total_amount - cash_payments_total - other_payments)
 
     def __str__(self):
-        type_indicator = 'NAT' if self.account_type == 'national' else 'INT'
-        return f"{self.bank} [{self.account_number}] - {type_indicator}"
-    
+        return f'Invoice {self.ref} from {self.supplier.name}'
+
 class Checker(BaseModel):
     TYPE_CHOICES = [
         ('CHQ', 'Cheque'),
@@ -681,7 +1011,12 @@ class Check(BaseModel):
                                 self.paid_at.date() if self.paid_at else None,
                                 check_reference=f"{self.checker.bank_account.bank}-{self.position}"
                             )
-                            
+                            if tax.paid_amount >= tax.amount:
+                                tax.status = 'paid'
+                            # If partially paid but not fully paid
+                            elif tax.paid_amount > 0:
+                                tax.status = 'partially_paid'
+                            tax.save()
                             # Log updated tax state
                             print(f"Updated tax state - amount: {tax.amount}, paid: {tax.paid_amount}")
                             
@@ -726,9 +1061,63 @@ class Check(BaseModel):
             except Exception as e:
                 print(f"Error updating tax payment status: {str(e)}")
                 print(traceback.format_exc())
+            
+            # If check is paid and it's a tax payment, delete the associated forecast
+            if (self.status == 'paid' or self.status == 'rejected') and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type:
+                # Map tax declaration types to forecast source types
+                forecast_type_mapping = {
+                    'other_tax': {
+                        'professional': 'professional_tax',
+                        'communal': 'communal_tax',
+                        'default': 'other_tax'
+                    },
+                    'ir': 'ir_declaration',
+                    'stamp_right': 'stamp_right_declaration',
+                    'vat': 'vat_declaration'
+                }
+                
+                source_type = None
+                if self.tax_declaration_type == 'other_tax':
+                    try:
+                        tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
+                        source_type = forecast_type_mapping['other_tax'].get(
+                            tax.tax_type,
+                            forecast_type_mapping['other_tax']['default']
+                        )
+                    except Exception as e:
+                        print(f"[Check Save] Error getting tax type: {str(e)}")
+                        # Try all possible tax types
+                        processed_count = 0
+                        for tax_type in ['communal_tax', 'professional_tax', 'other_tax']:
+                            count = ForecastStatement.objects.filter(
+                                source_type=tax_type,
+                                source_id=self.tax_declaration_id,
+                                is_processed=False
+                            ).update(is_processed=True)
+                            processed_count += count
+                            if count > 0:
+                                print(f"[Check Save] Marked {count} {tax_type} forecasts as processed")
+                        
+                        if processed_count > 0:
+                            print(f"[Check Save] Total forecasts marked as processed: {processed_count}")
+                        return  # Return here to avoid double-processing
+                else:
+                    source_type = forecast_type_mapping.get(self.tax_declaration_type)
+                    
+                if source_type:
+                    try:
+                        # Mark all forecasts for this tax declaration as processed
+                        processed_count = ForecastStatement.objects.filter(
+                            source_type=source_type,
+                            source_id=self.tax_declaration_id,
+                            is_processed=False
+                        ).update(is_processed=True)
+                        print(f"[Check Save] Marked {processed_count} {source_type} forecasts as processed for tax declaration {self.tax_declaration_id}")
+                    except Exception as e:
+                        print(f"[Check Save] Error marking forecasts as processed for tax: {str(e)}")
 
         # Regular payment forecast handling
-        if self.payment_due:
+        if self.payment_due and not self.is_tax_payment:  # Added condition to skip tax payments
             print(f"[Check Save] Initial payment_due: {self.payment_due} (type: {type(self.payment_due)})")
             
             # Ensure payment_due is a date object
@@ -786,6 +1175,99 @@ class Check(BaseModel):
                     print(f"[Check Save] Error during forecast creation: {str(e)}")
                     # Don't let forecast errors prevent check creation
                     pass
+            
+        if self.payment_due and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type and self.status != 'cancelled':
+            print(f"\n[Check Save] Tax payment forecast handling START")
+            print(f"[Check Save] Check ID: {self.pk}")
+            print(f"[Check Save] Status: {self.status}")
+            print(f"[Check Save] Payment due: {self.payment_due}")
+            print(f"[Check Save] Is tax payment: {self.is_tax_payment}")
+            print(f"[Check Save] Tax declaration ID: {self.tax_declaration_id}")
+            print(f"[Check Save] Tax declaration type: {self.tax_declaration_type}")
+            
+            # Delete ALL forecasts related to this tax declaration ID regardless of source_type
+            try:
+                all_deleted = ForecastStatement.objects.filter(
+                    source_id=self.tax_declaration_id,
+                    is_processed=False
+                ).delete()[0]
+                print(f"[Check Save] Deleted {all_deleted} forecasts for tax declaration {self.tax_declaration_id}")
+            except Exception as e:
+                print(f"[Check Save] Error deleting forecasts: {str(e)}")
+            
+            # Map tax declaration types to forecast source types 
+            forecast_type_mapping = {
+                'other_tax': {
+                    'professional': 'professional_tax',
+                    'communal': 'communal_tax',
+                    'default': 'other_tax'
+                },
+                'ir': 'ir_declaration',
+                'stamp_right': 'stamp_right_declaration',
+                'vat': 'vat_declaration'
+            }
+            
+            source_type = None
+            display_name = "Tax"
+            
+            if self.tax_declaration_type == 'other_tax':
+                try:
+                    tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
+                    tax_type = tax.tax_type
+                    print(f"[Check Save] Found tax record, type: {tax_type}")
+                    
+                    source_type = forecast_type_mapping['other_tax'].get(
+                        tax_type,
+                        forecast_type_mapping['other_tax']['default']
+                    )
+                    print(f"[Check Save] Mapped to source_type: {source_type}")
+                    
+                    display_name = f"{tax.get_tax_type_display()} Tax"
+                except Exception as e:
+                    print(f"[Check Save] Error getting tax type: {str(e)}")
+                    # Don't create forecast if tax declaration doesn't exist
+                    print(f"[Check Save] Skipping forecast creation since declaration doesn't exist")
+                    return
+            else:
+                source_type = forecast_type_mapping.get(self.tax_declaration_type)
+                if self.tax_declaration_type == 'vat':
+                    display_name = "VAT"
+                elif self.tax_declaration_type == 'ir':
+                    display_name = "IR"
+                elif self.tax_declaration_type == 'stamp_right':
+                    display_name = "Stamp Rights"
+            
+            if source_type:
+                # Prepare forecast date
+                forecast_date = self.payment_due
+                print(f"[Check Save] Will create forecast with date: {forecast_date}")
+                
+                try:
+                    print(f"[Check Save] Creating {source_type} forecast")
+                    
+                    # Create tax-specific forecast
+                    forecast = ForecastStatement.objects.create(
+                        bank_account=self.checker.bank_account,
+                        date=forecast_date,
+                        label=f"{display_name} Payment",
+                        debit=self.amount,
+                        amount=self.amount,
+                        reference=f"{display_name} Payment #{self.position}",
+                        source_type=source_type,  # Use tax-specific source type
+                        source_id=self.tax_declaration_id  # Point to the tax declaration
+                    )
+                    
+                    print(f"[Check Save] Tax forecast created successfully:")
+                    print(f"  - ID: {forecast.id}")
+                    print(f"  - Source type: {forecast.source_type}")
+                    print(f"  - Source ID: {forecast.source_id}")
+                    print(f"  - Date: {forecast.date}")
+                    print(f"  - Amount: {forecast.amount}")
+                except Exception as e:
+                    print(f"[Check Save] Error creating tax forecast: {str(e)}")
+                    print(traceback.format_exc())
+            
+            print(f"[Check Save] Tax payment forecast handling END\n")
         
         print("=== Check Save Method Completed ===\n")
 
@@ -957,111 +1439,6 @@ class Check(BaseModel):
             elif self.status == 'printed':
                 self.status = 'ready_to_sign'
             self.save()
-
-    
-class CheckAllocation(BaseModel):
-    """Tracks how supplier payments are allocated to invoices"""
-    payment = models.ForeignKey(
-        Check, 
-        on_delete=models.CASCADE,
-        related_name='allocations'
-    )
-    invoice = models.ForeignKey(
-        Invoice, 
-        on_delete=models.PROTECT,
-        related_name='check_allocations'
-    )
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
-    
-    class Meta:
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(amount__gt=0),
-                name='check_allocation_positive'
-            )
-        ]
-    
-    def clean(self):
-        # Ensure allocation is for a supplier payment
-        if not self.payment.is_supplier_payment:  
-            raise ValidationError(_("Can only allocate supplier payments"))
-            
-        # Ensure invoice matches check's beneficiary
-        if self.invoice.supplier != self.payment.beneficiary:  
-            raise ValidationError(_("Invoice must belong to check's beneficiary"))
-            
-        # Ensure we don't exceed available amount
-        available = self.payment.get_available_amount()  
-        if self.amount > available:
-            raise ValidationError(
-                _(f"Amount {self.amount} exceeds available amount {available}")
-            )
-            
-        # Ensure we don't exceed invoice's available amount
-        if self.amount > self.invoice.amount_available_for_payment:
-            raise ValidationError(_("Amount exceeds invoice's available amount"))
-
-class BankCheckTemplate(BaseModel):
-    bank = models.CharField(max_length=4, choices=MOROCCAN_BANKS)
-    check_type = models.CharField(max_length=3, choices=[('CHQ', 'Cheque'), ('LCN', 'LCN')])
-    template_data = models.JSONField(default=dict)  # Stores positions for each field
-
-    class Meta:
-        unique_together = ['bank', 'check_type']
-
-
-class CashConfiguration(BaseModel):
-    """Configuration for cash management"""
-    accounting_code = models.CharField(
-        max_length=5,
-        validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
-        ],
-        help_text="Main account code for cash operations"
-    )
-    journal_code = models.CharField(
-        max_length=2,
-        default='08',  # Using 08 for cash journal
-        validators=[
-            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
-        ]
-    )
-    current_balance = models.DecimalField(
-        max_digits=15, 
-        decimal_places=2,
-        default=Decimal('0.00')
-    )
-    max_payment_threshold = models.DecimalField(
-        max_digits=15,
-        decimal_places=2,
-        default=Decimal('5000.00')
-    )
-
-    def clean(self):
-        super().clean()
-        if self.pk and CashConfiguration.objects.exclude(pk=self.pk).exists():
-            raise ValidationError("Only one cash configuration can exist")
-
-    def save(self, *args, **kwargs):
-        print("\n=== Saving CashConfiguration ===")
-        print(f"Current balance: {self.current_balance}")
-        print(f"Max threshold: {self.max_payment_threshold}")
-        
-        if not self.pk and CashConfiguration.objects.exists():
-            raise ValidationError("Only one cash configuration can exist")
-            
-        super().save(*args, **kwargs)
-
-    @classmethod
-    def get_config(cls):
-        """Get or create cash configuration"""
-        config = CashConfiguration.objects.first()
-        if not config:
-            raise ValidationError("Cash Configuration must be set up")
-        return config
-
-    def __str__(self):
-        return f"Cash Configuration (Balance: {self.current_balance})"
 
 class BankStatement(models.Model):
     """
@@ -1831,1049 +2208,6 @@ class BankStatement(models.Model):
             
         print("No entries found, returning 0")
         return Decimal('0.00')
-        
-
-class AccountingEntry(models.Model):
-    """
-    Virtual model that dynamically generates accounting entries.
-    Does not store records directly - serves as a view model.
-    """
-    class Meta:
-        managed = False
-
-    @classmethod
-    def get_entries(cls, bank_account, start_date=None, end_date=None):
-        """
-        Dynamically generates double-entry accounting records.
-        Returns chronologically ordered list of debit/credit pairs.
-        """
-        entries = []
-
-        # Convert string dates to datetime.date objects
-        if start_date and isinstance(start_date, str):
-            start_date = datetime.datetime.strptime(start_date, '%Y-%m-%d').date()
-        if end_date and isinstance(end_date, str):
-            end_date = datetime.datetime.strptime(end_date, '%Y-%m-%d').date()
-
-        cash_withdrawals = CashDeposit.objects.filter(
-            source_type='bank',
-            source_bank_account=bank_account
-        )
-
-        for deposit in cash_withdrawals:
-            # Journal entry for the bank side
-            entries.extend([
-                {
-                    'date': deposit.date,
-                    'label': f"Cash withdrawal - {deposit.reference}",
-                    'debit': None,
-                    'credit': deposit.amount,
-                    'account_code': bank_account.accounting_number,
-                    'reference': deposit.reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'cash_deposit',
-                    'source_id': deposit.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': deposit.date,
-                    'label': f"Cash withdrawal - {deposit.reference}",
-                    'debit': deposit.amount,
-                    'credit': None,
-                    'account_code': CashConfiguration.get_config().accounting_code,
-                    'reference': deposit.reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'cash_deposit',
-                    'source_id': deposit.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-            print(f"Added cash withdrawal accounting entries: {deposit.amount}")
-        
-        # Get all relevant receipts and presentations
-        cash_receipts = CashReceipt.objects.filter(
-            credited_account=bank_account
-        ).select_related('entity', 'client')
-        
-        transfer_receipts = TransferReceipt.objects.filter(
-            credited_account=bank_account
-        ).select_related('entity', 'client')
-        
-        presentations = Presentation.objects.filter(
-            bank_account=bank_account
-        ).prefetch_related(
-            'presentation_receipts__checkreceipt',
-            'presentation_receipts__lcn'
-        )
-        
-        # Process cash receipts
-        for receipt in cash_receipts:
-            label = f"Cash payment from {receipt.entity.name}"
-            reference = receipt.reference_number or 'N/A'
-            
-            # Add debit and credit pair
-            entries.extend([
-                {
-                    'date': receipt.operation_date,
-                    'label': label,
-                    'debit': receipt.amount,
-                    'credit': None,
-                    'account_code': bank_account.accounting_number,  # Bank account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'cash_receipt',
-                    'source_id': receipt.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': receipt.operation_date,
-                    'label': label,
-                    'debit': None,
-                    'credit': receipt.amount,
-                    'account_code': receipt.entity.accounting_code,  # Entity account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'cash_receipt',
-                    'source_id': receipt.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-            
-        # Process transfer receipts
-        for receipt in transfer_receipts:
-            label = f"Bank transfer from {receipt.entity.name}"
-            reference = receipt.transfer_reference
-            
-            # Add debit and credit pair
-            entries.extend([
-                {
-                    'date': receipt.operation_date,
-                    'label': label,
-                    'debit': receipt.amount,
-                    'credit': None,
-                    'account_code': bank_account.accounting_number,  # Bank account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'transfer_receipt',
-                    'source_id': receipt.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': receipt.operation_date,
-                    'label': label,
-                    'debit': None,
-                    'credit': receipt.amount,
-                    'account_code': receipt.entity.accounting_code,  # Entity account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'transfer_receipt',
-                    'source_id': receipt.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-
-        # Process presentations
-        for pres in presentations:
-            for pr in pres.presentation_receipts.all():
-                receipt = pr.checkreceipt or pr.lcn
-                receipt_type = 'check' if pr.checkreceipt else 'lcn'
-                reference = pres.bank_reference or f"Pres. #{pres.id}"
-                
-                # For collection presentations - only record if marked as PAID
-                if pres.presentation_type == 'COLLECTION' and pr.recorded_status == 'PAID':
-                    label = f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
-                    
-                    # Get payment date from history
-                    payment_history = ReceiptHistory.objects.filter(
-                        content_type=ContentType.objects.get_for_model(receipt.__class__),
-                        object_id=receipt.id,
-                        action='status_changed',
-                        new_value__status='PAID'
-                    ).order_by('-business_date').first()
-                    
-                    # Use history date if available, otherwise use presentation date
-                    entry_date = (payment_history.business_date.date() 
-                        if payment_history and payment_history.business_date 
-                        else pres.date)
-                    
-                    # Add debit and credit pair with correct date
-                    entries.extend([
-                        {
-                            'date': entry_date,  # Use correct payment date
-                            'label': label,
-                            'debit': receipt.amount,
-                            'credit': None,
-                            'account_code': bank_account.accounting_number,  # Bank account
-                            'reference': reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'presentation_receipt',
-                            'source_id': pr.id,
-                            'pair_index': len(entries) // 2
-                        },
-                        {
-                            'date': entry_date,  # Use correct payment date
-                            'label': label,
-                            'debit': None,
-                            'credit': receipt.amount,
-                            'account_code': receipt.entity.accounting_code,  # Entity account
-                            'reference': reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'presentation_receipt',
-                            'source_id': pr.id,
-                            'pair_index': len(entries) // 2
-                        }
-                    ])
-                
-                # For discount presentations
-                elif pres.presentation_type == 'DISCOUNT':
-                    
-                    # Initial discount entry
-                    label = f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
-                    
-                    # Add debit and credit pair
-                    entries.extend([
-                        {
-                            'date': pres.date,
-                            'label': label,
-                            'debit': receipt.amount,
-                            'credit': None,
-                            'account_code': bank_account.accounting_number,  # Bank account
-                            'reference': reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'presentation_receipt',
-                            'source_id': pr.id,
-                            'pair_index': len(entries) // 2
-                        },
-                        {
-                            'date': pres.date,
-                            'label': label,
-                            'debit': None,
-                            'credit': receipt.amount,
-                            'account_code': '5000',  # On-hold account
-                            'reference': reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'presentation_receipt',
-                            'source_id': pr.id,
-                            'pair_index': len(entries) // 2
-                        }
-                    ])
-
-                    # If marked as unpaid in this presentation, add reversal
-                    if pr.recorded_status == 'UNPAID':
-                        label = f"Reversal of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
-
-                        payment_history = ReceiptHistory.objects.filter(
-                            content_type=ContentType.objects.get_for_model(receipt.__class__),
-                            object_id=receipt.id,
-                            action='status_changed',
-                            new_value__status='UNPAID'
-                        ).order_by('business_date', '-timestamp').first()
-                        
-                        entry_date = payment_history.business_date.date() if payment_history and payment_history.business_date else pres.date
-                        print(f"Using payment date for discounted receipt: {entry_date}")
-
-                        # Add debit and credit pair for reversal
-                        entries.extend([
-                            {
-                                'date': entry_date,
-                                'label': label,
-                                'debit': None,
-                                'credit': receipt.amount,
-                                'account_code': bank_account.accounting_number,  # Bank account
-                                'reference': reference,
-                                'journal_code': bank_account.journal_number,
-                                'source_type': 'presentation_receipt',
-                                'source_id': pr.id,
-                                'pair_index': len(entries) // 2
-                            },
-                            {
-                                'date': entry_date,
-                                'label': label,
-                                'debit': receipt.amount,
-                                'credit': None,
-                                'account_code': '5000',  # On-hold account
-                                'reference': reference,
-                                'journal_code': bank_account.journal_number,
-                                'source_type': 'presentation_receipt',
-                                'source_id': pr.id,
-                                'pair_index': len(entries) // 2
-                            }
-                        ])
-                        
-                    # If paid, record other operations entry
-                    elif pr.recorded_status == 'PAID':
-                        label = f"Payment of discounted {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"
-                        
-                        payment_history = ReceiptHistory.objects.filter(
-                            content_type=ContentType.objects.get_for_model(receipt.__class__),
-                            object_id=receipt.id,
-                            action='status_changed',
-                            new_value__status='PAID'
-                        ).order_by('business_date', '-timestamp').first()
-                        
-                        entry_date = payment_history.business_date.date() if payment_history and payment_history.business_date else pres.date
-                        print(f"Using payment date for discounted receipt: {entry_date}")
-
-                        # Add debit and credit pair for other operations
-                        entries.extend([
-                            {
-                                'date': entry_date,
-                                'label': label,
-                                'debit': receipt.amount,
-                                'credit': None,
-                                'account_code': '5000',  # On-hold account
-                                'reference': reference,
-                                'journal_code': '06',  # Other operations
-                                'source_type': 'presentation_receipt',
-                                'source_id': pr.id,
-                                'pair_index': len(entries) // 2
-                            },
-                            {
-                                'date': entry_date,
-                                'label': label,
-                                'debit': None,
-                                'credit': receipt.amount,
-                                'account_code': receipt.entity.accounting_code,  # Entity account
-                                'reference': reference,
-                                'journal_code': '06',  # Other operations
-                                'source_type': 'presentation_receipt',
-                                'source_id': pr.id,
-                                'pair_index': len(entries) // 2
-                            }
-                        ])
-
-        incoming_transfers = InterBankTransfer.objects.filter(
-            to_bank=bank_account,
-            is_deleted=False
-        ).prefetch_related('transferred_records')
-        
-        for transfer in incoming_transfers:
-            for transferred_record in transfer.transferred_records.all():
-                # Need to get the original record's entity
-                if transferred_record.source_type == 'cash_receipt':
-                    original_record = CashReceipt.objects.get(id=transferred_record.source_id)
-                elif transferred_record.source_type == 'transfer_receipt':
-                    original_record = TransferReceipt.objects.get(id=transferred_record.source_id)
-                else:  # presentation_receipt
-                    pres_receipt = PresentationReceipt.objects.get(id=transferred_record.source_id)
-                    original_record = pres_receipt.checkreceipt or pres_receipt.lcn
-
-                # Now we can access the entity
-                entries.extend([
-                    {
-                        'date': transfer.date,
-                        'label': f"{transfer.label} - {transferred_record.original_label}",
-                        'debit': transferred_record.amount,
-                        'credit': None,
-                        'account_code': bank_account.accounting_number,  # Bank account
-                        'reference': transferred_record.original_reference,
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'transferred_record',
-                        'source_id': transferred_record.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': transfer.date,
-                        'label': f"{transfer.label} - {transferred_record.original_label}",
-                        'debit': None,
-                        'credit': transferred_record.amount,
-                        'account_code': original_record.entity.accounting_code,  # Entity account
-                        'reference': transferred_record.original_reference,
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'transferred_record',
-                        'source_id': transferred_record.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-        
-        custom_records = CustomBankRecord.objects.filter(
-            bank_account=bank_account
-        )
-        
-        print(f"Found {custom_records.count()} custom records")
-        
-        if start_date:
-            custom_records = custom_records.filter(date__gte=start_date)
-        if end_date:
-            custom_records = custom_records.filter(date__lte=end_date)
-        
-        print(f"After date filtering: {custom_records.count()} custom records")
-        
-        # Debug log custom records
-        for record in custom_records:
-            print(f"\nCustom record: {record.id}")
-            print(f"Date: {record.date}")
-            print(f"Bank Label: {record.bank_label}")
-            print(f"Accounting Label: {record.accounting_label}")
-            print(f"Debit: {record.debit}")
-            print(f"Credit: {record.credit}")
-            print(f"Account Code: {record.account_code}")
-            
-            # Add the main account entry
-            entries.append({
-                'date': record.date,
-                'label': record.accounting_label,
-                'debit': record.debit,
-                'credit': record.credit,
-                'account_code': record.account_code,
-                'reference': record.reference,
-                'journal_code': bank_account.journal_number,
-                'source_type': 'custom_record',
-                'source_id': record.id,
-                'pair_index': len(entries) // 2
-            })
-            
-            # Add the counterpart entry (bank account)
-            entries.append({
-                'date': record.date,
-                'label': record.accounting_label,
-                'debit': record.credit,  # Swap debit/credit for counterpart
-                'credit': record.debit,  # Swap debit/credit for counterpart
-                'account_code': bank_account.accounting_number,
-                'reference': record.reference,
-                'journal_code': bank_account.journal_number,
-                'source_type': 'custom_record',
-                'source_id': record.id,
-                'pair_index': len(entries) // 2
-            })
-        
-        # Bank fee entries
-        fee_transactions = BankFeeTransaction.objects.filter(
-            bank_account=bank_account
-        ).select_related('fee_type')
-
-        for fee in fee_transactions:
-            # Raw amount entry
-            entries.extend([
-                {
-                    'date': fee.date,
-                    'label': f"{fee.fee_type.name} - Raw Amount",
-                    'debit': fee.raw_amount,
-                    'credit': None,
-                    'account_code': fee.fee_type.accounting_code,  # Fee account
-                    'reference': fee.fee_type.code,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'bank_fee',
-                    'source_id': fee.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': fee.date,
-                    'label': f"{fee.fee_type.name} - Raw Amount",
-                    'debit': None,
-                    'credit': fee.raw_amount,
-                    'account_code': bank_account.accounting_number,  # Bank account
-                    'reference': fee.fee_type.code,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'bank_fee',
-                    'source_id': fee.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-
-            
-            # VAT entry if applicable
-            if fee.vat_amount > 0:
-                entries.extend([
-                    {
-                        'date': fee.date,
-                        'label': f"{fee.fee_type.name} - VAT",
-                        'debit': fee.vat_amount,
-                        'credit': None,
-                        'account_code': fee.fee_type.vat_code,  # VAT account
-                        'reference': fee.fee_type.code,
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'bank_fee',
-                        'source_id': fee.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': fee.date,
-                        'label': f"{fee.fee_type.name} - VAT",
-                        'debit': None,
-                        'credit': fee.vat_amount,
-                        'account_code': bank_account.accounting_number,  # Bank account
-                        'reference': fee.fee_type.code,
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'bank_fee',
-                        'source_id': fee.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-
-        # Supplier payments accounting entries
-        supplier_payments = Check.objects.filter(
-            checker__bank_account=bank_account,
-            status='paid'
-        ).select_related('checker', 'beneficiary')
-
-        for payment in supplier_payments:
-            label = f"Payment to {payment.beneficiary.name}"
-            reference = f"{payment.checker.type} {payment.checker.index}{payment.position}"
-
-            # Add debit and credit pair
-            entries.extend([
-                {
-                    'date': payment.paid_at.date(),
-                    'label': label,
-                    'debit': None,
-                    'credit': payment.amount,
-                    'account_code': bank_account.accounting_number,  # Bank account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'supplier_payment',
-                    'source_id': payment.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': payment.paid_at.date(),
-                    'label': label,
-                    'debit': payment.amount,
-                    'credit': None,
-                    'account_code': payment.beneficiary.accounting_code,  # Supplier account
-                    'reference': reference,
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'supplier_payment',
-                    'source_id': payment.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-
-        contract_payments = ForecastStatement.objects.filter(
-            bank_account=bank_account,
-            source_type='contract_domiciliation',
-            is_processed=True
-        ).select_related('bank_account')
-
-        print(f"Found {contract_payments.count()} contract payments to account for")
-
-        for payment in contract_payments:
-            try:
-                contract = Contract.objects.get(id=payment.source_id)
-                print(f"\n=== Processing Contract Payment Accounting ===")
-                print(f"Contract: {contract.reference}")
-                print(f"Payment date: {payment.date}")
-                print(f"Amount: {payment.debit}")
-
-                # Get invoice for this payment period
-                contract_invoice = ContractInvoice.objects.filter(
-                    contract=contract,
-                    period_start__year=payment.date.year,
-                    period_start__month=payment.date.month
-                ).select_related('invoice').first()
-
-                if contract_invoice and contract_invoice.invoice:
-                    print(f"Found invoice: {contract_invoice.invoice.ref}")
-                    # Mirror invoice accounting entries with bank journal
-                    invoice_entries = contract_invoice.invoice.get_accounting_entries()
-                    print(f"Found {len(invoice_entries)} invoice entries to mirror")
-                    
-                    for entry in invoice_entries:
-                        print(f"Mirroring entry: {entry['label']}")
-                        print(f"Account: {entry['account_code']}")
-                        print(f"Debit: {entry['debit']}, Credit: {entry['credit']}")
-                        
-                        entries.append({
-                            'date': payment.date,
-                            'label': entry['label'],
-                            'debit': entry['debit'],
-                            'credit': entry['credit'],
-                            'account_code': entry['account_code'],
-                            'reference': payment.reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'contract_domiciliation',
-                            'source_id': payment.source_id,
-                            'pair_index': len(entries) // 2
-                        })
-                else:
-                    print("No invoice found, using default supplier accounting")
-                    # Fallback to default supplier payment accounting
-                    entries.extend([
-                        {
-                            'date': payment.date,
-                            'label': f"Domiciled payment for contract {contract.reference}",
-                            'debit': payment.debit,
-                            'credit': None,
-                            'account_code': contract.supplier.accounting_code,
-                            'reference': payment.reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'contract_domiciliation',
-                            'source_id': payment.source_id,
-                            'pair_index': len(entries) // 2
-                        },
-                        {
-                            'date': payment.date,
-                            'label': f"Domiciled payment for contract {contract.reference}",
-                            'debit': None,
-                            'credit': payment.debit,
-                            'account_code': bank_account.accounting_number,
-                            'reference': payment.reference,
-                            'journal_code': bank_account.journal_number,
-                            'source_type': 'contract_domiciliation',
-                            'source_id': payment.source_id,
-                            'pair_index': len(entries) // 2
-                        }
-                    ])
-
-            except Contract.DoesNotExist:
-                print(f"Contract {payment.source_id} not found")
-                continue
-            except Exception as e:
-                print(f"Error creating accounting entries: {str(e)}")
-                print(traceback.format_exc())
-                continue
-        
-        # Pay declarations
-        pay_declarations = PayDeclaration.objects.filter(
-            status=PayDeclaration.STATUS_PAID
-        )
-
-        if start_date:
-            pay_declarations = pay_declarations.filter(payment_date__gte=start_date)
-        if end_date:
-            pay_declarations = pay_declarations.filter(payment_date__lte=end_date)
-
-        print(f"\nProcessing pay declarations: {pay_declarations.count()}")
-
-        for declaration in pay_declarations:
-            # Group by account code
-            account_groups = {}
-            for item in declaration.items.all():
-                if item.account_code not in account_groups:
-                    account_groups[item.account_code] = []
-                account_groups[item.account_code].append(item)
-
-            # Create entries for each account
-            for account_code, items in account_groups.items():
-                total = sum(
-                    item.amount if item.is_debit else -item.amount 
-                    for item in items
-                )
-                if total != 0:
-                    entries.append({
-                        'date': declaration.payment_date,
-                        'label': f"Pay {declaration.period_month:02d}/{declaration.period_year}",
-                        'debit': abs(total) if total > 0 else None,
-                        'credit': abs(total) if total < 0 else None,
-                        'account_code': account_code,
-                        'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': '07',
-                        'source_type': 'pay_declaration',
-                        'source_id': declaration.id
-                    })
-
-        print("\n=== Getting VAT Accounting Entries ===")
-        declarations = VATDeclaration.objects.filter(
-            status=VATDeclaration.PAID,
-        ).select_related('forecast')
-
-        print(f"Found {declarations.count()} paid declarations")
-        print(f"Query: {declarations.query}")  # Print the query
-
-        for declaration in declarations:
-            print(f"\nProcessing declaration: {declaration.period_month}/{declaration.period_year}")
-            config = VATConfiguration.objects.first()
-            print(f"Config found: {bool(config)}")
-            if not config:
-                continue
-
-            # Print payment details    
-            print(f"Payment date: {declaration.payment_date}")
-            print(f"Total invoiced VAT: {declaration.total_invoiced_vat}")
-            print(f"Total deducted VAT: {declaration.total_deducted_vat}")
-            print(f"Net VAT: {declaration.total_invoiced_vat - declaration.total_deducted_vat}")
-                
-            # Get period end date for accounting entries
-            period_end = datetime.date(
-                declaration.period_year + (declaration.period_month == 12),
-                (declaration.period_month % 12) + 1,
-                1
-            ) - timedelta(days=1)
-            
-            # Payment entry in bank journal
-            entries.extend([
-                {
-                    'date': declaration.payment_date,
-                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
-                    'debit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
-                    'credit': None,
-                    'account_code': config.deducted_vat_account,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'vat_declaration',
-                    'source_id': declaration.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': declaration.payment_date,
-                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
-                    'debit': None,
-                    'credit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
-                    'account_code': bank_account.accounting_number,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                    'journal_code': bank_account.journal_number,
-                    'source_type': 'vat_declaration',
-                    'source_id': declaration.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-            
-            # VAT declaration entries in VAT journal
-            # First entry: Total invoiced VAT
-            entries.extend([
-                {
-                    'date': period_end,
-                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
-                    'debit': declaration.total_invoiced_vat,
-                    'credit': None,
-                    'account_code': config.invoiced_vat_account,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                    'journal_code': config.journal,
-                    'source_type': 'vat_declaration',
-                    'source_id': declaration.id,
-                    'pair_index': len(entries) // 2
-                },
-                {
-                    'date': period_end,
-                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
-                    'debit': None,
-                    'credit': declaration.total_invoiced_vat,
-                    'account_code': config.deducted_vat_account,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                    'journal_code': config.journal,
-                    'source_type': 'vat_declaration',
-                    'source_id': declaration.id,
-                    'pair_index': len(entries) // 2
-                }
-            ])
-            
-            # Process deducted VAT by rate
-            details = declaration.details.exclude(source_type='receipt')
-            by_rate = {}
-            for detail in details:
-                by_rate[detail.vat_rate] = by_rate.get(detail.vat_rate, Decimal('0')) + detail.vat_amount
-            
-            # Create entries for each VAT rate
-            for rate, amount in by_rate.items():
-                if rate > 0:
-                    entries.extend([
-                        {
-                            'date': period_end,
-                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
-                            'debit': amount,
-                            'credit': None,
-                            'account_code': config.deducted_vat_account,
-                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                            'journal_code': config.journal,
-                            'source_type': 'vat_declaration',
-                            'source_id': declaration.id,
-                            'pair_index': len(entries) // 2
-                        },
-                        {
-                            'date': period_end,
-                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
-                            'debit': None,
-                            'credit': amount,
-                            'account_code': f"345{int(rate):02d}",  # VAT rate specific account
-                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
-                            'journal_code': config.journal,
-                            'source_type': 'vat_declaration',
-                            'source_id': declaration.id,
-                            'pair_index': len(entries) // 2
-                        }
-                    ])
-        print("\n=== Getting IR Accounting Entries ===")
-        ir_declarations = IRDeclaration.objects.filter(
-            status='paid',
-        )
-
-        if start_date:
-            ir_declarations = ir_declarations.filter(payment_date__gte=start_date)
-        if end_date:
-            ir_declarations = ir_declarations.filter(payment_date__lte=end_date)
-
-        print(f"Found {ir_declarations.count()} paid IR declarations")
-
-        for declaration in ir_declarations:
-            try:
-                config = IRConfiguration.objects.first()
-                if not config:
-                    continue
-                    
-                bank_account = config.domiciliation_bank
-                    
-                # Payment entry in bank journal
-                entries.extend([
-                    {
-                        'date': declaration.payment_date,
-                        'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
-                        'debit': declaration.tax_amount,
-                        'credit': None,
-                        'account_code': config.accounting_code,
-                        'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'ir_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': declaration.payment_date,
-                        'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
-                        'debit': None,
-                        'credit': declaration.tax_amount,
-                        'account_code': bank_account.accounting_number,
-                        'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'ir_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-                    
-            except Exception as e:
-                print(f"Error processing IR accounting entries: {str(e)}")
-                continue
-        
-        print("\n=== Getting Stamp Rights Accounting Entries ===")
-        stamp_rights = StampRightDeclaration.objects.filter(
-            status='paid'
-        )
-
-        if start_date:
-            stamp_rights = stamp_rights.filter(payment_date__gte=start_date)
-        if end_date:
-            stamp_rights = stamp_rights.filter(payment_date__lte=end_date)
-
-        print(f"Found {stamp_rights.count()} paid stamp rights declarations")
-
-        for declaration in stamp_rights:
-            try:
-                config = StampRightConfiguration.get_config()
-                if not config:
-                    continue
-                        
-                bank_account = config.domiciliation_bank
-                
-                # Payment entry in bank journal
-                entries.extend([
-                    {
-                        'date': declaration.payment_date,
-                        'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
-                        'debit': declaration.tax_amount,
-                        'credit': None,
-                        'account_code': config.accounting_code,
-                        'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'stamp_right_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': declaration.payment_date,
-                        'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
-                        'debit': None,
-                        'credit': declaration.tax_amount,
-                        'account_code': bank_account.accounting_number,
-                        'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
-                        'journal_code': bank_account.journal_number,
-                        'source_type': 'stamp_right_declaration',
-                        'source_id': declaration.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])  
-            except Exception as e:
-                print(f"Error processing stamp rights accounting entries: {str(e)}")
-                continue
-        
-
-        # Filter entries
-        if start_date or end_date:
-            filtered_entries = []
-            for entry in entries:
-                entry_date = entry['date']
-                if start_date and entry_date < start_date:
-                    continue
-                if end_date and entry_date > end_date:
-                    continue
-                filtered_entries.append(entry)
-            entries = filtered_entries
-            print(f"Filtered entries: {entries}")
-
-        # Sort entries keeping pairs together
-        entries.sort(key=lambda x: (x['date'], x['pair_index']), reverse=True)
-        
-        return entries
-    
-    def get_cash_entries(cls, start_date=None, end_date=None):
-        """Generate accounting entries for cash transactions"""
-        print("\n=== Getting Cash Accounting Entries ===")
-        
-        entries = []
-        try:
-            config = CashConfiguration.get_config()
-            
-            # Process deposits
-            deposits = CashDeposit.objects.all()
-            if start_date:
-                deposits = deposits.filter(date__gte=start_date)
-            if end_date:
-                deposits = deposits.filter(date__lte=end_date)
-                
-            for deposit in deposits:
-                entries.extend([
-                    {
-                        'date': deposit.date,
-                        'label': f"Cash deposit {deposit.reference}",
-                        'debit': deposit.amount,
-                        'credit': None,
-                        'account_code': config.accounting_code,
-                        'reference': deposit.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_deposit',
-                        'source_id': deposit.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': deposit.date,
-                        'label': f"Cash deposit {deposit.reference}",
-                        'debit': None,
-                        'credit': deposit.amount,
-                        'account_code': '5161',  # Cash in transit
-                        'reference': deposit.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_deposit',
-                        'source_id': deposit.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-                
-            # Process payments
-            payments = CashPayment.objects.all()
-            if start_date:
-                payments = payments.filter(payment_date__gte=start_date)
-            if end_date:
-                payments = payments.filter(payment_date__lte=end_date)
-                
-            for payment in payments:
-                entries.extend([
-                    {
-                        'date': payment.payment_date,
-                        'label': f"Cash payment for invoice {payment.invoice.ref}",
-                        'debit': payment.amount,
-                        'credit': None,
-                        'account_code': payment.invoice.supplier.accounting_code,
-                        'reference': payment.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_payment',
-                        'source_id': payment.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': payment.payment_date,
-                        'label': f"Cash payment for invoice {payment.invoice.ref}",
-                        'debit': None,
-                        'credit': payment.amount,
-                        'account_code': config.accounting_code,
-                        'reference': payment.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_payment',
-                        'source_id': payment.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-            
-            # Process expenses
-            expenses = CashExpense.objects.all()
-            if start_date:
-                expenses = expenses.filter(date__gte=start_date)
-            if end_date:
-                expenses = expenses.filter(date__lte=end_date)
-                
-            for expense in expenses:
-                entries.extend([
-                    {
-                        'date': expense.date,
-                        'label': f"Cash expense ({expense.get_expense_type_display()})",
-                        'debit': expense.amount,
-                        'credit': None,
-                        'account_code': expense.expense_account,
-                        'reference': expense.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_expense',
-                        'source_id': expense.id,
-                        'pair_index': len(entries) // 2
-                    },
-                    {
-                        'date': expense.date,
-                        'label': f"Cash expense ({expense.get_expense_type_display()})",
-                        'debit': None,
-                        'credit': expense.amount,
-                        'account_code': config.accounting_code,
-                        'reference': expense.reference,
-                        'journal_code': config.journal_code,
-                        'source_type': 'cash_expense',
-                        'source_id': expense.id,
-                        'pair_index': len(entries) // 2
-                    }
-                ])
-
-            return entries
-            
-        except Exception as e:
-            print(f"Error getting cash accounting entries: {str(e)}")
-            return []
-
-
-    @classmethod
-    def get_entries_for_journal(cls, journal_code, start_date=None, end_date=None):
-        print(f"\n=== Getting entries for journal {journal_code} ===")
-        print(f"Date range: {start_date} - {end_date}")
-        
-        entries = []
-        declarations = PayDeclaration.objects.filter(
-            status=PayDeclaration.STATUS_PAID,
-            items__isnull=False
-        ).distinct()
-
-        if start_date:
-            declarations = declarations.filter(payment_date__gte=start_date)
-        if end_date:
-            declarations = declarations.filter(payment_date__lte=end_date)
-
-        print(f"Found {declarations.count()} paid declarations")
-
-        for declaration in declarations:
-            # Group by account code
-            account_groups = {}
-            for item in declaration.items.all():
-                key = (item.account_code, item.is_debit)
-                if key not in account_groups:
-                    account_groups[key] = Decimal('0.00')
-                account_groups[key] += item.amount
-
-            # Create entries for each account group
-            for (account_code, is_debit), amount in account_groups.items():
-                entries.append({
-                    'date': declaration.payment_date,
-                    'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
-                    'debit': amount if is_debit else None,
-                    'credit': amount if not is_debit else None,
-                    'account_code': account_code,
-                    'journal_code': journal_code,
-                    'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
-                    'source_type': 'pay_declaration',
-                    'source_id': declaration.id,
-                    'details': {
-                        'period': f"{declaration.period_month:02d}/{declaration.period_year}",
-                        'items_count': declaration.items.count(),
-                        'payment_date': declaration.payment_date.strftime('%Y-%m-% d'),
-                        'due_date': declaration.due_date.strftime('%Y-%m-% d')
-                    }
-                })
-
-        print(f"Generated {len(entries)} accounting entries")
-        return entries
-
 
 class ForecastStatement(BaseModel):
     """Stores forecasted bank statement entries"""
@@ -2890,128 +2224,6 @@ class ForecastStatement(BaseModel):
 
     def __str__(self):
         return f"Forecast {self.label} on {self.date}"
-    
-class DirectDebit(BaseModel):
-    """Direct debit for a contract invoice"""
-
-    PENDING = 'pending'
-    PROCESSED = 'processed'
-    REJECTED = 'rejected'
-    
-    STATUS_CHOICES = [
-        (PENDING, 'Pending'),
-        (PROCESSED, 'Processed'),
-        (REJECTED, 'Rejected')
-    ]
-    
-    REJECTION_CAUSES = [
-        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
-        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
-        ('TECHNICAL_ERROR', 'Technical Error'),
-        ('STOP_PAYMENT', 'Stop Payment Order'),
-        ('BANK_ERROR', 'Bank Processing Error')
-    ]
-    
-    invoice = models.ForeignKey('ContractInvoice', on_delete=models.PROTECT, null=True, blank=True)
-    contract = models.ForeignKey('Contract', on_delete=models.PROTECT, null=True, blank=True)
-    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
-    
-    due_date = models.DateField()
-    processed_date = models.DateField(null=True, blank=True)
-    
-    amount = models.DecimalField(max_digits=15, decimal_places=2)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=PENDING)
-    
-    rejection_cause = models.CharField(
-        max_length=50, 
-        choices=REJECTION_CAUSES,
-        null=True, 
-        blank=True
-    )
-    rejection_date = models.DateField(null=True, blank=True)
-    rejection_note = models.TextField(blank=True)
-    
-    forecast = models.OneToOneField(
-        'ForecastStatement', 
-        on_delete=models.SET_NULL, 
-        null=True,
-        related_name='direct_debit'
-    )
-    vat_declared = models.BooleanField(default=False)
-    vat_declaration_period = models.CharField(
-        max_length=7,  
-        null=True,
-        blank=True,
-        validators=[
-            RegexValidator(
-                r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
-            )
-        ]
-    )
-    
-    class Meta:
-        ordering = ['due_date']
-        verbose_name = "Direct Debit"
-        verbose_name_plural = "Direct Debits"
-    
-    def __str__(self):
-        return f"DirectDebit {self.id} for {self.invoice.invoice.ref}"
-        
-    def mark_as_processed(self, processed_date):
-        print(f"\n=== Processing DirectDebit {self.id} ===")
-        print(f"Invoice: {self.invoice.invoice.ref}")
-        print(f"Amount: {self.amount}")
-        print(f"Process date: {processed_date}")
-        
-        self.status = self.PROCESSED
-        self.processed_date = processed_date
-        self.save()
-        
-        # Update invoice payment status
-        self.invoice.invoice.update_payment_status()
-        
-        # Mark forecast as processed if exists
-        if self.forecast:
-            print(f"Marking forecast {self.forecast.id} as processed")
-            self.forecast.is_processed = True
-            self.forecast.save()
-        
-        print(f"DirectDebit processed successfully")
-        
-    def mark_as_rejected(self, rejection_date, cause, note=''):
-        print(f"\n=== Rejecting DirectDebit {self.id} ===")
-        print(f"Invoice: {self.invoice.invoice.ref}")
-        print(f"Cause: {cause}")
-        print(f"Date: {rejection_date}")
-        
-        self.status = self.REJECTED
-        self.rejection_date = rejection_date
-        self.rejection_cause = cause
-        self.rejection_note = note
-        self.save()
-        
-        # Update invoice payment status
-        self.invoice.invoice.update_payment_status()
-        
-        # Mark forecast as processed if exists
-        if self.forecast:
-            print(f"Marking forecast {self.forecast.id} as processed")
-            self.forecast.is_processed = True
-            self.forecast.save()
-            
-        print(f"DirectDebit rejected successfully")
-
-    @property
-    def presentation_info(self):
-        """Get formatted presentation information"""
-        return {
-            'date': self.due_date,
-            'type': 'Direct Debit',
-            'bank': self.bank_account,
-            'status': self.get_status_display(),
-            'rejection_cause': self.get_rejection_cause_display() if self.rejection_cause else None
-        }
 
 
 class OtherTaxConfiguration(BaseModel):
@@ -3508,6 +2720,16 @@ class OtherTaxDeclaration(BaseModel):
             unpaid_fines_total += fine.amount
         
         return base_remaining + unpaid_fines_total
+
+    @property
+    def payment_status(self):
+        """Calculate payment status based on paid amount vs total amount"""
+        if self.paid_amount >= self.amount:
+            return 'paid'
+        elif self.paid_amount > 0:
+            return 'partially_paid'
+        else:
+            return 'declared'
     
     def __str__(self):
         return f"{self.get_tax_type_display()} {self.year}"

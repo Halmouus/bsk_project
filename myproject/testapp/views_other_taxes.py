@@ -96,6 +96,17 @@ class OtherTaxListView(View):
     def get(self, request, tax_type):
         declarations = OtherTaxDeclaration.objects.filter(tax_type=tax_type).order_by('-year')
         
+        # Add total amount with fines to each declaration
+        for declaration in declarations:
+            # Calculate fines total
+            fines_total = sum(fine.amount for fine in declaration.fines.filter(paid=False))
+            
+            # Full amount including fines
+            declaration.total_amount = declaration.amount + fines_total
+            
+            # Remaining amount (already includes fines via the property)
+            declaration.total_remaining = declaration.remaining_amount
+        
         try:
             config = OtherTaxConfiguration.objects.filter(tax_type=tax_type).first()
             configured = bool(config)
@@ -630,7 +641,9 @@ class OtherTaxForecastView(View):
                     'year': year,
                     'label': forecast.label,
                     'is_declared': is_declared,
-                    'declaration_id': str(declaration.id) if declaration else None
+                    'declaration_id': str(declaration.id) if declaration else None,
+                    'status': declaration.status if declaration else None,
+                    'status_display': dict(OtherTaxDeclaration.STATUS_CHOICES).get(declaration.status if declaration else None, declaration.status if declaration else None),
                 })
 
             return JsonResponse({
@@ -676,6 +689,7 @@ class DeclarationPaymentsView(View):
             
             # Calculate grand total (declaration + fines)
             grand_total = declaration.amount + total_fines
+            remaining_amount = remaining_amount + total_fines
             
             return JsonResponse({
                 'html': render_to_string(
@@ -695,6 +709,113 @@ class DeclarationPaymentsView(View):
             })
         except Exception as e:
             print(f"Error in DeclarationPaymentsView: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=400)
+
+class OtherTaxForecastView(View):
+    def get(self, request):
+        date = request.GET.get('date')
+        bank_id = request.GET.get('bank')
+        
+        print(f"\n=== Loading Tax Forecasts for {date} ===")
+        print(f"Bank ID: {bank_id}")
+        
+        try:
+            forecast_date = datetime.strptime(date, '%Y-%m-%d').date()
+            bank_account = BankAccount.objects.get(id=bank_id)
+            
+            # Get forecasts for this date - include all tax types
+            forecasts = ForecastStatement.objects.filter(
+                bank_account=bank_account,
+                date=forecast_date,
+                is_processed=False,
+                source_type__in=['other_tax', 'communal_tax', 'professional_tax']
+            )
+            
+            print(f"Found {forecasts.count()} tax forecasts")
+            print(f"Types: {list(forecasts.values_list('source_type', flat=True))}")
+            
+            forecasts_data = []
+            total_amount = Decimal('0.00')
+            
+            for forecast in forecasts:
+                try:
+                    # Get the tax declaration
+                    declaration = OtherTaxDeclaration.objects.get(id=forecast.source_id)
+                    
+                    # Find any checks associated with this declaration
+                    associated_checks = Check.objects.filter(
+                        tax_declaration_id=declaration.id,
+                        tax_declaration_type='other_tax'
+                    ).exclude(status='cancelled').order_by('-creation_date')
+                    
+                    latest_check = associated_checks.first()
+                    
+                    # Count unpaid fines
+                    unpaid_fines = declaration.fines.filter(paid=False)
+                    fines_amount = sum(fine.amount for fine in unpaid_fines)
+                    
+                    # Map source_type to display name
+                    display_name = "Other Tax"
+                    if forecast.source_type == 'communal_tax':
+                        display_name = "Communal Tax"
+                    elif forecast.source_type == 'professional_tax':
+                        display_name = "Professional Tax"
+                    
+                    forecast_data = {
+                        'declaration_id': str(declaration.id),
+                        'tax_type': declaration.tax_type,
+                        'tax_type_display': display_name,
+                        'year': declaration.year,
+                        'status': declaration.status,
+                        'status_display': dict(OtherTaxDeclaration.STATUS_CHOICES).get(declaration.status, declaration.status),
+                        'amount': float(forecast.debit or 0),
+                        'tax_amount': float(declaration.amount),
+                        'paid_amount': float(declaration.paid_amount),
+                        'due_date': forecast.date.strftime('%Y-%m-%d'),
+                        'is_declared': True,
+                        'has_fines': unpaid_fines.exists(),
+                        'fines_amount': float(fines_amount),
+                        'has_check': associated_checks.exists(),
+                        'can_be_deleted': declaration.status != 'paid' and not associated_checks.exists()
+                    }
+                    
+                    # Add check information if available
+                    if latest_check:
+                        forecast_data['check'] = {
+                            'id': str(latest_check.id),
+                            'reference': f"{latest_check.checker.bank_account.bank}-{latest_check.position}",
+                            'status': latest_check.status,
+                            'status_display': latest_check.get_status_display(),
+                            'amount': float(latest_check.amount),
+                            'creation_date': latest_check.creation_date.strftime('%Y-%m-%d'),
+                            'delivered_at': latest_check.delivered_at.strftime('%Y-%m-%d') if latest_check.delivered_at else None,
+                            'can_mark_paid': latest_check.status == 'delivered',
+                            'can_mark_rejected': latest_check.status == 'delivered'
+                        }
+                    
+                    forecasts_data.append(forecast_data)
+                    total_amount += Decimal(str(forecast.debit or 0))
+                    
+                except OtherTaxDeclaration.DoesNotExist:
+                    print(f"Declaration {forecast.source_id} not found")
+                    continue
+                except Exception as e:
+                    print(f"Error processing forecast: {str(e)}")
+                    print(traceback.format_exc())
+                    continue
+            
+            return JsonResponse({
+                'status': 'success',
+                'forecasts': forecasts_data,
+                'total': float(total_amount)
+            })
+            
+        except Exception as e:
+            print(f"Error in OtherTaxForecastView: {str(e)}")
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',

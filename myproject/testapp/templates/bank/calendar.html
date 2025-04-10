@@ -184,7 +184,16 @@
                                                         <i class="fas fa-stamp"></i>
                                                     </button>
                                                 {% endif %}
-                                                
+
+                                                {% if bank_info.has_other_tax_forecasts %}
+                                                    <button class="other-tax-forecast-btn ms-2" 
+                                                            data-bs-toggle="modal" 
+                                                            data-bs-target="#otherTaxForecastModal"
+                                                            data-date="{{ day.date }}"
+                                                            data-bank="{{ bank_info.bank.id }}">
+                                                        <i class="fas fa-file-invoice-dollar"></i>
+                                                    </button>
+                                                {% endif %}
                                             </div>
                                         </div>
                                     {% endfor %}
@@ -287,6 +296,29 @@
                     <h5 class="modal-title">
                         <i class="fas fa-stamp me-2"></i>
                         {% trans "Stamp Rights Payments" %}
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="forecast-list">
+                        <!-- Will be populated by JavaScript -->
+                    </div>
+                    <div class="forecast-totals mt-3">
+                        <h6 class="text-end">Total: <span class="total-amount"></span></h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Other Tax Forecast Modal -->
+    <div class="modal fade" id="otherTaxForecastModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-invoice-dollar me-2"></i>
+                        {% trans "Other Tax Payments" %}
                     </h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
@@ -615,6 +647,45 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                     <button type="button" class="btn btn-primary" id="confirmStampRightsStatus">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Other Tax Payment Modal -->
+    <div class="modal fade" id="otherTaxPaymentModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="otherTaxPaymentModalTitle">Record Tax Payment</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="otherTaxPaymentForm">
+                        {% csrf_token %}
+                        <div class="mb-3">
+                            <label for="otherTaxPaymentDate" class="form-label">Payment Date</label>
+                            <input type="date" 
+                                class="form-control" 
+                                id="otherTaxPaymentDate" 
+                                name="payment_date"
+                                required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="otherTaxPaymentAmount" class="form-label">Amount (Optional)</label>
+                            <input type="number" 
+                                class="form-control" 
+                                id="otherTaxPaymentAmount" 
+                                name="amount"
+                                step="0.01"
+                                placeholder="Leave empty to pay remaining amount">
+                            <small class="form-text text-muted">Leave empty to pay remaining amount automatically</small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" id="confirmOtherTaxPayment">Confirm</button>
                 </div>
             </div>
         </div>
@@ -1604,7 +1675,7 @@
 .ir-forecast-btn {
     background: none;
     border: none;
-    color: #6B5B95;  /* Purple color for IR */
+    color: #6B5B95;
     cursor: pointer;
     padding: 4px;
     transition: all 0.2s ease;
@@ -1618,7 +1689,7 @@
 .stamp-rights-forecast-btn {
     background: none;
     border: none;
-    color: #9C7C38;  /* Gold color for Stamp Rights */
+    color: #9C7C38;
     cursor: pointer;
     padding: 4px;
     transition: all 0.2s ease;
@@ -1632,6 +1703,20 @@
 .forecast-item .badge-primary {
     background-color: #6B5B95;
     color: white;
+}
+
+.other-tax-forecast-btn {
+    background: none;
+    border: none;
+    color: #4B9CD3;
+    cursor: pointer;
+    padding: 4px;
+    transition: all 0.2s ease;
+}
+
+.other-tax-forecast-btn:hover {
+    color: #2E75A3;
+    transform: scale(1.1);
 }
      
 </style>
@@ -1697,6 +1782,10 @@
                 const unpaidModal = new bootstrap.Modal(document.getElementById('unpaidMarkingModal'));
                 unpaidModal.show();
             }
+
+            document.getElementById('otherTaxForecastModal').addEventListener('hidden.bs.modal', function () {
+                updateCalendar();
+            });
         });
 
          // Initialize notifications
@@ -1806,6 +1895,20 @@
                 const date = this.dataset.date;
                 const bankId = this.dataset.bank;
                 loadStampRightsForecasts(date, bankId);
+            });
+        });
+
+        document.querySelectorAll('.other-tax-forecast-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const date = this.dataset.date;
+                const bankId = this.dataset.bank;
+                
+                // Store date and bank ID in the modal for refreshing
+                const modal = document.getElementById('otherTaxForecastModal');
+                modal.setAttribute('data-date', date);
+                modal.setAttribute('data-bank', bankId);
+                
+                loadOtherTaxForecasts(date, bankId);
             });
         });
     }
@@ -1955,6 +2058,22 @@
                                 stampRightForecastBtn.appendChild(stampRightIcon);
 
                                 balanceInfo.appendChild(stampRightForecastBtn);
+                            }
+
+
+                            if (bank.has_other_tax_forecasts) {
+                                const otherTaxForecastBtn = document.createElement('button');
+                                otherTaxForecastBtn.classList.add('other-tax-forecast-btn', 'ms-2');
+                                otherTaxForecastBtn.setAttribute('data-bs-toggle', 'modal');
+                                otherTaxForecastBtn.setAttribute('data-bs-target', '#otherTaxForecastModal');
+                                otherTaxForecastBtn.setAttribute('data-date', day.date);
+                                otherTaxForecastBtn.setAttribute('data-bank', bank.bank.id);
+
+                                const otherTaxIcon = document.createElement('i');
+                                otherTaxIcon.classList.add('fas', 'fa-file-invoice-dollar');
+                                otherTaxForecastBtn.appendChild(otherTaxIcon);
+
+                                balanceInfo.appendChild(otherTaxForecastBtn);
                             }
                             
                             bankBalanceCard.appendChild(balanceInfo);
@@ -2528,23 +2647,279 @@
             });
     }
 
-
-
-    // Helper function with debug logging
-    function getStatusColor(status) {
-        console.log('Getting color for status:', status);
-        const color = {
-            'draft': 'secondary',
-            'printed': 'info',
-            'pending': 'warning',
-            'delivered': 'primary',
-            'paid': 'success',
-            'rejected': 'danger',
-            'cancelled': 'dark'
-        }[status] || 'secondary';
+    function loadOtherTaxForecasts(date, bankId) {
+        console.log(`Loading Other Tax forecasts for date: ${date}, bank ID: ${bankId}`);
         
-        console.log('Selected color:', color);
-        return color;
+        const modalBody = document.querySelector('#otherTaxForecastModal .modal-body');
+        const forecastList = modalBody.querySelector('.forecast-list');
+        const totalSpan = modalBody.querySelector('.total-amount');
+        
+        // Show loading indicator
+        forecastList.innerHTML = '<div class="text-center"><div class="spinner-border" role="status"></div></div>';
+        
+        fetch(`/testapp/calendar/other-tax-forecasts/?date=${date}&bank=${bankId}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    let content = '';
+                    let totalAmount = 0;
+                    
+                    if (data.forecasts && data.forecasts.length > 0) {
+                        data.forecasts.forEach(forecast => {
+                            totalAmount += forecast.amount;
+                            
+                            // Determine the status badge color
+                            let statusBadgeClass = 'bg-primary';
+                            if (forecast.status === 'paid') {
+                                statusBadgeClass = 'bg-success';
+                            } else if (forecast.status === 'partially_paid') {
+                                statusBadgeClass = 'bg-warning';
+                            } else if (forecast.status === 'rejected') {
+                                statusBadgeClass = 'bg-danger';
+                            }
+                            
+                            content += `
+                                <div class="forecast-item mb-3">
+                                    <div class="card">
+                                        <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                                            <div>
+                                                <h6 class="mb-1">${forecast.tax_type_display} Declaration ${forecast.year}</h6>
+                                                <div class="mt-1">
+                                                    <span class="badge ${statusBadgeClass}">
+                                                        ${forecast.status_display}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                            <div class="text-end">
+                                                <div class="amount fw-bold mb-1">${formatAmount(forecast.amount)}</div>
+                                                <small class="text-muted">Due: ${forecast.due_date}</small>
+                                            </div>
+                                        </div>
+                                        <div class="card-body">
+                                            <!-- Declaration Details -->
+                                            <div class="mb-3">
+                                                <h6 class="mb-2">Declaration Details</h6>
+                                                <div class="d-flex justify-content-between mb-1">
+                                                    <span class="text-muted">Tax Amount:</span>
+                                                    <span class="text-danger">${formatAmount(forecast.tax_amount)}</span>
+                                                </div>
+                                                <div class="d-flex justify-content-between mb-1">
+                                                    <span class="text-muted">Paid Amount:</span>
+                                                    <span class="text-success">${formatAmount(forecast.paid_amount)}</span>
+                                                </div>
+                                                ${forecast.has_fines ? `
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Unpaid Fines:</span>
+                                                        <span class="text-warning">${formatAmount(forecast.fines_amount)}</span>
+                                                    </div>
+                                                ` : ''}
+                                                ${forecast.status === 'paid' ? `
+                                                    <div class="alert alert-success mt-2 mb-0">
+                                                        <i class="fas fa-check-circle me-2"></i>
+                                                        This declaration has been fully paid
+                                                    </div>
+                                                ` : forecast.status === 'partially_paid' ? `
+                                                    <div class="alert alert-warning mt-2 mb-0">
+                                                        <i class="fas fa-exclamation-circle me-2"></i>
+                                                        This declaration has been partially paid
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                            
+                                            <!-- Check Payment Details (if available) -->
+                                            ${forecast.has_check && forecast.check ? `
+                                                <div class="mt-3 pt-3 border-top">
+                                                    <h6 class="mb-2">Payment Check Details</h6>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Check Reference:</span>
+                                                        <span class="fw-bold">${forecast.check.reference}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Status:</span>
+                                                        <span class="badge ${getCheckStatusBadgeClass(forecast.check.status)}">${forecast.check.status_display}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Amount:</span>
+                                                        <span>${formatAmount(forecast.check.amount)}</span>
+                                                    </div>
+                                                    <div class="d-flex justify-content-between mb-1">
+                                                        <span class="text-muted">Creation Date:</span>
+                                                        <span>${forecast.check.creation_date}</span>
+                                                    </div>
+                                                    ${forecast.check.delivered_at ? `
+                                                        <div class="d-flex justify-content-between mb-1">
+                                                            <span class="text-muted">Delivered Date:</span>
+                                                            <span>${forecast.check.delivered_at}</span>
+                                                        </div>
+                                                    ` : ''}
+                                                    
+                                                    <!-- Action buttons for delivered checks -->
+                                                    ${forecast.check.can_mark_paid ? `
+                                                        <div class="d-flex justify-content-end mt-3">
+                                                            <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                                    data-check-id="${forecast.check.id}"
+                                                                    data-delivered-at="${forecast.check.delivered_at}">
+                                                                <i class="fas fa-check me-1"></i>Mark as Paid
+                                                            </button>
+                                                            <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                                    data-check-id="${forecast.check.id}"
+                                                                    data-delivered-at="${forecast.check.delivered_at}">
+                                                                <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                            </button>
+                                                        </div>
+                                                    ` : ''}
+                                                </div>
+                                            ` : ''}
+                                            
+                                            <!-- Action buttons -->
+                                            <div class="d-flex justify-content-end mt-3">
+                                                ${forecast.status !== 'paid' && !forecast.has_check ? `
+                                                    <a href="/testapp/checks/create/?tax_type=other_tax&tax_declaration_id=${forecast.declaration_id}" 
+                                                    class="btn btn-sm btn-primary" target="_blank">
+                                                        <i class="fas fa-money-check me-1"></i>Create Payment Check
+                                                    </a>
+                                                ` : ''}
+                                                
+                                                ${forecast.status === 'paid' || forecast.has_check ? `
+                                                    <a href="/testapp/tax/other/${forecast.tax_type}/declaration/${forecast.declaration_id}/payments/" 
+                                                    class="btn btn-sm btn-info" target="_blank">
+                                                        <i class="fas fa-money-bill-wave me-1"></i>View Payments
+                                                    </a>
+                                                ` : ''}
+                                                
+                                                ${forecast.can_be_deleted ? `
+                                                    <button class="btn btn-sm btn-danger ms-2 delete-declaration" 
+                                                            data-declaration-id="${forecast.declaration_id}"
+                                                            data-tax-type="${forecast.tax_type}">
+                                                        <i class="fas fa-trash me-1"></i>Delete Declaration
+                                                    </button>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        forecastList.innerHTML = content;
+                        totalSpan.textContent = formatAmount(totalAmount);
+                        
+                        // Add event listeners for action buttons
+                        document.querySelectorAll('.mark-check-paid').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                handleCheckAction(this.dataset.checkId, 'pay');
+                            });
+                        });
+                        
+                        document.querySelectorAll('.mark-check-rejected').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                handleCheckAction(this.dataset.checkId, 'reject');
+                            });
+                        });
+                        
+                        document.querySelectorAll('.delete-declaration').forEach(btn => {
+                            btn.addEventListener('click', function() {
+                                if (confirm('Are you sure you want to delete this declaration?')) {
+                                    deleteDeclaration(this.dataset.declarationId, this.dataset.taxType);
+                                }
+                            });
+                        });
+                        
+                    } else {
+                        forecastList.innerHTML = '<div class="text-center text-muted">No tax forecasts for this date</div>';
+                        totalSpan.textContent = formatAmount(0);
+                    }
+                } else {
+                    forecastList.innerHTML = '<div class="error-message">Failed to load tax forecast details</div>';
+                }
+            })
+            .catch(error => {
+                console.error("Error loading tax forecasts:", error);
+                forecastList.innerHTML = '<div class="error-message">Failed to load tax forecast details</div>';
+            });
+    }
+
+    // Helper function to determine the badge class based on check status
+    function getCheckStatusBadgeClass(status) {
+        switch(status) {
+            case 'draft':
+                return 'bg-secondary';
+            case 'pending':
+                return 'bg-warning';
+            case 'printed':
+                return 'bg-info';
+            case 'delivered':
+                return 'bg-primary';
+            case 'paid':
+                return 'bg-success';
+            case 'rejected':
+            case 'cancelled':
+                return 'bg-danger';
+            default:
+                return 'bg-secondary';
+        }
+    }
+
+    // Function to handle check actions (pay/reject)
+    function handleCheckAction(checkId, action) {
+        console.log(`Handling check action: ${action} for check ${checkId}`);
+        
+        // For pay action
+        if (action === 'pay') {
+            // Show date input modal
+            const paymentDateInput = document.getElementById('checkPaymentDate');
+            paymentDateInput.value = new Date().toISOString().split('T')[0];
+            
+            activeSupplierCheckData = {
+                id: checkId
+            };
+            
+            const paidModal = new bootstrap.Modal(document.getElementById('checkPaymentModal'));
+            paidModal.show();
+        }
+        
+        // For reject action
+        if (action === 'reject') {
+            // Show rejection modal
+            const rejectionDateInput = document.getElementById('checkRejectionDate');
+            rejectionDateInput.value = new Date().toISOString().split('T')[0];
+            
+            activeSupplierCheckData = {
+                id: checkId
+            };
+            
+            const rejectionModal = new bootstrap.Modal(document.getElementById('checkRejectionModal'));
+            rejectionModal.show();
+        }
+    }
+
+    // Function to delete a declaration
+    function deleteDeclaration(declarationId, taxType) {
+        fetch(`/testapp/tax/other/${taxType}/declaration/${declarationId}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                showToast('success', 'Declaration deleted successfully');
+                // Refresh the forecast modal
+                const dateEl = document.querySelector('#otherTaxForecastModal').getAttribute('data-date');
+                const bankEl = document.querySelector('#otherTaxForecastModal').getAttribute('data-bank');
+                loadOtherTaxForecasts(dateEl, bankEl);
+                
+                // Refresh the calendar to update balances
+                updateCalendar();
+            } else {
+                showToast('error', data.message || 'Error deleting declaration');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('error', 'Failed to delete declaration');
+        });
     }
 
     function getVATStatusColor(status) {
@@ -2935,6 +3310,79 @@
             const modal = new bootstrap.Modal(document.getElementById('vatRejectionModal'));
             modal.show();
         }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (e.target.closest('.mark-other-tax-paid')) {
+            const button = e.target.closest('.mark-other-tax-paid');
+            const declarationId = button.dataset.declarationId;
+            const taxType = button.dataset.taxType;
+            const dueDate = button.dataset.dueDate;
+            
+            // Create a dedicated modal for other tax payments
+            document.getElementById('otherTaxPaymentModalTitle').textContent = 
+                'Record ' + (taxType === 'professional' ? 'Professional' : 'Communal') + ' Tax Payment';
+            
+            const dateInput = document.getElementById('otherTaxPaymentDate');
+            dateInput.min = dueDate;
+            dateInput.value = new Date().toISOString().split('T')[0];
+            
+            // Store active data
+            window.activeOtherTaxData = {
+                id: declarationId,
+                taxType: taxType,
+                dueDate: dueDate
+            };
+            
+            const modal = new bootstrap.Modal(document.getElementById('otherTaxPaymentModal'));
+            modal.show();
+        }
+    });
+
+    document.getElementById('confirmOtherTaxPayment').addEventListener('click', function() {
+        const paymentDate = document.getElementById('otherTaxPaymentDate').value;
+        const paymentAmount = document.getElementById('otherTaxPaymentAmount').value;
+        
+        if (!paymentDate) {
+            showToast('error', 'Please select a payment date');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('payment_date', paymentDate);
+        formData.append('amount', paymentAmount || '');  // Allow empty for backend calculation
+        formData.append('payment_method', 'check');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+
+        fetch(`/testapp/tax/other/${window.activeOtherTaxData.taxType}/declaration/${window.activeOtherTaxData.id}/status/`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(data => {
+                    throw new Error(data.message || 'Failed to record payment');
+                });
+            }
+            return response.json();
+        })
+        .then(result => {
+            if (result.status === 'success') {
+                bootstrap.Modal.getInstance(document.getElementById('otherTaxPaymentModal')).hide();
+                window.activeOtherTaxData = null;
+                
+                // Refresh the pending forecasts view
+                const currentBank = document.querySelector('#pendingForecastsModal').dataset.bankId;
+                viewPendingForecasts(currentBank);
+                showToast('success', result.message || 'Payment recorded successfully');
+            } else {
+                throw new Error(result.message || 'Failed to record payment');
+            }
+        })
+        .catch(error => {
+            console.error('Error recording payment:', error);
+            showToast('error', error.message || 'Failed to record payment');
+        });
     });
 
 document.getElementById('confirmVATPayment').addEventListener('click', function() {
@@ -3745,6 +4193,174 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
                                 </div>
                             </div>
                         `;
+                    } else if (forecast.type.includes('Tax Payment')) {
+                        html += `
+                            <div class="forecast-item mb-3">
+                                <div class="card border-0 shadow-sm">
+                                    <div class="card-header border-0 d-flex justify-content-between align-items-center bg-gradient-primary py-3">
+                                        <div class="d-flex align-items-center gap-2">
+                                            <div class="text-white">
+                                                <i class="fas fa-file-invoice-dollar me-2"></i> ${forecast.payment_type}
+                                            </div>
+                                            <div class="ms-2 text-white opacity-75">
+                                                ${forecast.status_display}
+                                            </div>
+                                        </div>
+                                        <div class="text-white fw-bold">
+                                            ${formatBalance(forecast.amount)}
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-0">
+                                        <!-- Primary Info Section -->
+                                        <div class="p-3 bg-white border-bottom">
+                                            <div class="row g-3">
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Reference</small>
+                                                        <span class="badge bg-primary mt-1">
+                                                            ${forecast.number}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Due Date</small>
+                                                        <span class="badge bg-info mt-1">${forecast.due_date}</span>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <div class="d-flex flex-column">
+                                                        <small class="text-muted text-uppercase fw-semibold">Amount</small>
+                                                        <span class="badge bg-primary mt-1">
+                                                            ${formatBalance(forecast.amount)}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Details Grid -->
+                                        <div class="row g-0">
+                                            <div class="col-md-6 border-end">
+                                                <!-- Declaration Details -->
+                                                <div class="p-3 border-bottom">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-file-invoice-dollar text-muted me-2"></i>
+                                                        Declaration Details
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Type</span>
+                                                            <span class="fw-semibold">${forecast.declaration.tax_type_display}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Year</span>
+                                                            <span>${forecast.declaration.year}</span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span class="text-muted">Status</span>
+                                                            <span class="badge ${getStatusBadgeClass(forecast.status)}">${forecast.status_display}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div class="col-md-6">
+                                                <!-- Amount Details -->
+                                                <div class="p-3">
+                                                    <h6 class="section-title d-flex align-items-center">
+                                                        <i class="fas fa-calculator text-muted me-2"></i>
+                                                        Payment Summary
+                                                    </h6>
+                                                    <div class="bg-light rounded-3 p-3">
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Total Amount</span>
+                                                            <span class="badge bg-danger">
+                                                                ${formatBalance(forecast.declaration.amount)}
+                                                            </span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Fines</span>
+                                                            <span class="badge bg-warning">
+                                                                ${formatBalance(forecast.fines)}
+                                                            </span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between mb-2">
+                                                            <span class="text-muted">Paid Amount</span>
+                                                            <span class="badge bg-success">
+                                                                ${formatBalance(forecast.declaration.paid_amount)}
+                                                            </span>
+                                                        </div>
+                                                        <div class="d-flex justify-content-between">
+                                                            <span class="text-muted">Remaining</span>
+                                                            <span class="badge bg-warning">
+                                                                ${formatBalance(forecast.declaration.remaining_amount)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <!-- Check Details (if available) -->
+                                        ${forecast.has_check && forecast.check ? `
+                                            <div class="p-3 bg-light border-top">
+                                                <h6 class="section-title">Payment Check Details</h6>
+                                                <div class="row mt-2">
+                                                    <div class="col-md-6">
+                                                        <div class="mb-2">
+                                                            <small class="text-muted">Reference:</small>
+                                                            <span class="fw-bold ms-2">${forecast.check.reference}</span>
+                                                        </div>
+                                                        <div class="mb-2">
+                                                            <small class="text-muted">Status:</small>
+                                                            <span class="badge ${getCheckStatusBadgeClass(forecast.check.status)} ms-2">${forecast.check.status_display}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <div class="mb-2">
+                                                            <small class="text-muted">Amount:</small>
+                                                            <span class="fw-bold ms-2">${formatBalance(forecast.check.amount)}</span>
+                                                        </div>
+                                                        ${forecast.check.delivered_at ? `
+                                                            <div class="mb-2">
+                                                                <small class="text-muted">Delivered:</small>
+                                                                <span class="ms-2">${forecast.check.delivered_at}</span>
+                                                            </div>
+                                                        ` : ''}
+                                                    </div>
+                                                </div>
+                                                
+                                                ${forecast.check.can_mark_paid ? `
+                                                    <div class="d-flex justify-content-end mt-3">
+                                                        <button class="btn btn-sm btn-success me-2 mark-check-paid" 
+                                                                data-check-id="${forecast.check.id}">
+                                                            <i class="fas fa-check me-1"></i>Mark as Paid
+                                                        </button>
+                                                        <button class="btn btn-sm btn-danger mark-check-rejected" 
+                                                                data-check-id="${forecast.check.id}">
+                                                            <i class="fas fa-times me-1"></i>Mark as Rejected
+                                                        </button>
+                                                    </div>
+                                                ` : ''}
+                                            </div>
+                                        ` : ''}
+
+                                        <!-- Action Buttons -->
+                                        ${!forecast.has_check && forecast.status !== 'paid' ? `
+                                            <div class="p-3 bg-light border-top">
+                                                <div class="d-flex justify-content-end">
+                                                    <a href="/testapp/checks/create/?tax_type=other_tax&tax_declaration_id=${forecast.source_id}" 
+                                                    class="btn btn-sm btn-primary" target="_blank">
+                                                        <i class="fas fa-money-check me-1"></i>Create Payment Check
+                                                    </a>
+                                                </div>
+                                            </div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
                     } else {
                         const amountClass = forecast.amount >= 0 ? 'text-success' : 'text-danger';
                         const typeClass = forecast.type === 'Expected Payment' ? 'expected' : 'discounted';
@@ -4380,6 +4996,47 @@ document.getElementById('confirmVATPayment').addEventListener('click', function(
         toastContainer.appendChild(toastElement);
         
         $('.toast').toast({ delay: 3000 }).toast('show');
+    }
+    
+    function getStatusBadgeClass(status) {
+        switch(status) {
+            case 'paid':
+                return 'bg-success';
+            case 'partially_paid':
+                return 'bg-warning';
+            case 'declared':
+                return 'bg-primary';
+            case 'rejected':
+                return 'bg-danger';
+            default:
+                return 'bg-secondary';
+        }
+    }
+
+    // Helper function for check status badges
+    function getCheckStatusBadgeClass(status) {
+        switch(status) {
+            case 'draft':
+                return 'bg-secondary';
+            case 'pending':
+                return 'bg-warning';
+            case 'printed':
+                return 'bg-info';
+            case 'delivered':
+                return 'bg-primary';
+            case 'paid':
+                return 'bg-success';
+            case 'rejected':
+            case 'cancelled':
+                return 'bg-danger';
+            default:
+                return 'bg-secondary';
+        }
+    }
+
+    // For backwards compatibility with existing code
+    function getStatusColor(status) {
+        return getCheckStatusBadgeClass(status).replace('bg-', '');
     }
     </script>
     {% endblock %}

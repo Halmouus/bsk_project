@@ -49,7 +49,7 @@
                         {% for declaration in declarations %}
                         <tr>
                             <td>{{ declaration.year }}</td>
-                            <td>{{ declaration.amount|format_balance }}</td>
+                            <td>{{ declaration.total_amount|format_balance }}</td>
                             <td>{{ declaration.paid_amount|format_balance }}</td>
                             <td>{{ declaration.due_date|date:"Y-m-d" }}</td>
                             <td>

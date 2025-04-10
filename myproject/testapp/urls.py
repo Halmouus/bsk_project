@@ -424,6 +424,7 @@ urlpatterns = [
     path('tax/other/<str:tax_type>/declaration/<uuid:declaration_id>/payments/', 
         views_other_taxes.DeclarationPaymentsView.as_view(), 
         name='other-tax-payments'),
+    path('calendar/other-tax-forecasts/', views_other_taxes.OtherTaxForecastView.as_view(), name='other-tax-forecasts'),
 
     # Tax Declaration Autocomplete
     path('tax-declarations/autocomplete/', views_checkers.TaxDeclarationAutocompleteView.as_view(), name='tax-declaration-autocomplete'),

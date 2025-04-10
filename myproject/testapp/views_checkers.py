@@ -971,6 +971,64 @@ class CheckActionView(View):
                     cancel_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
                     if not reason:
                         return JsonResponse({'error': 'Reason is required'}, status=400)
+                    
+                    # Delete any associated forecasts BEFORE changing status
+                    print(f"[CheckActionView] Cancelling check {check.id}, cleaning up forecasts")
+                    
+                    # For supplier checks (delete by check ID)
+                    deleted_count = ForecastStatement.objects.filter(
+                        source_type='supplier_check',
+                        source_id=check.id,
+                        is_processed=False
+                    ).delete()[0]
+                    print(f"[CheckActionView] Deleted {deleted_count} supplier check forecasts")
+                    
+                    # For tax payment checks (if applicable)
+                    if check.is_tax_payment and check.tax_declaration_id and check.tax_declaration_type:
+                        # Map tax declaration types to forecast source types 
+                        forecast_type_mapping = {
+                            'other_tax': {
+                                'professional': 'professional_tax',
+                                'communal': 'communal_tax',
+                                'default': 'other_tax'
+                            },
+                            'ir': 'ir_declaration',
+                            'stamp_right': 'stamp_right_declaration',
+                            'vat': 'vat_declaration'
+                        }
+                        
+                        source_type = None
+                        if check.tax_declaration_type == 'other_tax':
+                            try:
+                                tax = OtherTaxDeclaration.objects.get(id=check.tax_declaration_id)
+                                source_type = forecast_type_mapping['other_tax'].get(
+                                    tax.tax_type,
+                                    forecast_type_mapping['other_tax']['default']
+                                )
+                            except Exception as e:
+                                print(f"[CheckActionView] Error getting tax type: {str(e)}")
+                                source_type = 'other_tax'
+                        else:
+                            source_type = forecast_type_mapping.get(check.tax_declaration_type)
+                            
+                        if source_type:
+                            tax_deleted = ForecastStatement.objects.filter(
+                                source_type=source_type,
+                                source_id=check.tax_declaration_id,
+                                is_processed=False
+                            ).delete()[0]
+                            print(f"[CheckActionView] Deleted {tax_deleted} tax forecasts for type {source_type}")
+                            
+                            # Also delete any 'other_tax' forecasts (as a fallback)
+                            fallback_deleted = ForecastStatement.objects.filter(
+                                source_type='other_tax',
+                                source_id=check.tax_declaration_id,
+                                is_processed=False
+                            ).delete()[0]
+                            if fallback_deleted > 0:
+                                print(f"[CheckActionView] Also deleted {fallback_deleted} generic 'other_tax' forecasts")
+                    
+                    # ONLY NOW update check fields
                     check.cancelled_at = cancel_date
                     check.cancellation_reason = reason
                     check.status = 'cancelled'

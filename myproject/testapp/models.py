@@ -1893,7 +1893,7 @@ class Check(BaseModel):
                     try:
                         deleted_count = ForecastStatement.objects.filter(
                             source_type=source_type,
-                            source_id=self.tax_declaration_id,
+                            source_id=self.id,
                             is_processed=False
                         ).delete()[0]
                         print(f"Deleted {deleted_count} forecasts for tax declaration")
@@ -1930,77 +1930,9 @@ class Check(BaseModel):
             self.checker.current_position = int(self.position) + 1
             self.checker.save()
 
-        # Handle tax payment processing when marked as paid
-        if self.status == 'paid' and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type:
-            print(f"\n=== Processing Tax Payment ===")
-            print(f"Tax declaration type: {self.tax_declaration_type}")
-            print(f"Tax declaration ID: {self.tax_declaration_id}")
-            print(f"Amount: {self.amount}")
-            
-            try:
-                # Process different tax types
-                if self.tax_declaration_type == 'other_tax':
-                            tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
-                            
-                            # Debug information 
-                            print(f"Current tax state - amount: {tax.amount}, paid: {tax.paid_amount}")
-                            print(f"Fines: {[{'id': str(fine.id), 'amount': fine.amount, 'paid': fine.paid} for fine in tax.fines.all()]}")
-                            
-                            # Add payment with specific check reference
-                            tax.add_payment(
-                                self.amount, 
-                                'check', 
-                                self.paid_at.date() if self.paid_at else None,
-                                check_reference=f"{self.checker.bank_account.bank}-{self.position}"
-                            )
-                            
-                            # Log updated tax state
-                            print(f"Updated tax state - amount: {tax.amount}, paid: {tax.paid_amount}")
-                            
-                            # Update fines status if part of the payment was for fines
-                            unpaid_fines = tax.fines.filter(paid=False)
-                            if unpaid_fines.exists() and tax.paid_amount >= tax.amount:
-                                # All base amount is paid, so remaining payment goes to fines
-                                remaining = self.amount - (tax.amount - tax.paid_amount)
-                                if remaining > 0:
-                                    for fine in unpaid_fines:
-                                        if remaining >= fine.amount:
-                                            fine.paid = True
-                                            fine.payment_date = self.paid_at.date() if self.paid_at else timezone.now().date()
-                                            fine.save()
-                                            remaining -= fine.amount
-                                            print(f"Marked fine {fine.id} as paid")
-                                        else:
-                                            break
-                            
-                            print(f"Updated OtherTaxDeclaration payment: {tax.id}")
-                elif self.tax_declaration_type == 'ir':
-                    tax = IRDeclaration.objects.get(id=self.tax_declaration_id)
-                    tax.payment_method = 'check'
-                    tax.payment_date = self.paid_at.date() if self.paid_at else None
-                    tax.status = 'paid'
-                    tax.save()
-                    print(f"Updated IRDeclaration payment: {tax.id}")
-                elif self.tax_declaration_type == 'stamp_right':
-                    tax = StampRightDeclaration.objects.get(id=self.tax_declaration_id)
-                    tax.payment_method = 'check'
-                    tax.payment_date = self.paid_at.date() if self.paid_at else None
-                    tax.status = 'paid'
-                    tax.save()
-                    print(f"Updated StampRightDeclaration payment: {tax.id}")
-                elif self.tax_declaration_type == 'vat':
-                    from .models import VATDeclaration  # Import here to avoid circular imports
-                    tax = VATDeclaration.objects.get(id=self.tax_declaration_id)
-                    tax.payment_date = self.paid_at.date() if self.paid_at else None
-                    tax.status = 'paid'
-                    tax.save()
-                    print(f"Updated VATDeclaration payment: {tax.id}")
-            except Exception as e:
-                print(f"Error updating tax payment status: {str(e)}")
-                print(traceback.format_exc())
 
         # Regular payment forecast handling
-        if self.payment_due:
+        if self.payment_due and not self.is_tax_payment:  # Added condition to skip tax payments
             print(f"[Check Save] Initial payment_due: {self.payment_due} (type: {type(self.payment_due)})")
             
             # Ensure payment_due is a date object
@@ -2056,9 +1988,92 @@ class Check(BaseModel):
                     
                 except Exception as e:
                     print(f"[Check Save] Error during forecast creation: {str(e)}")
-                    # Don't let forecast errors prevent check creation
                     pass
-        
+            
+        if self.payment_due and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type and self.status != 'cancelled':
+            print(f"\n[Check Save] Tax payment forecast handling START")
+            print(f"[Check Save] Check ID: {self.pk}")
+            print(f"[Check Save] Status: {self.status}")
+            print(f"[Check Save] Payment due: {self.payment_due}")
+            print(f"[Check Save] Is tax payment: {self.is_tax_payment}")
+            print(f"[Check Save] Tax declaration ID: {self.tax_declaration_id}")
+            print(f"[Check Save] Tax declaration type: {self.tax_declaration_type}")
+            
+            # Get the tax declaration
+            tax_declaration = None
+            source_type = None
+            
+            # Map tax declaration types to forecast source types
+            forecast_type_mapping = {
+                'other_tax': {
+                    'professional': 'professional_tax',
+                    'communal': 'communal_tax',
+                    'default': 'other_tax'
+                },
+                'ir': 'ir_declaration',
+                'stamp_right': 'stamp_right_declaration',
+                'vat': 'vat_declaration'
+            }
+            
+            # Get the declaration and its source type
+            if self.tax_declaration_type == 'other_tax':
+                try:
+                    tax_declaration = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
+                    tax_type = tax_declaration.tax_type
+                    print(f"[Check Save] Found tax record, type: {tax_type}")
+                    
+                    source_type = forecast_type_mapping['other_tax'].get(
+                        tax_type,
+                        forecast_type_mapping['other_tax']['default']
+                    )
+                    print(f"[Check Save] Mapped to source_type: {source_type}")
+                except Exception as e:
+                    print(f"[Check Save] Error getting tax declaration: {str(e)}")
+                    return
+            else:
+                source_type = forecast_type_mapping.get(self.tax_declaration_type)
+            
+            # Process check based on status
+            if self.status == 'paid':
+                # For paid checks, add payment to declaration but don't delete forecast
+                # (just update its amount to reflect remaining)
+                print(f"[Check Save] Processing paid check for tax declaration")
+                
+                if self.tax_declaration_type == 'other_tax' and tax_declaration:
+                    # Get previous paid amount before processing payment
+                    old_paid_amount = tax_declaration.paid_amount
+                    
+                    # Process payment
+                    tax_declaration.calculate_payment_status()
+                    
+                    # If declaration is now fully paid, mark forecasts as processed
+                    if tax_declaration.status == 'paid':
+                        print(f"[Check Save] Declaration fully paid, marking forecasts as processed")
+                        processed_count = ForecastStatement.objects.filter(
+                            source_type=source_type,
+                            source_id=self.tax_declaration_id,
+                            is_processed=False
+                        ).update(is_processed=True)
+                        print(f"[Check Save] Marked {processed_count} forecasts as processed")
+                    else:
+                        # Otherwise, update forecasts to show remaining amount
+                        remaining_amount = tax_declaration.amount - tax_declaration.paid_amount
+                        print(f"[Check Save] Declaration partially paid, updating forecast to {remaining_amount}")
+                        
+                        # Update instead of recreate
+                        updated = ForecastStatement.objects.filter(
+                            source_type=source_type,
+                            source_id=self.tax_declaration_id,
+                            is_processed=False
+                        ).update(
+                            debit=remaining_amount,
+                            amount=remaining_amount
+                        )
+                        print(f"[Check Save] Updated {updated} forecasts with remaining amount")
+                
+                print(f"[Check Save] Tax payment forecast handling END\n")
+                return
+                
         print("=== Check Save Method Completed ===\n")
 
     def clean(self):
@@ -7444,17 +7459,19 @@ class VATDeclaration(BaseModel):
         # Generate new forecasts
         current_date = last_date
         for _ in range(months_needed):
-            # Move to next month
+            # Move to next month - using a safer method to handle month transitions
             if current_date.month == 12:
-                next_date = current_date.replace(year=current_date.year + 1, month=1)
+                next_date = datetime.date(current_date.year + 1, 1, 1)
             else:
-                next_date = current_date.replace(month=current_date.month + 1)
+                next_date = datetime.date(current_date.year, current_date.month + 1, 1)
                 
-            # Adjust for declaration day
+            # Adjust for declaration day - try to use the specified day
             try:
-                forecast_date = next_date.replace(day=min(config.declaration_day, calendar.monthrange(next_date.year, next_date.month)[1]))
+                last_day_of_month = calendar.monthrange(next_date.year, next_date.month)[1]
+                day_to_use = min(config.declaration_day, last_day_of_month)
+                forecast_date = next_date.replace(day=day_to_use)
             except ValueError:
-                # If day is invalid (e.g., February 30), use last day of month
+                # Fallback - use the last day of the month
                 forecast_date = next_date.replace(day=calendar.monthrange(next_date.year, next_date.month)[1])
                 
             # Skip weekends
@@ -9396,7 +9413,6 @@ class StampRightDeclaration(BaseModel):
 
     class Meta:
         ordering = ['-period_year', '-period_month']
-        unique_together = ['period_month', 'period_year']
         verbose_name = "Stamp Rights Declaration"
         verbose_name_plural = "Stamp Rights Declarations"
 
@@ -9534,6 +9550,14 @@ class OtherTaxDeclaration(BaseModel):
         help_text="Tax year"
     )
     
+    reference = models.CharField(
+        max_length=50,
+        unique=True,
+        null=True,
+        blank=True,
+        help_text="Unique reference for this declaration"
+    )
+    
     amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
@@ -9627,12 +9651,40 @@ class OtherTaxDeclaration(BaseModel):
         object_id_field='object_id',
         related_query_name='other_tax_declaration'
     )
-    
+
+    @property
+    def grand_total(self):
+        """Get total amount including fines"""
+        # Base amount remaining
+        base_remaining = self.amount - self.paid_amount
+        
+        # Add unpaid fines
+        fines_total = sum(fine.amount for fine in self.fines.filter(paid=False))
+        
+        return base_remaining + fines_total
+        
     def save(self, *args, **kwargs):
         print("\n=== Saving OtherTaxDeclaration ===")
         print(f"Type: {self.tax_type}")
         print(f"Year: {self.year}")
         print(f"Amount: {self.amount}")
+        print(f"Update fields: {kwargs.get('update_fields')}")
+        
+        # Skip forecast updates if we're just updating payment fields
+        update_fields = kwargs.get('update_fields')
+        super().save(*args, **kwargs)
+
+        # Generate reference if not set
+        if not self.reference:
+            # Generate reference in format: TAXTYPE-YEAR-SEQ
+            tax_type_prefix = self.tax_type.upper()[:3]  # First 3 letters of tax type
+            year = str(self.year)
+            # Get count of existing declarations for this type and year
+            seq = OtherTaxDeclaration.objects.filter(
+                tax_type=self.tax_type,
+                year=self.year
+            ).count() + 1
+            self.reference = f"{tax_type_prefix}-{year}-{seq:03d}"
         
         # Calculate due date if not set
         if not self.due_date:
@@ -9655,11 +9707,18 @@ class OtherTaxDeclaration(BaseModel):
         elif self.paid_amount > 0:
             self.status = 'partially_paid'
         
-        # Create forecast   
+        # Create forecast only if not paid   
         if self.status != 'paid':
             self._update_forecast()
+        else:
+            print("Declaration is paid, skipping forecast creation")
+            # Delete any existing forecasts for paid declarations
+            if hasattr(self, 'forecast') and self.forecast:
+                print(f"Deleting existing forecast for paid declaration: {self.forecast.id}")
+                self.forecast.delete()
+                self.forecast = None
         
-        if kwargs.get('update_fields') != ['paid_amount', 'status']:
+        if not update_fields or 'paid_amount' not in update_fields:
             self.calculate_payment_status()
         
         super().save(*args, **kwargs)
@@ -9668,16 +9727,21 @@ class OtherTaxDeclaration(BaseModel):
         """Update or create forecast for this declaration"""
         print("\n=== Updating Tax Forecast ===")
         
+        # Double check - don't create forecast for paid declarations
+        if self.status == 'paid':
+            print(f"Not creating forecast for paid declaration")
+            # Delete any existing forecast for this declaration
+            if self.forecast:
+                print(f"Deleting forecast for paid declaration: {self.forecast.id}")
+                self.forecast.delete()
+                self.forecast = None
+            return
+        
         # Delete old forecast if exists
         if self.forecast:
             print(f"Deleting old forecast: {self.forecast.id}")
             self.forecast.delete()
             self.forecast = None
-        
-        # Don't create forecast for paid declarations
-        if self.status == 'paid':
-            print(f"Not creating forecast for paid declaration")
-            return
         
         # Get config
         config = OtherTaxConfiguration.get_config(self.tax_type)
@@ -9695,15 +9759,15 @@ class OtherTaxDeclaration(BaseModel):
             return
         print("Current year: ", self.year)
         
-        # Delete ALL existing forecasts for this tax type, including current and ALL future years
+        # Delete existing forecasts only for THIS declaration (not all of same type)
         existing_forecasts = ForecastStatement.objects.filter(
             source_type=f"{self.tax_type}_tax",
-            date__gte=datetime.date(self.year, 1, 1),  # From January 1st of current year
+            source_id=self.id,
             is_processed=False
         )
         
         if existing_forecasts.exists():
-            print(f"Deleting {existing_forecasts.count()} existing forecasts for this tax type")
+            print(f"Deleting {existing_forecasts.count()} existing forecasts for this declaration")
             existing_forecasts.delete()
         
         # Get remaining amount including unpaid fines using the remaining_amount property
@@ -9725,8 +9789,11 @@ class OtherTaxDeclaration(BaseModel):
             self.forecast = forecast
             print(f"Created new forecast: {forecast.id}")
         
-        # Generate next year's forecast
-        self._generate_future_forecast()
+        # Only generate future forecast if current declaration is not paid
+        if self.status != 'paid':
+            self._generate_future_forecast()
+        else:
+            print("Skipping future forecast generation for paid declaration")
     
     def _generate_future_forecast(self):
         """Generate forecast for the next tax year"""
@@ -9758,16 +9825,16 @@ class OtherTaxDeclaration(BaseModel):
         else:
             due_date = datetime.date(next_year, month, day)
         
-        # Check for ANY existing forecasts for next year, using more comprehensive checks
+        # Check for existing forecasts for next year more carefully
         existing_forecast = ForecastStatement.objects.filter(
             source_type=f"{self.tax_type}_tax",
-            date__year=next_year,
+            label__icontains=f"{next_year}",
             is_processed=False
         ).first()
         
         if existing_forecast:
-            print(f"Forecast already exists for {next_year}, deleting and recreating")
-            existing_forecast.delete()
+            print(f"Forecast already exists for {next_year}, skipping creation")
+            return
         
         # Create forecast with default amount
         forecast = ForecastStatement.objects.create(
@@ -9836,11 +9903,12 @@ class OtherTaxDeclaration(BaseModel):
             'pending_amount': pending_amount
         }
         
-    def add_payment(self, amount, payment_method, payment_date=None):
+    def add_payment(self, amount, payment_method, payment_date=None, check_reference=None):
         """Add a payment to the declaration"""
         print(f"\n=== Adding Payment to {self.tax_type.title()} Tax {self.year} ===")
         print(f"Amount: {amount}")
         print(f"Method: {payment_method}")
+        print(f"Check reference: {check_reference}")
         
         if not payment_date:
             payment_date = timezone.now().date()
@@ -9858,7 +9926,24 @@ class OtherTaxDeclaration(BaseModel):
         else:
             self.status = 'partially_paid'
         
-        self.save()
+        # Save with specific fields to avoid triggering forecast updates
+        self.save(update_fields=['paid_amount', 'payment_method', 'payment_date', 'status'])
+        self._update_forecast()
+        
+        # Process fines payment if the base amount is fully paid
+        if self.paid_amount >= self.amount:
+            available_for_fines = amount - (self.amount - (self.paid_amount - amount))
+            if available_for_fines > 0:
+                unpaid_fines = self.fines.filter(paid=False).order_by('fine_date')
+                for fine in unpaid_fines:
+                    if available_for_fines >= fine.amount:
+                        fine.paid = True
+                        fine.payment_date = payment_date
+                        fine.save()
+                        available_for_fines -= fine.amount
+                        print(f"Marked fine {fine.id} as paid")
+                    else:
+                        break
         
         return True
     
@@ -9895,13 +9980,22 @@ class OtherTaxDeclaration(BaseModel):
             unpaid_fines_total += fine.amount
         
         return base_remaining + unpaid_fines_total
+
+    @property
+    def payment_status(self):
+        """Calculate payment status based on paid amount vs total amount"""
+        if self.paid_amount >= self.amount:
+            return 'paid'
+        elif self.paid_amount > 0:
+            return 'partially_paid'
+        else:
+            return 'declared'
     
     def __str__(self):
-        return f"{self.get_tax_type_display()} {self.year}"
+        return f"{self.get_tax_type_display()} - {self.year}"
     
     class Meta:
-        ordering = ['-year']
-        unique_together = ['tax_type', 'year']
+        ordering = ['-year', '-created_at']
         verbose_name = "Other Tax Declaration"
         verbose_name_plural = "Other Tax Declarations"
 
@@ -9952,9 +10046,7 @@ class TaxFine(BaseModel):
         """Override save to update declaration"""
         super().save(*args, **kwargs)
         
-        # Update declaration forecast if fine is not paid and using direct debit
-        if not self.paid and self.declaration.payment_method == 'direct_debit':
-            self.declaration._update_forecast()
+        self.declaration._update_forecast()
     
     def __str__(self):
         return f"Fine {self.amount} for {self.declaration}"

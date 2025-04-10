@@ -1,7 +1,7 @@
 from django.db.models.signals import post_save, post_delete
 from django.dispatch import receiver
 from django.contrib.auth.models import User
-from .models import LCN, CashReceipt, CheckAllocation, CheckReceipt, DirectDebit, ForecastStatement, Profile, Check, TransferReceipt, VATConfiguration, VATDeclaration
+from .models import LCN, CashReceipt, CheckAllocation, CheckReceipt, DirectDebit, ForecastStatement, Profile, Check, TaxFine, TransferReceipt, VATConfiguration, VATDeclaration
 
 @receiver(post_save, sender=User)
 def create_or_update_profile(sender, instance, created, **kwargs):
@@ -32,7 +32,7 @@ def update_invoice_status_on_allocation(sender, instance, **kwargs):
 @receiver(post_delete, sender=CheckAllocation)
 def update_invoice_status_on_deallocation(sender, instance, **kwargs):
     instance.invoice.update_payment_status()
-
+        
 @receiver(post_save, sender=Check)
 @receiver(post_save, sender=DirectDebit)
 @receiver(post_save, sender=CheckReceipt)
