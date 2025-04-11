@@ -142,6 +142,7 @@
                     <th class="text-end">Amount</th>
                     <th>Due Date</th>
                     <th>Status</th>
+                    <th>File</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -157,6 +158,7 @@
 {% include 'checker/partials/allocation_modal.html' %}
 {% include 'checker/partials/check_action_modals.html' %}
 {% include 'checker/partials/payment_edit_modal.html' %}
+{% include 'checker/partials/document_view_modal.html' %}
 
 <style>
     /* Empty State */
@@ -509,6 +511,25 @@
         transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
+    .view-document {
+        display: inline-block;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .view-document:hover {
+        transform: scale(1.2);
+    }
+
+    #document-container {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    .document-clear-btn {
+        border-top-left-radius: 0;
+        border-bottom-left-radius: 0;
+    }
 </style>
 <script>
 function formatMoney(amount) {
@@ -748,25 +769,41 @@ const CheckFilters = {
     },
 
     setupActionHandlers() {
-
+        
         $(document).on('click', '#save-payment-edit', async (e) => {
             e.preventDefault();
             const checkId = $(e.currentTarget).data('check-id');
             const paymentDue = $('#edit-payment-due').val();
             const observation = $('#edit-observation').val();
             
+            // Create FormData object for file upload
+            const formData = new FormData();
+            formData.append('action', 'edit');
+            formData.append('payment_due', paymentDue);
+            formData.append('observation', observation);
+            
+            // Add file if selected
+            const documentFile = $('#edit-document')[0].files[0];
+            if (documentFile) {
+                console.log("[CheckFilters] Uploading document:", documentFile.name);
+                formData.append('document', documentFile);
+            }
+            
+            // Check if document should be deleted
+            if ($('#delete-document').val() === 'true') {
+                console.log("[CheckFilters] Document deletion requested");
+                formData.append('delete_document', 'true');
+            }
+            
             try {
+                console.log("[CheckFilters] Submitting form data for check:", checkId);
                 const response = await fetch(`/testapp/checks/${checkId}/action/`, {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        // No Content-Type header - browser sets it for FormData
                         'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
                     },
-                    body: JSON.stringify({
-                        action: 'edit',
-                        payment_due: paymentDue,
-                        observation: observation
-                    })
+                    body: formData
                 });
 
                 if (!response.ok) {
@@ -1012,55 +1049,75 @@ const CheckFilters = {
                 case 'allocate':
                     AllocationSystem.openModal(checkId);
                     break;
-                case 'edit':
-                    console.log("[CheckActions] Opening edit modal for check:", checkId);
-                    try {
-                        const response = await fetch(`/testapp/checks/${checkId}/action/`);
-                        console.log("[CheckActions] Response status:", response.status);
-                        if (!response.ok) {
-                            const error = await response.json();
-                            throw new Error(error.error || 'Failed to load check details');
+                    case 'edit':
+                        console.log("[CheckActions] Opening edit modal for check:", checkId);
+                        try {
+                            const response = await fetch(`/testapp/checks/${checkId}/action/`);
+                            console.log("[CheckActions] Response status:", response.status);
+                            if (!response.ok) {
+                                const error = await response.json();
+                                throw new Error(error.error || 'Failed to load check details');
+                            }
+                            
+                            const check = await response.json();
+                            console.log("[CheckActions] Received check data:", check);
+                            
+                            // Populate edit modal
+                            $('#edit-reference').val(check.reference);
+                            $('#edit-amount').val(formatMoney(check.amount));
+                            $('#edit-beneficiary').val(check.beneficiary);
+                            $('#edit-status').val(check.status_display);
+                            $('#edit-creation-date').val(check.creation_date);
+                            
+                            // Add signatures (with null check)
+                            const signatures = check.signatures || [];
+                            const signaturesList = signatures.length ? 
+                                signatures.map(sig => `<span class="badge badge-${sig === 'OUK' ? 'success' : 'info'}">${sig}</span>`).join(' ') :
+                                '<span class="badge badge-secondary">None</span>';
+                            $('#edit-signatures').html(signaturesList);
+                            
+                            // Show invoice reference for direct payments
+                            if (!check.is_supplier_payment) {
+                                $('#edit-invoice-row').show();
+                                $('#edit-invoice-ref').val(check.invoice_ref || '-');
+                            } else {
+                                $('#edit-invoice-row').hide();
+                            }
+                            
+                            // Editable fields
+                            $('#edit-payment-due').val(check.payment_due || '');
+                            $('#edit-observation').val(check.observation || '');
+                            
+                            // Document information
+                            $('#edit-document').val(''); // Clear the file input
+                            $('#delete-document').val('false'); // Reset delete flag
+                            
+                            if (check.document) {
+                                $('#current-document-info').html(`
+                                    <div class="mt-2">
+                                        <span class="text-success">
+                                            <i class="fas fa-file-pdf"></i> 
+                                            Current document: ${check.document_name}
+                                        </span>
+                                        <button type="button" class="btn btn-link text-danger p-0 ms-2" id="remove-document">
+                                            <i class="fas fa-trash"></i> Remove
+                                        </button>
+                                    </div>
+                                `);
+                            } else {
+                                $('#current-document-info').empty();
+                            }
+                            
+                            // Store check ID for save handler
+                            $('#save-payment-edit').data('check-id', checkId);
+                            
+                            // Show modal
+                            $('#paymentEditModal').modal('show');
+                        } catch (error) {
+                            console.error('[CheckActions] Error loading check details:', error);
+                            alert('Failed to load check details: ' + error.message);
                         }
-                        
-                        const check = await response.json();
-                        console.log("[CheckActions] Received check data:", check);
-                        
-                        // Populate edit modal
-                        $('#edit-reference').val(check.reference);
-                        $('#edit-amount').val(formatMoney(check.amount));
-                        $('#edit-beneficiary').val(check.beneficiary);
-                        $('#edit-status').val(check.status_display);
-                        $('#edit-creation-date').val(check.creation_date);
-                        
-                        // Add signatures (with null check)
-                        const signatures = check.signatures || [];
-                        const signaturesList = signatures.length ? 
-                            signatures.map(sig => `<span class="badge badge-${sig === 'OUK' ? 'success' : 'info'}">${sig}</span>`).join(' ') :
-                            '<span class="badge badge-secondary">None</span>';
-                        $('#edit-signatures').html(signaturesList);
-                        
-                        // Show invoice reference for direct payments
-                        if (!check.is_supplier_payment) {
-                            $('#edit-invoice-row').show();
-                            $('#edit-invoice-ref').val(check.invoice_ref || '-');
-                        } else {
-                            $('#edit-invoice-row').hide();
-                        }
-                        
-                        // Editable fields
-                        $('#edit-payment-due').val(check.payment_due || '');
-                        $('#edit-observation').val(check.observation || '');
-                        
-                        // Store check ID for save handler
-                        $('#save-payment-edit').data('check-id', checkId);
-                        
-                        // Show modal
-                        $('#paymentEditModal').modal('show');
-                    } catch (error) {
-                        console.error('[CheckActions] Error loading check details:', error);
-                        alert('Failed to load check details: ' + error.message);
-                    }
-                    break;
+                        break;
             }
         } catch (error) {
             console.error('Error handling check action:', error);
@@ -1734,15 +1791,155 @@ const AllocationSystem = {
 
 
 
-// Initialize filters
+// Add this to the script section of check_list.html
+const DocumentHandler = {
+    init() {
+        console.log("[DocumentHandler] Initializing");
+        
+        // Handle document view click
+        $(document).on('click', '.view-document', (e) => {
+            e.preventDefault();
+            const checkId = $(e.currentTarget).data('check-id');
+            const filename = $(e.currentTarget).data('filename');
+            this.viewDocument(checkId, filename);
+        });
+        
+        // Clear document button in edit modal
+        $(document).on('click', '#clear-document', () => {
+            $('#edit-document').val('');
+            $('#current-document-info').empty();
+            $('#delete-document').val('true');
+        });
+
+        // Remove existing document button in edit modal
+        $(document).on('click', '#remove-document', (e) => {
+            e.preventDefault();
+            console.log("[DocumentHandler] Remove document clicked");
+            $('#current-document-info').empty();
+            $('#delete-document').val('true');
+        });
+    },
+    
+    viewDocument(checkId, filename) {
+        console.log("[DocumentHandler] Viewing document for check:", checkId);
+        
+        // Update modal title with filename
+        $('#documentViewModalLabel').text(`Document: ${filename}`);
+        
+        // Reset modal state
+        $('#document-loading').removeClass('d-none');
+        $('#document-container').addClass('d-none').empty();
+        $('#document-error').addClass('d-none').empty();
+        
+        // Set download link
+        const downloadUrl = `/testapp/checks/${checkId}/document/`;
+        $('#document-download').attr('href', downloadUrl);
+        
+        // Populate error message
+        $('#document-error').html(`
+            <i class="fas fa-exclamation-triangle"></i> 
+            Unable to display the document. 
+            <a href="${downloadUrl}" id="document-download-link" target="_blank">Download it instead</a>.
+        `);
+        
+        // Show modal
+        $('#documentViewModal').modal('show');
+        
+        // Try to load document
+        this.loadDocument(checkId);
+    },
+    
+    async loadDocument(checkId) {
+        try {
+            const response = await fetch(`/testapp/checks/${checkId}/document/`);
+            if (!response.ok) throw new Error('Failed to load document');
+            
+            const contentType = response.headers.get('content-type');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            
+            if (contentType.includes('pdf')) {
+                // Handle PDF with larger height
+                $('#document-container').html(`
+                    <iframe src="${url}" width="100%" height="750px" style="border: none;"></iframe>
+                `);
+            } else if (contentType.includes('image')) {
+                // Handle image
+                $('#document-container').html(`
+                    <img src="${url}" class="img-fluid" alt="Document Image">
+                `);
+            } else {
+                // Unsupported file type
+                throw new Error('Unsupported file type');
+            }
+            
+            // Show the document
+            $('#document-loading').addClass('d-none');
+            $('#document-container').removeClass('d-none');
+            
+        } catch (error) {
+            console.error('Error loading document:', error);
+            $('#document-loading').addClass('d-none');
+            $('#document-error').removeClass('d-none');
+            $('#document-error').html(`
+                <i class="fas fa-exclamation-triangle"></i> 
+                Unable to display the document. 
+                <a href="/testapp/checks/${checkId}/document/" id="document-download-link" target="_blank">Download it instead</a>.
+            `);
+        }
+    }
+};
+
+// Initialize document handler with other initializations
 $(document).ready(() => {
     CheckFilters.init();
     AllocationSystem.init();
+    DocumentHandler.init();
     
     // Toggle filter panel
     $('#toggle-filters').click(function() {
         $('.filter-panel').slideToggle();
         $(this).find('i').toggleClass('fa-filter fa-filter-slash');
+    });
+
+    $('#documentViewModal').on('shown.bs.modal', function() {
+        $(this).find('.modal-dialog').attr('data-backdrop', 'false');
+        $(this).find('.modal-dialog').css({
+            'cursor': 'move'
+        });
+        
+        let startX, startY, startLeft, startTop;
+        const dialog = $(this).find('.modal-dialog');
+        
+        dialog.on('mousedown', function(e) {
+            if ($(e.target).closest('.modal-body, .modal-footer, button').length === 0) {
+                startX = e.pageX;
+                startY = e.pageY;
+                startLeft = parseInt(dialog.css('margin-left'));
+                startTop = parseInt(dialog.css('margin-top'));
+                
+                $(document).on('mousemove', moveHandler);
+                $(document).on('mouseup', upHandler);
+                
+                // Prevent text selection during drag
+                e.preventDefault();
+            }
+        });
+        
+        function moveHandler(e) {
+            const deltaX = e.pageX - startX;
+            const deltaY = e.pageY - startY;
+            
+            dialog.css({
+                'margin-left': startLeft + deltaX + 'px',
+                'margin-top': startTop + deltaY + 'px'
+            });
+        }
+        
+        function upHandler() {
+            $(document).off('mousemove', moveHandler);
+            $(document).off('mouseup', upHandler);
+        }
     });
 });
 </script>

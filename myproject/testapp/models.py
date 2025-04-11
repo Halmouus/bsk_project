@@ -1796,6 +1796,16 @@ class Check(BaseModel):
             )
         ]
     )
+    document = models.FileField(
+        upload_to=get_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True,
+        blank=True,
+        help_text="Upload check document"
+    )
 
     def get_allocated_amount(self):
         """Get total allocated amount"""

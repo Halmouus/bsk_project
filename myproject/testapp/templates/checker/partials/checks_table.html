@@ -45,6 +45,17 @@
             {{ check.get_status_display }}
         </span>
     </td>
+    <td class="text-center">
+        {% if check.document %}
+            <a href="#" class="view-document" data-check-id="{{ check.id }}" data-filename="{{ check.document.name|default:'Document' }}">
+                <i class="fas fa-file-pdf fa-lg text-danger"></i>
+            </a>
+        {% else %}
+            <span class="text-muted">
+                <i class="fas fa-file text-light"></i>
+            </span>
+        {% endif %}
+    </td>
     <td>
         {% if request.user.userprofile.role.can_manage_checks %}    
         <div class="btn-group">

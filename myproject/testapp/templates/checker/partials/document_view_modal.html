@@ -1,0 +1,35 @@
+{% load i18n %}
+
+<!-- checker/partials/document_view_modal.html -->
+<div class="modal fade" id="documentViewModal" tabindex="-1" role="dialog" aria-labelledby="documentViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" style="max-width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center" id="document-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading document...</p>
+                </div>
+                <div id="document-container" class="d-none">
+                    <!-- The document will be embedded here -->
+                </div>
+                <div id="document-error" class="alert alert-danger d-none">
+                    <!-- Error message will be inserted via JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" id="document-download" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>

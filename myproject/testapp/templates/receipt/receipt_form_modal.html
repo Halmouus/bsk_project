@@ -260,26 +260,33 @@
             </div>
         </div>
 
-    <!-- Document Upload Card -->
-    <div class="card shadow-sm mb-4">
-        <div class="card-header bg-white">
-            <h6 class="mb-0 text-primary">
-                <i class="fas fa-file-pdf me-2"></i> Document
-            </h6>
-        </div>
-        <div class="card-body">
-            <div class="form-group">
-                <input type="file" class="form-control" id="document" name="document" accept=".pdf">
-                {% if receipt and receipt.document %}
-                    <div class="mt-2">
-                        <a href="{{ receipt.document.url }}" target="_blank" class="btn btn-sm btn-info">
-                            <i class="fas fa-eye me-1"></i> View Document
-                        </a>
-                    </div>
-                {% endif %}
+        <!-- Document Upload Card -->
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-white">
+                <h6 class="mb-0 text-primary">
+                    <i class="fas fa-file-pdf me-2"></i> Document
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="form-group">
+                    <input type="file" class="form-control" id="document" name="document" accept=".pdf">
+                    {% if receipt and receipt.document %}
+                        <div class="mt-2">
+                            <a href="#" class="view-document btn btn-sm btn-info" 
+                            data-receipt-type="{{ receipt_type }}" 
+                            data-receipt-id="{{ receipt.id }}" 
+                            data-filename="{{ receipt.document.name|default:'Document' }}">
+                                <i class="fas fa-eye me-1"></i> View Document
+                            </a>
+                            <button type="button" class="btn btn-sm btn-danger" id="remove-document">
+                                <i class="fas fa-trash me-1"></i> Remove
+                            </button>
+                        </div>
+                    {% endif %}
+                </div>
+                <input type="hidden" id="delete-document" name="delete_document" value="false">
             </div>
         </div>
-    </div>
 
         <!-- Notes Card -->
         <div class="card shadow-sm mb-4">

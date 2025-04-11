@@ -51,6 +51,23 @@
                         </div>
                     </div>
 
+                    <!-- Document -->
+                    <div class="row mb-3" id="document-upload-row">
+                        <div class="col-md-12">
+                            <label for="edit-document" class="form-label">Document</label>
+                            <div class="input-group">
+                                <input type="file" class="form-control" id="edit-document" name="document" accept=".pdf,.jpg,.jpeg,.png">
+                                <button class="btn btn-outline-secondary document-clear-btn" type="button" id="clear-document">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div class="form-text" id="current-document-info">
+                                <!-- This will be populated via JavaScript -->
+                            </div>
+                            <input type="hidden" id="delete-document" value="false">
+                        </div>
+                    </div>
+
                     <!-- Editable Fields -->
                     <div class="row mb-3">
                         <div class="col-md-6">

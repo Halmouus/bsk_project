@@ -8,6 +8,17 @@
     <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td>
     <td class="text-right">{{ transfer.amount|floatformat:2 }}</td>
     <td>
+        {% if transfer.document %}
+            <a href="#" class="view-document" data-receipt-type="transfer" data-receipt-id="{{ transfer.id }}" data-filename="{{ transfer.document.name|default:'Document' }}">
+                <i class="fas fa-file-pdf fa-lg text-danger"></i>
+            </a>
+        {% else %}
+            <span class="text-muted">
+                <i class="fas fa-file text-light"></i>
+            </span>
+        {% endif %}
+    </td>
+    <td>
         <div class="btn-group">
             {% if transfer.can_edit %}
             <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 

@@ -9,11 +9,27 @@
     <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td>
     <td class="text-right">{{ cash.amount|format_balance }}</td>
     <td>
+        {% if cash.document %}
+            <a href="#" class="view-document" data-receipt-type="cash" data-receipt-id="{{ cash.id }}" data-filename="{{ cash.document.name|default:'Document' }}">
+                <i class="fas fa-file-pdf fa-lg text-danger"></i>
+            </a>
+        {% else %}
+            <span class="text-muted">
+                <i class="fas fa-file text-light"></i>
+            </span>
+        {% endif %}
+    </td>
+    <td>
         <div class="btn-group">
             {% if cash.can_edit %}
             <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
                     data-type="cash" data-action="edit" data-id="{{ cash.id }}">
                 <i class="fas fa-edit"></i>
+            </button>
+            {% else %}
+            <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
+                    data-type="cash" data-action="edit" data-id="{{ cash.id }}" title="Manage Documents">
+                <i class="fas fa-file-pdf"></i>
             </button>
             {% endif %}
             {% if cash.can_delete %}

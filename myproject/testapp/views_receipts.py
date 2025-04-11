@@ -1,12 +1,14 @@
+import mimetypes
 import os
 from django.views import View
 from django.views.generic import ListView
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, request
+from django.http import FileResponse, JsonResponse, request
 from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.core.files.base import ContentFile
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
 import calendar
@@ -169,7 +171,7 @@ class ReceiptCreateView(View):
             # Handle document separately if present
             if 'document' in request.FILES:
                 print(f"Setting document for receipt {receipt.id}")
-                receipt.set_document(request.FILES['document'])
+                receipt.document = request.FILES['document']
                 receipt.save()
 
             # Then handle compensations
@@ -314,9 +316,6 @@ class ReceiptUpdateView(View):
     def post(self, request, receipt_type, pk):
         import traceback
         try:
-            data = request.POST.dict()
-            print(f"Received data for {receipt_type} update:", data)
-            
             model_map = {
                 'check': CheckReceipt,
                 'lcn': LCN,
@@ -325,6 +324,59 @@ class ReceiptUpdateView(View):
             }
             
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
+            
+            # Check for documents-only mode
+            is_document_only = request.POST.get('action') == 'edit_documents'
+            
+            if is_document_only:
+                print(f"Documents-only edit for {receipt_type} {pk}")
+                
+                # Handle document upload if present
+                if 'document' in request.FILES:
+                    print(f"New document received: {request.FILES['document'].name}")
+                    try:
+                        # Delete old document if exists
+                        if receipt.document:
+                            receipt.document.delete(save=False)
+                        
+                        # Save new document
+                        uploaded_file = request.FILES['document']
+                        file_content = uploaded_file.read()
+                        receipt.document.save(
+                            uploaded_file.name,
+                            ContentFile(file_content),
+                            save=True
+                        )
+                        print(f"Document saved successfully: {receipt.document.name}")
+                    except Exception as e:
+                        print(f"Error saving document: {str(e)}")
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': f'Error saving document: {str(e)}'
+                        }, status=400)
+                
+                # Handle document deletion
+                if request.POST.get('delete_document') == 'true' and receipt.document:
+                    try:
+                        receipt.document.delete()
+                        receipt.document = None
+                        receipt.save()
+                        print(f"Document deleted successfully")
+                    except Exception as e:
+                        print(f"Error deleting document: {str(e)}")
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': f'Error deleting document: {str(e)}'
+                        }, status=400)
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': f'Document updated successfully'
+                })
+            
+            # Regular edit mode - your existing code here
+            data = request.POST.dict()
+            print(f"Received data for {receipt_type} update:", data)
             
             # Update common fields
             receipt.client_id = data['client']
@@ -338,16 +390,35 @@ class ReceiptUpdateView(View):
             # Handle file upload if present
             if 'document' in request.FILES:
                 print(f"New document received: {request.FILES['document'].name}")
-                # Delete old document if exists
-                if receipt.document:
-                    if os.path.exists(receipt.document.path):
-                        os.remove(receipt.document.path)
-                        print(f"Deleted old document: {receipt.document.path}")
-                receipt.document = request.FILES['document']
+                try:
+                    # Delete old document if exists
+                    if receipt.document:
+                        receipt.document.delete(save=False)
+                    
+                    # Save new document
+                    uploaded_file = request.FILES['document']
+                    file_content = uploaded_file.read()
+                    receipt.document.save(
+                        uploaded_file.name,
+                        ContentFile(file_content),
+                        save=True
+                    )
+                    print(f"Document saved successfully: {receipt.document.name}")
+                except Exception as e:
+                    print(f"Error saving document: {str(e)}")
+                    # Continue even if file upload fails
+                
+            # Handle document deletion
+            if data.get('delete_document') == 'true' and receipt.document:
+                try:
+                    receipt.document.delete(save=False)
+                    receipt.document = None
+                except Exception as e:
+                    print(f"Error deleting document: {str(e)}")
 
             # Update type-specific fields
             if receipt_type in ['check', 'lcn']:
-                receipt.issuing_bank = data['issuing_bank']  # Set issuing bank
+                receipt.issuing_bank = data['issuing_bank']
                 receipt.due_date = data['due_date']
                 if receipt_type == 'check':
                     receipt.check_number = data['check_number']
@@ -1028,3 +1099,46 @@ def compensation_timeline(request, receipt_type, pk):
     }
     
     return render(request, 'receipt/partials/compensation_timeline_modal.html', context)
+
+class ReceiptDocumentView(View):
+    def get(self, request, receipt_type, receipt_id):
+        print(f"[ReceiptDocumentView] Accessing document for {receipt_type} receipt: {receipt_id}")
+        
+        # Determine which model to use based on receipt_type
+        model_map = {
+            'check': CheckReceipt,
+            'lcn': LCN,
+            'cash': CashReceipt,
+            'transfer': TransferReceipt
+        }
+        
+        # Get the appropriate model
+        model = model_map.get(receipt_type)
+        if not model:
+            return JsonResponse({"error": "Invalid receipt type"}, status=400)
+        
+        # Get the receipt instance
+        try:
+            receipt = model.objects.get(pk=receipt_id)
+        except model.DoesNotExist:
+            return JsonResponse({"error": "Receipt not found"}, status=404)
+        
+        if not receipt.document:
+            return JsonResponse({"error": "No document found for this receipt"}, status=404)
+        
+        # Open the file and return it
+        try:
+            file_path = receipt.document.path
+            content_type, _ = mimetypes.guess_type(file_path)
+            
+            if not content_type:
+                content_type = 'application/octet-stream'
+                
+            # Get filename from document path
+            filename = os.path.basename(receipt.document.name)
+                
+            response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+        except FileNotFoundError:
+            return JsonResponse({"error": "Document file not found"}, status=404)

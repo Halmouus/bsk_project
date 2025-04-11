@@ -101,6 +101,7 @@ from .views_pay import (
 )
 from . import views_production
 
+from . import views_receipts
 from .views import test_translation
 
 
@@ -223,6 +224,7 @@ urlpatterns = [
          CheckAllocationView.as_view(), 
          name='delete-allocation'),
     path('checks/<uuid:check_id>/print/', CheckPrintView.as_view(), name='check-print'),
+    path('checks/<uuid:check_id>/document/', views_checkers.CheckDocumentView.as_view(), name='check-document'),
 
     # Bank URLs
     path('bank-accounts/', BankAccountListView.as_view(), name='bank-account-list'),
@@ -319,6 +321,9 @@ urlpatterns = [
     path('receipts/validate-number/', validate_receipt_number, name='validate-receipt-number'),
     path('receipts/validate-compensating-receipt/', validate_compensating_receipt, name='validate-compensating-receipt'),
     path('receipts/<str:receipt_type>/<uuid:pk>/compensation-timeline/', compensation_timeline, name='compensation-timeline'),
+    
+    # Receipt Document URLs
+    path('receipts/<str:receipt_type>/<uuid:receipt_id>/document/', views_receipts.ReceiptDocumentView.as_view(), name='receipt-document'),
 
     # Presentation URLs
     path('presentations/', PresentationListView.as_view(), name='presentation-list'),

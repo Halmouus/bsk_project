@@ -172,6 +172,11 @@
                                             <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
                                                 <i class="fas fa-trash"></i>
                                             </button>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
+                                                    data-type="check" data-action="edit" data-id="{{ check.id }}" title="Manage Documents">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </button>
                                         {% endif %}
                                     {% endwith %}
                                 </div>
@@ -301,6 +306,11 @@
                                             <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
                                                 <i class="fas fa-trash"></i>
                                             </button>
+                                        {% else %}
+                                            <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
+                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title="Manage Documents">
+                                                <i class="fas fa-file-pdf"></i>
+                                            </button>
                                         {% endif %}
                                     {% endwith %}
                                 </div>
@@ -328,6 +338,7 @@
                             <th>Reference</th>
                             <th>Credited Account</th>
                             <th class="text-right" style="min-width: 120px;">Amount</th>
+                            <th>Document</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -340,6 +351,17 @@
                             <td>{{ cash.reference_number }}</td>
                             <td>{{ cash.credited_account.bank }} - {{ cash.credited_account.account_number }}</td>
                             <td class="text-right" style="min-width: 120px;">{{ cash.amount|format_balance }}</td>
+                            <td class="text-center">
+                                {% if cash.document %}
+                                    <a href="#" class="view-document" data-receipt-type="cash" data-receipt-id="{{ cash.id }}" data-filename="{{ cash.document.name|default:'Document' }}">
+                                        <i class="fas fa-file-pdf fa-lg text-danger"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">
+                                        <i class="fas fa-file text-light"></i>
+                                    </span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <div class="btn-group">
                                     {% if cash.can_edit %}
@@ -347,13 +369,17 @@
                                             data-type="cash" data-action="edit" data-id="{{ cash.id }}">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}" title="Manage Documents">
+                                        <i class="fas fa-file-pdf"></i>
+                                    </button>
                                     {% endif %}
                                     {% if cash.can_delete %}
                                     <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                     {% endif %}
-                                </div>
                                 </div>
                             </td>
                         </tr>
@@ -380,6 +406,7 @@
                             <th>Transfer Date</th>
                             <th>Credited Account</th>
                             <th class="text-right" style="min-width: 120px;">Amount</th>
+                            <th>Document</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -393,12 +420,28 @@
                             <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
                             <td>{{ transfer.credited_account.bank }} - {{ transfer.credited_account.account_number }}</td>
                             <td class="text-right" style="min-width: 120px;">{{ transfer.amount|format_balance }}</td>
+                            <td class="text-center">
+                                {% if transfer.document %}
+                                    <a href="#" class="view-document" data-receipt-type="transfer" data-receipt-id="{{ transfer.id }}" data-filename="{{ transfer.document.name|default:'Document' }}">
+                                        <i class="fas fa-file-pdf fa-lg text-danger"></i>
+                                    </a>
+                                {% else %}
+                                    <span class="text-muted">
+                                        <i class="fas fa-file text-light"></i>
+                                    </span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <div class="btn-group">
                                     {% if transfer.can_edit %}
                                     <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
                                             data-type="transfer" data-action="edit" data-id="{{ transfer.id }}">
                                         <i class="fas fa-edit"></i>
+                                    </button>
+                                    {% else %}
+                                    <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
+                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}" title="Manage Documents">
+                                        <i class="fas fa-file-pdf"></i>
                                     </button>
                                     {% endif %}
                                     {% if transfer.can_delete %}
@@ -445,6 +488,40 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <!-- Content will be loaded dynamically -->
+        </div>
+    </div>
+</div>
+
+<!-- Document View Modal -->
+<div class="modal fade" id="documentViewModal" tabindex="-1" role="dialog" aria-labelledby="documentViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" style="max-width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center" id="document-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading document...</p>
+                </div>
+                <div id="document-container" class="d-none">
+                    <!-- The document will be embedded here -->
+                </div>
+                <div id="document-error" class="alert alert-danger d-none">
+                    <!-- Error message will be inserted via JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" id="document-download" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -552,6 +629,24 @@
         width: 100%;
         height: 100%;
     }
+    .view-document {
+        display: inline-block;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .view-document:hover {
+        transform: scale(1.2);
+    }
+
+    #document-container {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    #documentViewModal .modal-header {
+        cursor: move;
+    }
 </style>
 
 <script>
@@ -602,6 +697,98 @@ $('a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
     debug.log('TabSwitch', 'Initializing filters for:', targetTab);
     activeFilters = new ReceiptFilters(targetTab, '/testapp/receipts/filter/?type=' + targetTab);
 });
+
+const DocumentHandler = {
+    init() {
+        console.log("[DocumentHandler] Initializing");
+        
+        // Handle document view click
+        $(document).on('click', '.view-document', (e) => {
+            e.preventDefault();
+            const receiptType = $(e.currentTarget).data('receipt-type');
+            const receiptId = $(e.currentTarget).data('receipt-id');
+            const filename = $(e.currentTarget).data('filename');
+            this.viewDocument(receiptType, receiptId, filename);
+        });
+        
+        // Clear document button in modal
+        $(document).on('click', '#clear-document', () => {
+            $('#document').val('');
+            $('#current-document-info').empty();
+            $('#delete-document').val('true');
+        });
+        
+        // Remove existing document button
+        $(document).on('click', '#remove-document', (e) => {
+            e.preventDefault();
+            console.log("[DocumentHandler] Remove document clicked");
+            $('#current-document-info').empty();
+            $('#delete-document').val('true');
+        });
+    },
+    
+    viewDocument(receiptType, receiptId, filename) {
+        console.log(`[DocumentHandler] Viewing document for ${receiptType} receipt:`, receiptId);
+        
+        // Update modal title with filename
+        $('#documentViewModalLabel').text(`Document: ${filename}`);
+        
+        // Reset modal state
+        $('#document-loading').removeClass('d-none');
+        $('#document-container').addClass('d-none').empty();
+        $('#document-error').addClass('d-none').empty();
+        
+        // Set download link
+        const downloadUrl = `/testapp/receipts/${receiptType}/${receiptId}/document/`;
+        $('#document-download').attr('href', downloadUrl);
+        
+        // Show modal
+        $('#documentViewModal').modal('show');
+        
+        // Try to load document
+        this.loadDocument(receiptType, receiptId);
+    },
+    
+    async loadDocument(receiptType, receiptId) {
+        try {
+            const response = await fetch(`/testapp/receipts/${receiptType}/${receiptId}/document/`);
+            if (!response.ok) throw new Error('Failed to load document');
+            
+            const contentType = response.headers.get('content-type');
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            
+            if (contentType.includes('pdf')) {
+                // Handle PDF with larger height
+                $('#document-container').html(`
+                    <iframe src="${url}" width="100%" height="750px" style="border: none;"></iframe>
+                `);
+            } else if (contentType.includes('image')) {
+                // Handle image
+                $('#document-container').html(`
+                    <img src="${url}" class="img-fluid" alt="Document Image">
+                `);
+            } else {
+                // Unsupported file type
+                throw new Error('Unsupported file type');
+            }
+            
+            // Show the document
+            $('#document-loading').addClass('d-none');
+            $('#document-container').removeClass('d-none');
+            
+        } catch (error) {
+            console.error('Error loading document:', error);
+            $('#document-loading').addClass('d-none');
+            $('#document-error').removeClass('d-none');
+            $('#document-error').html(`
+                <i class="fas fa-exclamation-triangle"></i> 
+                Unable to display the document. 
+                <a href="/testapp/receipts/${receiptType}/${receiptId}/document/" target="_blank">Download it instead</a>.
+            `);
+        }
+    }
+};
     
 $(document).ready(function() {
 
@@ -617,7 +804,7 @@ $(document).ready(function() {
         localStorage.setItem('activeReceiptTab', activeTab);
     });
 
-
+    DocumentHandler.init();
     // PDF Viewer handling
     $(document).on('click', '.view-pdf', function(e) {
         e.preventDefault();
@@ -651,20 +838,43 @@ $(document).ready(function() {
         const type = button.data('type');
         const action = button.data('action');
         const id = button.data('id');
+        const documentsOnly = button.hasClass('documents-only');
         
         let url = '';
         if (action === 'edit') {
-            url += `edit/${type}/${id}/`;
+            url = `edit/${type}/${id}/`;
         } else {
-            url += `create/${type}/`;
+            url = `create/${type}/`;
         }
 
         // Load modal content
         $.get(url, function(data) {
             $('#receiptModal .modal-content').html(data);
+            
+            // If documents-only mode, disable fields except document upload
+            if (documentsOnly) {
+                // Add a notice
+                $('#receiptModal .modal-title').text('Manage Documents');
+                
+                // Disable all input fields except document-related ones
+                $('#receiptModal input, #receiptModal select, #receiptModal textarea').prop('disabled', true);
+                
+                // Re-enable document upload fields
+                $('#document').prop('disabled', false);
+                
+                // Hide save button and rename close button
+                $('#receiptModal button[type="submit"]').hide();
+                $('#receiptModal .modal-footer').prepend(`
+                    <button type="button" class="btn btn-primary save-documents">
+                        <i class="fas fa-save me-1"></i> Save Documents
+                    </button>
+                `);
+            }
+            
             initializeForm();
-
-            if (action === 'edit') {
+            
+            // Keep original edit mode initialization for Select2
+            if (action === 'edit' && !documentsOnly) {
                 // Set form action URL for edit
                 $('#receiptForm').attr('action', url);
                 
@@ -686,6 +896,10 @@ $(document).ready(function() {
             e.preventDefault();
             const form = $(this);
             
+            // Disable the submit button to prevent double submission
+            const submitBtn = form.find('button[type="submit"]');
+            submitBtn.prop('disabled', true);
+            
             // Create FormData object and append transfer fields manually
             let formData = new FormData(form[0]);
             if ($('#transfer_reference').length) {
@@ -693,6 +907,12 @@ $(document).ready(function() {
                 formData.append('transfer_date', $('#transfer_date').val());
             }
 
+            if ($('#delete-document').val() === 'true') {
+                formData.append('delete_document', 'true');
+            }
+
+            console.log("[Form Submit] Receipt type:", formData.get('receipt_type'));
+            console.log("[Form Submit] Form data:", formData);
             // Convert FormData to URLSearchParams for jQuery
             const data = new URLSearchParams(formData).toString();
 
@@ -700,6 +920,8 @@ $(document).ready(function() {
                 url: form.attr('action'),
                 type: 'POST',
                 data: data,
+                processData: false,
+                contentType: false, 
                 success: function(response) {
                     if (response.status === 'success') {
                         $('#receiptModal').modal('hide');
@@ -707,6 +929,7 @@ $(document).ready(function() {
                         location.reload();
                     } else {
                         showFormErrors(form, response.errors);
+                        submitBtn.prop('disabled', false);
                     }
                 },
                 error: function(xhr) {
@@ -716,6 +939,67 @@ $(document).ready(function() {
                     } catch (e) {
                         showToast('An error occurred while saving the receipt.', 'error');
                     }
+                    submitBtn.prop('disabled', false);
+                }
+            });
+        });
+
+        // Handle save documents button click
+        $(document).on('click', '.save-documents', function() {
+            // Get the form
+            const form = $('#receiptForm');
+            const submitBtn = $(this);
+            
+            // Create FormData with only document-related fields
+            // Using selective approach instead of the entire form
+            const formData = new FormData();
+            formData.append('action', 'edit_documents');
+            formData.append('documents_only', 'true'); // Keep original flag
+            
+            // Add the document file if selected (explicit handling)
+            const documentFile = $('#document')[0].files[0];
+            if (documentFile) {
+                formData.append('document', documentFile);
+            }
+            
+            // Add delete flag if needed
+            if ($('#delete-document').val() === 'true') {
+                formData.append('delete_document', 'true');
+            }
+            
+            // Disable the button to prevent double submission
+            submitBtn.prop('disabled', true);
+            
+            $.ajax({
+                url: form.attr('action'),
+                type: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                success: function(response) {
+                    if (response.status === 'success') {
+                        $('#receiptModal').modal('hide');
+                        showToast(response.message, 'success');
+                        location.reload();
+                    } else {
+                        // Keep both error handling approaches
+                        if (response.errors) {
+                            showFormErrors(form, response.errors);
+                        } else {
+                            showToast(response.message || 'Error updating document', 'error');
+                        }
+                        submitBtn.prop('disabled', false);
+                    }
+                },
+                error: function(xhr) {
+                    // Keep comprehensive error handling from original
+                    try {
+                        const errors = JSON.parse(xhr.responseText);
+                        showFormErrors(form, errors);
+                    } catch (e) {
+                        showToast('Error updating document', 'error');
+                    }
+                    submitBtn.prop('disabled', false);
                 }
             });
         });
@@ -843,27 +1127,6 @@ $(document).ready(function() {
             'z-index': '9999'
         });
     }
-
-
-    // Modify the modal show event handler
-    $('#receiptModal').on('show.bs.modal', function(e) {
-    const button = $(e.relatedTarget);
-    const type = button.data('type');
-    const action = button.data('action');
-    const id = button.data('id');
-    
-    let url = '';
-    if (action === 'edit') {
-        url = `edit/${type}/${id}/`;
-    } else {
-        url = `create/${type}/`;
-    }
-
-    $.get(url, function(data) {
-        $('#receiptModal .modal-content').html(data);
-        initializeForm();
-    });
-    });
 
     // Handle delete
     $('.delete-receipt').click(function() {
@@ -1568,7 +1831,7 @@ $(document).on('change', '.receipt-status', function() {
     }
 
     $.ajax({
-        url: `/testapp/presentations/${presentationId}/edit/`,
+        url: `/testapp/presentations/${receiptId}/edit/`,
         method: 'POST',
         contentType: 'application/json',
         headers: { 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value },

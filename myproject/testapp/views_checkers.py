@@ -1,4 +1,6 @@
 from datetime import datetime
+import mimetypes
+import os
 from django.urls import reverse_lazy
 from django.template.loader import render_to_string
 from django.views import View
@@ -8,7 +10,7 @@ from .decorators import require_permission
 from .models import BankCheckTemplate, CheckAllocation, Checker, Check, ForecastStatement, IRDeclaration, Invoice, StampRightDeclaration, Supplier, BankAccount, VATDeclaration, get_supplier_balance, get_supplier_unpaid_invoices, DirectDebit, OtherTaxDeclaration
 from django.forms import inlineformset_factory
 from django.contrib.messages.views import SuccessMessageMixin
-from django.http import JsonResponse, HttpResponse
+from django.http import FileResponse, JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404, redirect, render
@@ -904,6 +906,8 @@ class CheckActionView(View):
                 'signatures': check.signatures or [],
                 'is_supplier_payment': check.is_supplier_payment,
                 'invoice_ref': check.cause.ref if check.cause else None,
+                'document': bool(check.document),
+                'document_name': os.path.basename(check.document.name) if check.document else None,
                 'has_allocations': check.allocations.exists(),
                 'allocations': [{
                     'invoice_ref': alloc.invoice.ref,
@@ -920,174 +924,207 @@ class CheckActionView(View):
             return JsonResponse({'error': str(e)}, status=400)
         
     def post(self, request, pk):
-            try:
-                check = get_object_or_404(Check, pk=pk)
+        try:
+            check = get_object_or_404(Check, pk=pk)
+            
+            # Determine how to handle the request data based on content type
+            if request.content_type and 'multipart/form-data' in request.content_type:
+                data = request.POST
+                files = request.FILES
+            else:
                 data = json.loads(request.body)
-                action = data.get('action')
-                print(f"Action received: {action}")  # Debug
-                print(f"Request data: {data}")  # Debug
-
-                if action == 'print':
-                    if check.status == 'draft':
-                        print_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
-                        check.status = 'printed'
-                        check.printed_at = print_date
-                        check.save()
-                elif action == 'sign':
-                    signature = data.get('signature')
-                    if check.can_be_signed(signature):
-                        check.add_signature(signature)                
-                elif action == 'reject':
-                    reason = data.get('rejection_reason')
-                    notes = data.get('rejection_note')
-                    print(f"Rejection reason: {reason}")  # Debug
-                    print(f"Rejection notes: {notes}")  # Debug
-                    check.rejected_at = timezone.now()
-                    check.rejection_reason = reason
-                    check.rejection_note = notes
-                    check.status = 'rejected'
-                    print(f"Check status after update: {check.status}")  # Debug
-
-                elif action == 'receive':
-                    check.receive(notes=data.get('notes', ''))
-
-                elif action == 'replace':
-                    if not check.can_be_replaced:
-                        raise ValidationError("Cannot replace this check")
-                    
-                    # Get the new checker
-                    checker = get_object_or_404(Checker, pk=data.get('checker_id'))
-                    
-                    # Pass checker as a named argument
-                    replacement = check.create_replacement(
-                    checker=checker,  # Fix is here - pass checker as named arg
-                    amount=Decimal(data.get('amount')),
-                    payment_due=data.get('payment_due') or None,  # Handle empty string
-                    observation=data.get('observation', '')
-                            )
-
-                elif action == 'cancel':
-                    reason = data.get('reason')
-                    cancel_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
-                    if not reason:
-                        return JsonResponse({'error': 'Reason is required'}, status=400)
-                    
-                    # Delete any associated forecasts BEFORE changing status
-                    print(f"[CheckActionView] Cancelling check {check.id}, cleaning up forecasts")
-                    
-                    # For supplier checks (delete by check ID)
-                    deleted_count = ForecastStatement.objects.filter(
-                        source_type='supplier_check',
-                        source_id=check.id,
-                        is_processed=False
-                    ).delete()[0]
-                    print(f"[CheckActionView] Deleted {deleted_count} supplier check forecasts")
-                    
-                    # For tax payment checks (if applicable)
-                    if check.is_tax_payment and check.tax_declaration_id and check.tax_declaration_type:
-                        # Map tax declaration types to forecast source types 
-                        forecast_type_mapping = {
-                            'other_tax': {
-                                'professional': 'professional_tax',
-                                'communal': 'communal_tax',
-                                'default': 'other_tax'
-                            },
-                            'ir': 'ir_declaration',
-                            'stamp_right': 'stamp_right_declaration',
-                            'vat': 'vat_declaration'
-                        }
-                        
-                        source_type = None
-                        if check.tax_declaration_type == 'other_tax':
-                            try:
-                                tax = OtherTaxDeclaration.objects.get(id=check.tax_declaration_id)
-                                source_type = forecast_type_mapping['other_tax'].get(
-                                    tax.tax_type,
-                                    forecast_type_mapping['other_tax']['default']
-                                )
-                            except Exception as e:
-                                print(f"[CheckActionView] Error getting tax type: {str(e)}")
-                                source_type = 'other_tax'
-                        else:
-                            source_type = forecast_type_mapping.get(check.tax_declaration_type)
-                            
-                        if source_type:
-                            tax_deleted = ForecastStatement.objects.filter(
-                                source_type=source_type,
-                                source_id=check.tax_declaration_id,
-                                is_processed=False
-                            ).delete()[0]
-                            print(f"[CheckActionView] Deleted {tax_deleted} tax forecasts for type {source_type}")
-                            
-                            # Also delete any 'other_tax' forecasts (as a fallback)
-                            fallback_deleted = ForecastStatement.objects.filter(
-                                source_type='other_tax',
-                                source_id=check.tax_declaration_id,
-                                is_processed=False
-                            ).delete()[0]
-                            if fallback_deleted > 0:
-                                print(f"[CheckActionView] Also deleted {fallback_deleted} generic 'other_tax' forecasts")
-                    
-                    # ONLY NOW update check fields
-                    check.cancelled_at = cancel_date
-                    check.cancellation_reason = reason
-                    check.status = 'cancelled'
-
-                elif action == 'deliver':
-                    if not check.printed_at:
-                        return JsonResponse({'error': 'Check must be printed first'}, status=400)
-                    deliver_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
-                    check.delivered_at = deliver_date
-                    check.status = 'delivered'
+                files = None
+            
+            action = data.get('action')
+            print(f"Action received: {action}")  # Debug
+            
+            if action == 'print':
+                if check.status == 'draft':
+                    print_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                    check.status = 'printed'
+                    check.printed_at = print_date
                     check.save()
+            elif action == 'sign':
+                signature = data.get('signature')
+                if check.can_be_signed(signature):
+                    check.add_signature(signature)                
+            elif action == 'reject':
+                reason = data.get('rejection_reason')
+                notes = data.get('rejection_note')
+                print(f"Rejection reason: {reason}")  # Debug
+                print(f"Rejection notes: {notes}")  # Debug
+                check.rejected_at = timezone.now()
+                check.rejection_reason = reason
+                check.rejection_note = notes
+                check.status = 'rejected'
+                print(f"Check status after update: {check.status}")  # Debug
 
-                elif action == 'pay':
-                    if not check.delivered_at:
-                        return JsonResponse({'error': 'Check must be delivered first'}, status=400)
-                    pay_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
-                    check.paid_at = pay_date
-                    check.status = 'paid'
-                    check.save()
+            elif action == 'receive':
+                check.receive(notes=data.get('notes', ''))
+
+            elif action == 'replace':
+                if not check.can_be_replaced:
+                    raise ValidationError("Cannot replace this check")
                 
-                elif action == 'edit':
-                    # Validate check can be edited
-                    if check.status not in ['draft', 'pending', 'printed']:
-                        return JsonResponse({
-                            'error': 'This check cannot be edited'
-                        }, status=403)
-                    
-                    # Update editable fields
-                    if 'payment_due' in data:
-                        try:
-                            check.payment_due = parse(data['payment_due']).date() if data['payment_due'] else None
-                        except ValueError as e:
-                            return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
-                            
-                    if 'observation' in data:
-                        check.observation = data['observation']
+                # Get the new checker
+                checker = get_object_or_404(Checker, pk=data.get('checker_id'))
+                
+                # Pass checker as a named argument
+                replacement = check.create_replacement(
+                checker=checker,
+                amount=Decimal(data.get('amount')),
+                payment_due=data.get('payment_due') or None,
+                observation=data.get('observation', '')
+                        )
 
-                    check.save()
-                    print(f"[CheckActionView] Check updated successfully: payment_due={check.payment_due}, observation={check.observation}")
+            elif action == 'cancel':
+                reason = data.get('reason')
+                cancel_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                if not reason:
+                    return JsonResponse({'error': 'Reason is required'}, status=400)
+                
+                # Delete any associated forecasts BEFORE changing status
+                print(f"[CheckActionView] Cancelling check {check.id}, cleaning up forecasts")
+                
+                # For supplier checks (delete by check ID)
+                deleted_count = ForecastStatement.objects.filter(
+                    source_type='supplier_check',
+                    source_id=check.id,
+                    is_processed=False
+                ).delete()[0]
+                print(f"[CheckActionView] Deleted {deleted_count} supplier check forecasts")
+                
+                # For tax payment checks (if applicable)
+                if check.is_tax_payment and check.tax_declaration_id and check.tax_declaration_type:
+                    # Map tax declaration types to forecast source types 
+                    forecast_type_mapping = {
+                        'other_tax': {
+                            'professional': 'professional_tax',
+                            'communal': 'communal_tax',
+                            'default': 'other_tax'
+                        },
+                        'ir': 'ir_declaration',
+                        'stamp_right': 'stamp_right_declaration',
+                        'vat': 'vat_declaration'
+                    }
                     
+                    source_type = None
+                    if check.tax_declaration_type == 'other_tax':
+                        try:
+                            tax = OtherTaxDeclaration.objects.get(id=check.tax_declaration_id)
+                            source_type = forecast_type_mapping['other_tax'].get(
+                                tax.tax_type,
+                                forecast_type_mapping['other_tax']['default']
+                            )
+                        except Exception as e:
+                            print(f"[CheckActionView] Error getting tax type: {str(e)}")
+                            source_type = 'other_tax'
+                    else:
+                        source_type = forecast_type_mapping.get(check.tax_declaration_type)
+                        
+                    if source_type:
+                        tax_deleted = ForecastStatement.objects.filter(
+                            source_type=source_type,
+                            source_id=check.tax_declaration_id,
+                            is_processed=False
+                        ).delete()[0]
+                        print(f"[CheckActionView] Deleted {tax_deleted} tax forecasts for type {source_type}")
+                        
+                        # Also delete any 'other_tax' forecasts (as a fallback)
+                        fallback_deleted = ForecastStatement.objects.filter(
+                            source_type='other_tax',
+                            source_id=check.tax_declaration_id,
+                            is_processed=False
+                        ).delete()[0]
+                        if fallback_deleted > 0:
+                            print(f"[CheckActionView] Also deleted {fallback_deleted} generic 'other_tax' forecasts")
+                
+                # ONLY NOW update check fields
+                check.cancelled_at = cancel_date
+                check.cancellation_reason = reason
+                check.status = 'cancelled'
+
+            elif action == 'deliver':
+                if not check.printed_at:
+                    return JsonResponse({'error': 'Check must be printed first'}, status=400)
+                deliver_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                check.delivered_at = deliver_date
+                check.status = 'delivered'
+                check.save()
+
+            elif action == 'pay':
+                if not check.delivered_at:
+                    return JsonResponse({'error': 'Check must be delivered first'}, status=400)
+                pay_date = datetime.strptime(data.get('date'), '%Y-%m-%d').date()
+                check.paid_at = pay_date
+                check.status = 'paid'
+                check.save()
+            
+            elif action == 'edit':
+                # Validate check can be edited
+                if check.status not in ['draft', 'pending', 'printed']:
                     return JsonResponse({
-                        'message': 'Check updated successfully',
-                        'check': {
-                            'id': str(check.id),
-                            'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
-                            'observation': check.observation
-                        }
-                    })
+                        'error': 'This check cannot be edited'
+                    }, status=403)
+                
+                # Update editable fields
+                if 'payment_due' in data:
+                    try:
+                        check.payment_due = parse(data['payment_due']).date() if data['payment_due'] else None
+                    except ValueError as e:
+                        return JsonResponse({'error': f'Invalid date format: {str(e)}'}, status=400)
+                        
+                if 'observation' in data:
+                    check.observation = data['observation']
+                
+                # Handle document upload
+                if files and 'document' in files:
+                    print(f"[CheckActionView] Document upload detected")
+                    # Delete old document if exists
+                    if check.document:
+                        try:
+                            check.document.delete(save=False)
+                            print(f"[CheckActionView] Deleted old document")
+                        except Exception as e:
+                            print(f"[CheckActionView] Error deleting old document: {str(e)}")
+                    
+                    # Save new document
+                    check.document = files['document']
+                    print(f"[CheckActionView] New document uploaded: {check.document.name}")
+                
+                # Handle document deletion
+                if data.get('delete_document') == 'true' and check.document:
+                    try:
+                        check.document.delete(save=False)
+                        check.document = None
+                        print(f"[CheckActionView] Document deleted")
+                    except Exception as e:
+                        print(f"[CheckActionView] Error deleting document: {str(e)}")
 
                 check.save()
-                return JsonResponse({'status': 'success'})
+                print(f"[CheckActionView] Check updated successfully: payment_due={check.payment_due}, observation={check.observation}")
+                
+                return JsonResponse({
+                    'message': 'Check updated successfully',
+                    'check': {
+                        'id': str(check.id),
+                        'payment_due': check.payment_due.strftime('%Y-%m-%d') if check.payment_due else None,
+                        'observation': check.observation,
+                        'document': bool(check.document),
+                        'document_name': os.path.basename(check.document.name) if check.document else None
+                    }
+                })
 
-            except Check.DoesNotExist:
-                return JsonResponse({'error': 'Check not found'}, status=404)
-            except json.JSONDecodeError:
-                return JsonResponse({'error': 'Invalid JSON'}, status=400)
-            except Exception as e:
-                print(f"Error handling check action: {str(e)}")  # Debug
-                return JsonResponse({'error': str(e)}, status=500)
+            check.save()
+            return JsonResponse({'status': 'success'})
+
+        except Check.DoesNotExist:
+            return JsonResponse({'error': 'Check not found'}, status=404)
+        except json.JSONDecodeError:
+            return JsonResponse({'error': 'Invalid JSON'}, status=400)
+        except Exception as e:
+            print(f"Error handling check action: {str(e)}")  # Debug
+            return JsonResponse({'error': str(e)}, status=500)
 
 class CheckerFilterView(View):
     def get(self, request):
@@ -1304,3 +1341,28 @@ class CheckPrintView(View):
         template.save()
         
         return JsonResponse({'status': 'success'})
+
+
+class CheckDocumentView(View):
+    def get(self, request, check_id):
+        check = get_object_or_404(Check, id=check_id)
+        
+        if not check.document:
+            return JsonResponse({"error": "No document found"}, status=404)
+        
+        # Open the file and return it
+        try:
+            file_path = check.document.path
+            content_type, _ = mimetypes.guess_type(file_path)
+            
+            if not content_type:
+                content_type = 'application/octet-stream'
+                
+            # Get filename directly from document.name
+            filename = os.path.basename(check.document.name)
+                
+            response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            return response
+        except FileNotFoundError:
+            return JsonResponse({"error": "Document file not found"}, status=404)
