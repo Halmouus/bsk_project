@@ -16,6 +16,8 @@
                     <th>IF Code</th>
                     <th>ICE Code</th>
                     <th>RC Code</th>
+                    <th>Primary Contact</th>
+                    <th>Documents</th>
                     <th class="text-end">Actions</th>
                 </tr>
             </thead>
@@ -30,6 +32,37 @@
                         <td>{{ supplier.if_code|default:"-" }}</td>
                         <td>{{ supplier.ice_code|default:"-" }}</td>
                         <td>{{ supplier.rc_code|default:"-" }}</td>
+                        <td>
+                            {% if supplier.email_primary or supplier.phone_primary %}
+                                {% if supplier.email_primary %}
+                                    <div><i class="fas fa-envelope me-1"></i> {{ supplier.email_primary }}</div>
+                                {% endif %}
+                                {% if supplier.phone_primary %}
+                                    <div><i class="fas fa-phone me-1"></i> {{ supplier.phone_primary }}</div>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="d-flex">
+                                {% if supplier.regulation_file %}
+                                    <a href="#" class="view-document me-2" data-document-type="regulation" data-supplier-id="{{ supplier.id }}" data-filename="{{ supplier.regulation_file.name|default:'Regulation File' }}">
+                                        <i class="fas fa-file-contract fa-lg text-danger" data-toggle="tooltip" title="Regulation File"></i>
+                                    </a>
+                                {% else %}
+                                    <i class="fas fa-file-contract fa-lg text-muted opacity-25 me-2" data-toggle="tooltip" title="No Regulation File"></i>
+                                {% endif %}
+                                
+                                {% if supplier.payment_delay_file %}
+                                    <a href="#" class="view-document" data-document-type="payment_delay" data-supplier-id="{{ supplier.id }}" data-filename="{{ supplier.payment_delay_file.name|default:'Payment Delay File' }}">
+                                        <i class="fas fa-file-invoice-dollar fa-lg text-success" data-toggle="tooltip" title="Payment Delay File"></i>
+                                    </a>
+                                {% else %}
+                                    <i class="fas fa-file-invoice-dollar fa-lg text-muted opacity-25" data-toggle="tooltip" title="No Payment Delay File"></i>
+                                {% endif %}
+                            </div>
+                        </td>
                         <td class="text-end">
                             <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning btn-sm">
                                 <i class="fas fa-edit"></i> Edit
@@ -46,6 +79,40 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Document View Modal -->
+<div class="modal fade" id="documentViewModal" tabindex="-1" role="dialog" aria-labelledby="documentViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" style="max-width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center" id="document-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading document...</p>
+                </div>
+                <div id="document-container" class="d-none">
+                    <!-- The document will be embedded here -->
+                </div>
+                <div id="document-error" class="alert alert-danger d-none">
+                    <!-- Error message will be inserted via JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" id="document-download" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -84,5 +151,195 @@
     .table-striped tbody tr:nth-of-type(odd) {
         background-color: rgba(241, 245, 249, 0.3);
     }
+    .view-document {
+        display: inline-block;
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+
+    .view-document:hover {
+        transform: scale(1.2);
+    }
+
+    #document-container {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+
+    /* Make document modal draggable */
+    #documentViewModal .modal-header {
+        cursor: move;
+    }
 </style>
+<script>
+    // Supplier Document Handler
+const SupplierDocumentHandler = {
+    init() {
+        console.log("[SupplierDocumentHandler] Initializing");
+        
+        // Handle document view click
+        $(document).on('click', '.view-document', (e) => {
+            e.preventDefault();
+            const supplierId = $(e.currentTarget).data('supplier-id');
+            const documentType = $(e.currentTarget).data('document-type');
+            const filename = $(e.currentTarget).data('filename');
+            this.viewDocument(supplierId, documentType, filename);
+        });
+        
+        // Handle document removal in form
+        $(document).on('click', '#remove-regulation-file', (e) => {
+            e.preventDefault();
+            $('#regulation-file-info').hide();
+            $('#delete-regulation-file').val('true');
+        });
+        
+        $(document).on('click', '#remove-payment-delay-file', (e) => {
+            e.preventDefault();
+            $('#payment-delay-file-info').hide();
+            $('#delete-payment-delay-file').val('true');
+        });
+        
+        // Clear file inputs
+        $(document).on('click', '#clear-regulation-file', () => {
+            $('#id_regulation_file').val('');
+        });
+        
+        $(document).on('click', '#clear-payment-delay-file', () => {
+            $('#id_payment_delay_file').val('');
+        });
+        
+        // Make document modal draggable
+        $('#documentViewModal').on('shown.bs.modal', function() {
+            let startX, startY, startLeft, startTop;
+            const dialog = $(this).find('.modal-dialog');
+            
+            $(this).find('.modal-header').on('mousedown', function(e) {
+                startX = e.pageX;
+                startY = e.pageY;
+                startLeft = parseInt(dialog.css('margin-left') || 0);
+                startTop = parseInt(dialog.css('margin-top') || 0);
+                
+                $(document).on('mousemove', moveHandler);
+                $(document).on('mouseup', upHandler);
+                
+                // Prevent text selection during drag
+                e.preventDefault();
+            });
+            
+            function moveHandler(e) {
+                const deltaX = e.pageX - startX;
+                const deltaY = e.pageY - startY;
+                
+                dialog.css({
+                    'margin-left': startLeft + deltaX + 'px',
+                    'margin-top': Math.max(0, startTop + deltaY) + 'px'
+                });
+            }
+            
+            function upHandler() {
+                $(document).off('mousemove', moveHandler);
+                $(document).off('mouseup', upHandler);
+            }
+        });
+    },
+    
+    viewDocument(supplierId, documentType, filename) {
+        console.log(`[SupplierDocumentHandler] Viewing ${documentType} document for supplier: ${supplierId}`);
+        
+        // Set modal title
+        const documentTypeLabels = {
+            'regulation': 'Regulation File',
+            'payment_delay': 'Payment Delay Agreement'
+        };
+        
+        const documentTypeLabel = documentTypeLabels[documentType] || 'Document';
+        $('#documentViewModalLabel').text(`${documentTypeLabel}: ${filename}`);
+        
+        // Reset modal state
+        $('#document-loading').removeClass('d-none');
+        $('#document-container').addClass('d-none').empty();
+        $('#document-error').addClass('d-none').empty();
+        
+        // Set download link
+        const downloadUrl = `/testapp/suppliers/${supplierId}/document/${documentType}/`;
+        $('#document-download').attr('href', downloadUrl);
+        
+        // Show modal
+        $('#documentViewModal').modal('show');
+        
+        // Try to load document
+        this.loadDocument(supplierId, documentType);
+    },
+
+    async loadDocument(supplierId, documentType) {
+        try {
+            // Add cache-busting parameter
+            const cacheBuster = new Date().getTime();
+            const url = `/testapp/suppliers/${supplierId}/document/${documentType}/?_=${cacheBuster}`;
+            console.log(`[SupplierDocumentHandler] Loading document from: ${url}`);
+            
+            const response = await fetch(url);
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Server error (${response.status}): ${errorText}`);
+                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+            }
+            
+            const contentType = response.headers.get('content-type');
+            console.log(`[SupplierDocumentHandler] Document content type: ${contentType}`);
+            
+            const blob = await response.blob();
+            console.log(`[SupplierDocumentHandler] Blob size: ${blob.size} bytes`);
+            
+            if (blob.size === 0) {
+                throw new Error('Empty document received');
+            }
+            
+            const objectUrl = URL.createObjectURL(blob);
+            
+            if (contentType.includes('pdf')) {
+                // Handle PDF with larger height
+                $('#document-container').html(`
+                    <iframe src="${objectUrl}" width="100%" height="750px" style="border: none;"></iframe>
+                `);
+            } else if (contentType.includes('image')) {
+                // Handle image
+                $('#document-container').html(`
+                    <img src="${objectUrl}" class="img-fluid" alt="Document Image">
+                `);
+            } else {
+                // Unsupported file type
+                throw new Error(`Unsupported file type: ${contentType}`);
+            }
+            
+            // Show the document
+            $('#document-loading').addClass('d-none');
+            $('#document-container').removeClass('d-none');
+            
+        } catch (error) {
+            console.error('Error loading document:', error);
+            $('#document-loading').addClass('d-none');
+            $('#document-error').removeClass('d-none');
+            $('#document-error').html(`
+                <i class="fas fa-exclamation-triangle"></i> 
+                Error: ${error.message}
+                <div class="mt-2">
+                    <a href="/testapp/suppliers/${supplierId}/document/${documentType}/" class="btn btn-sm btn-primary" target="_blank">
+                        Try Direct Download
+                    </a>
+                </div>
+            `);
+        }
+    }
+};
+
+// Initialize the document handler
+$(document).ready(function() {
+    // Initialize tooltips
+    $('[data-toggle="tooltip"]').tooltip();
+    
+    // Initialize document handler
+    SupplierDocumentHandler.init();
+});
+</script>
 {% endblock %}

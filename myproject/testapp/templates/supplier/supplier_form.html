@@ -40,7 +40,18 @@
     </h1>
     <form method="post" id="supplierForm" novalidate enctype="multipart/form-data">
         {% csrf_token %}
-
+        
+        <!-- Debug form errors -->
+        {% if form.errors %}
+        <div class="alert alert-danger">
+            <strong>Form has errors:</strong>
+            <ul>
+                {% for field, errors in form.errors.items %}
+                    <li>{{ field }}: {{ errors|join:", " }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
         <!-- Section 1: Basic Information -->
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
@@ -103,54 +114,167 @@
             </div>
         </div>
 
-        <!-- Section 3: Additional Information -->
-        <div class="card mb-4">
-            <div class="card-header bg-primary text-white">
-                <h5 class="card-title mb-0">
-                    <i class="fas fa-cogs"></i> Additional Information
-                </h5>
+    <!-- Section 3: Contact Information -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-address-card"></i> Contact Information
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Primary Email Field -->
+            <div class="mb-3">
+                <label for="id_email_primary" class="form-label">Primary Email</label>
+                <input type="email" class="form-control form-control-sm" id="id_email_primary" name="email_primary" value="{{ form.email_primary.value|default:'' }}">
+                <div class="invalid-feedback">Please provide a valid email address.</div>
             </div>
-            <div class="card-body">
-                <!-- Is Energy Field -->
-                <div class="mb-3">
-                    <label for="id_is_energy" class="form-label">Is Energy?</label>
-                    <select class="form-select form-select-sm" id="id_is_energy" name="is_energy">
-                        <option value="True" {% if form.is_energy.value %}selected{% endif %}>Yes</option>
-                        <option value="False" {% if not form.is_energy.value %}selected{% endif %}>No</option>
-                    </select>
-                </div>
 
-                <!-- Service Field -->
-                <div class="mb-3">
-                    <label for="id_service" class="form-label">Service</label>
-                    <input type="text" class="form-control form-control-sm" id="id_service" name="service" value="{{ form.service.value|default:'' }}">
-                    <div class="invalid-feedback">Please provide a valid service description.</div>
-                </div>
+            <!-- Secondary Email Field -->
+            <div class="mb-3">
+                <label for="id_email_secondary" class="form-label">Secondary Email</label>
+                <input type="email" class="form-control form-control-sm" id="id_email_secondary" name="email_secondary" value="{{ form.email_secondary.value|default:'' }}">
+                <div class="invalid-feedback">Please provide a valid email address.</div>
+            </div>
 
-                <!-- Delay Convention Field -->
-                <div class="mb-3">
-                    <label for="id_delay_convention" class="form-label">Delay Convention (Days)</label>
-                    <input type="number" class="form-control form-control-sm" id="id_delay_convention" name="delay_convention" value="{{ form.delay_convention.value|default:'' }}" required>
-                    <div class="invalid-feedback">Please provide a valid delay convention (0, 30, 60, 90, or 120).</div>
-                </div>
+            <!-- Primary Phone Field -->
+            <div class="mb-3">
+                <label for="id_phone_primary" class="form-label">Primary Phone</label>
+                <input type="tel" class="form-control form-control-sm" id="id_phone_primary" name="phone_primary" value="{{ form.phone_primary.value|default:'' }}">
+                <div class="invalid-feedback">Please provide a valid phone number.</div>
+            </div>
 
-                <!-- Is Regulated Field -->
-                <div class="mb-3">
-                    <label for="id_is_regulated" class="form-label">Is Regulated?</label>
-                    <select class="form-select form-select-sm" id="id_is_regulated" name="is_regulated">
-                        <option value="True" {% if form.is_regulated.value %}selected{% endif %}>Yes</option>
-                        <option value="False" {% if not form.is_regulated.value %}selected{% endif %}>No</option>
-                    </select>
-                </div>
-
-                <!-- Regulation File Path Field -->
-                <div class="mb-3">
-                    <label for="id_regulation_file_path" class="form-label">Regulation File</label>
-                    <input type="file" class="form-control form-control-sm" id="id_regulation_file_path" name="regulation_file_path" value="{{ form.regulation_file_path.value|default:'' }}">
-                    <div class="invalid-feedback">Please upload a valid regulation file.</div>
-                </div>
+            <!-- Secondary Phone Field -->
+            <div class="mb-3">
+                <label for="id_phone_secondary" class="form-label">Secondary Phone</label>
+                <input type="tel" class="form-control form-control-sm" id="id_phone_secondary" name="phone_secondary" value="{{ form.phone_secondary.value|default:'' }}">
+                <div class="invalid-feedback">Please provide a valid phone number.</div>
             </div>
         </div>
+    </div>
+
+    <!-- Section 4: Additional Information -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-cogs"></i> Additional Information
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Is Energy Field -->
+            <div class="mb-3">
+                <label for="id_is_energy" class="form-label">Is Energy?</label>
+                <select class="form-select form-select-sm" id="id_is_energy" name="is_energy">
+                    <option value="True" {% if form.is_energy.value %}selected{% endif %}>Yes</option>
+                    <option value="False" {% if not form.is_energy.value %}selected{% endif %}>No</option>
+                </select>
+            </div>
+
+            <!-- Service Field -->
+            <div class="mb-3">
+                <label for="id_service" class="form-label">Service</label>
+                <input type="text" class="form-control form-control-sm" id="id_service" name="service" value="{{ form.service.value|default:'' }}">
+                <div class="invalid-feedback">Please provide a valid service description.</div>
+            </div>
+
+            <!-- Delay Convention Field -->
+            <div class="mb-3">
+                <label for="id_delay_convention" class="form-label">Delay Convention (Days)</label>
+                <input type="number" class="form-control form-control-sm" id="id_delay_convention" name="delay_convention" value="{{ form.delay_convention.value|default:'' }}" required>
+                <div class="invalid-feedback">Please provide a valid delay convention (0, 30, 60, 90, or 120).</div>
+            </div>
+
+            <!-- Delay Check Field -->
+            <div class="mb-3">
+                <label for="id_delay_check" class="form-label">Check Payment Delay (Days)</label>
+                <input type="number" class="form-control form-control-sm" id="id_delay_check" name="delay_check" value="{{ form.delay_check.value|default:0 }}">
+                <div class="form-text">Additional days to delay check payment forecasts after due date.</div>
+            </div>
+
+            <!-- Delay LCN Field -->
+            <div class="mb-3">
+                <label for="id_delay_lcn" class="form-label">LCN Payment Delay (Days)</label>
+                <input type="number" class="form-control form-control-sm" id="id_delay_lcn" name="delay_lcn" value="{{ form.delay_lcn.value|default:0 }}">
+                <div class="form-text">Additional days to delay LCN payment forecasts after due date.</div>
+            </div>
+
+            <!-- Is Regulated Field -->
+            <div class="mb-3">
+                <label for="id_is_regulated" class="form-label">Is Regulated?</label>
+                <select class="form-select form-select-sm" id="id_is_regulated" name="is_regulated">
+                    <option value="True" {% if form.is_regulated.value %}selected{% endif %}>Yes</option>
+                    <option value="False" {% if not form.is_regulated.value %}selected{% endif %}>No</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section 5: Documents -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <h5 class="card-title mb-0">
+                <i class="fas fa-file-pdf"></i> Documents
+            </h5>
+        </div>
+        <div class="card-body">
+            <!-- Regulation File -->
+            <div class="mb-4">
+                <label for="id_regulation_file" class="form-label">Regulation File</label>
+                <div class="input-group">
+                    <input type="file" class="form-control form-control-sm" id="id_regulation_file" name="regulation_file" accept=".pdf">
+                    <button class="btn btn-outline-secondary" type="button" id="clear-regulation-file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                {% if form.instance.regulation_file %}
+                <div class="mt-2" id="regulation-file-info">
+                    <div class="alert alert-info d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-pdf"></i> Current file: {{ form.instance.regulation_file.name|default:"Regulation File"|truncatechars:30 }}
+                        </div>
+                        <div>
+                            <a href="#" class="btn btn-sm btn-info view-document" data-document-type="regulation" data-supplier-id="{{ form.instance.id }}">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                            <button type="button" class="btn btn-sm btn-danger" id="remove-regulation-file">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <input type="hidden" id="delete-regulation-file" name="delete_regulation_file" value="false">
+            </div>
+            
+            <!-- Payment Delay File -->
+            <div class="mb-3">
+                <label for="id_payment_delay_file" class="form-label">Payment Delay Agreement</label>
+                <div class="input-group">
+                    <input type="file" class="form-control form-control-sm" id="id_payment_delay_file" name="payment_delay_file" accept=".pdf">
+                    <button class="btn btn-outline-secondary" type="button" id="clear-payment-delay-file">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                {% if form.instance.payment_delay_file %}
+                <div class="mt-2" id="payment-delay-file-info">
+                    <div class="alert alert-info d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-pdf"></i> Current file: {{ form.instance.payment_delay_file.name|default:"Payment Delay File"|truncatechars:30 }}
+                        </div>
+                        <div>
+                            <a href="#" class="btn btn-sm btn-info view-document" data-document-type="payment_delay" data-supplier-id="{{ form.instance.id }}">
+                                <i class="fas fa-eye"></i> View
+                            </a>
+                            <button type="button" class="btn btn-sm btn-danger" id="remove-payment-delay-file">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+                <input type="hidden" id="delete-payment-delay-file" name="delete_payment_delay_file" value="false">
+            </div>
+        </div>
+    </div>
 
         <!-- Save Button -->
         <button type="submit" class="btn btn-primary" id="saveButton" disabled>
@@ -171,13 +295,16 @@
 
         // Function to check if all required fields are valid
         function isFormValid() {
+            console.log("Checking form validity...");
             const requiredFields = form.querySelectorAll('input[required], select[required]');
             let isValid = true;
             requiredFields.forEach(field => {
+                console.log(`Checking field: ${field.id}, valid: ${field.checkValidity()}`);
                 if (!field.checkValidity()) {
                     isValid = false;
                 }
             });
+            console.log("Form is valid:", isValid);
             return isValid;
         }
 
@@ -193,7 +320,8 @@
         // Add blur event listeners for real-time validation
         const fields = [
             'name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 
-            'accounting_code', 'service', 'delay_convention', 'regulation_file_path'
+            'accounting_code', 'email_primary', 'email_secondary', 'phone_primary',
+            'phone_secondary', 'service', 'delay_convention', 'delay_check', 'delay_lcn'
         ];
         fields.forEach(field => {
             const input = document.getElementById(`id_${field}`);
@@ -232,9 +360,30 @@
             }
             updateSaveButton();
         });
+        
+        // Handle document removal in form
+        $(document).on('click', '#remove-regulation-file', function(e) {
+            e.preventDefault();
+            console.log("[SupplierForm] Removing regulation file");
+            $('#regulation-file-info').hide();
+            $('#delete-regulation-file').val('true');
+        });
+
+        $(document).on('click', '#remove-payment-delay-file', function(e) {
+            e.preventDefault();
+            console.log("[SupplierForm] Removing payment delay file");
+            $('#payment-delay-file-info').hide();
+            $('#delete-payment-delay-file').val('true');
+        });
 
         // Initial check for save button state
         updateSaveButton();
+        form.addEventListener('submit', function(e) {
+            console.log("FORM SUBMISSION TRIGGERED");
+            console.log("Form is being submitted to:", this.action);
+            // Don't prevent default - let it submit
+        });
+        
     });
 </script>
 {% endblock %}

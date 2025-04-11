@@ -608,6 +608,109 @@
     </div>
 </div>
 
+<!-- After the summary cards section -->
+<div class="row mb-4">
+    <!-- Contact Information -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="fas fa-address-card me-2"></i>Contact Information</h5>
+            </div>
+            <div class="card-body">
+                {% if supplier.email_primary or supplier.email_secondary or supplier.phone_primary or supplier.phone_secondary %}
+                    <div class="mb-3">
+                        {% if supplier.email_primary %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="text-muted me-2 text-nowrap"><i class="fas fa-envelope me-2"></i>Primary Email:</span>
+                                <strong>{{ supplier.email_primary }}</strong>
+                            </div>
+                        {% endif %}
+                        {% if supplier.email_secondary %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="text-muted me-2 text-nowrap"><i class="fas fa-envelope me-2"></i>Secondary Email:</span>
+                                <strong>{{ supplier.email_secondary }}</strong>
+                            </div>
+                        {% endif %}
+                        {% if supplier.phone_primary %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="text-muted me-2 text-nowrap"><i class="fas fa-phone me-2"></i>Primary Phone:</span>
+                                <strong>{{ supplier.phone_primary }}</strong>
+                            </div>
+                        {% endif %}
+                        {% if supplier.phone_secondary %}
+                            <div class="d-flex align-items-center mb-2">
+                                <span class="text-muted me-2 text-nowrap"><i class="fas fa-phone me-2"></i>Secondary Phone:</span>
+                                <strong>{{ supplier.phone_secondary }}</strong>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="fas fa-info-circle fa-2x mb-3"></i>
+                        <p>No contact information available</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Documents Section -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0"><i class="fas fa-file-pdf me-2"></i>Documents</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <!-- Regulation File -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 {% if supplier.regulation_file %}border-success{% else %}border-light{% endif %}">
+                            <div class="card-body text-center">
+                                {% if supplier.regulation_file %}
+                                    <i class="fas fa-file-contract fa-3x text-success mb-3"></i>
+                                    <h6>Regulation File</h6>
+                                    <a href="#" class="btn btn-sm btn-primary view-document mt-2" 
+                                       data-document-type="regulation" 
+                                       data-supplier-id="{{ supplier.id }}" 
+                                       data-filename="{{ supplier.regulation_file.name|default:'Regulation File' }}">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </a>
+                                {% else %}
+                                    <i class="fas fa-file-contract fa-3x text-muted opacity-25 mb-3"></i>
+                                    <h6 class="text-muted">Regulation File</h6>
+                                    <div class="text-muted small">Not Available</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Payment Delay File -->
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 {% if supplier.payment_delay_file %}border-success{% else %}border-light{% endif %}">
+                            <div class="card-body text-center">
+                                {% if supplier.payment_delay_file %}
+                                    <i class="fas fa-file-invoice-dollar fa-3x text-success mb-3"></i>
+                                    <h6>Payment Delay Agreement</h6>
+                                    <a href="#" class="btn btn-sm btn-primary view-document mt-2" 
+                                       data-document-type="payment_delay" 
+                                       data-supplier-id="{{ supplier.id }}" 
+                                       data-filename="{{ supplier.payment_delay_file.name|default:'Payment Delay File' }}">
+                                        <i class="fas fa-eye me-1"></i> View
+                                    </a>
+                                {% else %}
+                                    <i class="fas fa-file-invoice-dollar fa-3x text-muted opacity-25 mb-3"></i>
+                                    <h6 class="text-muted">Payment Delay Agreement</h6>
+                                    <div class="text-muted small">Not Available</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <style>
     /* Gradient backgrounds */
     .bg-gradient-primary {

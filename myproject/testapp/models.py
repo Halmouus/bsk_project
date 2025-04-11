@@ -171,6 +171,8 @@ class Supplier(BaseModel):
 
     numeric_validator = RegexValidator(r'^[0-9]*$', _('Only numeric characters are allowed.'))
     alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', _('Only alphanumeric characters are allowed.'))
+    phone_validator = RegexValidator(r'^\+?[0-9]{8,15}$', _('Enter a valid phone number.'))
+    email_validator = RegexValidator(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', _('Enter a valid email address.'))
 
     name = models.CharField(max_length=100, unique=True, validators=[alphanumeric_validator])
     if_code = models.CharField(max_length=25, unique=True, validators=[numeric_validator])
@@ -178,11 +180,40 @@ class Supplier(BaseModel):
     rc_code = models.CharField(max_length=25, validators=[numeric_validator])
     rc_center = models.CharField(max_length=100, validators=[alphanumeric_validator])
     accounting_code = models.CharField(max_length=25, unique=True, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
+    
+    # Contact information
+    email_primary = models.EmailField(max_length=100, blank=True, null=True, validators=[email_validator])
+    email_secondary = models.EmailField(max_length=100, blank=True, null=True, validators=[email_validator])
+    phone_primary = models.CharField(max_length=20, blank=True, null=True, validators=[phone_validator])
+    phone_secondary = models.CharField(max_length=20, blank=True, null=True, validators=[phone_validator])
+    
     is_energy = models.BooleanField(default=False)
     service = models.CharField(max_length=255, blank=True, validators=[alphanumeric_validator])  # Description of merch/service sold
     delay_convention = models.IntegerField(choices=[(0, '0'), (30, '30'), (60, '60'), (90, '90'), (120, '120')], default=60)
     is_regulated = models.BooleanField(default=False)
-    regulation_file_path = models.FileField(upload_to='supplier_regulations/', null=True, blank=True)
+    
+    # Document fields
+    regulation_file = models.FileField(
+        upload_to=get_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True, 
+        blank=True,
+        help_text=_("Upload supplier regulation file")
+    )
+    payment_delay_file = models.FileField(
+        upload_to=get_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True, 
+        blank=True,
+        help_text=_("Upload payment delay agreement file")
+    )
+    
     delay_check = models.IntegerField(
         default=0,
         validators=[MinValueValidator(0)],

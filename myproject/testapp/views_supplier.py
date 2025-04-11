@@ -13,7 +13,10 @@ from django.shortcuts import get_object_or_404, render, redirect
 from django.db.models import ProtectedError
 from django.views.generic.edit import DeleteView
 from django.contrib import messages
-
+import mimetypes
+import os
+from django.http import FileResponse
+from django.core.files.base import ContentFile
 # List all Suppliers
 class SupplierListView(ListView):
     model = Supplier
@@ -32,6 +35,36 @@ class SupplierCreateView(SuccessMessageMixin, CreateView):
         context = super().get_context_data(**kwargs)
         context['is_create_mode'] = True
         return context
+        
+    def form_valid(self, form):
+        response = super().form_valid(form)
+        
+        # Handle document uploads
+        if 'regulation_file' in self.request.FILES:
+            try:
+                uploaded_file = self.request.FILES['regulation_file']
+                self.object.regulation_file.save(
+                    uploaded_file.name,
+                    uploaded_file,
+                    save=True
+                )
+                print(f"Regulation file saved successfully: {self.object.regulation_file.name}")
+            except Exception as e:
+                print(f"Error saving regulation file: {str(e)}")
+        
+        if 'payment_delay_file' in self.request.FILES:
+            try:
+                uploaded_file = self.request.FILES['payment_delay_file']
+                self.object.payment_delay_file.save(
+                    uploaded_file.name,
+                    uploaded_file,
+                    save=True
+                )
+                print(f"Payment delay file saved successfully: {self.object.payment_delay_file.name}")
+            except Exception as e:
+                print(f"Error saving payment delay file: {str(e)}")
+        
+        return response
 
 # Update an existing Supplier
 class SupplierUpdateView(SuccessMessageMixin, UpdateView):
@@ -40,7 +73,69 @@ class SupplierUpdateView(SuccessMessageMixin, UpdateView):
     template_name = 'supplier/supplier_form.html'
     success_url = reverse_lazy('supplier-list')
     success_message = "Supplier successfully updated."
-
+    
+    def form_valid(self, form):
+        print("\n=== SupplierUpdateView.form_valid ===")
+        print(f"Form data: {form.cleaned_data}")
+        print(f"Files: {self.request.FILES}")
+        print(f"POST data: {self.request.POST}")
+        response = super().form_valid(form)
+        
+        # Handle document uploads and deletions
+        if 'delete_regulation_file' in self.request.POST and self.request.POST.get('delete_regulation_file') == 'true':
+            try:
+                if self.object.regulation_file:
+                    self.object.regulation_file.delete()
+                    self.object.regulation_file = None
+                    print(f"Regulation file deleted successfully")
+            except Exception as e:
+                print(f"Error deleting regulation file: {str(e)}")
+        
+        if 'delete_payment_delay_file' in self.request.POST and self.request.POST.get('delete_payment_delay_file') == 'true':
+            try:
+                if self.object.payment_delay_file:
+                    self.object.payment_delay_file.delete()
+                    self.object.payment_delay_file = None
+                    print(f"Payment delay file deleted successfully")
+            except Exception as e:
+                print(f"Error deleting payment delay file: {str(e)}")
+        
+        # Handle new document uploads
+        if 'regulation_file' in self.request.FILES:
+            try:
+                # Delete old file if exists and not already deleted
+                if self.object.regulation_file:
+                    self.object.regulation_file.delete(save=False)
+                
+                uploaded_file = self.request.FILES['regulation_file']
+                self.object.regulation_file.save(
+                    uploaded_file.name,
+                    uploaded_file,
+                    save=True
+                )
+                print(f"Regulation file saved successfully: {self.object.regulation_file.name}")
+            except Exception as e:
+                print(f"Error saving regulation file: {str(e)}")
+        
+        if 'payment_delay_file' in self.request.FILES:
+            try:
+                # Delete old file if exists and not already deleted
+                if self.object.payment_delay_file:
+                    self.object.payment_delay_file.delete(save=False)
+                
+                uploaded_file = self.request.FILES['payment_delay_file']
+                self.object.payment_delay_file.save(
+                    uploaded_file.name,
+                    uploaded_file,
+                    save=True
+                )
+                print(f"Payment delay file saved successfully: {self.object.payment_delay_file.name}")
+            except Exception as e:
+                print(f"Error saving payment delay file: {str(e)}")
+        
+        # Save changes
+        self.object.save()
+        return response
 
 # Delete a Supplier
 class SupplierDeleteView(DeleteView):
@@ -167,3 +262,65 @@ class SupplierDetailView(DetailView):
         context['invoices'] = invoices.order_by('-date').select_related('supplier')
         context['active_filters'] = filters
         return context
+
+
+class SupplierDocumentView(View):
+    def get(self, request, pk, document_type):
+        print(f"\n=== SupplierDocumentView.get ===")
+        print(f"pk: {pk}, document_type: {document_type}")
+        
+        supplier = get_object_or_404(Supplier, pk=pk)
+        print(f"Found supplier: {supplier.name}")
+        
+        # Determine which document to serve
+        if document_type == 'regulation':
+            document = supplier.regulation_file
+            document_name = "Regulation File"
+            print(f"Regulation file: {document}")
+        elif document_type == 'payment_delay':
+            document = supplier.payment_delay_file
+            document_name = "Payment Delay File"
+            print(f"Payment delay file: {document}")
+        else:
+            print(f"Invalid document type: {document_type}")
+            return JsonResponse({"error": "Invalid document type"}, status=400)
+        
+        if not document:
+            print(f"No {document_name} found for this supplier")
+            return JsonResponse({"error": f"No {document_name} found for this supplier"}, status=404)
+        
+        # Open the file and return it
+        try:
+            file_path = document.path
+            print(f"Document path: {file_path}")
+            
+            # Check if file exists
+            import os
+            if not os.path.exists(file_path):
+                print(f"File does not exist: {file_path}")
+                return JsonResponse({"error": "File not found on disk"}, status=404)
+            
+            content_type, _ = mimetypes.guess_type(file_path)
+            print(f"Content type: {content_type}")
+            
+            if not content_type:
+                content_type = 'application/octet-stream'
+                
+            # Get filename from document path
+            filename = os.path.basename(document.name)
+            print(f"Filename: {filename}")
+                
+            response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            
+            # Add cache control headers
+            response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            return response
+        except FileNotFoundError:
+            print(f"Document file not found: {file_path}")
+            return JsonResponse({"error": "Document file not found"}, status=404)
+        except Exception as e:
+            print(f"Error serving document: {str(e)}")
+            return JsonResponse({"error": f"Error: {str(e)}"}, status=500)

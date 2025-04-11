@@ -12,11 +12,12 @@ class SupplierCreateForm(forms.ModelForm):
     class Meta:
         model = Supplier
         fields = [
-            'name', 'if_code', 'ice_code', 'rc_code', 'rc_center', 
-            'accounting_code', 'is_energy', 'service', 'delay_convention', 
-            'is_regulated', 'regulation_file_path'
+            'name', 'if_code', 'ice_code', 'rc_code', 'rc_center',
+            'accounting_code', 'email_primary', 'email_secondary',
+            'phone_primary', 'phone_secondary', 'is_energy', 'service', 
+            'delay_convention', 'is_regulated', 'regulation_file', 
+            'payment_delay_file', 'delay_check', 'delay_lcn'
         ]
-
     def clean_ice_code(self):
         ice_code = self.cleaned_data.get('ice_code')
         if len(ice_code) != 15:

@@ -102,6 +102,7 @@ from .views_pay import (
 from . import views_production
 from . import views_contract
 from . import views_receipts
+from . import views_supplier
 from .views import test_translation
 
 
@@ -129,6 +130,7 @@ urlpatterns = [
     path('suppliers/autocomplete/', supplier_autocomplete, name='supplier-autocomplete'),  # Autocomplete for suppliers
     path('suppliers/<uuid:pk>/balance/', SupplierBalanceView.as_view(), name='supplier-balance'),  # Get supplier balance
     path('suppliers/<uuid:pk>/view/', SupplierDetailView.as_view(), name='supplier-detail'),
+    path('suppliers/<uuid:pk>/document/<str:document_type>/', views_supplier.SupplierDocumentView.as_view(), name='supplier-document'),
  
     # Products URLs
     path('products/', ProductListView.as_view(), name='product-list'),  # List all products
