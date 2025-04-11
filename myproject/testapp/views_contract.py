@@ -1,10 +1,12 @@
 from datetime import datetime
 from decimal import Decimal
+import mimetypes
+import os
 import traceback
 from django.forms import ValidationError
 from django.views import View
 from django.views.generic import ListView
-from django.http import JsonResponse
+from django.http import FileResponse, JsonResponse
 from django.template.loader import render_to_string
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -12,7 +14,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.db import transaction
 import json
-
+from django.core.files.base import ContentFile
 from .models import INVOICE_TYPES, BankAccount, Contract, ContractProduct, DirectDebit, ForecastStatement, Supplier, Product, ContractInvoice
 
 class ContractListView(ListView):
@@ -224,7 +226,10 @@ class ContractUpdateView(View):
                 'domiciliation_suspended': contract.domiciliation_suspended,
                 'domiciliation_suspension_date': contract.domiciliation_suspension_date.isoformat() if contract.domiciliation_suspension_date else None,
                 'domiciliation_suspension_reason': contract.domiciliation_suspension_reason,
-                'is_loan': contract.invoice_type == 'LOAN'
+                'is_loan': contract.invoice_type == 'LOAN',
+                # Add document information
+                'has_document': bool(contract.document),
+                'document_name': os.path.basename(contract.document.name) if contract.document else None
             }
 
             print("Response data:", response_data)
@@ -241,11 +246,60 @@ class ContractUpdateView(View):
     def post(self, request, pk):
         try:
             contract = get_object_or_404(Contract, pk=pk)
-            data = json.loads(request.body)
             
             print(f"\n=== Updating Contract {contract.id} ===")
             print(f"Current status: {contract.status}")
             print(f"Has forecasts: {ForecastStatement.objects.filter(source_type='contract_domiciliation', source_id=contract.id).exists()}")
+            
+            # Check if this is a document-only update
+            if request.content_type and 'multipart/form-data' in request.content_type:
+                print("Processing document update for contract")
+                
+                # Handle document upload
+                if 'document' in request.FILES:
+                    print(f"New document received: {request.FILES['document'].name}")
+                    try:
+                        # Delete old document if exists
+                        if contract.document:
+                            contract.document.delete(save=False)
+                        
+                        # Save new document
+                        uploaded_file = request.FILES['document']
+                        file_content = uploaded_file.read()
+                        contract.document.save(
+                            uploaded_file.name,
+                            ContentFile(file_content),
+                            save=True
+                        )
+                        print(f"Document saved successfully: {contract.document.name}")
+                    except Exception as e:
+                        print(f"Error saving document: {str(e)}")
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': f'Error saving document: {str(e)}'
+                        }, status=400)
+                
+                # Handle document deletion
+                if request.POST.get('delete_document') == 'true' and contract.document:
+                    try:
+                        contract.document.delete()
+                        contract.document = None
+                        contract.save()
+                        print(f"Document deleted successfully")
+                    except Exception as e:
+                        print(f"Error deleting document: {str(e)}")
+                        return JsonResponse({
+                            'status': 'error',
+                            'message': f'Error deleting document: {str(e)}'
+                        }, status=400)
+                
+                return JsonResponse({
+                    'status': 'success',
+                    'message': 'Contract document updated successfully'
+                })
+            
+            # Regular JSON update
+            data = json.loads(request.body)
             
             with transaction.atomic():
                 # If contract has forecasts, don't allow domiciliation changes
@@ -530,3 +584,32 @@ class ContractSuspendDomiciliationView(View):
                 'status': 'error',
                 'message': 'Failed to suspend domiciliation'
             }, status=500)
+
+class ContractDocumentView(View):
+    def get(self, request, pk):
+        contract = get_object_or_404(Contract, pk=pk)
+        
+        if not contract.document:
+            return JsonResponse({"error": "No document found"}, status=404)
+        
+        # Open the file and return it
+        try:
+            file_path = contract.document.path
+            content_type, _ = mimetypes.guess_type(file_path)
+            
+            if not content_type:
+                content_type = 'application/octet-stream'
+                
+            # Get filename from document path
+            filename = os.path.basename(contract.document.name)
+                
+            response = FileResponse(open(file_path, 'rb'), content_type=content_type)
+            response['Content-Disposition'] = f'inline; filename="{filename}"'
+            
+            # Add cache control headers to prevent caching
+            response['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response['Pragma'] = 'no-cache'
+            response['Expires'] = '0'
+            return response
+        except FileNotFoundError:
+            return JsonResponse({"error": "Document file not found"}, status=404)

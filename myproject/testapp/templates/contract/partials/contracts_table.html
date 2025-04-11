@@ -65,6 +65,17 @@
             </small>
         {% endif %}
     </td>
+    <td class="text-center">
+        {% if contract.document %}
+            <a href="#" class="view-contract-document" data-contract-id="{{ contract.id }}" data-filename="{{ contract.document.name|default:'Document' }}">
+                <i class="fas fa-file-pdf fa-lg text-danger"></i>
+            </a>
+        {% else %}
+            <span class="text-muted">
+                <i class="fas fa-file text-light"></i>
+            </span>
+        {% endif %}
+    </td>
     <td>
         <div class="btn-group">
             {% if contract.status == 'draft' %}
@@ -77,7 +88,7 @@
                     <i class="fas fa-play"></i>
                 </button>
             {% endif %}
-
+        
             {% if contract.status == 'active' %}
                 <button type="button" class="btn btn-sm btn-info generate-invoices"
                         data-contract-id="{{ contract.id }}">
@@ -88,11 +99,19 @@
                     <i class="fas fa-stop"></i>
                 </button>
             {% endif %}
-
+        
             <button type="button" class="btn btn-sm btn-info view-history"
                     data-contract-id="{{ contract.id }}"
                     {% if not contract.contractinvoice_set.exists %}disabled{% endif %}>
                 <i class="fas fa-history"></i>
+            </button>
+            
+            <button type="button" class="btn btn-sm btn-secondary manage-document"
+                    data-contract-id="{{ contract.id }}" 
+                    data-reference="{{ contract.reference }}"
+                    data-has-document="{% if contract.document %}true{% else %}false{% endif %}"
+                    data-document-name="{% if contract.document %}{{ contract.document.name|default:'Document' }}{% endif %}">
+                <i class="fas fa-file-pdf"></i>
             </button>
         </div>
     </td>

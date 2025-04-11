@@ -61,6 +61,7 @@
                     <th>Periodicity</th>
                     <th>Products</th>
                     <th>Status</th>
+                    <th>Document</th>
                     <th>Actions</th>
                 </tr>
             </thead>
@@ -493,6 +494,84 @@
     </div>
 </div>
 
+<!-- Document View Modal -->
+<div class="modal fade" id="documentViewModal" tabindex="-1" role="dialog" aria-labelledby="documentViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl" style="max-width: 90%;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center" id="document-loading">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="sr-only">Loading...</span>
+                    </div>
+                    <p class="mt-2">Loading document...</p>
+                </div>
+                <div id="document-container" class="d-none">
+                    <!-- The document will be embedded here -->
+                </div>
+                <div id="document-error" class="alert alert-danger d-none">
+                    <!-- Error message will be inserted via JavaScript -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a class="btn btn-primary" id="document-download" target="_blank">
+                    <i class="fas fa-download"></i> Download
+                </a>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Document Upload Modal -->
+<div class="modal fade" id="documentUploadModal" tabindex="-1" role="dialog" aria-labelledby="documentUploadModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="documentUploadModalLabel">Manage Contract Document</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <form id="documentUploadForm" enctype="multipart/form-data">
+                    <input type="hidden" id="contract-id-document">
+                    
+                    <div class="form-group">
+                        <label>Contract Reference</label>
+                        <input type="text" class="form-control" id="contract-reference-document" readonly>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="document">Document</label>
+                        <div class="input-group">
+                            <input type="file" class="form-control" id="document" name="document" accept=".pdf">
+                            <div class="input-group-append">
+                                <button class="btn btn-outline-secondary" type="button" id="clear-document">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div id="current-document-info" class="mt-2">
+                        <!-- Will be populated by JavaScript if a document exists -->
+                    </div>
+                    <input type="hidden" id="delete-document" name="delete_document" value="false">
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-document">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
 
 <style>
 
@@ -533,6 +612,29 @@
 
 .modal-content .ui-autocomplete {
     position: fixed !important;
+}
+
+.view-contract-document {
+    display: inline-block;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+
+.view-contract-document:hover {
+    transform: scale(1.2);
+}
+
+#document-container {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.document-actions {
+    margin-left: 0.5rem;
+}
+
+#documentViewModal .modal-header {
+    cursor: move;
 }
 </style>
 {% endblock %}
@@ -974,46 +1076,122 @@ const ContractSystem = {
     async saveContract() {
         if (!this.validateContractForm()) return;
 
-        const data = {
-            reference: $('#reference').val(),
-            supplier_id: $('#supplier_id').val(),
-            start_date: $('#start-date').val(),
-            end_date: $('#is-indefinite').prop('checked') ? null : $('#end-date').val(),
-            is_indefinite: $('#is-indefinite').prop('checked'),
-            periodicity: $('#periodicity').val(),
-            generation_day: $('#generation-day').val(),
-            products: this.getProductsData(),
-            invoice_type: $('#invoice-type').val(),
-            is_domiciled: $('#is-domiciled').prop('checked'),
-            domiciliation_bank: $('#is-domiciled').prop('checked') ? 
-                ($('#domiciliation-bank-id').val() || $('#domiciliation-bank').val()) : null,
-            domiciliation_day: $('#is-domiciled').prop('checked') ? $('#domiciliation-day').val() : null
-        };
-
-        console.log('Saving contract with data:', data);
-
         const contractId = $('#contract-id').val();
         const url = contractId ? 
             `/testapp/contracts/${contractId}/update/` : 
             '/testapp/contracts/create/';
+        
+        // Check if we have a file upload
+        const hasDocumentUpload = $('#contract-document').length && $('#contract-document')[0].files.length > 0;
+        const hasDocumentDelete = $('#delete-contract-document').val() === 'true';
+        
+        if (hasDocumentUpload || hasDocumentDelete) {
+            // Use FormData approach for file upload
+            console.log('Using FormData for document upload');
+            
+            // First, save the contract data using JSON
+            const contractData = {
+                reference: $('#reference').val(),
+                supplier_id: $('#supplier_id').val(),
+                start_date: $('#start-date').val(),
+                end_date: $('#is-indefinite').prop('checked') ? null : $('#end-date').val(),
+                is_indefinite: $('#is-indefinite').prop('checked'),
+                periodicity: $('#periodicity').val(),
+                generation_day: $('#generation-day').val(),
+                products: this.getProductsData(),
+                invoice_type: $('#invoice-type').val(),
+                is_domiciled: $('#is-domiciled').prop('checked'),
+                domiciliation_bank: $('#is-domiciled').prop('checked') ? 
+                    ($('#domiciliation-bank-id').val() || $('#domiciliation-bank').val()) : null,
+                domiciliation_day: $('#is-domiciled').prop('checked') ? $('#domiciliation-day').val() : null
+            };
+            
+            try {
+                const saveResponse = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(contractData)
+                });
+                
+                if (!saveResponse.ok) {
+                    const errorData = await saveResponse.json();
+                    throw new Error(errorData.message || 'Failed to save contract');
+                }
+                
+                const saveData = await saveResponse.json();
+                const savedContractId = saveData.id || contractId;
+                
+                // Now handle the document upload as a separate request
+                const formData = new FormData();
+                
+                if (hasDocumentUpload) {
+                    formData.append('document', $('#contract-document')[0].files[0]);
+                }
+                
+                if (hasDocumentDelete) {
+                    formData.append('delete_document', 'true');
+                }
+                
+                const documentResponse = await fetch(`/testapp/contracts/${savedContractId}/update/`, {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: formData
+                });
+                
+                if (!documentResponse.ok) {
+                    throw new Error('Failed to update document');
+                }
+                
+                $('#contractModal').modal('hide');
+                this.applyFilters();
+                
+            } catch (error) {
+                this.showError(error.message);
+            }
+            
+        } else {
+            // Standard JSON approach for regular data
+            const data = {
+                reference: $('#reference').val(),
+                supplier_id: $('#supplier_id').val(),
+                start_date: $('#start-date').val(),
+                end_date: $('#is-indefinite').prop('checked') ? null : $('#end-date').val(),
+                is_indefinite: $('#is-indefinite').prop('checked'),
+                periodicity: $('#periodicity').val(),
+                generation_day: $('#generation-day').val(),
+                products: this.getProductsData(),
+                invoice_type: $('#invoice-type').val(),
+                is_domiciled: $('#is-domiciled').prop('checked'),
+                domiciliation_bank: $('#is-domiciled').prop('checked') ? 
+                    ($('#domiciliation-bank-id').val() || $('#domiciliation-bank').val()) : null,
+                domiciliation_day: $('#is-domiciled').prop('checked') ? $('#domiciliation-day').val() : null
+            };
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
-                },
-                body: JSON.stringify(data)
-            });
+            console.log('Saving contract with data:', data);
 
-            if (!response.ok) throw new Error('Failed to save contract');
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                    },
+                    body: JSON.stringify(data)
+                });
 
-            $('#contractModal').modal('hide');
-            this.applyFilters();
+                if (!response.ok) throw new Error('Failed to save contract');
 
-        } catch (error) {
-            this.showError(error.message);
+                $('#contractModal').modal('hide');
+                this.applyFilters();
+
+            } catch (error) {
+                this.showError(error.message);
+            }
         }
     },
 
@@ -1254,7 +1432,7 @@ const ContractSystem = {
             // Domiciliation loading
             if (data.is_domiciled) {
                 $('#is-domiciled').prop('checked', true)
-                                  .prop('disabled', data.domiciliation_locked); // Lock the checkbox if domiciliation is locked
+                                .prop('disabled', data.domiciliation_locked); // Lock the checkbox if domiciliation is locked
                 $('.domiciliation-fields').show();
                 
                 // Show text field, hide dropdown in edit mode
@@ -1272,6 +1450,43 @@ const ContractSystem = {
                 $('#domiciliation-day').prop('disabled', false).val('');
             }
 
+            // Add document section if not already present
+            if (!$('#document-section').length) {
+                const documentSection = `
+                    <div class="card mb-3" id="document-section">
+                        <div class="card-header bg-white">
+                            <h6 class="mb-0">
+                                <i class="fas fa-file-pdf me-2"></i>Contract Document
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <input type="file" class="form-control" id="contract-document" name="document" accept=".pdf">
+                                ${data.has_document ? `
+                                    <div class="mt-2">
+                                        <a href="#" class="view-contract-document btn btn-sm btn-info" data-contract-id="${data.id}" data-filename="${data.document_name}">
+                                            <i class="fas fa-eye me-1"></i> View Document
+                                        </a>
+                                        <button type="button" class="btn btn-sm btn-danger" id="remove-contract-document">
+                                            <i class="fas fa-trash me-1"></i> Remove
+                                        </button>
+                                    </div>
+                                ` : ''}
+                            </div>
+                            <input type="hidden" id="delete-contract-document" name="delete_document" value="false">
+                        </div>
+                    </div>
+                `;
+                
+                // Add after domiciliation section
+                $('#domiciliation-section').after(documentSection);
+                
+                // Add document removal handler
+                $('#remove-contract-document').on('click', function() {
+                    $('#delete-contract-document').val('true');
+                    $(this).closest('.mt-2').remove();
+                });
+            }
 
             $('#contractModal').modal('show');
 
@@ -1522,10 +1737,249 @@ const LoanContractSystem = {
     }
 };
 
+// Contract Document Handler
+const ContractDocumentHandler = {
+    init() {
+        console.log("[ContractDocumentHandler] Initializing");
+        
+        // Handle document view click
+        $(document).on('click', '.view-contract-document', (e) => {
+            e.preventDefault();
+            const contractId = $(e.currentTarget).data('contract-id');
+            const filename = $(e.currentTarget).data('filename');
+            this.viewDocument(contractId, filename);
+        });
+        
+        // Handle document upload button in action menu
+        $(document).on('click', '.manage-document', (e) => {
+            e.preventDefault();
+            const contractId = $(e.currentTarget).data('contract-id');
+            const reference = $(e.currentTarget).data('reference');
+            const hasDocument = $(e.currentTarget).data('has-document');
+            const documentName = $(e.currentTarget).data('document-name');
+            this.showUploadModal(contractId, reference, hasDocument, documentName);
+        });
+        
+        // Clear document button
+        $(document).on('click', '#clear-document', () => {
+            $('#document').val('');
+        });
+        
+        // Remove existing document button
+        $(document).on('click', '#remove-document', (e) => {
+            e.preventDefault();
+            console.log("[ContractDocumentHandler] Remove document clicked");
+            $('#current-document-info').empty();
+            $('#delete-document').val('true');
+        });
+        
+        // Save document button
+        $(document).on('click', '#save-document', (e) => {
+            e.preventDefault();
+            this.saveDocument();
+        });
+        
+        // Make document modal draggable
+        $('#documentViewModal').on('shown.bs.modal', function() {
+            let startX, startY, startLeft, startTop;
+            const dialog = $(this).find('.modal-dialog');
+            
+            $(this).find('.modal-header').on('mousedown', function(e) {
+                startX = e.pageX;
+                startY = e.pageY;
+                startLeft = parseInt(dialog.css('margin-left') || 0);
+                startTop = parseInt(dialog.css('margin-top') || 0);
+                
+                $(document).on('mousemove', moveHandler);
+                $(document).on('mouseup', upHandler);
+                
+                // Prevent text selection during drag
+                e.preventDefault();
+            });
+            
+            function moveHandler(e) {
+                const deltaX = e.pageX - startX;
+                const deltaY = e.pageY - startY;
+                
+                dialog.css({
+                    'margin-left': startLeft + deltaX + 'px',
+                    'margin-top': Math.max(0, startTop + deltaY) + 'px'
+                });
+            }
+            
+            function upHandler() {
+                $(document).off('mousemove', moveHandler);
+                $(document).off('mouseup', upHandler);
+            }
+        });
+    },
+    
+    showUploadModal(contractId, reference, hasDocument, documentName) {
+        console.log(`[ContractDocumentHandler] Showing upload modal for contract: ${contractId}`);
+        
+        // Set contract ID and reference
+        $('#contract-id-document').val(contractId);
+        $('#contract-reference-document').val(reference);
+        
+        // Reset form
+        $('#document').val('');
+        $('#delete-document').val('false');
+        
+        // Show current document if exists
+        if (hasDocument) {
+            $('#current-document-info').html(`
+                <div class="alert alert-info">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <i class="fas fa-file-pdf mr-2"></i>
+                            <strong>Current document:</strong> ${documentName}
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-sm btn-primary view-document-btn"
+                                    data-contract-id="${contractId}" data-filename="${documentName}">
+                                <i class="fas fa-eye"></i> View
+                            </button>
+                            <button type="button" class="btn btn-sm btn-danger" id="remove-document">
+                                <i class="fas fa-trash"></i> Remove
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `);
+        } else {
+            $('#current-document-info').empty();
+        }
+        
+        // Show modal
+        $('#documentUploadModal').modal('show');
+    },
+    
+    viewDocument(contractId, filename) {
+        console.log(`[ContractDocumentHandler] Viewing document for contract: ${contractId}`);
+        
+        // Update modal title with filename
+        $('#documentViewModalLabel').text(`Document: ${filename}`);
+        
+        // Reset modal state
+        $('#document-loading').removeClass('d-none');
+        $('#document-container').addClass('d-none').empty();
+        $('#document-error').addClass('d-none').empty();
+        
+        // Set download link
+        const downloadUrl = `/testapp/contracts/${contractId}/document/`;
+        $('#document-download').attr('href', downloadUrl);
+        
+        // Show modal
+        $('#documentViewModal').modal('show');
+        
+        // Try to load document
+        this.loadDocument(contractId);
+    },
+    
+    async loadDocument(contractId) {
+        try {
+            // Add cache-busting parameter to prevent caching
+            const cacheBuster = new Date().getTime();
+            const url = `/testapp/contracts/${contractId}/document/?_=${cacheBuster}`;
+            console.log(`[ContractDocumentHandler] Loading document from: ${url}`);
+            
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Failed to load document');
+            
+            const contentType = response.headers.get('content-type');
+            console.log(`[ContractDocumentHandler] Document content type: ${contentType}`);
+            
+            const blob = await response.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            
+            if (contentType.includes('pdf')) {
+                // Handle PDF with larger height
+                $('#document-container').html(`
+                    <iframe src="${objectUrl}" width="100%" height="750px" style="border: none;"></iframe>
+                `);
+            } else if (contentType.includes('image')) {
+                // Handle image
+                $('#document-container').html(`
+                    <img src="${objectUrl}" class="img-fluid" alt="Document Image">
+                `);
+            } else {
+                // Unsupported file type
+                throw new Error('Unsupported file type');
+            }
+            
+            // Show the document
+            $('#document-loading').addClass('d-none');
+            $('#document-container').removeClass('d-none');
+            
+        } catch (error) {
+            console.error('Error loading document:', error);
+            $('#document-loading').addClass('d-none');
+            $('#document-error').removeClass('d-none');
+            $('#document-error').html(`
+                <i class="fas fa-exclamation-triangle"></i> 
+                Unable to display the document. 
+                <a href="/testapp/contracts/${contractId}/document/" target="_blank">Download it instead</a>.
+            `);
+        }
+    },
+    
+    async saveDocument() {
+        const contractId = $('#contract-id-document').val();
+        console.log(`[ContractDocumentHandler] Saving document for contract: ${contractId}`);
+        
+        // Disable button to prevent double submission
+        const saveBtn = $('#save-document');
+        saveBtn.prop('disabled', true);
+        
+        // Create FormData
+        const formData = new FormData();
+        
+        // Add document if selected
+        const documentFile = $('#document')[0].files[0];
+        if (documentFile) {
+            formData.append('document', documentFile);
+        }
+        
+        // Add delete flag if needed
+        if ($('#delete-document').val() === 'true') {
+            formData.append('delete_document', 'true');
+        }
+        
+        try {
+            const response = await fetch(`/testapp/contracts/${contractId}/update/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                },
+                body: formData
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update document');
+            }
+            
+            // Success!
+            $('#documentUploadModal').modal('hide');
+            showToast('Document updated successfully', 'success');
+            
+            // Reload the contract list
+            ContractSystem.applyFilters();
+            
+        } catch (error) {
+            console.error('Error saving document:', error);
+            showToast(`Error: ${error.message}`, 'error');
+        } finally {
+            saveBtn.prop('disabled', false);
+        }
+    }
+};
+
 // Initialize when document is ready
 $(document).ready(() => {
     ContractSystem.init();
     LoanContractSystem.init();
+    ContractDocumentHandler.init();
 });
 </script>
 {% endblock %}

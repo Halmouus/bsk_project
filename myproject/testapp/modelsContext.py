@@ -27,695 +27,6 @@ from django.utils.translation import gettext_lazy as _
 import re
 
 logger = logging.getLogger(__name__)
-    
-class Checker(BaseModel):
-    TYPE_CHOICES = [
-        ('CHQ', 'Cheque'),
-        ('LCN', 'LCN')
-    ]
-    
-    PAGE_CHOICES = [
-        (25, '25'),
-        (50, '50'),
-        (100, '100')
-    ]
-
-    STATUS_CHOICES = [
-        ('new', 'New'),
-        ('in_use', 'In Use'), 
-        ('completed', 'Completed')
-    ]
-
-    code = models.CharField(max_length=10, unique=True, blank=True)
-    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
-    bank_account = models.ForeignKey(BankAccount, on_delete=models.PROTECT)  # New field
-    num_pages = models.IntegerField(choices=PAGE_CHOICES)
-    index = models.CharField(
-        max_length=3,
-        validators=[RegexValidator(r'^[A-Z]{1,3}$', _('Must be 1 to 3 uppercase letters.'))]
-    )
-    starting_page = models.IntegerField(validators=[MinValueValidator(1)])
-    final_page = models.IntegerField(blank=True)
-    current_position = models.IntegerField(blank=True)
-    is_active = models.BooleanField(default=True)
-    owner = models.CharField(max_length=100, default="Briqueterie Sidi Kacem")
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='new')
-
-    def update_status(self):
-        """Update checker status based on remaining pages"""
-        print("\n=== Updating Checker Status ===")
-        print(f"Checker {self.id} - Current status: {self.status}")
-        print(f"Remaining pages: {self.remaining_pages}")
-        print(f"Total pages: {self.num_pages}")
-        
-        if self.remaining_pages == self.num_pages:
-            self.status = 'new'
-        elif self.remaining_pages > 0:
-            self.status = 'in_use'
-        else:
-            self.status = 'completed'
-        
-        print(f"New status: {self.status}")
-        self.save()
-
-    def get_status(self):
-        STATUS_STYLES = {
-            'new': {'label': 'New', 'color': 'primary'},
-            'in_use': {'label': 'In Use', 'color': 'warning'},
-            'completed': {'label': 'Completed', 'color': 'success'},
-        }
-        return STATUS_STYLES.get(self.status, {'label': 'Unknown', 'color': 'secondary'})
-
-    @property
-    def remaining_pages(self):
-        print(f"Calculating remaining pages for {self.bank_account.bank}")
-        
-        # Get all used positions (excluding cancelled checks)
-        used_positions = set(
-            self.checks.values_list('position', flat=True)
-        )
-        used_positions_count = self.checks.count()
-        # Count available positions
-        available_count = self.final_page - self.starting_page + 1 - used_positions_count
-        print(f"Used positions: {used_positions}")
-        print(f"Available positions count: {available_count}")
-        
-        return available_count
-    
-    def clean(self):
-        if self.bank_account:
-            if not self.bank_account.is_active:
-                raise ValidationError(_("Cannot create checker for inactive bank account"))
-            if self.bank_account.account_type != 'national':
-                raise ValidationError(_("Can only create checkers for national accounts"))
-        super().clean()
-
-    def save(self, *args, **kwargs):
-        if not self.code:
-            self.code = self.generate_code()
-        if not self.final_page:
-            self.final_page = self.starting_page + self.num_pages - 1
-        if not self.current_position:
-            self.current_position = self.starting_page
-        super().save(*args, **kwargs)
-
-    def generate_code(self):
-        # Generate random alphanumeric code
-        return ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    
-    #signature part#
-    position_signatures = models.JSONField(default=dict)
-
-    def get_position_signature_status(self, position):
-        print(f"Getting signature status for position {position}")
-        print(f"Current signatures: {self.position_signatures}")
-        return self.position_signatures.get(str(position), {
-            'signatures': [],
-            'timestamps': []
-        })
-
-    def add_signature(self, position, signature):
-        print(f"Adding signature {signature} to position {position}")
-        position = str(position)
-        if position not in self.position_signatures:
-            print(f"Position {position} not found, initializing")
-            self.position_signatures[position] = {
-                'signatures': [],
-                'timestamps': []
-            }
-        
-        if signature not in self.position_signatures[position]['signatures']:
-            print(f"Adding new signature {signature}")
-            self.position_signatures[position]['signatures'].append(signature)
-            self.position_signatures[position]['timestamps'].append(
-                timezone.now().isoformat()
-            )
-            print(f"Updated signatures: {self.position_signatures}")
-            self.save()
-        else:
-            print(f"Signature {signature} already exists for position {position}")
-        
-    
-    def get_last_issued_check(self):
-        """Get the last issued check."""
-        return self.checks.exclude(status="available").order_by('-position').first()
-
-    def get_next_available_position(self):
-        """Calculate the next available position."""
-        last_check = self.get_last_issued_check()
-        if last_check:
-            last_position = int(last_check.position[len(self.index):])
-            next_position = last_position + 1
-            if next_position <= self.final_page:
-                return next_position
-        return self.starting_page
-
-    def __str__(self):
-        return f'Checker {self.index}'
-
-    class Meta:
-        ordering = ['-created_at']
-
-class Check(BaseModel):
-    checker = models.ForeignKey(Checker, on_delete=models.PROTECT, related_name='checks')
-    position = models.CharField(max_length=10, unique=True)
-    creation_date = models.DateField(default=timezone.now)
-    beneficiary = models.ForeignKey(Supplier, on_delete=models.PROTECT)
-    cause = models.ForeignKey(
-        Invoice, 
-        on_delete=models.PROTECT, 
-        null=True,
-        blank=True
-    )
-    payment_due = models.DateField(null=True, blank=True)
-    amount_due = models.DecimalField(max_digits=10, decimal_places=2, editable=False)
-    amount = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal('0.01'))]
-    )
-    is_supplier_payment = models.BooleanField(default=False)
-    is_tax_payment = models.BooleanField(default=False)
-    tax_declaration_type = models.CharField(max_length=50, null=True, blank=True)
-    tax_declaration_id = models.UUIDField(null=True, blank=True)
-    content_type = models.ForeignKey(
-        ContentType, 
-        on_delete=models.SET_NULL, 
-        null=True, blank=True,
-        related_name="tax_checks"
-    )
-    object_id = models.UUIDField(null=True, blank=True)
-    tax_declaration = GenericForeignKey('content_type', 'object_id')
-
-    observation = models.TextField(blank=True)
-    delivered = models.BooleanField(default=False)
-    paid = models.BooleanField(default=False)
-    delivered_at = models.DateTimeField(null=True, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
-    printed_at = models.DateTimeField(null=True, blank=True)
-    cancelled_at = models.DateTimeField(null=True, blank=True)
-    cancellation_reason = models.TextField(null=True, blank=True)
-    status = models.CharField(
-        max_length=25,
-        choices=[
-            ('draft', 'Draft'),
-            ('printed', 'Printed'),
-            ('ready_to_sign', 'Ready to Sign'),
-            ('pending', 'Pending'),
-            ('delivered', 'Delivered'),
-            ('paid', 'Paid'),
-            ('rejected', 'Rejected'),
-            ('cancelled', 'Cancelled')
-        ],
-        default='draft'
-    )
-
-    REJECTION_REASONS = [
-        ('insufficient_funds', 'Insufficient Funds'),
-        ('signature_mismatch', 'Signature Mismatch'),
-        ('amount_error', 'Amount Error'),
-        ('date_error', 'Date Error'),
-        ('other', 'Other')
-    ]
-
-    SIGNATURE_CHOICES = [
-        ('OUK', 'OUK'),
-        ('KEZ', 'KEZ')
-    ]
-    
-
-    rejected_at = models.DateTimeField(null=True, blank=True)
-    rejection_reason = models.CharField(max_length=50, choices=REJECTION_REASONS, null=True, blank=True)
-    rejection_note = models.TextField(blank=True)
-    rejection_date = models.DateTimeField(null=True, blank=True)
-
-    replaces = models.ForeignKey('self', null=True, blank=True, related_name='replaced_by', on_delete=models.PROTECT)
-
-    received_at = models.DateTimeField(null=True, blank=True)
-    received_notes = models.TextField(blank=True)
-
-    signatures = models.JSONField(default=list)
-
-    vat_declared = models.BooleanField(default=False)
-    vat_declaration_period = models.CharField(
-        max_length=7,  
-        null=True,
-        blank=True,
-        validators=[
-            RegexValidator(
-                r'^\d{2}-\d{4}$',
-                _('Period must be in MM-YYYY format')
-            )
-        ]
-    )
-
-    def get_allocated_amount(self):
-        """Get total allocated amount"""
-        return sum(
-            allocation.amount 
-            for allocation in self.allocations.all()
-        )
-    
-    def get_available_amount(self):
-        """Get remaining amount available for allocation"""
-        return self.amount - self.get_allocated_amount()
-    
-    def can_be_paid(self):
-        """Check if payment can be marked as paid"""
-        if self.is_supplier_payment:
-            # Must be fully allocated for supplier payments
-            return self.get_available_amount() == 0
-        return True  # Direct invoice payments can always be paid
-    
-    def save(self, *args, **kwargs):
-        print("\n=== Check Save Method Started ===")
-        print(f"Check ID: {self.pk}")
-        print(f"Is new check: {not self.pk}")
-        print(f"Current position: {getattr(self, 'position', None)}")
-        
-        if not self.pk:  # New check
-            print("Processing new check creation")
-            print(f"Checker ID: {self.checker.id}")
-            print(f"Checker position_signatures: {self.checker.position_signatures}")
-            
-            if hasattr(self, 'position') and self.position:
-                position_str = str(self.position)
-                print(f"Looking for signatures at position: {position_str}")
-                
-                position_sigs = self.checker.position_signatures.get(position_str, {})
-                print(f"Found position signatures: {position_sigs}")
-                
-                if position_sigs and 'signatures' in position_sigs:
-                    print(f"Setting signatures from position_sigs: {position_sigs['signatures']}")
-                    self.signatures = position_sigs['signatures']
-                else:
-                    print("No signatures found for this position")
-                    self.signatures = []
-            
-            if not hasattr(self, 'position') or not self.position:
-                print(f"Setting position to current_position: {self.checker.current_position}")
-                self.position = self.checker.current_position
-                
-            if not self.amount_due:
-                print(f"Setting amount_due from cause: {self.cause.total_amount if self.cause else 0}")
-                if self.cause:
-                    try:
-                        self.amount_due = float(self.cause.total_amount)
-                        print(f"Amount due set to: {self.amount_due}")
-                    except (ValueError, TypeError) as e:
-                        print(f"Error converting amount_due: {e}")
-                        self.amount_due = 0
-                else:
-                    self.amount_due = 0
-                    
-            # If this is a tax payment check, delete any existing tax forecast
-            if self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type:
-                print(f"Tax payment check detected, type: {self.tax_declaration_type}")
-                print(f"Deleting any existing tax forecasts for declaration: {self.tax_declaration_id}")
-                
-                # Map tax declaration types to forecast source types
-                forecast_type_mapping = {
-                    'other_tax': {
-                        'professional': 'professional_tax',
-                        'communal': 'communal_tax',
-                        # Add other subtypes
-                        'default': 'other_tax'
-                    },
-                    'ir': 'ir_declaration',
-                    'stamp_right': 'stamp_right_declaration',
-                    'vat': 'vat_declaration'
-                }
-                
-                source_type = None
-                if self.tax_declaration_type == 'other_tax':
-                    # For OtherTaxDeclaration, we need the subtype
-                    try:
-                        tax = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
-                        source_type = forecast_type_mapping['other_tax'].get(
-                            tax.tax_type,
-                            forecast_type_mapping['other_tax']['default']
-                        )
-                    except Exception as e:
-                        print(f"Error getting tax subtype: {str(e)}")
-                        source_type = forecast_type_mapping['other_tax']['default']
-                else:
-                    source_type = forecast_type_mapping.get(self.tax_declaration_type)
-
-                if source_type:
-                    try:
-                        deleted_count = ForecastStatement.objects.filter(
-                            source_type=source_type,
-                            source_id=self.id,
-                            is_processed=False
-                        ).delete()[0]
-                        print(f"Deleted {deleted_count} forecasts for tax declaration")
-                    except Exception as e:
-                        print(f"Error deleting tax forecasts: {str(e)}")
-        
-        # If this is a tax payment, sync the generic fields
-        if self.is_tax_payment and self.tax_declaration_type and self.tax_declaration_id:
-            if self.tax_declaration_type == 'other_tax':
-                model_class = OtherTaxDeclaration
-            elif self.tax_declaration_type == 'ir':
-                model_class = IRDeclaration
-            elif self.tax_declaration_type == 'stamp_right':
-                model_class = StampRightDeclaration
-            elif self.tax_declaration_type == 'vat':
-                model_class = VATDeclaration
-            
-            # Set content_type and object_id
-            self.content_type = ContentType.objects.get_for_model(model_class)
-            self.object_id = self.tax_declaration_id
-        
-        print(f"Final signatures before save: {getattr(self, 'signatures', [])}")
-        super().save(*args, **kwargs)
-        print(f"Check saved with signatures: {self.signatures}")
-        
-        # Update status if printed and has all signatures
-        if self.status == 'printed' and len(self.signatures) == 2:
-            self.status = 'pending'
-            super().save(update_fields=['status'])
-            
-        # Update checker current_position if new check
-        if not self.pk and int(self.position) == self.checker.current_position:
-            print("Updating checker current_position")
-            self.checker.current_position = int(self.position) + 1
-            self.checker.save()
-
-
-        # Regular payment forecast handling
-        if self.payment_due and not self.is_tax_payment:  # Added condition to skip tax payments
-            print(f"[Check Save] Initial payment_due: {self.payment_due} (type: {type(self.payment_due)})")
-            
-            # Ensure payment_due is a date object
-            if isinstance(self.payment_due, str):
-                try:
-                    self.payment_due = datetime.datetime.strptime(self.payment_due, '%Y-%m-%d').date()
-                    print(f"[Check Save] Converted payment_due to date: {self.payment_due}")
-                except ValueError as e:
-                    print(f"[Check Save] Error converting payment_due date: {e}")
-                    return
-
-            # Delete existing forecast if any
-            ForecastStatement.objects.filter(
-                source_type='supplier_check',
-                source_id=self.id,
-                is_processed=False
-            ).delete()
-
-            # Create new forecast if status allows
-            if self.status not in ['cancelled', 'paid', 'unpaid']:
-                # Calculate forecast date
-                forecast_date = self.payment_due
-                
-                # Add supplier delay based on checker type
-                delay = self.beneficiary.delay_lcn if self.checker.type == 'LCN' else self.beneficiary.delay_check
-                print(f"[Check Save] Using delay of {delay} days based on checker type {self.checker.type}")
-                
-                current_date = forecast_date
-                print(f"[Check Save] Starting date calculation from: {current_date} (type: {type(current_date)})")
-                
-                try:
-                    while delay > 0 or current_date.weekday() >= 5:
-                        current_date += timedelta(days=1)
-                        print(f"[Check Save] Checking date: {current_date} (weekday: {current_date.weekday()})")
-                        if current_date.weekday() < 5:  # Only count business days
-                            delay -= 1
-                            print(f"[Check Save] Business day found, remaining delay: {delay}")
-                            
-                    print(f"[Check Save] Final forecast date: {current_date}")
-                    
-                    # Create forecast
-                    ForecastStatement.objects.create(
-                        bank_account=self.checker.bank_account,
-                        date=current_date,
-                        label=f"Expected payment to {self.beneficiary.name}",
-                        debit=self.amount,
-                        amount=self.amount,
-                        reference=f"Payment #{self.position}",
-                        source_type='supplier_check',
-                        source_id=self.id
-                    )
-                    print(f"[Check Save] Forecast created successfully")
-                    
-                except Exception as e:
-                    print(f"[Check Save] Error during forecast creation: {str(e)}")
-                    pass
-            
-        if self.payment_due and self.is_tax_payment and self.tax_declaration_id and self.tax_declaration_type and self.status != 'cancelled':
-            print(f"\n[Check Save] Tax payment forecast handling START")
-            print(f"[Check Save] Check ID: {self.pk}")
-            print(f"[Check Save] Status: {self.status}")
-            print(f"[Check Save] Payment due: {self.payment_due}")
-            print(f"[Check Save] Is tax payment: {self.is_tax_payment}")
-            print(f"[Check Save] Tax declaration ID: {self.tax_declaration_id}")
-            print(f"[Check Save] Tax declaration type: {self.tax_declaration_type}")
-            
-            # Get the tax declaration
-            tax_declaration = None
-            source_type = None
-            
-            # Map tax declaration types to forecast source types
-            forecast_type_mapping = {
-                'other_tax': {
-                    'professional': 'professional_tax',
-                    'communal': 'communal_tax',
-                    'default': 'other_tax'
-                },
-                'ir': 'ir_declaration',
-                'stamp_right': 'stamp_right_declaration',
-                'vat': 'vat_declaration'
-            }
-            
-            # Get the declaration and its source type
-            if self.tax_declaration_type == 'other_tax':
-                try:
-                    tax_declaration = OtherTaxDeclaration.objects.get(id=self.tax_declaration_id)
-                    tax_type = tax_declaration.tax_type
-                    print(f"[Check Save] Found tax record, type: {tax_type}")
-                    
-                    source_type = forecast_type_mapping['other_tax'].get(
-                        tax_type,
-                        forecast_type_mapping['other_tax']['default']
-                    )
-                    print(f"[Check Save] Mapped to source_type: {source_type}")
-                except Exception as e:
-                    print(f"[Check Save] Error getting tax declaration: {str(e)}")
-                    return
-            else:
-                source_type = forecast_type_mapping.get(self.tax_declaration_type)
-            
-            # Process check based on status
-            if self.status == 'paid':
-                # For paid checks, add payment to declaration but don't delete forecast
-                # (just update its amount to reflect remaining)
-                print(f"[Check Save] Processing paid check for tax declaration")
-                
-                if self.tax_declaration_type == 'other_tax' and tax_declaration:
-                    # Get previous paid amount before processing payment
-                    old_paid_amount = tax_declaration.paid_amount
-                    
-                    # Process payment
-                    tax_declaration.calculate_payment_status()
-                    
-                    # If declaration is now fully paid, mark forecasts as processed
-                    if tax_declaration.status == 'paid':
-                        print(f"[Check Save] Declaration fully paid, marking forecasts as processed")
-                        processed_count = ForecastStatement.objects.filter(
-                            source_type=source_type,
-                            source_id=self.tax_declaration_id,
-                            is_processed=False
-                        ).update(is_processed=True)
-                        print(f"[Check Save] Marked {processed_count} forecasts as processed")
-                    else:
-                        # Otherwise, update forecasts to show remaining amount
-                        remaining_amount = tax_declaration.amount - tax_declaration.paid_amount
-                        print(f"[Check Save] Declaration partially paid, updating forecast to {remaining_amount}")
-                        
-                        # Update instead of recreate
-                        updated = ForecastStatement.objects.filter(
-                            source_type=source_type,
-                            source_id=self.tax_declaration_id,
-                            is_processed=False
-                        ).update(
-                            debit=remaining_amount,
-                            amount=remaining_amount
-                        )
-                        print(f"[Check Save] Updated {updated} forecasts with remaining amount")
-                
-                print(f"[Check Save] Tax payment forecast handling END\n")
-                return
-                
-        print("=== Check Save Method Completed ===\n")
-
-    def clean(self):
-                
-        # Ensure no duplicate positions
-        if self.objects.filter(checker=self.checker, position=self.position).exists():
-            raise ValidationError("This position is already used.")
-        
-        # Ensure the position is within the valid range
-        if int(self.position[len(self.checker.index):]) < self.checker.starting_page or \
-           int(self.position[len(self.checker.index):]) > self.checker.final_page:
-            raise ValidationError(
-                f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
-            )
-
-        # Check payment type validation
-        payment_types = sum([
-            not self.is_supplier_payment and not self.is_tax_payment and bool(self.cause),
-            bool(self.is_supplier_payment),
-            bool(self.is_tax_payment)
-        ])
-        
-        if payment_types > 1:
-            raise ValidationError(_("Check can only be one payment type: invoice, supplier, or tax"))
-        
-        if payment_types == 0:
-            raise ValidationError(_("Check must be either an invoice, supplier, or tax payment"))
-        
-        # Tax payment validation
-        if self.is_tax_payment:
-            if not self.tax_declaration_type or not self.tax_declaration_id:
-                raise ValidationError(_("Tax declaration type and ID are required for tax payments"))
-            if self.cause:
-                raise ValidationError(_("Tax payments cannot specify a direct cause"))
-        
-        # Invoice payment validation
-        if not self.is_supplier_payment and not self.is_tax_payment and not self.cause:
-            raise ValidationError(_("Invoice is required for direct invoice payments"))
-            
-        if self.is_supplier_payment and self.cause:
-            raise ValidationError(_("Supplier payments cannot specify a direct cause"))
-            
-        if self.cause and self.cause.supplier != self.beneficiary:
-            raise ValidationError(_("Invoice supplier must match check beneficiary"))
-            
-        # Validate amount for invoice payments
-        if not self.is_supplier_payment and not self.is_tax_payment and self.cause:
-            if self.amount > self.cause.amount_available_for_payment:
-                raise ValidationError(_("Amount exceeds invoice's available amount"))
-            
-        if self.paid_at and not self.delivered_at:
-            raise ValidationError(_("Check cannot be marked as paid before delivery"))
-
-        # Validate supplier payment allocation before printing
-        if self.status == 'printed' and self.is_supplier_payment:
-            if self.get_available_amount() > 0:
-                raise ValidationError(_("Supplier payment must be fully allocated before printing"))
-            
-        # Only allow edits to specific fields after draft status
-        if self.pk and self.status not in ['draft', 'pending']:
-            original = Check.objects.get(pk=self.pk)
-            changed_fields = []
-            for field in ['beneficiary', 'cause', 'amount', 'position', 'checker']:
-                if getattr(self, field) != getattr(original, field):
-                    changed_fields.append(field)
-            
-            if changed_fields:
-                raise ValidationError(_(f"Cannot modify {', '.join(changed_fields)} after check is printed"))        
-        super().clean()
-
-    class Meta:
-        ordering = ['-creation_date']
-        constraints = [
-            models.CheckConstraint(
-                check=models.Q(
-                    is_supplier_payment=True
-                ) | models.Q(
-                    amount__lte=models.F('amount_due')
-                ),
-                name='check_amount_cannot_exceed_due'
-            )
-        ]
-    
-    @property
-    def has_replacement(self):
-        return hasattr(self, 'replaced_by') and self.replaced_by.exists()
-
-    def reject(self, reason, note=''):
-        self.status = 'rejected'
-        self.rejection_reason = reason
-        self.rejection_note = note
-        self.rejection_date = timezone.now()
-        self.save()
-
-    def replace_with(self, new_check):
-        new_check.replaces = self
-        new_check.save()
-
-    @property
-    def is_received(self):
-        """Check if we have physical possession of the check"""
-        return bool(self.received_at)
-
-    @property
-    def can_be_replaced(self):
-        """Can only replace rejected checks that we physically have"""
-        return (
-            self.status == 'rejected' and 
-            self.is_received and 
-            not self.has_replacement
-        )
-
-    def receive(self, notes=''):
-        """Mark check as physically received"""
-        if self.status not in ['delivered', 'rejected']:
-            raise ValidationError(_("Only delivered or rejected checks can be received"))
-        
-        self.received_at = timezone.now()
-        self.received_notes = notes
-        self.save()
-
-    def create_replacement(self, checker, **kwargs):
-        """
-        Create a replacement check after validating state
-        
-        Args:
-            checker (Checker): The checker to use for the new check
-        """
-        if not self.can_be_replaced:
-            raise ValidationError(
-                _("Cannot replace: Check must be rejected and received, with no existing replacement")
-            )
-
-        if not checker.is_active or checker.status == 'completed':
-            raise ValidationError(_("Selected checker is not available for new checks"))
-
-        # Create new check with same base properties but new checker and details
-        replacement = Check.objects.create(
-            checker=checker,  # Use the provided checker
-            beneficiary=self.beneficiary,
-            cause=self.cause,
-            amount_due=self.amount_due,
-            replaces=self,
-        )
-        return replacement
-
-    @property
-    def signature_status(self):
-        sig_count = len(self.signatures)
-        if sig_count == 0:
-            return 'unsigned'
-        elif sig_count == 1:
-            return 'mono-signed'
-        return 'double-signed'
-
-    def can_be_signed(self, signature):
-        return (
-            signature in dict(self.SIGNATURE_CHOICES) and
-            signature not in self.signatures and
-            len(self.signatures) < 2
-        )
-
-    def add_signature(self, signature):
-        if self.can_be_signed(signature):
-            self.signatures.append(signature)
-            if len(self.signatures) == 2:
-                self.status = 'pending'
-            elif self.status == 'printed':
-                self.status = 'ready_to_sign'
-            self.save()
 
 
 def get_upload_path(instance, filename):
@@ -753,140 +64,621 @@ def validate_file_size(value):
         raise ValidationError(_("The maximum file size that can be uploaded is 5MB"))
 
 
+ 
+class Contract(BaseModel):
+    """Contract for a supplier"""
+    PERIOD_MONTHLY = 'monthly'
+    PERIOD_QUARTERLY = 'quarterly'
+    PERIOD_BIANNUAL = 'biannual'
+    PERIOD_ANNUAL = 'annual'
+    
+    PERIOD_CHOICES = [
+        (PERIOD_MONTHLY, 'Monthly'),
+        (PERIOD_QUARTERLY, 'Quarterly'),
+        (PERIOD_BIANNUAL, 'Biannual'),
+        (PERIOD_ANNUAL, 'Annual')
+    ]
 
-class Receipt(BaseModel):
-    """Base class for all receipt types."""
-    client = models.ForeignKey('Client', on_delete=models.PROTECT)
-    entity = models.ForeignKey('Entity', on_delete=models.PROTECT)
-    operation_date = models.DateField(default=timezone.now)
-    amount = models.DecimalField(max_digits=15, decimal_places=2)
-    client_year = models.IntegerField()
-    client_month = models.IntegerField()
-    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
-    notes = models.TextField(blank=True)
-    vat_declared = models.BooleanField(default=False)
-    vat_declaration_period = models.CharField(
-        max_length=7,
+    STATUS_DRAFT = 'draft'
+    STATUS_ACTIVE = 'active'
+    STATUS_TERMINATED = 'terminated'
+    STATUS_EXPIRED = 'expired'
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, 'Draft'),
+        (STATUS_ACTIVE, 'Active'),
+        (STATUS_TERMINATED, 'Terminated'),
+        (STATUS_EXPIRED, 'Expired')
+    ]
+
+    reference = models.CharField(max_length=50, unique=True)
+    supplier = models.ForeignKey('Supplier', on_delete=models.PROTECT)
+    start_date = models.DateField()
+    end_date = models.DateField(null=True, blank=True)
+    is_indefinite = models.BooleanField(default=False)
+    periodicity = models.CharField(max_length=20, choices=PERIOD_CHOICES)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT)
+    generation_day = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month to generate invoice (1-28)"
+    )
+    cancellation_date = models.DateField(null=True, blank=True)
+    cancellation_reason = models.TextField(blank=True)
+    is_domiciled = models.BooleanField(default=False)
+    domiciliation_bank = models.ForeignKey(
+        'BankAccount', 
+        on_delete=models.PROTECT,
         null=True,
         blank=True,
-        validators=[
-            RegexValidator(
-                r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
-            )
-        ]
+        related_name='domiciled_contracts'
     )
-    document = models.FileField(
-        upload_to=get_receipt_upload_path,
-        validators=[
-            FileExtensionValidator(allowed_extensions=['pdf']),
-            validate_file_size
-        ],
+    domiciliation_day = models.IntegerField(
         null=True,
-        blank=True
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(28)],
+        help_text="Day of month for domiciliation payment (1-28)"
     )
-
-    class Meta:
-        abstract = True
-
-    def save(self, *args, **kwargs):
-        print(f"\n=== Saving {self.__class__.__name__} ===")
-        if self.document:
-            print(f"Document: {self.document.name}")
-        if not self.client_year:
-            self.client_year = timezone.now().year
-        if not self.client_month:
-            self.client_month = timezone.now().month
-        super().save(*args, **kwargs)
-
-
-class CashReceipt(Receipt):
-    """Cash receipt implementation."""
-    reference_number = models.CharField(max_length=50, blank=True)
-    credited_account = models.ForeignKey(
-        'BankAccount',
-        on_delete=models.PROTECT,
-        related_name='cash_receipts'
+    domiciliation_suspended = models.BooleanField(default=False)
+    domiciliation_suspension_date = models.DateField(null=True, blank=True)
+    domiciliation_suspension_reason = models.TextField(blank=True)
+    invoice_type = models.CharField(
+        max_length=20,
+        choices=INVOICE_TYPES,
+        default='OTHER'
     )
+    
+    def clean(self):
+        if not self.is_indefinite and not self.end_date:
+            raise ValidationError("End date is required for fixed-term contracts")
+        
+        if self.is_indefinite and self.end_date:
+            raise ValidationError("Indefinite contracts cannot have an end date")
+        
+        if self.end_date and self.start_date and self.end_date <= self.start_date:
+            raise ValidationError("End date must be after start date")
 
-    def get_compensated_receipt(self):
-        """Returns receipts this cash is compensating"""
-        return CompensationRecord.objects.filter(
-            compensator_content_type=ContentType.objects.get_for_model(self),
-            compensator_id=self.id,
-            is_active=True
+    def get_next_generation_date(self, from_date=None):
+        """Calculate the next invoice generation date based on periodicity"""
+        if not from_date:
+            from_date = timezone.now().date()
+
+        # Start with the generation day in the current month
+        next_date = from_date.replace(day=min(self.generation_day, 28))
+        
+        # If we've passed this month's generation day, move to next period
+        if from_date.day > self.generation_day:
+            if self.periodicity == self.PERIOD_MONTHLY:
+                next_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                next_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                next_date += relativedelta(months=6)
+            else:  # annual
+                next_date += relativedelta(years=1)
+                
+        return next_date
+
+    def get_period_end_date(self, start_date):
+        """Calculate period end date based on periodicity"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return start_date + relativedelta(months=1, days=-1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            return start_date + relativedelta(months=3, days=-1)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            return start_date + relativedelta(months=6, days=-1)
+        else:  # annual
+            return start_date + relativedelta(years=1, days=-1)
+
+    def can_generate_invoice(self, for_date):
+        """Check if an invoice can be generated for the given date"""
+        if self.status not in [self.STATUS_ACTIVE, self.STATUS_TERMINATED]:
+            return False
+
+        # Check if date is within contract period
+        if for_date < self.start_date:
+            return False
+            
+        if self.end_date and for_date > self.end_date:
+            return False
+            
+        if self.cancellation_date and for_date > self.cancellation_date:
+            return False
+
+        # Check if invoice already exists for this period
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+        
+        return not ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).exists()
+
+    def get_period_start_date(self, for_date):
+        """Get the start date of the period containing the given date"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return for_date.replace(day=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            month = ((for_date.month - 1) // 3) * 3 + 1
+            return for_date.replace(month=month, day=1)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            month = ((for_date.month - 1) // 6) * 6 + 1
+            return for_date.replace(month=month, day=1)
+        else:  # annual
+            return for_date.replace(month=1, day=1)
+
+    def generate_invoice(self, for_date):
+        """Generate an invoice for the given date"""
+        print(f"\n=== Generating Invoice for Contract {self.reference} ===")
+        print(f"Date: {for_date}")
+        
+        if not self.can_generate_invoice(for_date):
+            raise ValidationError("Cannot generate invoice for this date")
+
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+        print(f"Period: {period_start} to {period_end}")
+
+        # Create invoice
+        invoice = Invoice.objects.create(
+            ref=f"{self.reference}-{period_start.strftime('%Y%m')}",
+            date=for_date,
+            supplier=self.supplier,
+            type='invoice',
+            invoice_type=self.invoice_type
         )
+        print(f"Created invoice: {invoice.ref}")
 
-    def get_compensation_description(self):
-        """Returns description if this receipt compensates another"""
-        compensated = self.get_compensated_receipt()
-        if compensated:
-            return f"Compensating unpaid {compensated.__class__.__name__.replace('Receipt', '')} #{compensated.get_receipt_number()}"
-        return None
+        # Add products from contract
+        total_amount = Decimal('0')
+        for contract_product in self.products.all():
+            print(f"\nProcessing product: {contract_product.product.name}")
+            # Calculate product amount with VAT
+            amount = contract_product.quantity * contract_product.unit_price
+            if contract_product.reduction_rate:
+                reduction = amount * (contract_product.reduction_rate / Decimal('100'))
+                amount -= reduction
+            vat_amount = amount * (contract_product.product.vat_rate / Decimal('100'))
+            amount += vat_amount
+            total_amount += amount
+            
+            InvoiceProduct.objects.create(
+                invoice=invoice,
+                product=contract_product.product,
+                quantity=contract_product.quantity,
+                unit_price=contract_product.unit_price,
+                reduction_rate=contract_product.reduction_rate,
+                vat_rate=contract_product.product.vat_rate
+            )
 
-    def can_edit(self):
-        """Check if receipt can be edited"""
-        compensated_receipt = self.get_compensated_receipt()
-        return compensated_receipt is None
-
-    def can_delete(self):
-        """Check if receipt can be deleted"""
-        compensated_receipt = self.get_compensated_receipt()
-        return compensated_receipt is None
-
-    def __str__(self):
-        return f"Cash Receipt {self.reference_number or 'N/A'}"
-
-    class Meta:
-        verbose_name = "Cash Receipt"
-        verbose_name_plural = "Cash Receipts"
-
-    def get_receipt_number(self):
-        """Returns reference number for consistency with other receipts"""
-        return self.reference_number or 'N/A'
-
-class TransferReceipt(Receipt):
-    """Bank transfer implementation."""
-    transfer_reference = models.CharField(max_length=100)
-    credited_account = models.ForeignKey(
-        'BankAccount',
-        on_delete=models.PROTECT,
-        related_name='transfer_receipts'
-    )
-    transfer_date = models.DateField(default=timezone.now)
-
-    def get_compensated_receipt(self):
-        """Returns receipts this transfer is compensating"""
-        return CompensationRecord.objects.filter(
-            compensator_content_type=ContentType.objects.get_for_model(self),
-            compensator_id=self.id,
-            is_active=True
+        # Create contract invoice record
+        contract_invoice = ContractInvoice.objects.create(
+            contract=self,
+            invoice=invoice,
+            period_start=period_start,
+            period_end=period_end
         )
+        print(f"Created contract invoice record: {contract_invoice.id}")
 
-    def get_compensation_description(self):
-        """Returns description if this receipt compensates another"""
-        compensated = self.get_compensated_receipt()
-        if compensated:
-            return f"Compensating unpaid {compensated.__class__.__name__.replace('Receipt', '')} #{compensated.get_receipt_number()}"
-        return None
+        # If contract is domiciled, create DirectDebit
+        if self.is_domiciled and not self.domiciliation_suspended:
+            print("\nCreating DirectDebit record")
+            valid_day = self.get_valid_day(period_start.year, period_start.month, self.domiciliation_day)
+            payment_date = period_start.replace(day=valid_day)
+            while payment_date.weekday() >= 5:  # Skip weekends
+                payment_date += timedelta(days=1)
+            
+            # Find associated forecast
+            forecast = ForecastStatement.objects.filter(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            ).first()
+            print(f"Found forecast: {forecast.id if forecast else None}")
 
-    def can_edit(self):
-        """Check if receipt can be edited"""
-        compensated_receipt = self.get_compensated_receipt()
-        return compensated_receipt is None
+            direct_debit = DirectDebit.objects.create(
+                invoice=contract_invoice,
+                contract=self,
+                bank_account=self.domiciliation_bank,
+                due_date=payment_date,
+                amount=total_amount,
+                forecast=forecast
+            )
+            print(f"Created DirectDebit: {direct_debit.id}")
 
-    def can_delete(self):
-        """Check if receipt can be deleted"""
-        compensated_receipt = self.get_compensated_receipt()
-        return compensated_receipt is None
+        return invoice
 
-    def __str__(self):
-        return f"Transfer {self.transfer_reference}"
+    def generate_missing_invoices(self, up_to_date=None):
+        """Generate any missing invoices up to given date"""
+        print("\n=== Starting invoice generation ===")
+        if not up_to_date:
+            up_to_date = timezone.now().date()
+        print(f"Generating invoices up to: {up_to_date}")
+        
+        # Start from contract start date
+        current_date = self.start_date
+        print(f"Starting from date: {current_date}")
+        
+        invoices = []
+        while current_date <= up_to_date:
+            print(f"\nChecking date: {current_date}")
+            
+            if self.can_generate_invoice(current_date):
+                print(f"\nChecking if invoice can be generated for {current_date}")
+                # Check if invoice exists for this period
+                period_start = self.get_period_start_date(current_date)
+                period_end = self.get_period_end_date(period_start)
+                
+                invoice_exists = ContractInvoice.objects.filter(
+                    contract=self,
+                    period_start=period_start,
+                    period_end=period_end
+                ).exists()
+                
+                print(f"Invoice exists for period: {invoice_exists}")
+                
+                if not invoice_exists:
+                    print(f"Generating invoice for: {current_date}")
+                    invoice = self.generate_invoice(current_date)
+                    invoices.append(invoice)
+            
+            # Move to next period
+            current_date = self._get_next_period_date(current_date)
+        
+        return invoices
+
+    def can_generate_invoice(self, for_date):
+        """Check if an invoice can be generated for the given date"""
+        print(f"\nChecking if invoice can be generated for {for_date}")
+        
+        if self.status not in [self.STATUS_ACTIVE, self.STATUS_TERMINATED]:
+            print("Invalid status")
+            return False
+
+        # Check if date is within contract period
+        if for_date < self.start_date:
+            print("Date before contract start")
+            return False
+            
+        if self.end_date and for_date > self.end_date:
+            print("Date after contract end")
+            return False
+            
+        if self.cancellation_date and for_date > self.cancellation_date:
+            print("Date after cancellation")
+            return False
+
+        # Check if invoice already exists for this period
+        period_start = self.get_period_start_date(for_date)
+        period_end = self.get_period_end_date(period_start)
+        
+        exists = ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).exists()
+        
+        print(f"Invoice exists for period: {exists}")
+        return not exists
+
+    def get_next_generation_date(self, from_date=None):
+        """Calculate the next invoice generation date based on periodicity"""
+        print(f"\nCalculating next generation date from {from_date}")
+        if not from_date:
+            from_date = timezone.now().date()
+
+        # Always advance to next period
+        if self.periodicity == self.PERIOD_MONTHLY:
+            next_date = from_date + relativedelta(months=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            next_date = from_date + relativedelta(months=3)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            next_date = from_date + relativedelta(months=6)
+        else:  # annual
+            next_date = from_date + relativedelta(years=1)
+
+        # Set to generation day
+        next_date = next_date.replace(day=min(self.generation_day, 
+            (next_date + relativedelta(months=1) - relativedelta(days=1)).day))
+        
+        print(f"Next generation date: {next_date}")
+        return next_date
+    
+    def suspend_domiciliation(self, date, reason):
+        """Suspend domiciliation and remove future forecasts"""
+        if not self.is_domiciled:
+            raise ValidationError("Contract is not domiciled")
+            
+        print(f"\n=== Suspending Domiciliation for Contract {self.id} ===")
+        print(f"Suspension date: {date}")
+        print(f"Reason: {reason}")
+        
+        self.domiciliation_suspended = True
+        self.domiciliation_suspension_date = date
+        self.domiciliation_suspension_reason = reason
+        
+        # Delete future forecasts
+        ForecastStatement.objects.filter(
+            source_type='contract_domiciliation',
+            source_id=self.id,
+            date__gte=date
+        ).delete()
+        
+        self.save()
+
+    def _next_business_day(self, date):
+        """Get next business day, skipping weekends"""
+        print(f"\n=== Getting next business day from {date} ===")
+        next_date = date
+        while next_date.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+            next_date += timedelta(days=1)
+            print(f"Skipped to: {next_date}")
+        return next_date
+
+    def _calculate_total_amount_with_vat(self):
+        """Calculate total contract amount including VAT"""
+        total_amount = Decimal('0')
+        for contract_product in self.products.all():
+            product_amount = contract_product.quantity * contract_product.unit_price
+            
+            if contract_product.reduction_rate:
+                reduction = product_amount * (contract_product.reduction_rate / Decimal('100'))
+                product_amount -= reduction
+            
+            vat_amount = product_amount * (contract_product.product.vat_rate / Decimal('100'))
+            product_amount += vat_amount
+            
+            total_amount += product_amount
+            
+        return total_amount
+
+    def _get_or_create_invoice_for_date(self, date):
+        """Get or create invoice for the given date"""
+        period_start = self.get_period_start_date(date)
+        period_end = self.get_period_end_date(period_start)
+        
+        # Check if invoice exists
+        invoice = ContractInvoice.objects.filter(
+            contract=self,
+            period_start=period_start,
+            period_end=period_end
+        ).first()
+        
+        if not invoice and self.can_generate_invoice(date):
+            print(f"Generating new invoice for period {period_start} to {period_end}")
+            invoice = self.generate_invoice(date)
+        
+        return invoice
+
+    def _create_forecast_and_direct_debit(self, payment_date, amount, invoice, current_date):
+        """Create forecast and direct debit records"""
+        # Check if forecast already exists
+        existing_forecast = ForecastStatement.objects.filter(
+            bank_account=self.domiciliation_bank,
+            date=payment_date,
+            source_type='contract_domiciliation',
+            source_id=self.id
+        ).first()
+        
+        if not existing_forecast:
+            print(f"Creating new forecast for {payment_date}")
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=amount,
+                amount=amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+        else:
+            forecast = existing_forecast
+            print(f"Using existing forecast {forecast.id}")
+        
+        # Create DirectDebit if it doesn't exist
+        direct_debit = DirectDebit.objects.filter(
+            invoice=invoice,
+            contract=self,
+            forecast=forecast
+        ).first()
+        
+        if not direct_debit:
+            print(f"Creating DirectDebit for invoice {invoice.invoice.ref}")
+            DirectDebit.objects.create(
+                invoice=invoice,
+                contract=self,
+                bank_account=self.domiciliation_bank,
+                due_date=payment_date,
+                amount=amount,
+                forecast=forecast
+            )
+        else:
+            print(f"DirectDebit already exists: {direct_debit.id}")
+
+
+    def generate_domiciliation_forecasts(self):
+        """Generate a year of forecasts for domiciled contract"""
+        if not self.is_domiciled or self.domiciliation_suspended:
+            return
+                    
+        print(f"\n=== Generating Domiciliation Forecasts for Contract {self.id} ===")
+        print(f"Contract start date: {self.start_date}")
+        print(f"Domiciliation day: {self.domiciliation_day}")
+        
+        today = timezone.now().date()
+        year_end = today + timedelta(days=365)
+        
+        valid_day = self.get_valid_day(self.start_date.year, self.start_date.month, self.domiciliation_day)
+        current_date = self.start_date.replace(day=valid_day)
+        if current_date < self.start_date:
+            current_date += relativedelta(months=1)
+                
+        print(f"First payment date: {current_date}")
+        
+        total_amount = Decimal('0')
+        for contract_product in self.products.all():
+            product_amount = contract_product.quantity * contract_product.unit_price
+            
+            if contract_product.reduction_rate:
+                reduction = product_amount * (contract_product.reduction_rate / Decimal('100'))
+                product_amount -= reduction
+            
+            vat_amount = product_amount * (contract_product.product.vat_rate / Decimal('100'))
+            product_amount += vat_amount
+            
+            total_amount += product_amount
+            
+        print(f"Total amount (with VAT): {total_amount}")
+        
+        while current_date < today:
+            payment_date = current_date
+            while payment_date.weekday() >= 5:
+                payment_date += timedelta(days=1)
+                    
+            print(f"\nCreating past due forecast for: {payment_date} (Original: {current_date})")
+            
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=total_amount,
+                amount=total_amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+
+            # ONLY NEW CODE: Create DirectDebit for this forecast
+            invoice = ContractInvoice.objects.filter(
+                contract=self,
+                period_start__year=current_date.year,
+                period_start__month=current_date.month
+            ).first()
+
+            if invoice:
+                DirectDebit.objects.create(
+                    invoice=invoice,
+                    contract=self,
+                    bank_account=self.domiciliation_bank,
+                    due_date=payment_date,
+                    amount=total_amount,
+                    forecast=forecast
+                )
+            
+            if self.periodicity == self.PERIOD_MONTHLY:
+                current_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                current_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                current_date += relativedelta(months=6)
+            else:
+                current_date += relativedelta(years=1)
+            
+            # Validate day for new month
+            valid_day = self.get_valid_day(current_date.year, current_date.month, self.domiciliation_day)
+            current_date = current_date.replace(day=valid_day)
+        
+        while current_date <= year_end:
+            payment_date = current_date
+            while payment_date.weekday() >= 5:
+                payment_date += timedelta(days=1)
+                    
+            print(f"\nCreating future forecast for: {payment_date} (Original: {current_date})")
+                
+            forecast = ForecastStatement.objects.create(
+                bank_account=self.domiciliation_bank,
+                date=payment_date,
+                label=f"Domiciled payment for contract {self.reference}",
+                debit=total_amount,
+                amount=total_amount,
+                reference=f"DOM/{self.reference}/{current_date.strftime('%Y%m')}",
+                source_type='contract_domiciliation',
+                source_id=self.id,
+                is_processed=False
+            )
+
+            # ONLY NEW CODE: Create DirectDebit for this forecast
+            invoice = ContractInvoice.objects.filter(
+                contract=self,
+                period_start__year=current_date.year,
+                period_start__month=current_date.month
+            ).first()
+
+            if invoice:
+                DirectDebit.objects.create(
+                    invoice=invoice,
+                    contract=self,
+                    bank_account=self.domiciliation_bank,
+                    due_date=payment_date,
+                    amount=total_amount,
+                    forecast=forecast
+                )
+
+            if self.periodicity == self.PERIOD_MONTHLY:
+                current_date += relativedelta(months=1)
+            elif self.periodicity == self.PERIOD_QUARTERLY:
+                current_date += relativedelta(months=3)
+            elif self.periodicity == self.PERIOD_BIANNUAL:
+                current_date += relativedelta(months=6)
+            else:
+                current_date += relativedelta(years=1)
+                
+            print(f"Next payment date: {current_date}")
+            
+    def _get_next_period_date(self, current_date):
+        """Get next period date based on contract periodicity"""
+        if self.periodicity == self.PERIOD_MONTHLY:
+            return current_date + relativedelta(months=1)
+        elif self.periodicity == self.PERIOD_QUARTERLY:
+            return current_date + relativedelta(months=3)
+        elif self.periodicity == self.PERIOD_BIANNUAL:
+            return current_date + relativedelta(months=6)
+        else:  # annual
+            return current_date + relativedelta(years=1)
+
+    def get_valid_day(self, year, month, target_day):
+        """Get valid day for the given month, adjusting for month end if necessary"""
+        last_day = calendar.monthrange(year, month)[1]
+        return min(target_day, last_day)
+
+            
+class ContractProduct(BaseModel):
+    """Product for a contract"""
+    contract = models.ForeignKey(Contract, on_delete=models.CASCADE, related_name='products')
+    product = models.ForeignKey('Product', on_delete=models.PROTECT)
+    quantity = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    unit_price = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(Decimal('0.01'))]
+    )
+    reduction_rate = models.DecimalField(
+        max_digits=5,
+        decimal_places=2,
+        default=Decimal('0.00'),
+        validators=[MinValueValidator(0), MaxValueValidator(100)]
+    )
 
     class Meta:
-        verbose_name = "Transfer"
-        verbose_name_plural = "Transfers"
+        unique_together = ['contract', 'product']
 
-    def get_receipt_number(self):
-        """Returns transfer reference for consistency with other receipts"""
-        return self.transfer_reference
+class ContractInvoice(BaseModel):
+    """Links generated invoices to their contract periods"""
+    contract = models.ForeignKey(Contract, on_delete=models.PROTECT)
+    invoice = models.OneToOneField('Invoice', on_delete=models.PROTECT, related_name='contract_invoice')
+    period_start = models.DateField()
+    period_end = models.DateField()
+
+    class Meta:
+        unique_together = [
+            ['contract', 'period_start', 'period_end']
+        ]

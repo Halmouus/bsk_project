@@ -100,7 +100,7 @@ from .views_pay import (
     PayDeclarationItemUpdateView, PayAccountingView, PayAccountingView, PayAccountingView, PayPendingDeclarationsView
 )
 from . import views_production
-
+from . import views_contract
 from . import views_receipts
 from .views import test_translation
 
@@ -321,7 +321,7 @@ urlpatterns = [
     path('receipts/validate-number/', validate_receipt_number, name='validate-receipt-number'),
     path('receipts/validate-compensating-receipt/', validate_compensating_receipt, name='validate-compensating-receipt'),
     path('receipts/<str:receipt_type>/<uuid:pk>/compensation-timeline/', compensation_timeline, name='compensation-timeline'),
-    
+
     # Receipt Document URLs
     path('receipts/<str:receipt_type>/<uuid:receipt_id>/document/', views_receipts.ReceiptDocumentView.as_view(), name='receipt-document'),
 
@@ -359,6 +359,7 @@ urlpatterns = [
     path('bank/contracts/<uuid:contract_id>/payment-action/', 
         ContractPaymentActionView.as_view(), 
         name='contract-payment-action'),
+    path('contracts/<uuid:pk>/document/', views_contract.ContractDocumentView.as_view(), name='contract-document'),
 
     # VAT URLs
     path('vat/', VATListView.as_view(), name='vat-list'),
