@@ -1,0 +1,764 @@
+{% load i18n %}
+{% load humanize %}
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% trans "Presentation Summary" %} - {{ presentation.internal_reference }}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- html2pdf library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* General document styling */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f8f9fa;
+            color: #495057;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .document-container {
+            background-color: white;
+            max-width: 210mm; /* A4 width */
+            height: 296mm; /* Slightly less than A4 height to ensure fit */
+            margin: 30px auto;
+            padding: 0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden; /* Hide overflow content */
+        }
+        
+        /* Header section styling */
+        .document-header {
+            background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%);
+            color: white;
+            padding: 30px;
+            position: relative;
+        }
+        
+        .watermark {
+            position: absolute;
+            right: 30px;
+            top: 30px;
+            font-size: 128px;
+            opacity: 0.04;
+            transform: rotate(-45deg);
+            transform-origin: 50% 50%;
+            color: white;
+            user-select: none;
+        }
+        
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .company-branding {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .company-icon {
+            font-size: 2.5rem;
+            margin-right: 15px;
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .company-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 0;
+            line-height: 1.1;
+        }
+        
+        .company-subtitle {
+            font-size: 1rem;
+            opacity: 0.8;
+            margin: 5px 0 0 0;
+        }
+        
+        .document-title-container {
+            text-align: right;
+        }
+        
+        .document-type {
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin: 0;
+        }
+        
+        .document-title {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .document-number {
+            margin-top: 5px;
+            background: rgba(255,255,255,0.15);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            display: inline-block;
+        }
+        
+        /* Reference card styling */
+        .reference-card {
+            background-color: white;
+            margin: -20px 30px 0 30px;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .reference-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 15px;
+            border-right: 1px dashed #e0e0e0;
+            flex: 1;
+        }
+        
+        .reference-item:last-child {
+            border-right: none;
+        }
+        
+        .reference-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .reference-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #343a40;
+        }
+        
+        .reference-item i {
+            color: #4ca1af;
+            margin-right: 5px;
+        }
+        
+        /* Content section styling */
+        .document-content {
+            padding: 30px;
+        }
+        
+        .section {
+            margin-bottom: 25px; /* Slightly reduced from 30px */
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+            padding-bottom: 10px;
+        }
+        
+        .section-icon {
+            font-size: 1.4rem;
+            background-color: #4ca1af;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+        }
+        
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+            margin: 0;
+        }
+        
+        /* Info tables styling */
+        .info-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 0 10px;
+        }
+        
+        .info-table tr {
+            background-color: #f8f9fa;
+        }
+        
+        .info-table td {
+            padding: 12px 15px;
+        }
+        
+        .info-table td:first-child {
+            font-weight: 600;
+            color: #495057;
+            width: 160px;
+            border-left: 4px solid #4ca1af;
+        }
+        
+        /* Receipts table styling */
+        .receipts-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        
+        .receipts-table th {
+            background-color: #2c3e50;
+            color: white;
+            text-align: left;
+            padding: 12px 15px;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .receipts-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.95rem;
+            max-width: 150px; /* Prevent overflow by limiting width */
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .receipts-table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        
+        .receipts-table tr:hover {
+            background-color: #f1f3f5;
+        }
+        
+        .amount-cell {
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            font-weight: 600;
+        }
+        
+        /* Status badges */
+        .status-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            text-align: center;
+        }
+        
+        .badge-pending {
+            background-color: #ffc107;
+            color: #343a40;
+        }
+        
+        .badge-presented {
+            background-color: #17a2b8;
+            color: white;
+        }
+        
+        .badge-discounted {
+            background-color: #6f42c1;
+            color: white;
+        }
+        
+        .badge-paid {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .badge-rejected {
+            background-color: #dc3545;
+            color: white;
+        }
+        
+        /* Table footer styling */
+        .table-footer {
+            background-color: #2c3e50;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .table-footer td {
+            border-bottom: none;
+            padding: 15px;
+        }
+        
+        /* Summary section styling */
+        .summary-section {
+            background-color: #f8f9fa;
+            padding: 15px; /* Reduced from 20px */
+            border-radius: 6px;
+            margin-top: 20px; /* Reduced from 30px */
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            font-size: 1.1rem;
+        }
+        
+        .total-label {
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .total-value {
+            font-weight: 700;
+            color: #2c3e50;
+            font-size: 1.3rem;
+            font-family: 'Courier New', monospace;
+        }
+        
+        /* Document footer styling */
+        .document-footer {
+            margin-top: 20px; /* Reduced from 30px */
+            padding: 15px 30px; /* Reduced from 20px */
+            background-color: #f8f9fa;
+            color: #6c757d;
+            font-size: 0.85rem; /* Reduced from 0.9rem */
+            border-top: 1px solid #e0e0e0;
+            text-align: center;
+            page-break-inside: avoid; /* Prevent footer from breaking across pages */
+        }
+        
+        .footer-info {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+        
+        .footer-item {
+            margin: 0 15px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .footer-item i {
+            margin-right: 5px;
+            color: #4ca1af;
+        }
+        
+        /* Action buttons */
+        .action-buttons {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 30px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.2);
+            padding: 10px;
+        }
+        
+        .action-button {
+            margin: 0 5px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #4ca1af;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+        
+        .download-button {
+            width: auto;
+            border-radius: 20px;
+            padding: 0 20px;
+            margin-right: 10px;
+            background-color: #2c3e50;
+        }
+        
+        .download-button i {
+            margin-right: 8px;
+        }
+        
+        .action-button:hover {
+            transform: scale(1.1);
+            background-color: #2c3e50;
+        }
+        
+        .download-button:hover {
+            background-color: #4ca1af;
+        }
+        
+        .action-button i {
+            font-size: 1.2rem;
+        }
+        
+        /* Print-specific styles */
+        @media print {
+            @page {
+                size: A4;
+                margin: 0;
+            }
+            
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .document-container {
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+            }
+            
+            .action-buttons {
+                display: none !important;
+            }
+            
+            .table-footer {
+                background-color: #2c3e50 !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            .receipts-table th {
+                background-color: #2c3e50 !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            .document-header {
+                background: linear-gradient(135deg, #2c3e50 0%, #4ca1af 100%) !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            
+            .section-icon {
+                background-color: #4ca1af !important;
+                color: white !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="document-container" id="summaryDocument">
+        <!-- Document Header -->
+        <div class="document-header">
+            <div class="watermark">
+                <i class="fas fa-file-invoice"></i>
+            </div>
+            
+            <div class="header-row">
+                <div>
+                    <div class="company-branding">
+                        <div class="company-icon">
+                            <i class="fas fa-building"></i>
+                        </div>
+                        <div>
+                            <h1 class="company-title">{% trans "Finance System" %}</h1>
+                            <p class="company-subtitle">{% trans "Professional Banking Solutions" %}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="document-title-container">
+                    <p class="document-type">{{ presentation.get_presentation_type_display }} {% trans "Presentation" %}</p>
+                    <h2 class="document-title">{% trans "Summary Report" %}</h2>
+                    <div class="document-number">
+                        <i class="fas fa-hashtag"></i> {{ presentation.internal_reference }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Reference Card -->
+        <div class="reference-card">
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-calendar"></i> {% trans "Date" %}</span>
+                <span class="reference-value">{{ presentation.date|date:"d M Y" }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-university"></i> {% trans "Bank" %}</span>
+                <span class="reference-value">{{ presentation.bank_account.get_bank_display }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-hashtag"></i> {% trans "Bank Reference" %}</span>
+                <span class="reference-value">{{ presentation.bank_reference|default:_("Pending") }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-tag"></i> {% trans "Status" %}</span>
+                <span class="reference-value">
+                    <span class="status-badge badge-{{ presentation.status }}">
+                        {{ presentation.get_status_display }}
+                    </span>
+                </span>
+            </div>
+        </div>
+        
+        <!-- Document Content -->
+        <div class="document-content">
+            <!-- Basic Information Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon">
+                        <i class="fas fa-info-circle"></i>
+                    </div>
+                    <h3 class="section-title">{% trans "Basic Information" %}</h3>
+                </div>
+                
+                <div class="row">
+                    <div class="col-md-6">
+                        <table class="info-table">
+                            <tr>
+                                <td>{% trans "Account Number" %}</td>
+                                <td>{{ presentation.bank_account.account_number }}</td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Total Amount" %}</td>
+                                <td><strong>{{ presentation.total_amount|euro_format }} {% trans "MAD" %}</strong></td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Receipt Count" %}</td>
+                                <td>{{ presentation.receipt_count }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <table class="info-table">
+                            <tr>
+                                <td>{% trans "Presentation Type" %}</td>
+                                <td>{{ presentation.get_presentation_type_display }}</td>
+                            </tr>
+                            <tr>
+                                <td>{% trans "Created On" %}</td>
+                                <td>{{ presentation.created_at|date:"d M Y, H:i" }}</td>
+                            </tr>
+                            {% if presentation.notes %}
+                            <tr>
+                                <td>{% trans "Notes" %}</td>
+                                <td>{{ presentation.notes }}</td>
+                            </tr>
+                            {% endif %}
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Receipts Section -->
+            <div class="section">
+                <div class="section-header">
+                    <div class="section-icon">
+                        <i class="fas fa-receipt"></i>
+                    </div>
+                    <h3 class="section-title">{% trans "Presented Receipts" %}</h3>
+                </div>
+                
+                <table class="receipts-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 8%">{% trans "Type" %}</th>
+                            <th style="width: 15%">{% trans "Reference" %}</th>
+                            <th style="width: 25%">{% trans "Entity" %}</th>
+                            <th style="width: 12%">{% trans "Due Date" %}</th>
+                            <th style="width: 15%">{% trans "Bank" %}</th>
+                            <th style="width: 15%" class="text-end">{% trans "Amount" %}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for receipt in presentation.presentation_receipts.all %}
+                        <tr>
+                            <td>
+                                {% if receipt.checkreceipt %}
+                                <i class="fas fa-money-check text-primary me-1"></i> {% trans "Check" %}
+                                {% else %}
+                                <i class="fas fa-file-invoice-dollar text-success me-1"></i> {% trans "LCN" %}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.check_number }}
+                                {% else %}
+                                {{ receipt.lcn.lcn_number }}
+                                {% endif %}
+                            </td>
+                            <td title="{% if receipt.checkreceipt %}{{ receipt.checkreceipt.entity.name }}{% else %}{{ receipt.lcn.entity.name }}{% endif %}">
+                                {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.entity.name }}
+                                {% else %}
+                                {{ receipt.lcn.entity.name }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.due_date|date:"d/m/Y" }}
+                                {% else %}
+                                {{ receipt.lcn.due_date|date:"d/m/Y" }}
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if receipt.checkreceipt %}
+                                {{ receipt.checkreceipt.get_issuing_bank_display }}
+                                {% else %}
+                                {{ receipt.lcn.get_issuing_bank_display }}
+                                {% endif %}
+                            </td>
+                            <td class="amount-cell">{{ receipt.amount|euro_format }} {% trans "MAD" %}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-footer">
+                            <td colspan="5" class="text-end">{% trans "Total Amount:" %}</td>
+                            <td class="amount-cell">{{ presentation.total_amount|euro_format }} {% trans "MAD" %}</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            
+            <!-- Summary Section -->
+            <div class="summary-section">
+                <div class="total-row">
+                    <div class="total-label">
+                        <i class="fas fa-calculator me-2"></i>
+                        {% trans "Total Presentation Amount:" %}
+                    </div>
+                    <div class="total-value">{{ presentation.total_amount|euro_format }} {% trans "MAD" %}</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Document Footer -->
+        <div class="document-footer">
+            <div class="footer-info">
+                <div class="footer-item">
+                    <i class="fas fa-calendar-check"></i>
+                    {% trans "Generated on:" %} {{ now|date:"d M Y" }}
+                </div>
+                <div class="footer-item">
+                    <i class="fas fa-clock"></i>
+                    {% trans "Time:" %} {{ now|time:"H:i" }}
+                </div>
+                <div class="footer-item">
+                    <i class="fas fa-money-check"></i>
+                    {% blocktrans count count=presentation.receipt_count %}{{ count }} Receipt{% plural %}{{ count }} Receipts{% endblocktrans %}
+                </div>
+            </div>
+            <div>{% trans "This is an automatically generated document. Electronic summary, no signature required." %}</div>
+        </div>
+    </div>
+    
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+        <button class="action-button download-button" onclick="downloadPDF()">
+            <i class="fas fa-download"></i> {% trans "Download PDF" %}
+        </button>
+        <button class="action-button" onclick="window.print()" title="{% trans 'Print' %}">
+            <i class="fas fa-print"></i>
+        </button>
+        <button class="action-button" onclick="window.location.href='{% url 'presentation-list' %}';" title="{% trans 'Back to List' %}">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Function to download the summary as PDF
+        function downloadPDF() {
+            // Show a loading message
+            const loadingElement = document.createElement('div');
+            loadingElement.style.position = 'fixed';
+            loadingElement.style.top = '0';
+            loadingElement.style.left = '0';
+            loadingElement.style.width = '100%';
+            loadingElement.style.height = '100%';
+            loadingElement.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            loadingElement.style.display = 'flex';
+            loadingElement.style.justifyContent = 'center';
+            loadingElement.style.alignItems = 'center';
+            loadingElement.style.zIndex = '9999';
+            loadingElement.innerHTML = '<div style="background-color: white; padding: 20px; border-radius: 10px;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-right: 10px;"></i> {% trans "Generating PDF..." %}</div>';
+            document.body.appendChild(loadingElement);
+            
+            // Hide action buttons
+            const actionButtons = document.querySelector('.action-buttons');
+            actionButtons.style.display = 'none';
+            
+            // Configure PDF options to fit on a single page
+            const opt = {
+                margin: [0, 0, 0, 0],
+                filename: 'presentation_{{ presentation.internal_reference }}.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 1.4, // Slightly reduced to ensure footer fits
+                    useCORS: true,
+                    letterRendering: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait',
+                    compress: true
+                }
+            };
+            
+            // Use html2pdf to generate and download the PDF
+            html2pdf()
+                .set(opt)
+                .from(document.getElementById('summaryDocument'))
+                .save()
+                .then(() => {
+                    // Show the action buttons again
+                    actionButtons.style.display = 'flex';
+                    
+                    // Remove the loading element
+                    document.body.removeChild(loadingElement);
+                });
+        }
+    </script>
+</body>
+</html>

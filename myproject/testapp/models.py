@@ -3742,6 +3742,7 @@ class Presentation(BaseModel):
     bank_reference = models.CharField(max_length=100, blank=True)
     total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
     notes = models.TextField(blank=True)
+    internal_reference = models.CharField(max_length=15, editable=False, null=True, blank=True)
     status = models.CharField(
         max_length=25,
         choices=[
@@ -3764,6 +3765,32 @@ class Presentation(BaseModel):
 
     def __str__(self):
         return f"{self.get_presentation_type_display()} - {self.date}"
+
+    def save(self, *args, **kwargs):
+        if not self.pk and not self.internal_reference:  # Only for new presentations
+            year = timezone.now().year
+            # Get the last presentation created this year
+            last_presentation = Presentation.objects.filter(
+                internal_reference__startswith=f"P-{year}-"
+            ).order_by('-internal_reference').first()
+            
+            if last_presentation:
+                # Extract the number from the last reference
+                try:
+                    last_sequence = int(last_presentation.internal_reference.split('-')[-1])
+                    next_sequence = last_sequence + 1
+                except (ValueError, IndexError):
+                    print(f"Debug: Error parsing sequence from {last_presentation.internal_reference}")
+                    next_sequence = 1
+            else:
+                # First presentation this year
+                next_sequence = 1
+            
+            # Format with leading zeros (e.g., P-2025-00001)
+            self.internal_reference = f"P-{year}-{next_sequence:05d}"
+            print(f"Debug: Generated internal reference: {self.internal_reference}")
+        
+        super().save(*args, **kwargs)
 
     @property
     def receipt_count(self):

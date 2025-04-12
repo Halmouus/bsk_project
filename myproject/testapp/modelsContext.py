@@ -29,132 +29,224 @@ import re
 logger = logging.getLogger(__name__)
 
 
-def get_upload_path(instance, filename):
-    # Get current year
-    year = timezone.now().year
-    # Get model type (delivery/reception)
-    model_type = instance.__class__.__name__.lower()
-    # Clean filename
-    ext = filename.split('.')[-1]
-    new_name = f"{model_type}_{uuid.uuid4().hex[:8]}.{ext}"
-    # Important: Files must be saved under media directory
-    return f"documents/{model_type}/{year}/{new_name}"
 
-def get_receipt_upload_path(instance, filename):
-    """Get upload path for receipt documents"""
-    print(f"\n=== Getting upload path for {instance.__class__.__name__} document ===")
-    # Get current year 
-    year = timezone.now().year
-    receipt_type = instance.__class__.__name__.lower()
-
-    # Clean filename
-    ext = filename.split('.')[-1]
-    new_name = f"{receipt_type}_{uuid.uuid4().hex[:8]}.{ext}"
+class Presentation(BaseModel):
+    """Represents a collection/discount presentation of negotiable receipts."""
+    TYPE_COLLECTION = 'COLLECTION'
+    TYPE_DISCOUNT = 'DISCOUNT'
     
-    path = f"receipts/{receipt_type}/{year}/{new_name}"
-    print(f"Generated path: {path}")
-    return path
+    PRESENTATION_TYPES = [
+        (TYPE_COLLECTION, 'Collection'),
+        (TYPE_DISCOUNT, 'Discount')
+    ]
 
-def validate_file_size(value):
-    """
-    Validate file size (5MB limit)
-    """
-    filesize = value.size
-    if filesize > 5 * 1024 * 1024:  # 5MB limit
-        raise ValidationError(_("The maximum file size that can be uploaded is 5MB"))
-
-
-class Supplier(BaseModel):
-
-    numeric_validator = RegexValidator(r'^[0-9]*$', _('Only numeric characters are allowed.'))
-    alphanumeric_validator = RegexValidator(r'^[a-zA-Z0-9 ]*$', _('Only alphanumeric characters are allowed.'))
-
-    name = models.CharField(max_length=100, unique=True, validators=[alphanumeric_validator])
-    if_code = models.CharField(max_length=25, unique=True, validators=[numeric_validator])
-    ice_code = models.CharField(max_length=15, unique=True, validators=[numeric_validator])  # Exactly 15 characters
-    rc_code = models.CharField(max_length=25, validators=[numeric_validator])
-    rc_center = models.CharField(max_length=100, validators=[alphanumeric_validator])
-    accounting_code = models.CharField(max_length=25, unique=True, validators=[RegexValidator(r'^[0-9]{5,}$', 'Expense code must be numeric and at least 5 characters long.')])
-    is_energy = models.BooleanField(default=False)
-    service = models.CharField(max_length=255, blank=True, validators=[alphanumeric_validator])  # Description of merch/service sold
-    delay_convention = models.IntegerField(choices=[(0, '0'), (30, '30'), (60, '60'), (90, '90'), (120, '120')], default=60)
-    is_regulated = models.BooleanField(default=False)
-    regulation_file_path = models.FileField(upload_to='supplier_regulations/', null=True, blank=True)
-    delay_check = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text=_("Number of days to delay check payment forecasts after due date")
+    presentation_type = models.CharField(max_length=10, choices=PRESENTATION_TYPES)
+    date = models.DateField()
+    bank_account = models.ForeignKey('BankAccount', on_delete=models.PROTECT)
+    bank_reference = models.CharField(max_length=100, blank=True)
+    total_amount = models.DecimalField(max_digits=15, decimal_places=2, default=Decimal('0.00'))
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=25,
+        choices=[
+            ('pending', 'Pending'),
+            ('presented', 'Presented'),
+            ('paid', 'Paid'),
+            ('rejected', 'Rejected')
+        ],
+        default='pending'
     )
-    delay_lcn = models.IntegerField(
-        default=0,
-        validators=[MinValueValidator(0)],
-        help_text=_("Number of days to delay LCN payment forecasts after due date")
+    document = models.FileField(
+        upload_to=get_receipt_upload_path,
+        validators=[
+            FileExtensionValidator(allowed_extensions=['pdf']),
+            validate_file_size
+        ],
+        null=True,
+        blank=True
     )
+
+    def __str__(self):
+        return f"{self.get_presentation_type_display()} - {self.date}"
+
+    @property
+    def receipt_count(self):
+        return self.presentation_receipts.count()
+
+    def update_total(self):
+        self.total_amount = sum(
+            pr.amount for pr in self.presentation_receipts.all()
+        )
+        self.save()
 
     def clean(self):
         super().clean()
-        # Ensure IF code is numeric
-        if not self.if_code.isdigit():
-            raise ValidationError(_("IF code must be numeric."))
-        # Ensure ICE code has exactly 15 characters
-        if len(self.ice_code) != 15:
-            raise ValidationError(_("ICE code must contain exactly 15 characters."))
-    
+        self.validate_receipts()
+
+    def validate_receipts(self):
+        invalid_receipts = self.presentation_receipts.exclude(
+            receipt__status=NegotiableReceipt.STATUS_PORTFOLIO
+        )
+        if invalid_receipts.exists():
+            raise ValidationError('All receipts must be in portfolio status')
+
     class Meta:
-        constraints = [
+        verbose_name = "Presentation"
+        verbose_name_plural = "Presentations"
+        ordering = ['-date', '-created_at']
+
+class PresentationReceipt(BaseModel):
+    """Links receipts to presentations."""
+
+    presentation = models.ForeignKey(
+        Presentation, 
+        on_delete=models.CASCADE,
+        related_name='presentation_receipts'
+    )
+    checkreceipt = models.ForeignKey(
+        CheckReceipt, 
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='check_presentations'
+    )
+    lcn = models.ForeignKey(
+        LCN, 
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='lcn_presentations'
+    )
+    
+    recorded_status = models.CharField(
+        max_length=25,
+        choices=NegotiableReceipt.RECEIPT_STATUS,
+        null=True,
+        blank=True,
+        help_text="Stores the final status decision made in this presentation"
+    )
+    amount = models.DecimalField(max_digits=15, decimal_places=2)
+    immutable = models.BooleanField(default=False)
+    forecast_payment_date = models.DateField(null=True, blank=True)
+    is_forecasted = models.BooleanField(default=False)
+
+    class Meta:
+        unique_together = [
+            ('presentation', 'checkreceipt'),
+            ('presentation', 'lcn')
         ]
 
     def __str__(self):
-        return self.name
+        receipt = self.checkreceipt or self.lcn
+        if receipt:
+            return f"Presentation {self.presentation.id} - Receipt {receipt.id}"
+        return f"Presentation {self.presentation.id} - No receipt attached"
 
-# models.py
-def get_supplier_balance(supplier):
-    """Calculate supplier balance including only PAID payments"""
-    invoices = Invoice.objects.filter(
-        supplier=supplier,
-        type='invoice'
-    )
-    
-    invoice_total = sum(invoice.net_amount for invoice in invoices)
-    
-    # Get all PAID check payments (both direct and allocated)
-    check_total = Decimal('0.00')
-    
-    # Direct invoice payments - only PAID checks
-    direct_payments = Check.objects.filter(
-        beneficiary=supplier,
-        is_supplier_payment=False,
-        status='paid'  # Only count paid checks
-    ).exclude(status='cancelled')
-    check_total += sum(check.amount for check in direct_payments)
-    
-    # Allocated payments - only from PAID checks
-    allocated_payments = CheckAllocation.objects.filter(
-        payment__beneficiary=supplier,
-        payment__is_supplier_payment=True,
-        payment__status='paid'  # Only count allocations from paid checks
-    )
-    check_total += sum(alloc.amount for alloc in allocated_payments)
-    
-    return {
-        'payable': invoice_total,  # What we owe supplier
-        'paid': check_total,       # What we've actually paid
-        'balance': invoice_total - check_total,  # Remaining to pay
-        'invoices_count': Invoice.objects.filter(
-            supplier=supplier,
-            type='invoice',
-            payment_status__in=['not_paid', 'partially_paid']
-        ).count()
-    }
+    def clean(self):
+        super().clean()
+        if self.checkreceipt and self.lcn:
+            raise ValidationError("Cannot have both check and LCN")
+        if not self.checkreceipt and not self.lcn:
+            raise ValidationError("Must have either check or LCN")
+        
+        # Get the actual receipt object
+        receipt = self.checkreceipt or self.lcn
+        
+        # Only validate receipt status during initial creation
+        if not self.pk:  # If this is a new record
+            if getattr(receipt, 'status', None) != 'PORTFOLIO' and getattr(receipt, 'status', None) != 'UNPAID':
+                raise ValidationError('Only receipts in portfolio status can be presented')
 
-def get_supplier_unpaid_invoices(supplier):
-    """Get all invoices that still have amount available for payment"""
-    invoices = Invoice.objects.filter(
-        supplier=supplier,
-        type='invoice'
-    ).exclude(
-        status='cancelled'
-    )
-    
-    # Filter out invoices with no available amount
-    return [inv for inv in invoices if inv.amount_available_for_payment > 0]
+    def save(self, *args, **kwargs):
+        print("\n=== PresentationReceipt save method start ===")
+        print(f"Receipt ID: {self.pk}")
+        print(f"Is new: {not self.pk}")
+        is_new = not self.pk  
+        
+        self.full_clean()
+        super().save(*args, **kwargs)
+        self.presentation.update_total()
+
+        receipt = self.checkreceipt or self.lcn
+        print(f"Receipt: {receipt}")
+        print(f"Presentation type: {self.presentation.presentation_type}")
+        print(f"Presentation status: {self.presentation.status}")  
+        
+        if receipt:
+            # Only update status if not in a final state
+            if receipt.status not in ['PAID', 'UNPAID', 'COMPENSATED']:
+                if self.presentation.presentation_type == 'COLLECTION':
+                    print("Setting status to PRESENTED_COLLECTION")
+                    receipt._presentation_date = self.presentation.date  # Store temporarily
+                    receipt.status = 'PRESENTED_COLLECTION'
+                    if is_new:
+                        print("Attempting to create forecast...")
+                        try:
+                            self.create_forecast_statement()
+                            print("Forecast statement created successfully")
+                        except Exception as e:
+                            print(f"Error creating forecast statement: {str(e)}")
+                            import traceback
+                            print(traceback.format_exc())
+                    else:
+                        print("Existing presentation - skipping forecast creation")
+                else:
+                    print("Setting status to PRESENTED_DISCOUNT")
+                    receipt._presentation_date = self.presentation.date  # Store temporarily
+                    receipt.status = 'PRESENTED_DISCOUNT'
+                receipt.save()
+            else:
+                print(f"Skipping status update - receipt already in final state: {receipt.status}")
+            print(f"Final receipt status: {receipt.status}")
+        print("=== PresentationReceipt save method end ===\n")
+
+    def create_forecast_statement(self):
+        """Create forecast statement for this presentation"""
+        print("\n=== Creating Forecast Statement ===")
+        receipt = self.checkreceipt or self.lcn
+        presentation = self.presentation
+
+        # For LCNs, use presentation date if due date is later
+        if isinstance(receipt, LCN) and receipt.due_date > presentation.date:
+            effective_date = presentation.date
+        else:
+            effective_date = presentation.date
+
+        # Calculate business days to add
+        days_to_skip = 1 if receipt.issuing_bank == presentation.bank_account.bank else 2
+        forecast_date = self._calculate_business_day(effective_date, days_to_skip)
+
+        # Check if this is a representation
+        if isinstance(receipt, CheckReceipt):
+            previous_presentations = receipt.check_presentations.exclude(id=self.id).exists()
+        else:
+            previous_presentations = receipt.lcn_presentations.exclude(id=self.id).exists()
+
+        ForecastStatement.objects.create(
+            bank_account=presentation.bank_account,
+            date=forecast_date,
+            label=f"Expected payment of {receipt.__class__.__name__} #{receipt.get_receipt_number()}",
+            credit=receipt.amount,
+            reference=f"Pres. #{presentation.bank_reference}",
+            source_type=receipt.__class__.__name__.lower(),
+            source_id=receipt.id,
+        )
+
+    def _calculate_business_day(self, start_date, days):
+        """Calculate business day skipping weekends"""
+        current_date = start_date
+        while days > 0:
+            current_date += timedelta(days=1)
+            # Skip weekends
+            while current_date.weekday() >= 5:
+                current_date += timedelta(days=1)
+            days -= 1
+        return current_date
+
+    class Meta:
+        verbose_name = "Presentation Receipt"
+        verbose_name_plural = "Presentation Receipts"
+        unique_together = [
+            ('presentation', 'checkreceipt'),
+            ('presentation', 'lcn')
+        ]

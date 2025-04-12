@@ -3,6 +3,7 @@
 {% load presentation_filters %}
 {% for presentation in presentations %}
 <tr>
+    <td>{{ presentation.internal_reference }}</td>
     <td>{{ presentation.date|date:"Y-m-d" }}</td>
     <td>{{ presentation.get_presentation_type_display }}</td>
     <td>
@@ -35,10 +36,6 @@
     <td>
         <div class="btn-group">
             <button class="btn btn-sm btn-info" onclick="viewPresentation('{{ presentation.id }}')">
-                <i class="fas fa-eye"></i>
-            </button>
-            <button class="btn btn-sm btn-primary" onclick="editPresentation('{{ presentation.id }}')"
-                    {% if presentation.status == 'paid' %}disabled{% endif %}>
                 <i class="fas fa-edit"></i>
             </button>
             <button class="btn btn-sm btn-danger" onclick="deletePresentation('{{ presentation.id }}')"

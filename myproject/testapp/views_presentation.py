@@ -658,3 +658,26 @@ class PresentationDocumentDeleteView(View):
                 'status': 'error',
                 'message': str(e)
             }, status=500)
+
+class PresentationSummaryView(View):
+    """Display a professional summary of a presentation for printing/PDF."""
+    def get(self, request, pk):
+        try:
+            print(f"\n=== Generating Professional Summary for Presentation {pk} ===")
+            presentation = get_object_or_404(Presentation, pk=pk)
+            
+            context = {
+                'presentation': presentation,
+                'now': timezone.now(),
+            }
+            
+            return render(request, 'presentation/presentation_summary_standalone.html', context)
+            
+        except Exception as e:
+            print(f"Error generating professional summary: {str(e)}")
+            import traceback
+            print(traceback.format_exc())
+            return JsonResponse({
+                'status': 'error',
+                'message': f"Failed to generate summary: {str(e)}"
+            }, status=500)

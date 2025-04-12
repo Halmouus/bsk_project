@@ -1,4 +1,5 @@
 from django import template
+from decimal import Decimal
 
 register = template.Library()
 
@@ -22,3 +23,30 @@ def status_badge(status):
         'completed': 'badge-primary'
     }
     return status_map.get(status, 'badge-light')
+
+@register.filter
+def euro_format(value):
+    """
+    Format number with spaces as thousand separators and comma as decimal point.
+    Example: 12345.67 becomes 12 345,67
+    """
+    if value is None:
+        return ""
+    
+    # Convert to Decimal for precision
+    if not isinstance(value, Decimal):
+        value = Decimal(str(value))
+    
+    # Format with 2 decimal places
+    formatted = '{:,.2f}'.format(value)
+    
+    # Replace commas with temp placeholder
+    formatted = formatted.replace(',', 'COMMA')
+    
+    # Replace dots with commas (for decimal point)
+    formatted = formatted.replace('.', ',')
+    
+    # Replace placeholder with spaces (for thousand separators)
+    formatted = formatted.replace('COMMA', ' ')
+    
+    return formatted
