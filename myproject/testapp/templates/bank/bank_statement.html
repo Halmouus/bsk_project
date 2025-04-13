@@ -8,6 +8,10 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Statement</h2>
         <div class="d-flex gap-2">
+            <!-- Reports Button -->
+            <a href="{% url 'bank-statement-report' %}?bank_id={{ bank_account.id }}" class="btn btn-info me-2">
+                <i class="fas fa-chart-bar"></i> Reports
+            </a>
             <!-- Transfer Button -->
             <button id="transferBtn" class="btn btn-primary" disabled>
                 <i class="fas fa-exchange-alt me-2"></i> Transfer Selected
@@ -77,6 +81,7 @@
                     <th>Date</th>
                     <th>Label</th>
                     <th>Type</th>
+                    <th>Category</th>
                     <th class="text-right">Debit</th>
                     <th class="text-right">Credit</th>
                     <th>Reference</th>
@@ -113,6 +118,12 @@
                     <td>{{ entry.label }}</td>
                     <td>
                         <span class="badge badge-{{ entry.type|lower }}">{{ entry.type }}</span>
+                    </td>
+                    <td>
+                        <span class="badge badge-primary">{{ entry.main_type }}</span>
+                        {% if entry.sub_type != 'GENERAL' and entry.sub_type != 'OTHER' %}
+                        <small class="text-muted ml-1">{{ entry.sub_type }}</small>
+                        {% endif %}
                     </td>
                     <td class="text-right text-danger">
                         {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}

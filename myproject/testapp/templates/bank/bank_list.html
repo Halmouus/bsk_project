@@ -7,9 +7,16 @@
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>{% trans "Bank Accounts" %}</h2>
-        <button class="btn btn-primary" data-toggle="modal" data-target="#bankAccountModal">
-            <i class="fas fa-plus"></i> {% trans "New Bank Account" %}
-        </button>
+        <div class="d-flex gap-2">
+            <!-- Reports Button -->
+            <a href="{% url 'bank-statement-report' %}" class="btn btn-info me-2">
+                <i class="fas fa-chart-bar"></i> {% trans "Reports" %}
+            </a>
+            <!-- New Bank Account Button -->
+            <button class="btn btn-primary" data-toggle="modal" data-target="#bankAccountModal">
+                <i class="fas fa-plus"></i> {% trans "New Bank Account" %}
+            </button>
+        </div>
     </div>
 
     <!-- Accounts Table -->

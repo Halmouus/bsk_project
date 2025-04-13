@@ -1508,3 +1508,223 @@ def get_cash_statement_entries(start_date=None, end_date=None):
     except Exception as e:
         print(f"Error getting cash statement entries: {str(e)}")
         return []
+
+
+class BankStatementReportView(View):
+    """Generate bank statement reports with categorized grouping"""
+    
+    def get(self, request):
+        # Get parameters
+        bank_id = request.GET.get('bank_id')
+        start_date = request.GET.get('start_date')
+        end_date = request.GET.get('end_date')
+        report_type = request.GET.get('report_type', 'summary')
+        export_format = request.GET.get('export_format')
+        
+        # If no bank_id is provided, just show the filter form
+        if not bank_id:
+            context = {
+                'bank_accounts': BankAccount.objects.filter(is_active=True)
+            }
+            return render(request, 'bank/bank_statement_report.html', context)
+        
+        try:
+            bank_account = get_object_or_404(BankAccount, pk=bank_id)
+            
+            # Convert dates if provided
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if end_date:
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            # Get statement entries
+            entries = BankStatement.get_statement(
+                bank_account=bank_account,
+                start_date=start_date,
+                end_date=end_date,
+                include_forecasts=False
+            )
+            
+            # Generate report data
+            report_data = self._generate_report_data(entries, report_type)
+            
+            context = {
+                'bank_account': bank_account,
+                'start_date': start_date,
+                'end_date': end_date,
+                'report_type': report_type,
+                'report_data': report_data,
+                'bank_accounts': BankAccount.objects.filter(is_active=True)
+            }
+            
+            # If exporting to standalone format, use the standalone template
+            if export_format == 'standalone':
+                return render(request, 'bank/bank_statement_report_standalone.html', context)
+            
+            # Otherwise use the regular template
+            return render(request, 'bank/bank_statement_report.html', context)
+            
+        except Exception as e:
+            print(f"Error generating report: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({'error': str(e)}, status=400)
+    
+    def _generate_report_data(self, entries, report_type):
+        """Generate structured report data from statement entries"""
+        
+        # Extract opening and closing balances
+        opening_balance = entries[-1]['balance'] if entries else Decimal('0.00')
+        closing_balance = entries[0]['balance'] if entries else Decimal('0.00')
+        
+        # Exclude BALANCE type entries from categorization
+        entries = [e for e in entries if e.get('type') != 'BALANCE']
+        
+        # Initialize data structure
+        summary = {
+            'inflows': {},   # Grouped by main_type, then by sub_type/supplier
+            'outflows': {},  # Same structure
+            'inflow_total': Decimal('0.00'),
+            'outflow_total': Decimal('0.00'),
+            'opening_balance': opening_balance,
+            'closing_balance': closing_balance
+        }
+        
+        # Process each entry
+        for entry in entries:
+            # Skip entries without main_type
+            if 'main_type' not in entry:
+                continue
+                
+            main_type = entry.get('main_type')
+            sub_type = entry.get('sub_type', 'Other')
+            
+            # Determine if it's an inflow or outflow
+            credit = entry.get('credit') or Decimal('0.00')
+            debit = entry.get('debit') or Decimal('0.00')
+            
+            # Skip entries with zero amount
+            if credit == 0 and debit == 0:
+                continue
+                
+            # Determine if this is supplier-related
+            is_supplier_related = main_type in ['Expense', 'Utility', 'Service', 'Telecom', 'Insurance', 'Property']
+            
+            # For supplier payments, get the supplier name
+            supplier_name = None
+            if is_supplier_related and 'beneficiary' in entry:
+                supplier_name = entry['beneficiary'].get('name', 'Unknown Supplier')
+            
+            # Add to appropriate category (inflows or outflows)
+            if credit > 0:
+                if main_type not in summary['inflows']:
+                    summary['inflows'][main_type] = {'group_total': Decimal('0.00')}  # Changed _total to group_total
+                
+                # Group by supplier name if supplier-related, otherwise by sub_type
+                if is_supplier_related and supplier_name:
+                    if supplier_name not in summary['inflows'][main_type]:
+                        summary['inflows'][main_type][supplier_name] = Decimal('0.00')
+                    summary['inflows'][main_type][supplier_name] += credit
+                else:
+                    if sub_type not in summary['inflows'][main_type]:
+                        summary['inflows'][main_type][sub_type] = Decimal('0.00')
+                    summary['inflows'][main_type][sub_type] += credit
+                
+                # Update totals
+                summary['inflows'][main_type]['group_total'] += credit  # Changed _total to group_total
+                summary['inflow_total'] += credit
+                
+            if debit > 0:
+                if main_type not in summary['outflows']:
+                    summary['outflows'][main_type] = {'group_total': Decimal('0.00')}  # Changed _total to group_total
+                
+                # Group by supplier name if supplier-related, otherwise by sub_type
+                if is_supplier_related and supplier_name:
+                    if supplier_name not in summary['outflows'][main_type]:
+                        summary['outflows'][main_type][supplier_name] = Decimal('0.00')
+                    summary['outflows'][main_type][supplier_name] += debit
+                else:
+                    if sub_type not in summary['outflows'][main_type]:
+                        summary['outflows'][main_type][sub_type] = Decimal('0.00')
+                    summary['outflows'][main_type][sub_type] += debit
+                
+                # Update totals
+                summary['outflows'][main_type]['group_total'] += debit  # Changed _total to group_total
+                summary['outflow_total'] += debit
+        
+        # For detailed supplier report, add the transaction details
+        if report_type == 'detailed':
+            detailed_supplier_data = self._generate_supplier_details(entries)
+            summary['supplier_details'] = detailed_supplier_data
+        
+        # Calculate net flow
+        summary['net_flow'] = summary['inflow_total'] - summary['outflow_total']
+        
+        # Sort main categories by amount (descending)
+        sorted_inflows = sorted(
+            summary['inflows'].items(), 
+            key=lambda x: x[1]['group_total'],  # Changed _total to group_total
+            reverse=True
+        )
+        sorted_outflows = sorted(
+            summary['outflows'].items(), 
+            key=lambda x: x[1]['group_total'],  # Changed _total to group_total
+            reverse=True
+        )
+        
+        # Rebuild dictionaries with sorted keys
+        summary['inflows'] = {k: v for k, v in sorted_inflows}
+        summary['outflows'] = {k: v for k, v in sorted_outflows}
+        
+        return summary
+    
+    def _generate_supplier_details(self, entries):
+        """Generate detailed supplier payment information"""
+        
+        # Group entries by supplier
+        supplier_details = {}
+        
+        # Filter for supplier-related entries with debit amounts
+        supplier_entries = [
+            e for e in entries 
+            if e.get('debit') and 
+            e.get('main_type') in ['Expense', 'Utility', 'Service', 'Telecom', 'Insurance', 'Property'] and
+            'beneficiary' in e
+        ]
+        
+        # Group by supplier
+        for entry in supplier_entries:
+            supplier_name = entry['beneficiary'].get('name', 'Unknown Supplier')
+            
+            if supplier_name not in supplier_details:
+                supplier_details[supplier_name] = {
+                    'total': Decimal('0.00'),
+                    'payments': [],
+                    'main_type': entry.get('main_type', 'Expense'),
+                    'supplier_info': entry.get('beneficiary', {})
+                }
+            
+            # Add payment details
+            supplier_details[supplier_name]['payments'].append({
+                'date': entry.get('date'),
+                'amount': entry.get('debit'),
+                'reference': entry.get('reference'),
+                'label': entry.get('label'),
+                'type': entry.get('main_type'),
+                'sub_type': entry.get('sub_type'),
+                'invoice': entry.get('invoice'),
+                'payment_due': entry.get('payment_due'),
+                'status': entry.get('status')
+            })
+            
+            # Update total
+            supplier_details[supplier_name]['total'] += entry.get('debit') or Decimal('0.00')
+        
+        # Sort suppliers by total amount (descending)
+        sorted_suppliers = sorted(
+            supplier_details.items(),
+            key=lambda x: x[1]['total'],
+            reverse=True
+        )
+        
+        return {k: v for k, v in sorted_suppliers}
+

@@ -59,20 +59,28 @@ def format_balance(value):
     try:
         # Convert string to Decimal if needed
         if isinstance(value, str):
-            value = Decimal(value)
+            value = Decimal(value.replace(' ', '').replace(',', '.'))
         
         # Now we can safely use abs()
-        formatted = floatformat(abs(value), 2)
+        value = abs(value)
         
-        # Add space thousand separators
+        # Format with 2 decimal places
+        formatted = f"{value:.2f}"
+        
+        # Split into integer and decimal parts
         int_part, dec_part = formatted.split('.')
+        
+        # Format integer part with space separators
         int_with_spaces = ''
         for i, digit in enumerate(reversed(int_part)):
             if i and i % 3 == 0:
                 int_with_spaces = ' ' + int_with_spaces
             int_with_spaces = digit + int_with_spaces
             
+        # Choose one format - using period as decimal separator
         return f'{int_with_spaces}.{dec_part}'
+        # Or using comma as decimal separator
+        # return f'{int_with_spaces},{dec_part}'
         
     except (TypeError, ValueError, InvalidOperation) as e:
         print(f"Error formatting balance: {e}, value: {value}, type: {type(value)}")

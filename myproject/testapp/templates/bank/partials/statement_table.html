@@ -33,6 +33,12 @@
             {{ entry.type }}
         </span>
     </td>
+    <td>
+        <span class="badge badge-primary">{{ entry.main_type }}</span>
+        {% if entry.sub_type != 'GENERAL' and entry.sub_type != 'OTHER' %}
+        <small class="text-muted ml-1">{{ entry.sub_type }}</small>
+        {% endif %}
+    </td>
     <td class="text-right text-danger">
         {% if entry.debit %}{{ entry.debit|format_balance }}{% endif %}
     </td>

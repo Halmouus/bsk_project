@@ -99,7 +99,7 @@ from .views_pay import (
     PayDeclarationListView, PayDeclarationCreateView, PayDeclarationDetailView, PayAccountingView, PayAccountingView,
     PayDeclarationItemUpdateView, PayAccountingView, PayAccountingView, PayAccountingView, PayPendingDeclarationsView
 )
-from . import views_production, views_presentation, views_contract, views_receipts, views_supplier
+from . import views_production, views_presentation, views_contract, views_receipts, views_supplier, views_statement
 from .views import test_translation
 
 
@@ -261,7 +261,8 @@ urlpatterns = [
     # Custom Bank Record URLs
     path('bank-accounts/custom-records/', CustomBankRecordView.as_view(), name='custom-bank-record-create'),
     path('bank-accounts/custom-records/<uuid:record_id>/', CustomBankRecordView.as_view(), name='custom-bank-record-delete'),
-
+    path('bank-accounts/report/', views_statement.BankStatementReportView.as_view(), name='bank-statement-report'),
+    
 
     # Cash Management URLs
     path('cash/', CashConfigurationView.as_view(), name='cash-configuration'),
@@ -341,7 +342,7 @@ urlpatterns = [
         PresentationDocumentDeleteView.as_view(), 
         name='presentation-delete-document'),
     path('presentations/<uuid:pk>/summary/', views_presentation.PresentationSummaryView.as_view(), name='presentation-summary'),
-    
+
     # Calendar URLs
     path('calendar/', CalendarView.as_view(), name='calendar'),
     path('calendar/forecasts/', CalendarForecastView.as_view(), name='calendar-forecasts'),

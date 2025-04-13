@@ -4086,6 +4086,307 @@ class BankStatement(models.Model):
         return balance
     
     @classmethod
+    def categorize_transaction(cls, entry_type, data=None):
+        """
+        Determine the main_type and sub_type for a transaction based on its properties.
+        
+        Args:
+            entry_type (str): The original entry type
+            data (dict): Additional data about the transaction to help with categorization
+        
+        Returns:
+            tuple: (main_type, sub_type)
+        """
+        # Default values
+        main_type = "Operational"
+        sub_type = "General"
+        
+        # Format function for better readability
+        def format_name(name):
+            """Convert from UPPERCASE_WITH_UNDERSCORES to Title Case With Spaces"""
+            if not name:
+                return "General"
+            return ' '.join(word.capitalize() for word in name.replace('_', ' ').lower().split())
+        
+        # Check/Supplier payments
+        if entry_type == 'SUPPLIER_PAYMENT':
+            check = data.get('payment')
+            
+            # Tax payments take precedence
+            if check and check.is_tax_payment:
+                main_type = "Tax"
+                if check.tax_declaration_type == 'vat':
+                    sub_type = "VAT"
+                elif check.tax_declaration_type == 'ir':
+                    sub_type = "Income"
+                elif check.tax_declaration_type == 'stamp_right':
+                    sub_type = "Stamp Rights"
+                elif check.tax_declaration_type == 'other_tax':
+                    # Get specific tax type if available
+                    try:
+                        if check.tax_declaration_id and check.content_type:
+                            # Get the model class from content_type
+                            tax_model = check.content_type.model_class()
+                            if tax_model:
+                                # Query the actual tax declaration
+                                tax_declaration = tax_model.objects.filter(id=check.tax_declaration_id).first()
+                                if tax_declaration and hasattr(tax_declaration, 'tax_type'):
+                                    print(f"Found tax declaration: {tax_declaration.id}, type: {tax_declaration.tax_type}")
+                                    tax_type = tax_declaration.tax_type
+                                    if tax_type == 'professional':
+                                        sub_type = "Professional"
+                                    elif tax_type == 'communal':
+                                        sub_type = "Communal"
+                                    else:
+                                        sub_type = format_name(tax_type)
+                                else:
+                                    print(f"Tax declaration not found or has no tax_type attribute")
+                                    sub_type = "Other"
+                            else:
+                                print(f"Could not get model class from content_type")
+                                sub_type = "Other"
+                        else:
+                            print(f"No tax_declaration_id or content_type available")
+                            sub_type = "Other"
+                    except Exception as e:
+                        print(f"Error getting tax type: {e}")
+                        sub_type = "Other"
+                else:
+                    sub_type = "General"
+            
+            # Direct invoice payments or allocated payments
+            elif check:
+                invoice = check.cause
+                if invoice:
+                    # Use invoice type if available
+                    main_type = "Expense" 
+                    sub_type = "General"
+                    
+                    # Special handling for specific invoice types
+                    if hasattr(invoice, 'type'):
+                        if invoice.type in ["ENERGY", "UTILITIES"]:
+                            main_type = "Utility"
+                            sub_type = format_name(invoice.type)
+                        elif invoice.type == "INSURANCE":
+                            main_type = "Insurance"
+                            sub_type = "General"
+                        elif invoice.type == "LEASING":
+                            main_type = "Leasing"
+                            sub_type = "General"
+                        elif invoice.type == "TELECOM":
+                            main_type = "Telecom"
+                            sub_type = "General"
+                        elif invoice.type == "RENT":
+                            main_type = "Property"
+                            sub_type = "Rent"
+                        elif invoice.type == "SERVICE":
+                            main_type = "Service"
+                            sub_type = "General"
+                        elif invoice.type == "LOAN":
+                            main_type = "Financial"
+                            sub_type = "Loan"
+                        elif invoice.type in ["SOCIAL", "RETIREMENT"]:
+                            main_type = "Social Security"
+                            sub_type = format_name(invoice.type)
+                        else:
+                            sub_type = format_name(invoice.type)
+                
+                # Check supplier properties if no invoice or couldn't categorize by invoice
+                if (not invoice or main_type == "Expense") and check.beneficiary:
+                    supplier = check.beneficiary
+                    if supplier.is_energy:
+                        main_type = "Utility"
+                        sub_type = "Energy"
+        
+        elif entry_type == 'DIRECT_DEBIT':
+            direct_debit = data.get('direct_debit')
+            main_type = "Expense"  # Default
+            sub_type = "Payment"
+            
+            try:
+                if direct_debit:
+                    # First try to determine type from contract reference
+                    if direct_debit.contract and direct_debit.contract.reference:
+                        contract_ref = direct_debit.contract.reference.upper()
+                        print(f"Contract reference: {contract_ref}")
+                        
+                        # Check for patterns in contract reference
+                        if "LOAN" in contract_ref:
+                            main_type = "Financial"
+                            sub_type = "Loan"
+                        elif "RENT" in contract_ref:
+                            main_type = "Property"
+                            sub_type = "Rent"
+                        elif "ENERGY" in contract_ref or "ELEC" in contract_ref:
+                            main_type = "Utility"
+                            sub_type = "Energy"
+                        elif "WATER" in contract_ref:
+                            main_type = "Utility"
+                            sub_type = "Water"
+                        elif "TEL" in contract_ref or "PHONE" in contract_ref:
+                            main_type = "Telecom"
+                            sub_type = "Service"
+                        
+                    # Only try invoice type if we still haven't identified a specific category
+                    if sub_type == "Payment" and direct_debit.invoice and direct_debit.invoice.invoice:
+                        invoice = direct_debit.invoice.invoice
+                        
+                        # Try to get invoice type if available
+                        if hasattr(invoice, 'type'):
+                            invoice_type = invoice.type
+                            print(f"Invoice type: {invoice_type}")
+                            
+                            # Map invoice types
+                            if invoice_type == "ENERGY":
+                                main_type = "Utility"
+                                sub_type = "Energy"
+                            elif invoice_type == "UTILITIES":
+                                main_type = "Utility"
+                                sub_type = "Utilities"
+                            elif invoice_type == "INSURANCE":
+                                main_type = "Insurance"
+                                sub_type = "Policy"
+                            elif invoice_type == "LEASING":
+                                main_type = "Leasing"
+                                sub_type = "Equipment"
+                            elif invoice_type == "TELECOM":
+                                main_type = "Telecom"
+                                sub_type = "Service"
+                            elif invoice_type == "RENT":
+                                main_type = "Property"
+                                sub_type = "Rent"
+                            elif invoice_type == "LOAN":
+                                main_type = "Financial"
+                                sub_type = "Loan"
+                            elif invoice_type == "SERVICE":
+                                main_type = "Service"
+                                sub_type = "Professional"
+                            elif invoice_type in ["SOCIAL", "RETIREMENT"]:
+                                main_type = "Social Security"
+                                sub_type = invoice_type.capitalize()
+                            else:
+                                sub_type = format_name(invoice_type)
+                        else:
+                            # Try to analyze fiscal label if available
+                            if hasattr(invoice, 'fiscal_label') and invoice.fiscal_label:
+                                label = invoice.fiscal_label.lower()
+                                if "loan" in label:
+                                    main_type = "Financial"
+                                    sub_type = "Loan"
+                                elif "rent" in label:
+                                    main_type = "Property"
+                                    sub_type = "Rent"
+                                # Add other patterns as needed
+            except Exception as e:
+                print(f"Error categorizing direct debit: {e}")
+        
+        # Tax payments
+        elif entry_type in ['VAT_PAYMENT', 'IR_PAYMENT', 'STAMP_PAYMENT']:
+            main_type = "Tax"
+            if entry_type == 'VAT_PAYMENT':
+                sub_type = "VAT"
+            elif entry_type == 'IR_PAYMENT':
+                sub_type = "Income"
+            else:
+                sub_type = "Stamp Rights"
+        
+        # Client receipts/income
+        elif entry_type in ['CASH', 'TRANSFER']:
+            main_type = "Client"
+            sub_type = entry_type.capitalize() 
+        elif entry_type in ['CHECK_COLLECTION', 'LCN_COLLECTION']:
+            main_type = "Client"
+            sub_type = entry_type.split('_')[0].capitalize()
+        elif entry_type in ['CHECK_DISCOUNT', 'LCN_DISCOUNT']:
+            main_type = "Financial"
+            sub_type = "Discount"
+        elif entry_type in ['CHECK_REVERSAL', 'LCN_REVERSAL']:
+            main_type = "Financial"
+            sub_type = "Reversal"
+        
+        # Bank fees
+        elif entry_type == 'BANK_FEE':
+            main_type = "Fee"
+            fee_details = data.get('details', {}) if data else {}
+            if fee_details and 'fee_type' in fee_details:
+                sub_type = fee_details['fee_type']
+            else:
+                sub_type = "Commission"
+        
+        # Interbank transfers
+        elif entry_type in ['INTERBANK_TRANSFER_IN', 'INTERBANK_TRANSFER_OUT']:
+            main_type = "Internal"
+            sub_type = "Transfer"
+        
+        # Balance entries
+        elif entry_type == 'BALANCE':
+            main_type = "Balance"
+            sub_type = "Opening"
+        
+        # Payroll
+        elif entry_type == 'PAY_DECLARATION':
+            main_type = "Payroll"
+            sub_type = "Salary"
+            
+        # Cash operations
+        elif entry_type == 'CASH_WITHDRAWAL':
+            main_type = "Cash"
+            sub_type = "Withdrawal"
+        elif entry_type == 'CASH_DEPOSIT':
+            main_type = "Cash"
+            sub_type = "Deposit"
+        elif entry_type == 'CASH_EXPENSE':
+            main_type = "Expense"
+            sub_type = "Cash"
+        elif entry_type == 'CASH_PAYMENT':
+            main_type = "Expense"
+            sub_type = "Cash"
+            
+        # Custom records
+        elif entry_type == 'MANUAL':
+            manual_record = data.get('record') if data else None
+            
+            main_type = "Manual"
+            
+            # Use notes field directly as subcategory if available
+            if manual_record and manual_record.notes and manual_record.notes.strip():
+                sub_type = manual_record.notes.strip()
+                # Truncate if too long (optional)
+                if len(sub_type) > 30:
+                    sub_type = sub_type[:27] + "..."
+            else:
+                sub_type = "Custom"
+            
+        # Other tax types
+        elif entry_type in ['PROFESSIONAL_TAX', 'COMMUNAL_TAX', 'OTHER_TAX']:
+            main_type = "Tax"
+            # Try to get specific tax type from tax declaration
+            declaration = None
+            
+            if data and 'declaration' in data:
+                declaration = data.get('declaration')
+            
+            if declaration and hasattr(declaration, 'tax_type'):
+                tax_type = declaration.tax_type
+                if tax_type == 'professional':
+                    sub_type = "Professional"
+                elif tax_type == 'communal':
+                    sub_type = "Communal"
+                else:
+                    sub_type = format_name(tax_type)
+            else:
+                # Default to the entry type itself
+                if entry_type == 'PROFESSIONAL_TAX':
+                    sub_type = "Professional"
+                elif entry_type == 'COMMUNAL_TAX':
+                    sub_type = "Communal"
+                else:
+                    sub_type = "Other"
+    
+        print(f"Categorized {entry_type} as {main_type}/{sub_type}")
+        return main_type, sub_type
+        
+    @classmethod
     def get_statement(cls, bank_account, start_date=None, end_date=None, include_forecasts=False):
         """
         Dynamically generates statement entries for a bank account.
@@ -4104,10 +4405,14 @@ class BankStatement(models.Model):
         )
 
         for deposit in cash_withdrawals:
+            main_type, sub_type = cls.categorize_transaction('CASH_WITHDRAWAL')
+            
             entries.append({
                 'date': deposit.date,
                 'label': f"Cash withdrawal - {deposit.reference}",
                 'type': 'CASH_WITHDRAWAL',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': deposit.amount,
                 'credit': None,
                 'reference': deposit.reference,
@@ -4136,10 +4441,14 @@ class BankStatement(models.Model):
                     'rejection_cause_display': None
                 }
             
+            main_type, sub_type = cls.categorize_transaction('CASH')
+            
             entries.append({
                 'date': receipt.operation_date,
                 'label': f"Cash payment from {receipt.entity.name}",
                 'type': 'CASH',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': None,
                 'credit': receipt.amount,
                 'reference': receipt.reference_number or 'N/A',
@@ -4165,10 +4474,14 @@ class BankStatement(models.Model):
         ).select_related('entity', 'client')
         
         for receipt in transfer_receipts:
+            main_type, sub_type = cls.categorize_transaction('TRANSFER')
+            
             entries.append({
                 'date': receipt.operation_date,
                 'label': f"Bank transfer from {receipt.entity.name}",
                 'type': 'TRANSFER',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': None,
                 'credit': receipt.amount,
                 'reference': receipt.transfer_reference,
@@ -4227,11 +4540,15 @@ class BankStatement(models.Model):
                         
                         print(f"Final entry_date being used: {entry_date}")
                         print("=== End processing paid collection receipt ===\n")
+                        entry_type = f'{receipt_type.upper()}_COLLECTION'
+                        main_type, sub_type = cls.categorize_transaction(entry_type)
                         
                         entries.append({
                             'date': entry_date,
                             'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
-                            'type': f'{receipt_type.upper()}_COLLECTION',
+                            'type': entry_type,
+                            'main_type': main_type,
+                            'sub_type': sub_type,
                             'debit': None,
                             'credit': receipt.amount,
                             'reference': pres.bank_reference or f"Pres. #{pres.id}",
@@ -4257,11 +4574,15 @@ class BankStatement(models.Model):
                 
                 # For discount presentations
                 elif pres.presentation_type == 'DISCOUNT':
+                    entry_type = f'{receipt_type.upper()}_DISCOUNT'
+                    main_type, sub_type = cls.categorize_transaction(entry_type)
                     # Record initial discount
                     discount_entry = {
                         'date': pres.date,
                         'label': f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
-                        'type': f'{receipt_type.upper()}_DISCOUNT',
+                        'type': entry_type,
+                        'main_type': main_type,
+                        'sub_type': sub_type,
                         'debit': None,
                         'credit': receipt.amount,
                         'reference': pres.bank_reference or f"Pres. #{pres.id}",
@@ -4307,12 +4628,15 @@ class BankStatement(models.Model):
                         print("Unpaid date:", unpaid_date)
                         print("Type of pres.date:", type(pres.date))
                         print("Type of unpaid_date:", type(unpaid_date))
-                    
+                        entry_type = f'{receipt_type.upper()}_REVERSAL'
+                        main_type, sub_type = cls.categorize_transaction(entry_type)
                         reversal_entry = {
                             'date': unpaid_date,  # Use unpaid date if available
                             'label': (f"Reversal of {receipt_type} "
                                     f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
-                            'type': f'{receipt_type.upper()}_REVERSAL',
+                            'type': entry_type,
+                            'main_type': main_type,
+                            'sub_type': sub_type,
                             'debit': receipt.amount,
                             'credit': None,
                             'reference': pres.bank_reference or f"Pres. #{pres.id}",
@@ -4345,10 +4669,14 @@ class BankStatement(models.Model):
         )
         
         for transfer in outgoing_transfers:
+            main_type, sub_type = cls.categorize_transaction('INTERBANK_TRANSFER_OUT')
+            
             entries.append({
                 'date': transfer.date,
                 'label': transfer.label,
                 'type': 'INTERBANK_TRANSFER_OUT',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': transfer.total_amount,
                 'credit': None,
                 'reference': f'Transfer #{transfer.id}',
@@ -4369,10 +4697,13 @@ class BankStatement(models.Model):
         
         for transfer in incoming_transfers:
             for record in transfer.transferred_records.all():
+                main_type, sub_type = cls.categorize_transaction('INTERBANK_TRANSFER_IN')
                 entries.append({
                     'date': transfer.date,
                     'label': f"{transfer.label} - {record.original_label}",
                     'type': 'INTERBANK_TRANSFER_IN',
+                    'main_type': main_type,
+                    'sub_type': sub_type,
                     'debit': None,
                     'credit': record.amount,
                     'reference': record.original_reference,
@@ -4405,11 +4736,22 @@ class BankStatement(models.Model):
         ).select_related('fee_type', 'related_presentation')
 
         for fee in fee_transactions:
+            main_type, sub_type = cls.categorize_transaction('BANK_FEE', {'details': {
+                'fee_type': fee.fee_type.name,
+                'raw_amount': fee.raw_amount,
+                'vat_rate': fee.vat_rate,
+                'vat_included': fee.vat_included,
+                'vat_amount': fee.vat_amount,
+                'total_amount': fee.total_amount,
+                'related_presentation': fee.related_presentation.bank_reference if fee.related_presentation else None
+            }})
             entries.append({
                 'date': fee.date,
                 'label': (f"{fee.fee_type.name}"
                         f"{' - Pres. ' + fee.related_presentation.bank_reference if fee.related_presentation else ''}"),
                 'type': 'BANK_FEE',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': fee.total_amount,
                 'credit': None,
                 'reference': fee.fee_type.code,
@@ -4440,10 +4782,13 @@ class BankStatement(models.Model):
             custom_records = custom_records.filter(date__lte=end_date)
             
         for record in custom_records:
+            main_type, sub_type = cls.categorize_transaction('MANUAL', {'record': record})
             entries.append({
                 'date': record.date,
                 'label': record.bank_label,
                 'type': 'MANUAL',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': record.debit,
                 'credit': record.credit,
                 'reference': record.reference,
@@ -4473,11 +4818,15 @@ class BankStatement(models.Model):
             print(f"Paid at: {payment.paid_at}")
             print(f"Is supplier payment: {payment.is_supplier_payment}")
             print(f"Bank Account: {payment.checker.bank_account.id} (Expected: {bank_account.id})")
-            
+
+            main_type, sub_type = cls.categorize_transaction('SUPPLIER_PAYMENT', {'payment': payment})
+
             entries.append({
                 'date': payment.paid_at.date(),
                 'label': f"Payment to {payment.beneficiary.name}",
                 'type': 'SUPPLIER_PAYMENT',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': payment.amount,
                 'credit': None,
                 'reference': f"{payment.checker.type} {payment.checker.index}{payment.position}",
@@ -4524,11 +4873,15 @@ class BankStatement(models.Model):
                 print(f"Invoice: {debit.invoice.invoice.ref}")
                 print(f"Amount: {debit.amount}")
                 print(f"Processed date: {debit.processed_date}")
-                
+
+                main_type, sub_type = cls.categorize_transaction('DIRECT_DEBIT', {'direct_debit': debit})
+
                 entries.append({
                     'date': debit.processed_date,
                     'label': f"Domiciled payment for contract {debit.contract.reference}",
                     'type': 'DIRECT_DEBIT',
+                    'main_type': main_type,
+                    'sub_type': sub_type,
                     'debit': debit.amount,
                     'credit': None,
                     'reference': f"DOM/{debit.contract.reference}/{debit.processed_date.strftime('%Y%m')}",
@@ -4584,11 +4937,15 @@ class BankStatement(models.Model):
                 print(f"Total deducted VAT: {declaration.total_deducted_vat}")
                 net_vat = declaration.total_invoiced_vat - declaration.total_deducted_vat
                 print(f"Net VAT to pay: {net_vat}")
+
+                main_type, sub_type = cls.categorize_transaction('VAT_PAYMENT')
                 
                 entries.append({
                     'date': declaration.payment_date,
                     'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
                     'type': 'VAT_PAYMENT',
+                    'main_type': main_type,
+                    'sub_type': sub_type,
                     'debit': net_vat if net_vat > 0 else None,
                     'credit': abs(net_vat) if net_vat < 0 else None,
                     'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
@@ -4634,10 +4991,14 @@ class BankStatement(models.Model):
                     print(f"Payment date: {declaration.payment_date}")
                     print(f"Tax amount: {declaration.tax_amount}")
                     
+                    main_type, sub_type = cls.categorize_transaction('IR_PAYMENT')
+                    
                     entries.append({
                         'date': declaration.payment_date,
                         'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
                         'type': 'IR_PAYMENT',
+                        'main_type': main_type,
+                        'sub_type': sub_type,
                         'debit': declaration.tax_amount,
                         'credit': None,
                         'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
@@ -4683,11 +5044,15 @@ class BankStatement(models.Model):
                 print(f"\nProcessing stamp rights declaration: {declaration.period_month}/{declaration.period_year}")
                 print(f"Payment date: {declaration.payment_date}")
                 print(f"Tax amount: {declaration.tax_amount}")
-                
+
+                main_type, sub_type = cls.categorize_transaction('STAMP_PAYMENT')
+
                 entries.append({
                     'date': declaration.payment_date,
                     'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
                     'type': 'STAMP_PAYMENT',
+                    'main_type': main_type,
+                    'sub_type': sub_type,
                     'debit': declaration.tax_amount,
                     'credit': None,
                     'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
@@ -4718,11 +5083,15 @@ class BankStatement(models.Model):
 
         print(f"\nProcessing pay declarations: {pay_declarations.count()}")
 
+        main_type, sub_type = cls.categorize_transaction('PAY_DECLARATION')
+
         for declaration in pay_declarations:
             entries.append({
                 'date': declaration.payment_date,
                 'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
                 'type': 'PAY_DECLARATION',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': declaration.total_amount,
                 'credit': None,
                 'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
@@ -4749,11 +5118,14 @@ class BankStatement(models.Model):
                 if entry['date'] < start_date:
                     initial_balance += (entry['credit'] or Decimal('0.00')) - (entry['debit'] or Decimal('0.00'))
 
+            main_type, sub_type = cls.categorize_transaction('BALANCE')
             # Add opening balance entry
             entries.append({
                 'date': start_date,
                 'label': 'Opening Balance',
                 'type': 'BALANCE',
+                'main_type': main_type,
+                'sub_type': sub_type,
                 'debit': initial_balance if initial_balance < 0 else None,
                 'credit': initial_balance if initial_balance > 0 else None,
                 'reference': 'Opening balance',
@@ -4788,6 +5160,7 @@ class BankStatement(models.Model):
                 forecast_entries = forecast_entries.filter(date__lte=end_date)
 
             for forecast in forecast_entries:
+                main_type, sub_type = cls.categorize_transaction('FORECAST')
                 entries.append({
                     'date': forecast.date,
                     'label': forecast.label,
@@ -4797,6 +5170,8 @@ class BankStatement(models.Model):
                     'source_type': forecast.source_type,
                     'source_id': forecast.source_id,
                     'type': 'FORECAST',
+                    'main_type': main_type,
+                    'sub_type': sub_type,
                     'is_forecast': True
                 })
 

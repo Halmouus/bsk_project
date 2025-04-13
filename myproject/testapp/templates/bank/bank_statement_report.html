@@ -1,0 +1,309 @@
+{% extends 'base.html' %}
+{% load accounting_filters %}
+{% load custom_filters %}
+
+{% block title %}Bank Statement Report{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Filter Section -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form id="reportFilterForm" class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Bank Account</label>
+                    <select class="form-control" name="bank_id" id="bankAccountSelect" required>
+                        <option value="">Select Bank Account</option>
+                        {% for account in bank_accounts %}
+                        <option value="{{ account.id }}" {% if bank_account.id == account.id %}selected{% endif %}>
+                            {{ account.bank }} - {{ account.account_number }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="col-md-2">
+                    <label class="form-label">Start Date</label>
+                    <input type="date" class="form-control" name="start_date" id="startDate" 
+                           value="{{ start_date|date:'Y-m-d' }}" required>
+                </div>
+                
+                <div class="col-md-2">
+                    <label class="form-label">End Date</label>
+                    <input type="date" class="form-control" name="end_date" id="endDate" 
+                           value="{{ end_date|date:'Y-m-d' }}" required>
+                </div>
+                
+                <div class="col-md-3">
+                    <label class="form-label">Report Type</label>
+                    <select class="form-control" name="report_type" id="reportType">
+                        <option value="summary" {% if report_type == 'summary' %}selected{% endif %}>Summary Report</option>
+                        <option value="detailed" {% if report_type == 'detailed' %}selected{% endif %}>Detailed Report</option>
+                    </select>
+                </div>
+                
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-sync-alt me-2"></i> Generate Report
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Report Section -->
+    <div id="reportContainer" class="mb-4">
+        {% if report_data %}
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    Bank Statement Report: {{ bank_account.bank }} - {{ bank_account.account_number }}
+                </h5>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" id="printReport">
+                        <i class="fas fa-print me-1"></i> Print
+                    </button>
+                    <a href="{% url 'bank-statement-report' %}?bank_id={{ bank_account.id }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}&report_type={{ report_type }}&export_format=standalone" 
+                        class="btn btn-sm btn-outline-secondary" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i> Export PDF
+                    </a>
+                    <button class="btn btn-sm btn-outline-secondary" id="exportExcel">
+                        <i class="fas fa-file-excel me-1"></i> Excel
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Report Header -->
+                <div class="report-header mb-4">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Period: {{ start_date|date:"F d, Y" }} to {{ end_date|date:"F d, Y" }}</h6>
+                            <p class="text-muted">Generated on: {% now "F d, Y" %}</p>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <h5 class="mb-0">Bank: {{ bank_account.bank }}</h5>
+                            <p>{{ bank_account.account_number }}</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Balance Summary -->
+                <div class="balance-summary mb-4">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Opening Balance</h6>
+                                    <h4 class="card-text {% if report_data.opening_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ report_data.opening_balance|format_balance }}
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Net Flow</h6>
+                                    <h4 class="card-text {% if report_data.net_flow >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ report_data.net_flow|format_balance }}
+                                    </h4>
+                                    <div class="d-flex justify-content-between small">
+                                        <span class="text-success">In: {{ report_data.inflow_total|format_balance }}</span>
+                                        <span class="text-danger">Out: {{ report_data.outflow_total|format_balance }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-light">
+                                <div class="card-body">
+                                    <h6 class="card-title">Closing Balance</h6>
+                                    <h4 class="card-text {% if report_data.closing_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ report_data.closing_balance|format_balance }}
+                                    </h4>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Categories Section -->
+                <div class="categories-section mb-4">
+                    <div class="row">
+                        <!-- Inflows -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-success text-white">
+                                    <h5 class="mb-0">Inflows: {{ report_data.inflow_total|format_balance }}</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% if report_data.inflows %}
+                                        {% for main_type, categories in report_data.inflows.items %}
+                                            {% if main_type != '_total' %}
+                                            <div class="category-group mb-3">
+                                                <div class="d-flex justify-content-between fw-bold border-bottom pb-2">
+                                                    <span>{{ main_type }}:</span>
+                                                    <span>{{ categories.group_total|format_balance }}</span>
+                                                </div>
+                                                
+                                                {% for sub_type, amount in categories.items %}
+                                                    {% if sub_type != '_total' %}
+                                                    <div class="d-flex justify-content-between ps-3 mt-1">
+                                                        <span>- {{ sub_type }}:</span>
+                                                        <span>{{ amount|format_balance }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <p class="text-muted">No inflows during this period</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Outflows -->
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header bg-danger text-white">
+                                    <h5 class="mb-0">Outflows: {{ report_data.outflow_total|format_balance }}</h5>
+                                </div>
+                                <div class="card-body">
+                                    {% if report_data.outflows %}
+                                        {% for main_type, categories in report_data.outflows.items %}
+                                            {% if main_type != 'group_total' %}
+                                            <div class="category-group mb-3">
+                                                <div class="d-flex justify-content-between fw-bold border-bottom pb-2">
+                                                    <span>{{ main_type }}:</span>
+                                                    <span>{{ categories.group_total|format_balance }}</span>
+                                                </div>
+                                                
+                                                {% for sub_type, amount in categories.items %}
+                                                    {% if sub_type != 'group_total' %}
+                                                    <div class="d-flex justify-content-between ps-3 mt-1">
+                                                        <span>- {{ sub_type }}:</span>
+                                                        <span>{{ amount|format_balance }}</span>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </div>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <p class="text-muted">No outflows during this period</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Detailed Supplier Breakdown (if detailed report) -->
+                {% if report_type == 'detailed' and report_data.supplier_details %}
+                <div class="supplier-details-section mt-5">
+                    <h5 class="mb-3">Detailed Supplier Breakdown</h5>
+                    
+                    {% for supplier, details in report_data.supplier_details.items %}
+                    <div class="supplier-card mb-4">
+                        <div class="card">
+                            <div class="card-header bg-primary text-white">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">
+                                        {{ supplier }} ({{ details.main_type }})
+                                    </h6>
+                                    <span>Total: {{ details.total|format_balance }}</span>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="table-responsive">
+                                    <table class="table table-sm">
+                                        <thead>
+                                            <tr>
+                                                <th>Date</th>
+                                                <th>Reference</th>
+                                                <th>Invoice</th>
+                                                <th>Due Date</th>
+                                                <th class="text-end">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {% for payment in details.payments %}
+                                            <tr>
+                                                <td>{{ payment.date|date:"Y-m-d" }}</td>
+                                                <td>{{ payment.reference }}</td>
+                                                <td>
+                                                    {% if payment.invoice %}
+                                                    <a href="{% url 'invoice-update' payment.invoice.id %}">
+                                                        {{ payment.invoice.ref }}
+                                                    </a>
+                                                    {% else %}
+                                                    -
+                                                    {% endif %}
+                                                </td>
+                                                <td>{{ payment.payment_due|date:"Y-m-d"|default:"-" }}</td>
+                                                <td class="text-end">{{ payment.amount|format_balance }}</td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Select bank account and date range, then click "Generate Report" to view the bank statement report.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+$(document).ready(function() {
+    // Initialize with default dates if not already set
+    if (!$('#startDate').val() || !$('#endDate').val()) {
+        const today = new Date();
+        const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+        const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        
+        $('#startDate').val(firstDay.toISOString().split('T')[0]);
+        $('#endDate').val(lastDay.toISOString().split('T')[0]);
+    }
+    
+    // Handle report generation
+    $('#reportFilterForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        const bankId = $('#bankAccountSelect').val();
+        const startDate = $('#startDate').val();
+        const endDate = $('#endDate').val();
+        const reportType = $('#reportType').val();
+        
+        if (!bankId || !startDate || !endDate) {
+            showToast('Please fill in all required fields', 'error');
+            return;
+        }
+        
+        // Redirect to the report URL with parameters
+        window.location.href = `/testapp/bank-accounts/report/?bank_id=${bankId}&start_date=${startDate}&end_date=${endDate}&report_type=${reportType}`;
+    });
+    
+    // Print report functionality
+    $('#printReport').on('click', function() {
+        window.print();
+    });
+    
+    // Export functionality will be added later
+});
+</script>
+{% endblock %}

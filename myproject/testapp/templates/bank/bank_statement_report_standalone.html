@@ -1,0 +1,760 @@
+{% load accounting_filters %}
+{% load custom_filters %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Statement Report - {{ bank_account.bank }}</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- html2pdf library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    
+    <style>
+        /* General document styling */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background-color: #f8f9fa;
+            color: #495057;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .document-container {
+            background-color: white;
+            max-width: 210mm; /* A4 width */
+            margin: 30px auto;
+            padding: 0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.15);
+            position: relative;
+            overflow: hidden;
+            border-radius: 8px;
+        }
+        
+        /* Header section styling */
+        .document-header {
+            background: linear-gradient(135deg, #4e73df 0%, #224abe 100%);
+            color: white;
+            padding: 30px;
+            position: relative;
+        }
+        
+        .watermark {
+            position: absolute;
+            right: 30px;
+            top: 30px;
+            font-size: 128px;
+            opacity: 0.04;
+            transform: rotate(-45deg);
+            transform-origin: 50% 50%;
+            color: white;
+            user-select: none;
+        }
+        
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+        }
+        
+        .company-branding {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .company-icon {
+            font-size: 2.5rem;
+            margin-right: 15px;
+            color: white;
+            background-color: rgba(255, 255, 255, 0.1);
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .company-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 0;
+            line-height: 1.1;
+        }
+        
+        .company-subtitle {
+            font-size: 1rem;
+            opacity: 0.8;
+            margin: 5px 0 0 0;
+        }
+        
+        .document-title-container {
+            text-align: right;
+        }
+        
+        .document-type {
+            font-size: 1.2rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            margin: 0;
+        }
+        
+        .document-title {
+            font-size: 2.2rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .document-number {
+            margin-top: 5px;
+            background: rgba(255,255,255,0.15);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 1.1rem;
+            display: inline-block;
+        }
+        
+        /* Reference card styling */
+        .reference-card {
+            background-color: white;
+            margin: -20px 30px 20px 30px;
+            padding: 20px;
+            border-radius: 6px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            z-index: 10;
+        }
+        
+        .reference-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 0 15px;
+            border-right: 1px dashed #e0e0e0;
+            flex: 1;
+        }
+        
+        .reference-item:last-child {
+            border-right: none;
+        }
+        
+        .reference-label {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .reference-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #343a40;
+        }
+        
+        .reference-item i {
+            color: #4e73df;
+            margin-right: 5px;
+        }
+        
+        /* Summary Cards */
+        .summary-cards {
+            padding: 0 30px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            gap: 20px;
+        }
+        
+        .summary-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            flex: 1;
+        }
+        
+        .summary-card.opening {
+            border-left: 4px solid #4e73df;
+        }
+        
+        .summary-card.net {
+            border-left: 4px solid #f6c23e;
+        }
+        
+        .summary-card.closing {
+            border-left: 4px solid #1cc88a;
+        }
+        
+        .summary-card h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #858796;
+        }
+        
+        .summary-card .amount {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+        
+        .amount.positive {
+            color: #1cc88a;
+        }
+        
+        .amount.negative {
+            color: #e74a3b;
+        }
+        
+        /* Content section styling */
+        .document-content {
+            padding: 0 30px 30px 30px;
+        }
+        
+        .section {
+            margin-bottom: 25px;
+        }
+        
+        /* Flow sections */
+        .flows-container {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+        
+        .flow-section {
+            flex: 1;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        
+        .flow-header {
+            padding: 15px;
+            color: white;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .inflow-header {
+            background: linear-gradient(90deg, #1cc88a 0%, #13a673 100%);
+        }
+        
+        .outflow-header {
+            background: linear-gradient(90deg, #e74a3b 0%, #c92e26 100%);
+        }
+        
+        .flow-content {
+            padding: 15px;
+            background: white;
+        }
+        
+        .category-group {
+            margin-bottom: 15px;
+        }
+        
+        .category-header {
+            display: flex;
+            justify-content: space-between;
+            padding-bottom: 5px;
+            margin-bottom: 5px;
+            border-bottom: 1px solid #e8e8e8;
+            font-weight: 600;
+            color: #4e73df;
+        }
+        
+        .category-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            margin-right: 8px;
+            color: white;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+        
+        .icon-client { background-color: #1cc88a; }
+        .icon-financial { background-color: #4e73df; }
+        .icon-tax { background-color: #f6c23e; }
+        .icon-expense { background-color: #e74a3b; }
+        .icon-utility { background-color: #36b9cc; }
+        .icon-property { background-color: #6f42c1; }
+        .icon-fee { background-color: #5a5c69; }
+        
+        .category-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0 4px 30px;
+            font-size: 0.9rem;
+        }
+        
+        /* Supplier section */
+        .supplier-details {
+            margin-top: 30px;
+        }
+        
+        .supplier-details h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #4e73df;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #4e73df;
+        }
+        
+        .supplier-card {
+            margin-bottom: 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        }
+        
+        .supplier-header {
+            background: linear-gradient(90deg, #4e73df 0%, #2e59d9 100%);
+            color: white;
+            padding: 10px 15px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+        }
+        
+        .supplier-content {
+            padding: 15px;
+            background: white;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+        
+        th {
+            background-color: #f8f9fc;
+            color: #6e707e;
+            text-align: left;
+            padding: 10px;
+            font-weight: 500;
+            border-bottom: 1px solid #e3e6f0;
+        }
+        
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #e3e6f0;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9fafc;
+        }
+        
+        /* Footer */
+        .document-footer {
+            margin-top: 30px;
+            padding: 15px 30px;
+            background-color: #f8f9fa;
+            color: #858796;
+            font-size: 0.85rem;
+            text-align: center;
+            border-top: 1px solid #e3e6f0;
+        }
+        
+        /* Action buttons */
+        .action-buttons {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            z-index: 1000;
+            background-color: white;
+            border-radius: 30px;
+            box-shadow: 0 2px 15px rgba(0,0,0,0.2);
+            padding: 10px;
+        }
+        
+        .action-button {
+            margin: 0 5px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background-color: #4e73df;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+        }
+        
+        .download-button {
+            width: auto;
+            border-radius: 20px;
+            padding: 0 20px;
+            margin-right: 10px;
+            background-color: #1cc88a;
+        }
+        
+        .download-button i {
+            margin-right: 8px;
+        }
+        
+        .action-button:hover {
+            transform: scale(1.1);
+            background-color: #2e59d9;
+        }
+        
+        .download-button:hover {
+            background-color: #13a673;
+        }
+        
+        /* Print-specific styles */
+        @media print {
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .document-container {
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                border-radius: 0;
+            }
+            
+            .action-buttons {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+        <button class="action-button download-button" onclick="downloadPDF()">
+            <i class="fas fa-download"></i> Download PDF
+        </button>
+        <button class="action-button" onclick="window.print()" title="Print">
+            <i class="fas fa-print"></i>
+        </button>
+        <button class="action-button" onclick="window.location.href='{% url 'bank-statement-report' %}'" title="Back to Reports">
+            <i class="fas fa-arrow-left"></i>
+        </button>
+    </div>
+
+    <div class="document-container" id="reportDocument">
+        <!-- Document Header -->
+        <div class="document-header">
+            <div class="watermark">
+                <i class="fas fa-chart-line"></i>
+            </div>
+            
+            <div class="header-row">
+                <div>
+                    <div class="company-branding">
+                        <div class="company-icon">
+                            <i class="fas fa-university"></i>
+                        </div>
+                        <div>
+                            <h1 class="company-title">Bank Statement Report</h1>
+                            <p class="company-subtitle">Financial Overview</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="document-title-container">
+                    <p class="document-type">{{ bank_account.get_bank_display }}</p>
+                    <h2 class="document-title">{{ bank_account.account_number }}</h2>
+                    <div class="document-number">
+                        <i class="fas fa-calendar"></i> {{ start_date|date:"d M Y" }} - {{ end_date|date:"d M Y" }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Reference Card -->
+        <div class="reference-card">
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-university"></i> Bank</span>
+                <span class="reference-value">{{ bank_account.get_bank_display }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-hashtag"></i> Account</span>
+                <span class="reference-value">{{ bank_account.account_number }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-calendar-alt"></i> Period</span>
+                <span class="reference-value">{{ start_date|date:"d M Y" }} - {{ end_date|date:"d M Y" }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-clock"></i> Generated</span>
+                <span class="reference-value">{% now "d M Y, H:i" %}</span>
+            </div>
+        </div>
+        
+        <!-- Summary Cards -->
+        <div class="summary-cards">
+            <div class="summary-card opening">
+                <h3>Opening Balance</h3>
+                <div class="amount {% if report_data.opening_balance >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ report_data.opening_balance|format_balance }}
+                </div>
+                <div class="date-info small text-muted">{{ start_date|date:"d M Y" }}</div>
+            </div>
+            
+            <div class="summary-card net">
+                <h3>Net Flow</h3>
+                <div class="amount {% if report_data.net_flow >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ report_data.net_flow|format_balance }}
+                </div>
+                <div class="flow-details small">
+                    <span class="text-success">In: {{ report_data.inflow_total|format_balance }}</span> | 
+                    <span class="text-danger">Out: {{ report_data.outflow_total|format_balance }}</span>
+                </div>
+            </div>
+            
+            <div class="summary-card closing">
+                <h3>Closing Balance</h3>
+                <div class="amount {% if report_data.closing_balance >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ report_data.closing_balance|format_balance }}
+                </div>
+                <div class="date-info small text-muted">{{ end_date|date:"d M Y" }}</div>
+            </div>
+        </div>
+        
+        <!-- Document Content -->
+        <div class="document-content">
+            <!-- Flows Section -->
+            <div class="flows-container">
+                <!-- Inflows -->
+                <div class="flow-section">
+                    <div class="flow-header inflow-header">
+                        <span>Inflows</span>
+                        <span>{{ report_data.inflow_total|format_balance }}</span>
+                    </div>
+                    <div class="flow-content">
+                        {% if report_data.inflows %}
+                            {% for main_type, categories in report_data.inflows.items %}
+                                {% if main_type != 'group_total' %}
+                                <div class="category-group">
+                                    <div class="category-header">
+                                        <span>
+                                            <span class="category-icon 
+                                                {% if main_type == 'Client' %}icon-client
+                                                {% elif main_type == 'Financial' %}icon-financial
+                                                {% else %}icon-client
+                                                {% endif %}
+                                            ">
+                                                {{ main_type|slice:":1" }}
+                                            </span>
+                                            {{ main_type }}
+                                        </span>
+                                        <span>{{ categories.group_total|format_balance }}</span>
+                                    </div>
+                                    
+                                    {% for sub_type, amount in categories.items %}
+                                        {% if sub_type != 'group_total' %}
+                                        <div class="category-item">
+                                            <span>{{ sub_type }}</span>
+                                            <span>{{ amount|format_balance }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted text-center py-3">No inflows during this period</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                <!-- Outflows -->
+                <div class="flow-section">
+                    <div class="flow-header outflow-header">
+                        <span>Outflows</span>
+                        <span>{{ report_data.outflow_total|format_balance }}</span>
+                    </div>
+                    <div class="flow-content">
+                        {% if report_data.outflows %}
+                            {% for main_type, categories in report_data.outflows.items %}
+                                {% if main_type != 'group_total' %}
+                                <div class="category-group">
+                                    <div class="category-header">
+                                        <span>
+                                            <span class="category-icon 
+                                                {% if main_type == 'Tax' %}icon-tax
+                                                {% elif main_type == 'Expense' %}icon-expense
+                                                {% elif main_type == 'Utility' %}icon-utility
+                                                {% elif main_type == 'Financial' %}icon-financial
+                                                {% elif main_type == 'Property' %}icon-property
+                                                {% elif main_type == 'Fee' %}icon-fee
+                                                {% else %}icon-expense
+                                                {% endif %}
+                                            ">
+                                                {{ main_type|slice:":1" }}
+                                            </span>
+                                            {{ main_type }}
+                                        </span>
+                                        <span>{{ categories.group_total|format_balance }}</span>
+                                    </div>
+                                    
+                                    {% for sub_type, amount in categories.items %}
+                                        {% if sub_type != 'group_total' %}
+                                        <div class="category-item">
+                                            <span>{{ sub_type }}</span>
+                                            <span>{{ amount|format_balance }}</span>
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% else %}
+                            <p class="text-muted text-center py-3">No outflows during this period</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Detailed Supplier Breakdown -->
+            {% if report_type == 'detailed' and report_data.supplier_details %}
+            <div class="supplier-details">
+                <h2>Detailed Supplier Breakdown</h2>
+                
+                {% for supplier, details in report_data.supplier_details.items %}
+                <div class="supplier-card">
+                    <div class="supplier-header">
+                        <div>{{ supplier }} ({{ details.main_type }})</div>
+                        <div>{{ details.total|format_balance }}</div>
+                    </div>
+                    <div class="supplier-content">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Reference</th>
+                                    <th>Invoice</th>
+                                    <th>Due Date</th>
+                                    <th class="text-end">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for payment in details.payments %}
+                                <tr>
+                                    <td>{{ payment.date|date:"Y-m-d" }}</td>
+                                    <td>{{ payment.reference }}</td>
+                                    <td>
+                                        {% if payment.invoice %}
+                                            {{ payment.invoice.ref }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                    <td>{{ payment.payment_due|date:"Y-m-d"|default:"-" }}</td>
+                                    <td class="text-end">{{ payment.amount|format_balance }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Document Footer -->
+        <div class="document-footer">
+            <div>
+                This is an automatically generated report. No signature required.
+            </div>
+            <div class="mt-2">
+                Generated on: {% now "F d, Y H:i" %} | Copyright © {% now "Y" %} Banking Report System
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap and Other Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        // Function to download the report as PDF
+        function downloadPDF() {
+            // Show a loading indicator
+            const loadingElement = document.createElement('div');
+            loadingElement.style.position = 'fixed';
+            loadingElement.style.top = '0';
+            loadingElement.style.left = '0';
+            loadingElement.style.width = '100%';
+            loadingElement.style.height = '100%';
+            loadingElement.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            loadingElement.style.display = 'flex';
+            loadingElement.style.justifyContent = 'center';
+            loadingElement.style.alignItems = 'center';
+            loadingElement.style.zIndex = '9999';
+            loadingElement.innerHTML = '<div style="background-color: white; padding: 20px; border-radius: 10px;"><i class="fas fa-spinner fa-spin" style="font-size: 2rem; margin-right: 10px;"></i> Generating PDF...</div>';
+            document.body.appendChild(loadingElement);
+            
+            // Hide action buttons
+            const actionButtons = document.querySelector('.action-buttons');
+            actionButtons.style.display = 'none';
+            
+            // Configure PDF options
+            const opt = {
+                margin: [0, 0, 0, 0],
+                filename: 'Bank_Statement_{{ bank_account.account_number }}_{{ start_date|date:"Y-m-d" }}_{{ end_date|date:"Y-m-d" }}.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { 
+                    scale: 2,
+                    useCORS: true,
+                    letterRendering: true
+                },
+                jsPDF: { 
+                    unit: 'mm', 
+                    format: 'a4', 
+                    orientation: 'portrait'
+                }
+            };
+            
+            // Generate PDF
+            html2pdf()
+                .set(opt)
+                .from(document.getElementById('reportDocument'))
+                .save()
+                .then(() => {
+                    // Show the action buttons again
+                    actionButtons.style.display = 'flex';
+                    
+                    // Remove the loading element
+                    document.body.removeChild(loadingElement);
+                });
+        }
+    </script>
+</body>
+</html>
