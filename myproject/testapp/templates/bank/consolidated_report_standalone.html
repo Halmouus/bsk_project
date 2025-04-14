@@ -6,7 +6,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% trans "Bank Statement Report" %} - {{ bank_account.bank }}</title>
+    <title>{% trans "Consolidated Bank Report" %}</title>
     
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -262,16 +262,16 @@
             opacity: 0.08;
         }
         
-        .summary-card.opening {
-            border-left: 4px solid #4e73df;
+        .summary-card.inflow {
+            border-left: 4px solid #1cc88a;
+        }
+        
+        .summary-card.outflow {
+            border-left: 4px solid #e74a3b;
         }
         
         .summary-card.net {
-            border-left: 4px solid #f6c23e;
-        }
-        
-        .summary-card.closing {
-            border-left: 4px solid #1cc88a;
+            border-left: 4px solid #4e73df;
         }
         
         .summary-card h3 {
@@ -317,6 +317,53 @@
             transform: scaleX(1);
         }
         
+        /* Bank Account List */
+        .bank-list {
+            margin: 0 30px 30px 30px;
+            background-color: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+        }
+        
+        .bank-list h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+            color: #4e73df;
+            border-bottom: 2px solid #4e73df;
+            padding-bottom: 10px;
+            position: relative;
+        }
+        
+        .bank-list h3:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: -2px;
+            width: 50px;
+            height: 2px;
+            background-color: #e74a3b;
+        }
+        
+        .bank-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 15px;
+            border-bottom: 1px solid #e3e6f0;
+            font-size: 0.95rem;
+            transition: all 0.2s ease;
+        }
+        
+        .bank-item:hover {
+            background-color: rgba(78, 115, 223, 0.05);
+            transform: translateX(2px);
+        }
+        
+        .bank-item:last-child {
+            border-bottom: none;
+        }
+        
         /* Content section styling */
         .document-content {
             padding: 0 30px 30px 30px;
@@ -324,6 +371,26 @@
         
         .section {
             margin-bottom: 25px;
+        }
+        
+        .section-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: #4e73df;
+            border-bottom: 2px solid #4e73df;
+            padding-bottom: 8px;
+            position: relative;
+        }
+        
+        .section-title:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: -2px;
+            width: 50px;
+            height: 2px;
+            background-color: #e74a3b;
         }
         
         /* Flow sections */
@@ -433,6 +500,142 @@
         .category-item:hover {
             background-color: rgba(0,0,0,0.02);
             padding-left: 35px;
+        }
+        
+        /* Per-Bank Section */
+        .bank-details {
+            margin-top: 30px;
+        }
+        
+        .bank-card {
+            background: white;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            overflow: hidden;
+            transition: all 0.3s ease;
+            opacity: 0;
+            animation: fadeIn 0.5s forwards;
+            animation-delay: calc(var(--index, 0) * 0.1s);
+        }
+        
+        .bank-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        
+        .bank-header {
+            background: linear-gradient(90deg, #4e73df 0%, #2e59d9 100%);
+            color: white;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            font-weight: 600;
+        }
+        
+        .bank-content {
+            padding: 20px;
+            background: white;
+            position: relative;
+        }
+        
+        .bank-content .decorative-icon {
+            position: absolute;
+            right: -15px;
+            bottom: -15px;
+            font-size: 8rem;
+            opacity: 0.03;
+            transform: rotate(-15deg);
+            transition: all 0.3s ease;
+            z-index: 0;
+        }
+        
+        .bank-card:hover .decorative-icon {
+            transform: rotate(0deg);
+            opacity: 0.05;
+        }
+        
+        .bank-summary {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .bank-summary-card {
+            flex: 1;
+            padding: 15px;
+            border-radius: 6px;
+            background-color: #f8f9fc;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .bank-summary-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+        }
+        
+        .bank-summary-title {
+            font-size: 0.85rem;
+            color: #6c757d;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+        }
+        
+        .bank-summary-value {
+            font-size: 1.25rem;
+            font-weight: 600;
+            position: relative;
+            display: inline-block;
+        }
+        
+        .bank-summary-value:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: 0;
+            width: 100%;
+            height: 30%;
+            background-color: rgba(255, 255, 0, 0.1);
+            z-index: -1;
+            border-radius: 2px;
+            transform: scaleX(0);
+            transform-origin: left;
+            transition: transform 0.3s ease;
+        }
+        
+        .bank-summary-card:hover .bank-summary-value:after {
+            transform: scaleX(1);
+        }
+        
+        .bank-categories {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .bank-category-section {
+            flex: 1;
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            transition: all 0.3s ease;
+        }
+        
+        .bank-category-section:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
+        }
+        
+        .bank-category-title {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #e3e6f0;
+            color: #4e73df;
         }
         
         /* Supplier section */
@@ -609,35 +812,6 @@
             background-color: #13a673;
         }
         
-        /* Print-specific styles */
-        @media print {
-            body {
-                background-color: white;
-                margin: 0;
-                padding: 0;
-            }
-            
-            .document-container {
-                width: 100%;
-                max-width: none;
-                margin: 0;
-                padding: 0;
-                box-shadow: none;
-                border-radius: 0;
-            }
-            
-            .action-buttons {
-                display: none !important;
-            }
-            
-            /* Ensure animations don't affect print */
-            * {
-                animation: none !important;
-                transition: none !important;
-                transform: none !important;
-            }
-        }
-        
         /* Shimmer effect for highlights */
         .highlight-shimmer {
             position: relative;
@@ -667,35 +841,42 @@
             }
         }
         
-        /* Bank tabs styles */
-        .bank-tabs {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .bank-tab-button {
-            background-color: #f8f9fa;
-            border: 1px solid #e3e6f0;
-            border-radius: 6px;
-            padding: 8px 15px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: #4e73df;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        
-        .bank-tab-button.active {
-            background-color: #4e73df;
-            color: white;
-            box-shadow: 0 2px 8px rgba(78, 115, 223, 0.2);
-        }
-        
-        .bank-tab-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        /* Print-specific styles */
+        @media print {
+            body {
+                background-color: white;
+                margin: 0;
+                padding: 0;
+            }
+            
+            .document-container {
+                width: 100%;
+                max-width: none;
+                margin: 0;
+                padding: 0;
+                box-shadow: none;
+                border-radius: 0;
+            }
+            
+            .action-buttons {
+                display: none !important;
+            }
+            
+            /* Ensure animations don't affect print */
+            * {
+                animation: none !important;
+                transition: none !important;
+                transform: none !important;
+            }
+            
+            /* Page break controls */
+            .page-break {
+                page-break-after: always;
+            }
+            
+            .avoid-break {
+                page-break-inside: avoid;
+            }
         }
     </style>
 </head>
@@ -717,7 +898,7 @@
         <!-- Document Header -->
         <div class="document-header">
             <div class="watermark">
-                <i class="fas fa-chart-line"></i>
+                <i class="fas fa-chart-pie"></i>
             </div>
             
             <div class="header-row">
@@ -727,15 +908,15 @@
                             <i class="fas fa-university"></i>
                         </div>
                         <div>
-                            <h1 class="company-title">{% trans "Bank Statement Report" %}</h1>
-                            <p class="company-subtitle">{% trans "Financial Overview" %}</p>
+                            <h1 class="company-title">{% trans "Consolidated Report" %}</h1>
+                            <p class="company-subtitle">{% trans "Banking System Overview" %}</p>
                         </div>
                     </div>
                 </div>
                 
                 <div class="document-title-container">
-                    <p class="document-type">{{ bank_account.get_bank_display }}</p>
-                    <h2 class="document-title">{{ bank_account.account_number }}</h2>
+                    <p class="document-type">{% trans "Financial Report" %}</p>
+                    <h2 class="document-title">{% trans "Multiple Accounts" %}</h2>
                     <div class="document-number highlight-shimmer">
                         <i class="fas fa-calendar"></i> {{ start_date|date:"d M Y" }} - {{ end_date|date:"d M Y" }}
                     </div>
@@ -746,13 +927,8 @@
         <!-- Reference Card -->
         <div class="reference-card" data-aos="fade-up">
             <div class="reference-item">
-                <span class="reference-label"><i class="fas fa-university"></i> {% trans "Bank" %}</span>
-                <span class="reference-value">{{ bank_account.get_bank_display }}</span>
-            </div>
-            
-            <div class="reference-item">
-                <span class="reference-label"><i class="fas fa-hashtag"></i> {% trans "Account" %}</span>
-                <span class="reference-value">{{ bank_account.account_number }}</span>
+                <span class="reference-label"><i class="fas fa-university"></i> {% trans "Accounts" %}</span>
+                <span class="reference-value">{{ bank_account_objects.count }}</span>
             </div>
             
             <div class="reference-item">
@@ -761,63 +937,88 @@
             </div>
             
             <div class="reference-item">
-                <span class="reference-label"><i class="fas fa-clock"></i> {% trans "Generated" %}</span>
-                <span class="reference-value">{% now "d M Y, H:i" %}</span>
+                <span class="reference-label"><i class="fas fa-arrow-up"></i> {% trans "Inflows" %}</span>
+                <span class="reference-value">{{ consolidated_data.totals.inflow_total|format_balance }}</span>
+            </div>
+            
+            <div class="reference-item">
+                <span class="reference-label"><i class="fas fa-arrow-down"></i> {% trans "Outflows" %}</span>
+                <span class="reference-value">{{ consolidated_data.totals.outflow_total|format_balance }}</span>
             </div>
         </div>
         
         <!-- Summary Cards -->
         <div class="summary-cards">
-            <div class="summary-card opening" data-aos="fade-up" data-aos-delay="100">
+            <div class="summary-card inflow" data-aos="fade-up" data-aos-delay="100">
                 <div class="decorative-icon">
-                    <i class="fas fa-wallet"></i>
+                    <i class="fas fa-arrow-circle-up"></i>
                 </div>
-                <h3>{% trans "Opening Balance" %}</h3>
-                <div class="amount {% if report_data.opening_balance >= 0 %}positive{% else %}negative{% endif %}">
-                    {{ report_data.opening_balance|format_balance }}
+                <h3>{% trans "Total Inflows" %}</h3>
+                <div class="amount positive">
+                    {{ consolidated_data.totals.inflow_total|format_balance }}
                 </div>
-                <div class="date-info small text-muted">{{ start_date|date:"d M Y" }}</div>
+                <div class="small text-muted">{% trans "All accounts combined" %}</div>
             </div>
             
-            <div class="summary-card net" data-aos="fade-up" data-aos-delay="200">
+            <div class="summary-card outflow" data-aos="fade-up" data-aos-delay="200">
                 <div class="decorative-icon">
-                    <i class="fas fa-exchange-alt"></i>
+                    <i class="fas fa-arrow-circle-down"></i>
+                </div>
+                <h3>{% trans "Total Outflows" %}</h3>
+                <div class="amount negative">
+                    {{ consolidated_data.totals.outflow_total|format_balance }}
+                </div>
+                <div class="small text-muted">{% trans "All accounts combined" %}</div>
+            </div>
+            
+            <div class="summary-card net" data-aos="fade-up" data-aos-delay="300">
+                <div class="decorative-icon">
+                    <i class="fas fa-balance-scale"></i>
                 </div>
                 <h3>{% trans "Net Flow" %}</h3>
-                <div class="amount {% if report_data.net_flow >= 0 %}positive{% else %}negative{% endif %}">
-                    {{ report_data.net_flow|format_balance }}
+                <div class="amount {% if consolidated_data.totals.net_flow >= 0 %}positive{% else %}negative{% endif %}">
+                    {{ consolidated_data.totals.net_flow|format_balance }}
                 </div>
-                <div class="flow-details small">
-                    <span class="text-success">{% trans "In" %}: {{ report_data.inflow_total|format_balance }}</span> | 
-                    <span class="text-danger">{% trans "Out" %}: {{ report_data.outflow_total|format_balance }}</span>
-                </div>
+                <div class="small text-muted">{% trans "During selected period" %}</div>
             </div>
+        </div>
+        
+        <!-- Bank List -->
+        <div class="bank-list" data-aos="fade-up" data-aos-delay="300">
+            <h3><i class="fas fa-university me-2"></i> {% trans "Included Bank Accounts" %}</h3>
             
-            <div class="summary-card closing" data-aos="fade-up" data-aos-delay="300">
-                <div class="decorative-icon">
-                    <i class="fas fa-chart-line"></i>
-                </div>
-                <h3>{% trans "Closing Balance" %}</h3>
-                <div class="amount {% if report_data.closing_balance >= 0 %}positive{% else %}negative{% endif %}">
-                    {{ report_data.closing_balance|format_balance }}
-                </div>
-                <div class="date-info small text-muted">{{ end_date|date:"d M Y" }}</div>
+            {% for bank_id, bank_data in consolidated_data.banks.items %}
+            <div class="bank-item">
+                <span>
+                    <i class="fas fa-university me-2"></i>
+                    {{ bank_data.account.get_bank_display }} - {{ bank_data.account.account_number }}
+                </span>
+                <span class="highlight-shimmer">
+                    <span class="fw-bold {% if bank_data.report.closing_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                        {{ bank_data.report.closing_balance|format_balance }}
+                    </span>
+                </span>
             </div>
+            {% endfor %}
         </div>
         
         <!-- Document Content -->
         <div class="document-content">
+            <h2 class="section-title" data-aos="fade-up">
+                <i class="fas fa-chart-pie me-2"></i> {% trans "Consolidated Categories" %}
+            </h2>
+            
             <!-- Flows Section -->
             <div class="flows-container">
                 <!-- Inflows -->
                 <div class="flow-section" data-aos="fade-right">
                     <div class="flow-header inflow-header">
                         <span>{% trans "Inflows" %}</span>
-                        <span>{{ report_data.inflow_total|format_balance }}</span>
+                        <span>{{ consolidated_data.totals.inflow_total|format_balance }}</span>
                     </div>
                     <div class="flow-content">
-                        {% if report_data.inflows %}
-                            {% for main_type, categories in report_data.inflows.items %}
+                        {% if consolidated_data.categories.inflows %}
+                            {% for main_type, categories in consolidated_data.categories.inflows.items %}
                                 {% if main_type != 'group_total' %}
                                 <div class="category-group" style="--index: {{ forloop.counter }}">
                                     <div class="category-header">
@@ -856,11 +1057,11 @@
                 <div class="flow-section" data-aos="fade-left">
                     <div class="flow-header outflow-header">
                         <span>{% trans "Outflows" %}</span>
-                        <span>{{ report_data.outflow_total|format_balance }}</span>
+                        <span>{{ consolidated_data.totals.outflow_total|format_balance }}</span>
                     </div>
                     <div class="flow-content">
-                        {% if report_data.outflows %}
-                            {% for main_type, categories in report_data.outflows.items %}
+                        {% if consolidated_data.categories.outflows %}
+                            {% for main_type, categories in consolidated_data.categories.outflows.items %}
                                 {% if main_type != 'group_total' %}
                                 <div class="category-group" style="--index: {{ forloop.counter }}">
                                     <div class="category-header">
@@ -900,12 +1101,12 @@
                 </div>
             </div>
             
-            <!-- Detailed Supplier Breakdown -->
-            {% if report_type == 'detailed' and report_data.supplier_details %}
+            <!-- Consolidated Supplier Breakdown -->
+            {% if report_type == 'detailed' and consolidated_data.supplier_details %}
             <div class="supplier-details" data-aos="fade-up">
-                <h2>{% trans "Detailed Supplier Breakdown" %}</h2>
+                <h2><i class="fas fa-handshake me-2"></i> {% trans "Consolidated Supplier Breakdown" %}</h2>
                 
-                {% for supplier, details in report_data.supplier_details.items %}
+                {% for supplier, details in consolidated_data.supplier_details.items %}
                 <div class="supplier-card" style="--index: {{ forloop.counter }}">
                     <div class="supplier-header">
                         <div>{{ supplier }} ({{ details.main_type }})</div>
@@ -916,6 +1117,7 @@
                             <thead>
                                 <tr>
                                     <th>{% trans "Date" %}</th>
+                                    <th>{% trans "Bank" %}</th>
                                     <th>{% trans "Reference" %}</th>
                                     <th>{% trans "Invoice" %}</th>
                                     <th>{% trans "Due Date" %}</th>
@@ -926,6 +1128,7 @@
                                 {% for payment in details.payments %}
                                 <tr>
                                     <td>{{ payment.date|date:"Y-m-d" }}</td>
+                                    <td>{{ payment.bank.get_bank_display }}</td>
                                     <td>{{ payment.reference }}</td>
                                     <td>
                                         {% if payment.invoice %}
@@ -945,154 +1148,142 @@
                 {% endfor %}
             </div>
             {% endif %}
+        </div>
+        
+        <!-- Page break before bank details -->
+        <div class="page-break"></div>
+        
+        <!-- Per-Bank Breakdown -->
+        <div class="document-content bank-details">
+            <h2 class="section-title" data-aos="fade-up">
+                <i class="fas fa-university me-2"></i> {% trans "Individual Bank Details" %}
+            </h2>
             
-            <!-- Per-Bank Breakdown Section -->
-            {% if consolidated_data.banks %}
-            <div class="bank-details-section mt-5" data-aos="fade-up">
-                <h2>{% trans "Individual Bank Details" %}</h2>
-                
-                <div class="bank-tabs mb-3">
-                    {% for bank_id, bank_data in consolidated_data.banks.items %}
-                    <button class="bank-tab-button {% if forloop.first %}active{% endif %}" 
-                            onclick="showBankTab('bank-tab-{{ forloop.counter }}')">
-                        {{ bank_data.account.get_bank_display }} - {{ bank_data.account.account_number }}
-                    </button>
-                    {% endfor %}
+            {% for bank_id, bank_data in consolidated_data.banks.items %}
+            <div class="bank-card" data-aos="fade-up" style="--index: {{ forloop.counter }}">
+                <div class="bank-header">
+                    <span>{{ bank_data.account.get_bank_display }} - {{ bank_data.account.account_number }}</span>
+                    <span class="highlight-shimmer">
+                        {% trans "Net" %}: {{ bank_data.report.net_flow|format_balance }}
+                    </span>
                 </div>
-                
-                {% for bank_id, bank_data in consolidated_data.banks.items %}
-                <div id="bank-tab-{{ forloop.counter }}" class="bank-tab-content" style="display: {% if forloop.first %}block{% else %}none{% endif %}">
+                <div class="bank-content">
+                    <div class="decorative-icon">
+                        <i class="fas fa-university"></i>
+                    </div>
+                    
                     <!-- Bank Summary -->
-                    <div class="bank-summary mb-4">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="summary-card opening">
-                                    <div class="decorative-icon">
-                                        <i class="fas fa-wallet"></i>
-                                    </div>
-                                    <h3>{% trans "Opening Balance" %}</h3>
-                                    <div class="amount {% if bank_data.report.opening_balance >= 0 %}positive{% else %}negative{% endif %}">
-                                        {{ bank_data.report.opening_balance|format_balance }}
-                                    </div>
-                                </div>
+                    <div class="bank-summary">
+                        <div class="bank-summary-card">
+                            <div class="bank-summary-title">{% trans "Opening Balance" %}</div>
+                            <div class="bank-summary-value {% if bank_data.report.opening_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ bank_data.report.opening_balance|format_balance }}
                             </div>
-                            <div class="col-md-4">
-                                <div class="summary-card net">
-                                    <div class="decorative-icon">
-                                        <i class="fas fa-exchange-alt"></i>
-                                    </div>
-                                    <h3>{% trans "Net Flow" %}</h3>
-                                    <div class="amount {% if bank_data.report.net_flow >= 0 %}positive{% else %}negative{% endif %}">
-                                        {{ bank_data.report.net_flow|format_balance }}
-                                    </div>
-                                    <div class="flow-details small">
-                                        <span class="text-success">{% trans "In" %}: {{ bank_data.report.inflow_total|format_balance }}</span> | 
-                                        <span class="text-danger">{% trans "Out" %}: {{ bank_data.report.outflow_total|format_balance }}</span>
-                                    </div>
-                                </div>
+                        </div>
+                        
+                        <div class="bank-summary-card">
+                            <div class="bank-summary-title">{% trans "Inflows" %}</div>
+                            <div class="bank-summary-value text-success">
+                                {{ bank_data.report.inflow_total|format_balance }}
                             </div>
-                            <div class="col-md-4">
-                                <div class="summary-card closing">
-                                    <div class="decorative-icon">
-                                        <i class="fas fa-chart-line"></i>
-                                    </div>
-                                    <h3>{% trans "Closing Balance" %}</h3>
-                                    <div class="amount {% if bank_data.report.closing_balance >= 0 %}positive{% else %}negative{% endif %}">
-                                        {{ bank_data.report.closing_balance|format_balance }}
-                                    </div>
-                                </div>
+                        </div>
+                        
+                        <div class="bank-summary-card">
+                            <div class="bank-summary-title">{% trans "Outflows" %}</div>
+                            <div class="bank-summary-value text-danger">
+                                {{ bank_data.report.outflow_total|format_balance }}
+                            </div>
+                        </div>
+                        
+                        <div class="bank-summary-card">
+                            <div class="bank-summary-title">{% trans "Closing Balance" %}</div>
+                            <div class="bank-summary-value {% if bank_data.report.closing_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ bank_data.report.closing_balance|format_balance }}
                             </div>
                         </div>
                     </div>
                     
                     <!-- Bank Categories -->
-                    <div class="bank-categories mb-4">
-                        <div class="row">
-                            <!-- Inflows -->
-                            <div class="col-md-6">
-                                <div class="flow-section">
-                                    <div class="flow-header inflow-header">
-                                        <span>{% trans "Inflows" %}</span>
-                                        <span>{{ bank_data.report.inflow_total|format_balance }}</span>
-                                    </div>
-                                    <div class="flow-content">
-                                        {% if bank_data.report.inflows %}
-                                            {% for main_type, categories in bank_data.report.inflows.items %}
-                                                {% if main_type != 'group_total' %}
-                                                <div class="category-group" style="--index: {{ forloop.counter }}">
-                                                    <div class="category-header">
-                                                        <span>
-                                                            <span class="category-icon {% if main_type == 'Client' %}icon-client{% elif main_type == 'Financial' %}icon-financial{% else %}icon-client{% endif %}">
-                                                                {{ main_type|slice:":1" }}
-                                                            </span>
-                                                            {{ main_type }}
-                                                        </span>
-                                                        <span>{{ categories.group_total|format_balance }}</span>
-                                                    </div>
-                                                    
-                                                    {% for sub_type, amount in categories.items %}
-                                                        {% if sub_type != 'group_total' %}
-                                                        <div class="category-item">
-                                                            <span>{{ sub_type }}</span>
-                                                            <span>{{ amount|format_balance }}</span>
-                                                        </div>
-                                                        {% endif %}
-                                                    {% endfor %}
-                                                </div>
-                                                {% endif %}
-                                            {% endfor %}
-                                        {% else %}
-                                            <p class="text-muted text-center py-3">{% trans "No inflows during this period" %}</p>
-                                        {% endif %}
-                                    </div>
-                                </div>
+                    <div class="bank-categories">
+                        <!-- Inflows -->
+                        <div class="flow-section">
+                            <div class="flow-header inflow-header">
+                                <span>{% trans "Inflows" %}</span>
+                                <span>{{ bank_data.report.inflow_total|format_balance }}</span>
                             </div>
-                            
-                            <!-- Outflows -->
-                            <div class="col-md-6">
-                                <div class="flow-section">
-                                    <div class="flow-header outflow-header">
-                                        <span>{% trans "Outflows" %}</span>
-                                        <span>{{ bank_data.report.outflow_total|format_balance }}</span>
-                                    </div>
-                                    <div class="flow-content">
-                                        {% if bank_data.report.outflows %}
-                                            {% for main_type, categories in bank_data.report.outflows.items %}
-                                                {% if main_type != 'group_total' %}
-                                                <div class="category-group" style="--index: {{ forloop.counter }}">
-                                                    <div class="category-header">
-                                                        <span>
-                                                            <span class="category-icon {% if main_type == 'Tax' %}icon-tax{% elif main_type == 'Expense' %}icon-expense{% elif main_type == 'Utility' %}icon-utility{% elif main_type == 'Financial' %}icon-financial{% elif main_type == 'Property' %}icon-property{% elif main_type == 'Fee' %}icon-fee{% else %}icon-expense{% endif %}">
-                                                                {{ main_type|slice:":1" }}
-                                                            </span>
-                                                            {{ main_type }}
-                                                        </span>
-                                                        <span>{{ categories.group_total|format_balance }}</span>
-                                                    </div>
-                                                    
-                                                    {% for sub_type, amount in categories.items %}
-                                                        {% if sub_type != 'group_total' %}
-                                                        <div class="category-item">
-                                                            <span>{{ sub_type }}</span>
-                                                            <span>{{ amount|format_balance }}</span>
-                                                        </div>
-                                                        {% endif %}
-                                                    {% endfor %}
+                            <div class="flow-content">
+                                {% if bank_data.report.inflows %}
+                                    {% for main_type, categories in bank_data.report.inflows.items %}
+                                        {% if main_type != 'group_total' %}
+                                        <div class="category-group" style="--index: {{ forloop.counter }}">
+                                            <div class="category-header">
+                                                <span>
+                                                    <span class="category-icon {% if main_type == 'Client' %}icon-client{% elif main_type == 'Financial' %}icon-financial{% else %}icon-client{% endif %}">
+                                                        {{ main_type|slice:":1" }}
+                                                    </span>
+                                                    {{ main_type }}
+                                                </span>
+                                                <span>{{ categories.group_total|format_balance }}</span>
+                                            </div>
+                                            
+                                            {% for sub_type, amount in categories.items %}
+                                                {% if sub_type != 'group_total' %}
+                                                <div class="category-item">
+                                                    <span>{{ sub_type }}</span>
+                                                    <span>{{ amount|format_balance }}</span>
                                                 </div>
                                                 {% endif %}
                                             {% endfor %}
-                                        {% else %}
-                                            <p class="text-muted text-center py-3">{% trans "No outflows during this period" %}</p>
+                                        </div>
                                         {% endif %}
-                                    </div>
-                                </div>
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted text-center py-3">{% trans "No inflows during this period" %}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                        
+                        <!-- Outflows -->
+                        <div class="flow-section">
+                            <div class="flow-header outflow-header">
+                                <span>{% trans "Outflows" %}</span>
+                                <span>{{ bank_data.report.outflow_total|format_balance }}</span>
+                            </div>
+                            <div class="flow-content">
+                                {% if bank_data.report.outflows %}
+                                    {% for main_type, categories in bank_data.report.outflows.items %}
+                                        {% if main_type != 'group_total' %}
+                                        <div class="category-group" style="--index: {{ forloop.counter }}">
+                                            <div class="category-header">
+                                                <span>
+                                                    <span class="category-icon {% if main_type == 'Tax' %}icon-tax{% elif main_type == 'Expense' %}icon-expense{% elif main_type == 'Utility' %}icon-utility{% elif main_type == 'Financial' %}icon-financial{% elif main_type == 'Property' %}icon-property{% elif main_type == 'Fee' %}icon-fee{% else %}icon-expense{% endif %}">
+                                                        {{ main_type|slice:":1" }}
+                                                    </span>
+                                                    {{ main_type }}
+                                                </span>
+                                                <span>{{ categories.group_total|format_balance }}</span>
+                                            </div>
+                                            
+                                            {% for sub_type, amount in categories.items %}
+                                                {% if sub_type != 'group_total' %}
+                                                <div class="category-item">
+                                                    <span>{{ sub_type }}</span>
+                                                    <span>{{ amount|format_balance }}</span>
+                                                </div>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <p class="text-muted text-center py-3">{% trans "No outflows during this period" %}</p>
+                                {% endif %}
                             </div>
                         </div>
                     </div>
                 </div>
-                {% endfor %}
             </div>
-            {% endif %}
+            {% endfor %}
         </div>
         
         <!-- Document Footer -->
@@ -1170,7 +1361,7 @@
             // Configure PDF options
             const opt = {
                 margin: [0, 0, 0, 0],
-                filename: 'Bank_Statement_{{ bank_account.account_number }}_{{ start_date|date:"Y-m-d" }}_{{ end_date|date:"Y-m-d" }}.pdf',
+                filename: 'Consolidated_Bank_Report_{{ start_date|date:"Y-m-d" }}_{{ end_date|date:"Y-m-d" }}.pdf',
                 image: { type: 'jpeg', quality: 0.98 },
                 html2canvas: { 
                     scale: 2,
@@ -1181,7 +1372,8 @@
                     unit: 'mm', 
                     format: 'a4', 
                     orientation: 'portrait'
-                }
+                },
+                pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
             };
             
             // Generate PDF
@@ -1200,25 +1392,6 @@
                         document.body.removeChild(loadingElement);
                     }, 300);
                 });
-        }
-        
-        // Function to switch between bank tabs
-        function showBankTab(tabId) {
-            // Hide all tab contents
-            document.querySelectorAll('.bank-tab-content').forEach(tab => {
-                tab.style.display = 'none';
-            });
-            
-            // Remove active class from all tab buttons
-            document.querySelectorAll('.bank-tab-button').forEach(button => {
-                button.classList.remove('active');
-            });
-            
-            // Show the selected tab
-            document.getElementById(tabId).style.display = 'block';
-            
-            // Add active class to the clicked button
-            event.currentTarget.classList.add('active');
         }
     </script>
 </body>

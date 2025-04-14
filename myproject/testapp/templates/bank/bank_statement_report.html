@@ -1,50 +1,51 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
 {% load custom_filters %}
+{% load i18n %}
 
-{% block title %}Bank Statement Report{% endblock %}
+{% block title %}{% trans "Bank Statement Report" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- Filter Section -->
-    <div class="card mb-4">
+    <div class="card mb-4 shadow-sm">
         <div class="card-body">
             <form id="reportFilterForm" class="row g-3">
-                <div class="col-md-3">
-                    <label class="form-label">Bank Account</label>
-                    <select class="form-control" name="bank_id" id="bankAccountSelect" required>
-                        <option value="">Select Bank Account</option>
+                <div class="col-md-4">
+                    <label class="form-label">{% trans "Bank Accounts" %}</label>
+                    <select class="form-select" name="bank_id[]" id="bankAccountSelect" multiple size="5" required>
                         {% for account in bank_accounts %}
-                        <option value="{{ account.id }}" {% if bank_account.id == account.id %}selected{% endif %}>
-                            {{ account.bank }} - {{ account.account_number }}
+                        <option value="{{ account.id }}" {% if account.id in selected_banks %}selected{% endif %}>
+                            {{ account.get_bank_display }} - {{ account.account_number }}
                         </option>
                         {% endfor %}
                     </select>
+                    <div class="form-text">{% trans "Hold Ctrl/Cmd to select multiple accounts" %}</div>
                 </div>
                 
                 <div class="col-md-2">
-                    <label class="form-label">Start Date</label>
+                    <label class="form-label">{% trans "Start Date" %}</label>
                     <input type="date" class="form-control" name="start_date" id="startDate" 
                            value="{{ start_date|date:'Y-m-d' }}" required>
                 </div>
                 
                 <div class="col-md-2">
-                    <label class="form-label">End Date</label>
+                    <label class="form-label">{% trans "End Date" %}</label>
                     <input type="date" class="form-control" name="end_date" id="endDate" 
                            value="{{ end_date|date:'Y-m-d' }}" required>
                 </div>
                 
                 <div class="col-md-3">
-                    <label class="form-label">Report Type</label>
+                    <label class="form-label">{% trans "Report Type" %}</label>
                     <select class="form-control" name="report_type" id="reportType">
-                        <option value="summary" {% if report_type == 'summary' %}selected{% endif %}>Summary Report</option>
-                        <option value="detailed" {% if report_type == 'detailed' %}selected{% endif %}>Detailed Report</option>
+                        <option value="summary" {% if report_type == 'summary' %}selected{% endif %}>{% trans "Summary Report" %}</option>
+                        <option value="detailed" {% if report_type == 'detailed' %}selected{% endif %}>{% trans "Detailed Report" %}</option>
                     </select>
                 </div>
                 
                 <div class="col-md-2 d-flex align-items-end">
-                    <button type="submit" class="btn btn-primary w-100">
-                        <i class="fas fa-sync-alt me-2"></i> Generate Report
+                    <button type="submit" class="btn btn-primary w-100 btn-shine">
+                        <i class="fas fa-sync-alt me-2"></i> {% trans "Generate Report" %}
                     </button>
                 </div>
             </form>
@@ -54,21 +55,21 @@
     <!-- Report Section -->
     <div id="reportContainer" class="mb-4">
         {% if report_data %}
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
+        <div class="card shadow-lg">
+            <div class="card-header d-flex justify-content-between align-items-center bg-primary text-white">
                 <h5 class="mb-0">
-                    Bank Statement Report: {{ bank_account.bank }} - {{ bank_account.account_number }}
+                    {% trans "Bank Statement Report" %}: {{ bank_account.bank }} - {{ bank_account.account_number }}
                 </h5>
                 <div class="btn-group">
-                    <button class="btn btn-sm btn-outline-secondary" id="printReport">
-                        <i class="fas fa-print me-1"></i> Print
+                    <button class="btn btn-sm btn-light" id="printReport">
+                        <i class="fas fa-print me-1"></i> {% trans "Print" %}
                     </button>
                     <a href="{% url 'bank-statement-report' %}?bank_id={{ bank_account.id }}&start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}&report_type={{ report_type }}&export_format=standalone" 
-                        class="btn btn-sm btn-outline-secondary" target="_blank">
-                        <i class="fas fa-file-pdf me-1"></i> Export PDF
+                        class="btn btn-sm btn-light" target="_blank">
+                        <i class="fas fa-file-pdf me-1"></i> {% trans "Export PDF" %}
                     </a>
-                    <button class="btn btn-sm btn-outline-secondary" id="exportExcel">
-                        <i class="fas fa-file-excel me-1"></i> Excel
+                    <button class="btn btn-sm btn-light" id="exportExcel">
+                        <i class="fas fa-file-excel me-1"></i> {% trans "Excel" %}
                     </button>
                 </div>
             </div>
@@ -77,11 +78,11 @@
                 <div class="report-header mb-4">
                     <div class="row">
                         <div class="col-md-6">
-                            <h6>Period: {{ start_date|date:"F d, Y" }} to {{ end_date|date:"F d, Y" }}</h6>
-                            <p class="text-muted">Generated on: {% now "F d, Y" %}</p>
+                            <h6>{% trans "Period" %}: {{ start_date|date:"F d, Y" }} {% trans "to" %} {{ end_date|date:"F d, Y" }}</h6>
+                            <p class="text-muted">{% trans "Generated on" %}: {% now "F d, Y" %}</p>
                         </div>
                         <div class="col-md-6 text-end">
-                            <h5 class="mb-0">Bank: {{ bank_account.bank }}</h5>
+                            <h5 class="mb-0">{% trans "Bank" %}: {{ bank_account.bank }}</h5>
                             <p>{{ bank_account.account_number }}</p>
                         </div>
                     </div>
@@ -91,34 +92,43 @@
                 <div class="balance-summary mb-4">
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">Opening Balance</h6>
-                                    <h4 class="card-text {% if report_data.opening_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            <div class="card bg-light hover-scale">
+                                <div class="card-body text-center position-relative overflow-hidden">
+                                    <div class="decorative-icon">
+                                        <i class="fas fa-wallet fa-2x opacity-10"></i>
+                                    </div>
+                                    <h6 class="card-title">{% trans "Opening Balance" %}</h6>
+                                    <h4 class="card-text {% if report_data.opening_balance >= 0 %}text-success{% else %}text-danger{% endif %} highlight-text">
                                         {{ report_data.opening_balance|format_balance }}
                                     </h4>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">Net Flow</h6>
-                                    <h4 class="card-text {% if report_data.net_flow >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            <div class="card bg-light hover-scale">
+                                <div class="card-body text-center position-relative overflow-hidden">
+                                    <div class="decorative-icon">
+                                        <i class="fas fa-exchange-alt fa-2x opacity-10"></i>
+                                    </div>
+                                    <h6 class="card-title">{% trans "Net Flow" %}</h6>
+                                    <h4 class="card-text {% if report_data.net_flow >= 0 %}text-success{% else %}text-danger{% endif %} highlight-text">
                                         {{ report_data.net_flow|format_balance }}
                                     </h4>
                                     <div class="d-flex justify-content-between small">
-                                        <span class="text-success">In: {{ report_data.inflow_total|format_balance }}</span>
-                                        <span class="text-danger">Out: {{ report_data.outflow_total|format_balance }}</span>
+                                        <span class="text-success">{% trans "In" %}: {{ report_data.inflow_total|format_balance }}</span>
+                                        <span class="text-danger">{% trans "Out" %}: {{ report_data.outflow_total|format_balance }}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card bg-light">
-                                <div class="card-body">
-                                    <h6 class="card-title">Closing Balance</h6>
-                                    <h4 class="card-text {% if report_data.closing_balance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                            <div class="card bg-light hover-scale">
+                                <div class="card-body text-center position-relative overflow-hidden">
+                                    <div class="decorative-icon">
+                                        <i class="fas fa-chart-line fa-2x opacity-10"></i>
+                                    </div>
+                                    <h6 class="card-title">{% trans "Closing Balance" %}</h6>
+                                    <h4 class="card-text {% if report_data.closing_balance >= 0 %}text-success{% else %}text-danger{% endif %} highlight-text">
                                         {{ report_data.closing_balance|format_balance }}
                                     </h4>
                                 </div>
@@ -132,23 +142,23 @@
                     <div class="row">
                         <!-- Inflows -->
                         <div class="col-md-6">
-                            <div class="card">
+                            <div class="card shadow-sm">
                                 <div class="card-header bg-success text-white">
-                                    <h5 class="mb-0">Inflows: {{ report_data.inflow_total|format_balance }}</h5>
+                                    <h5 class="mb-0">{% trans "Inflows" %}: {{ report_data.inflow_total|format_balance }}</h5>
                                 </div>
                                 <div class="card-body">
                                     {% if report_data.inflows %}
                                         {% for main_type, categories in report_data.inflows.items %}
                                             {% if main_type != '_total' %}
-                                            <div class="category-group mb-3">
+                                            <div class="category-group mb-3 fade-in">
                                                 <div class="d-flex justify-content-between fw-bold border-bottom pb-2">
                                                     <span>{{ main_type }}:</span>
-                                                    <span>{{ categories.group_total|format_balance }}</span>
+                                                    <span class="text-success">{{ categories.group_total|format_balance }}</span>
                                                 </div>
                                                 
                                                 {% for sub_type, amount in categories.items %}
                                                     {% if sub_type != '_total' %}
-                                                    <div class="d-flex justify-content-between ps-3 mt-1">
+                                                    <div class="d-flex justify-content-between ps-3 mt-1 category-item">
                                                         <span>- {{ sub_type }}:</span>
                                                         <span>{{ amount|format_balance }}</span>
                                                     </div>
@@ -158,7 +168,7 @@
                                             {% endif %}
                                         {% endfor %}
                                     {% else %}
-                                        <p class="text-muted">No inflows during this period</p>
+                                        <p class="text-muted">{% trans "No inflows during this period" %}</p>
                                     {% endif %}
                                 </div>
                             </div>
@@ -166,23 +176,23 @@
                         
                         <!-- Outflows -->
                         <div class="col-md-6">
-                            <div class="card">
+                            <div class="card shadow-sm">
                                 <div class="card-header bg-danger text-white">
-                                    <h5 class="mb-0">Outflows: {{ report_data.outflow_total|format_balance }}</h5>
+                                    <h5 class="mb-0">{% trans "Outflows" %}: {{ report_data.outflow_total|format_balance }}</h5>
                                 </div>
                                 <div class="card-body">
                                     {% if report_data.outflows %}
                                         {% for main_type, categories in report_data.outflows.items %}
                                             {% if main_type != 'group_total' %}
-                                            <div class="category-group mb-3">
+                                            <div class="category-group mb-3 fade-in">
                                                 <div class="d-flex justify-content-between fw-bold border-bottom pb-2">
                                                     <span>{{ main_type }}:</span>
-                                                    <span>{{ categories.group_total|format_balance }}</span>
+                                                    <span class="text-danger">{{ categories.group_total|format_balance }}</span>
                                                 </div>
                                                 
                                                 {% for sub_type, amount in categories.items %}
                                                     {% if sub_type != 'group_total' %}
-                                                    <div class="d-flex justify-content-between ps-3 mt-1">
+                                                    <div class="d-flex justify-content-between ps-3 mt-1 category-item">
                                                         <span>- {{ sub_type }}:</span>
                                                         <span>{{ amount|format_balance }}</span>
                                                     </div>
@@ -192,7 +202,7 @@
                                             {% endif %}
                                         {% endfor %}
                                     {% else %}
-                                        <p class="text-muted">No outflows during this period</p>
+                                        <p class="text-muted">{% trans "No outflows during this period" %}</p>
                                     {% endif %}
                                 </div>
                             </div>
@@ -203,29 +213,29 @@
                 <!-- Detailed Supplier Breakdown (if detailed report) -->
                 {% if report_type == 'detailed' and report_data.supplier_details %}
                 <div class="supplier-details-section mt-5">
-                    <h5 class="mb-3">Detailed Supplier Breakdown</h5>
+                    <h5 class="mb-3">{% trans "Detailed Supplier Breakdown" %}</h5>
                     
                     {% for supplier, details in report_data.supplier_details.items %}
-                    <div class="supplier-card mb-4">
-                        <div class="card">
+                    <div class="supplier-card mb-4 fade-in" style="--delay: {{ forloop.counter|add:'-1' }}">
+                        <div class="card shadow-sm">
                             <div class="card-header bg-primary text-white">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h6 class="mb-0">
                                         {{ supplier }} ({{ details.main_type }})
                                     </h6>
-                                    <span>Total: {{ details.total|format_balance }}</span>
+                                    <span class="highlight-text">{{ details.total|format_balance }}</span>
                                 </div>
                             </div>
                             <div class="card-body">
                                 <div class="table-responsive">
-                                    <table class="table table-sm">
+                                    <table class="table table-sm table-hover">
                                         <thead>
                                             <tr>
-                                                <th>Date</th>
-                                                <th>Reference</th>
-                                                <th>Invoice</th>
-                                                <th>Due Date</th>
-                                                <th class="text-end">Amount</th>
+                                                <th>{% trans "Date" %}</th>
+                                                <th>{% trans "Reference" %}</th>
+                                                <th>{% trans "Invoice" %}</th>
+                                                <th>{% trans "Due Date" %}</th>
+                                                <th class="text-end">{% trans "Amount" %}</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -235,7 +245,7 @@
                                                 <td>{{ payment.reference }}</td>
                                                 <td>
                                                     {% if payment.invoice %}
-                                                    <a href="{% url 'invoice-update' payment.invoice.id %}">
+                                                    <a href="{% url 'invoice-update' payment.invoice.id %}" class="btn-link">
                                                         {{ payment.invoice.ref }}
                                                     </a>
                                                     {% else %}
@@ -260,7 +270,7 @@
         {% else %}
         <div class="alert alert-info">
             <i class="fas fa-info-circle me-2"></i>
-            Select bank account and date range, then click "Generate Report" to view the bank statement report.
+            {% trans "Select bank account and date range, then click \"Generate Report\" to view the bank statement report." %}
         </div>
         {% endif %}
     </div>
@@ -290,9 +300,18 @@ $(document).ready(function() {
         const reportType = $('#reportType').val();
         
         if (!bankId || !startDate || !endDate) {
-            showToast('Please fill in all required fields', 'error');
+            showToast('{% trans "Please fill in all required fields" %}', 'error');
             return;
         }
+        
+        // Show loading animation
+        const loadingHtml = `<div class="text-center py-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">{% trans "Loading..." %}</span>
+            </div>
+            <p class="mt-2">{% trans "Generating report..." %}</p>
+        </div>`;
+        $('#reportContainer').html(loadingHtml);
         
         // Redirect to the report URL with parameters
         window.location.href = `/testapp/bank-accounts/report/?bank_id=${bankId}&start_date=${startDate}&end_date=${endDate}&report_type=${reportType}`;
@@ -303,7 +322,110 @@ $(document).ready(function() {
         window.print();
     });
     
-    // Export functionality will be added later
+    // Add visual enhancements
+    const style = document.createElement('style');
+    style.textContent = `
+        /* Decorative elements */
+        .decorative-icon {
+            position: absolute;
+            right: 10px;
+            bottom: -10px;
+            opacity: 0.2;
+            transform: rotate(-15deg);
+            transition: all 0.3s ease;
+        }
+        
+        /* Hover effects */
+        .hover-scale {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        
+        .hover-scale:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1) !important;
+        }
+        
+        .hover-scale:hover .decorative-icon {
+            transform: rotate(0deg);
+            opacity: 0.3;
+        }
+        
+        /* Highlight text */
+        .highlight-text {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .highlight-text:after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 30%;
+            background-color: rgba(255, 255, 0, 0.2);
+            bottom: 0;
+            left: 0;
+            z-index: -1;
+            border-radius: 2px;
+        }
+        
+        /* Fade in animation for items */
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out forwards;
+            opacity: 0;
+            animation-delay: calc(var(--delay, 0) * 0.1s);
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Category item animations */
+        .category-item {
+            animation-delay: calc(var(--item-index, 0) * 0.05s);
+        }
+        
+        /* Button shine effect */
+        .btn-shine {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-shine:after {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                to right, 
+                rgba(255, 255, 255, 0) 0%, 
+                rgba(255, 255, 255, 0.3) 50%, 
+                rgba(255, 255, 255, 0) 100%
+            );
+            transform: rotate(45deg);
+            transition: all 0.3s ease;
+            opacity: 0;
+        }
+        
+        .btn-shine:hover:after {
+            opacity: 1;
+            left: 100%;
+            transition: all 0.8s ease;
+        }
+    `;
+    document.head.appendChild(style);
+    
+    // Add animation delay to category items
+    document.querySelectorAll('.category-item').forEach((item, index) => {
+        item.style.setProperty('--item-index', index);
+    });
+    
+    // Add fade-in animation to elements
+    document.querySelectorAll('.category-group').forEach((group, index) => {
+        group.style.setProperty('--delay', index);
+    });
 });
 </script>
 {% endblock %}

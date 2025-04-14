@@ -1515,21 +1515,35 @@ class BankStatementReportView(View):
     
     def get(self, request):
         # Get parameters
-        bank_id = request.GET.get('bank_id')
+        bank_ids_raw = request.GET.get('bank_id')
         start_date = request.GET.get('start_date')
         end_date = request.GET.get('end_date')
         report_type = request.GET.get('report_type', 'summary')
         export_format = request.GET.get('export_format')
         
-        # If no bank_id is provided, just show the filter form
-        if not bank_id:
+    # Parse bank_ids (handle comma-separated values)
+        bank_ids = []
+        if bank_ids_raw:
+            # Split by comma and strip whitespace
+            ids = [id.strip() for id in bank_ids_raw.split(',')]
+            for id in ids:
+                if id:  # Skip empty strings
+                    bank_ids.append(id)
+        
+        # If no valid bank_id is provided, show the filter form
+        if not bank_ids:
             context = {
                 'bank_accounts': BankAccount.objects.filter(is_active=True)
             }
             return render(request, 'bank/bank_statement_report.html', context)
         
         try:
-            bank_account = get_object_or_404(BankAccount, pk=bank_id)
+            # If multiple banks, generate consolidated report
+            if len(bank_ids) > 1:
+                return self.get_consolidated_report(request, bank_ids, start_date, end_date, report_type)
+            
+            # Otherwise, generate single bank report
+            bank_account = get_object_or_404(BankAccount, pk=bank_ids[0])
             
             # Convert dates if provided
             if start_date:
@@ -1728,3 +1742,195 @@ class BankStatementReportView(View):
         
         return {k: v for k, v in sorted_suppliers}
 
+    def get_consolidated_report(self, request, bank_ids, start_date, end_date, report_type):
+        """Generate a consolidated report for multiple bank accounts"""
+        try:
+            # Get export format
+            export_format = request.GET.get('export_format')
+            
+            # Convert dates
+            if start_date:
+                start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+            if end_date:
+                end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+            
+            # Get bank accounts
+            bank_accounts = BankAccount.objects.filter(id__in=bank_ids)
+            
+            # Initialize consolidated data
+            consolidated_data = {
+                'banks': {},
+                'categories': {
+                    'inflows': {},
+                    'outflows': {}
+                },
+                'totals': {
+                    'inflow_total': Decimal('0.00'),
+                    'outflow_total': Decimal('0.00'),
+                    'net_flow': Decimal('0.00')
+                }
+            }
+            
+            # Process each bank account
+            for bank_account in bank_accounts:
+                # Get statement data
+                entries = BankStatement.get_statement(
+                    bank_account=bank_account,
+                    start_date=start_date,
+                    end_date=end_date,
+                    include_forecasts=False
+                )
+                
+                # Generate report data for this account
+                bank_data = self._generate_report_data(entries, report_type)
+                
+                # Store per-bank data
+                consolidated_data['banks'][str(bank_account.id)] = {
+                    'account': bank_account,
+                    'report': bank_data
+                }
+                
+                # Update consolidated flow totals (not balances)
+                consolidated_data['totals']['inflow_total'] += bank_data['inflow_total']
+                consolidated_data['totals']['outflow_total'] += bank_data['outflow_total']
+                
+                # Consolidate categories
+                for main_type, categories in bank_data['inflows'].items():
+                    if main_type not in consolidated_data['categories']['inflows']:
+                        consolidated_data['categories']['inflows'][main_type] = {'group_total': Decimal('0.00')}
+                    
+                    # Add main type total
+                    consolidated_data['categories']['inflows'][main_type]['group_total'] += categories['group_total']
+                    
+                    # Add subcategories
+                    for sub_type, amount in categories.items():
+                        if sub_type != 'group_total':
+                            if sub_type not in consolidated_data['categories']['inflows'][main_type]:
+                                consolidated_data['categories']['inflows'][main_type][sub_type] = Decimal('0.00')
+                            consolidated_data['categories']['inflows'][main_type][sub_type] += amount
+                
+                # Same for outflows
+                for main_type, categories in bank_data['outflows'].items():
+                    if main_type not in consolidated_data['categories']['outflows']:
+                        consolidated_data['categories']['outflows'][main_type] = {'group_total': Decimal('0.00')}
+                    
+                    consolidated_data['categories']['outflows'][main_type]['group_total'] += categories['group_total']
+                    
+                    for sub_type, amount in categories.items():
+                        if sub_type != 'group_total':
+                            if sub_type not in consolidated_data['categories']['outflows'][main_type]:
+                                consolidated_data['categories']['outflows'][main_type][sub_type] = Decimal('0.00')
+                            consolidated_data['categories']['outflows'][main_type][sub_type] += amount
+            
+            # Calculate consolidated net flow
+            consolidated_data['totals']['net_flow'] = (
+                consolidated_data['totals']['inflow_total'] - 
+                consolidated_data['totals']['outflow_total']
+            )
+
+            # Prepare consolidated supplier breakdown (if detailed report requested)
+            if report_type == 'detailed':
+                # Initialize consolidated supplier details
+                consolidated_data['supplier_details'] = {}
+                
+                # Process each bank's supplier details
+                for bank_id, bank_data in consolidated_data['banks'].items():
+                    if 'supplier_details' in bank_data['report']:
+                        for supplier_name, details in bank_data['report']['supplier_details'].items():
+                            # Initialize supplier in consolidated data if not exists
+                            if supplier_name not in consolidated_data['supplier_details']:
+                                consolidated_data['supplier_details'][supplier_name] = {
+                                    'total': Decimal('0.00'),
+                                    'banks': {},
+                                    'payments': [],
+                                    'main_type': details['main_type'],
+                                    'supplier_info': details.get('supplier_info', {})
+                                }
+                            
+                            # Add bank-specific total
+                            consolidated_data['supplier_details'][supplier_name]['banks'][bank_id] = {
+                                'total': details['total'],
+                                'account': bank_data['account']
+                            }
+                            
+                            # Add payments with bank reference
+                            for payment in details['payments']:
+                                payment_copy = payment.copy()
+                                payment_copy['bank'] = bank_data['account']
+                                consolidated_data['supplier_details'][supplier_name]['payments'].append(payment_copy)
+                            
+                            # Update total amount across all banks
+                            consolidated_data['supplier_details'][supplier_name]['total'] += details['total']
+                
+                # Sort suppliers by total amount
+                consolidated_data['supplier_details'] = {
+                    k: v for k, v in sorted(
+                        consolidated_data['supplier_details'].items(),
+                        key=lambda x: x[1]['total'],
+                        reverse=True
+                    )
+                }
+
+            # Sort categories by amount
+            consolidated_data['categories']['inflows'] = {
+                k: v for k, v in sorted(
+                    consolidated_data['categories']['inflows'].items(),
+                    key=lambda x: x[1]['group_total'],
+                    reverse=True
+                )
+            }
+            
+            consolidated_data['categories']['outflows'] = {
+                k: v for k, v in sorted(
+                    consolidated_data['categories']['outflows'].items(),
+                    key=lambda x: x[1]['group_total'],
+                    reverse=True
+                )
+            }
+            
+            context = {
+                'bank_accounts': BankAccount.objects.filter(is_active=True),
+                'selected_banks': bank_ids,
+                'bank_account_objects': bank_accounts,
+                'start_date': start_date,
+                'end_date': end_date,
+                'report_type': report_type,
+                'consolidated_data': consolidated_data
+            }
+            
+            # If requested as standalone export, use standalone template
+            if export_format == 'consolidated_standalone':
+                return render(request, 'bank/consolidated_report_standalone.html', context)
+                
+            # Otherwise use regular template
+            return render(request, 'bank/consolidated_report.html', context)
+        
+        except Exception as e:
+            print(f"Error generating consolidated report: {str(e)}")
+            print(traceback.format_exc())
+            return JsonResponse({'error': str(e)}, status=400)
+        
+    def _aggregate_categories(self, source, target, total_field):
+        """Aggregate categories from source to target dictionary"""
+        for main_type, categories in source.items():
+            if main_type not in target:
+                target[main_type] = {total_field: Decimal('0.00')}
+            
+            # Add main type total
+            target[main_type][total_field] += categories[total_field]
+            
+            # Add subcategories
+            for sub_type, amount in categories.items():
+                if sub_type != total_field:
+                    if sub_type not in target[main_type]:
+                        target[main_type][sub_type] = Decimal('0.00')
+                    target[main_type][sub_type] += amount
+
+    def _sort_categories(self, categories, total_field):
+        """Sort categories by total amount"""
+        sorted_items = sorted(
+            categories.items(),
+            key=lambda x: x[1][total_field],
+            reverse=True
+        )
+        return {k: v for k, v in sorted_items}
