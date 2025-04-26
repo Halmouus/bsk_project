@@ -1,14 +1,15 @@
 {% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}Production Records{% endblock %}
+{% block title %}{% trans "Production Records" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h1 class="h3 mb-0 text-gray-800">Production Records</h1>
+        <h1 class="h3 mb-0 text-gray-800">{% trans "Production Records" %}</h1>
         <button type="button" class="btn btn-primary" onclick="ProductionManager.openCreateModal()">
-            <i class="fas fa-plus"></i> New Production Record
+            <i class="fas fa-plus"></i> {% trans "New Production Record" %}
         </button>
     </div>
 
@@ -20,12 +21,12 @@
 <!-- Main Table -->
 <div class="card shadow">
     <div class="card-header py-3 d-flex justify-content-between align-items-center">
-        <h6 class="m-0 font-weight-bold text-primary">Production Records</h6>
+        <h6 class="m-0 font-weight-bold text-primary">{% trans "Production Records" %}</h6>
         <div class="input-group w-50">
             <span class="input-group-text bg-light">
                 <i class="fas fa-search text-gray-500"></i>
             </span>
-            <input type="text" id="productionSearch" class="form-control" placeholder="Search by date..." onkeyup="filterProductionTable()">
+            <input type="text" id="productionSearch" class="form-control" placeholder="{% trans "Search by date..." %}" onkeyup="filterProductionTable()">
         </div>
     </div>
     <div class="card-body">
@@ -33,13 +34,13 @@
             <table class="table table-hover align-middle" id="productionTable">
                 <thead class="table-light">
                     <tr>
-                        <th class="sortable" onclick="sortProductionTable(0)">Date <i class="fas fa-sort ms-1 text-muted"></i></th>
-                        <th class="text-center">VPower</th>
-                        <th class="text-center">Total Wagons</th>
-                        <th class="text-center">Total Bricks</th>
-                        <th class="text-center">Packaged</th>
-                        <th class="text-center">Bulk</th>
-                        <th class="text-center">Actions</th>
+                        <th class="sortable" onclick="sortProductionTable(0)">{% trans "Date" %} <i class="fas fa-sort ms-1 text-muted"></i></th>
+                        <th class="text-center">{% trans "VPower" %}</th>
+                        <th class="text-center">{% trans "Total Wagons" %}</th>
+                        <th class="text-center">{% trans "Total Bricks" %}</th>
+                        <th class="text-center">{% trans "Packaged" %}</th>
+                        <th class="text-center">{% trans "Bulk" %}</th>
+                        <th class="text-center">{% trans "Actions" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -61,13 +62,13 @@
                         </td>
                         <td class="text-center">
                             <div class="btn-group btn-group-sm" role="group">
-                                <button class="btn btn-outline-primary view-production" data-id="{{ batch.id }}" title="View">
+                                <button class="btn btn-outline-primary view-production" data-id="{{ batch.id }}" title="{% trans "View" %}">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="btn btn-outline-warning ms-1 edit-production" data-id="{{ batch.id }}" title="Edit">
+                                <button class="btn btn-outline-warning ms-1 edit-production" data-id="{{ batch.id }}" title="{% trans "Edit" %}">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn btn-outline-danger ms-1 delete-production" data-id="{{ batch.id }}" title="Delete">
+                                <button class="btn btn-outline-danger ms-1 delete-production" data-id="{{ batch.id }}" title="{% trans "Delete" %}">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </div>
@@ -80,8 +81,8 @@
             <!-- Empty state message -->
             <div id="emptyState" class="text-center p-5 d-none">
                 <i class="fas fa-industry fa-3x text-muted mb-3"></i>
-                <h5 class="text-muted">No production records found</h5>
-                <p class="text-muted">Try different search criteria or add a new production record</p>
+                <h5 class="text-muted">{% trans "No production records found" %}</h5>
+                <p class="text-muted">{% trans "Try different search criteria or add a new production record" %}</p>
             </div>
         </div>
     </div>
@@ -92,7 +93,7 @@
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">New Production Record</h5>
+                <h5 class="modal-title">{% trans "New Production Record" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -103,16 +104,16 @@
                     <!-- Tabs -->
                     <ul class="nav nav-tabs mb-3" id="productionTabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab" aria-controls="basic" aria-selected="true">Basic Info</button>
+                            <button class="nav-link active" id="basic-tab" data-bs-toggle="tab" data-bs-target="#basic" type="button" role="tab" aria-controls="basic" aria-selected="true">{% trans "Basic Info" %}</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="energy-tab" data-bs-toggle="tab" data-bs-target="#energy" type="button" role="tab" aria-controls="energy" aria-selected="false">Energy</button>
+                            <button class="nav-link" id="energy-tab" data-bs-toggle="tab" data-bs-target="#energy" type="button" role="tab" aria-controls="energy" aria-selected="false">{% trans "Energy" %}</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button" role="tab" aria-controls="production" aria-selected="false">Production</button>
+                            <button class="nav-link" id="production-tab" data-bs-toggle="tab" data-bs-target="#production" type="button" role="tab" aria-controls="production" aria-selected="false">{% trans "Production" %}</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="packaging-tab" data-bs-toggle="tab" data-bs-target="#packaging" type="button" role="tab" aria-controls="packaging" aria-selected="false">Packaging</button>
+                            <button class="nav-link" id="packaging-tab" data-bs-toggle="tab" data-bs-target="#packaging" type="button" role="tab" aria-controls="packaging" aria-selected="false">{% trans "Packaging" %}</button>
                         </li>
                     </ul>
                     
@@ -122,39 +123,39 @@
                             <div class="card border-light mb-3">
                                 <div class="card-header bg-light">
                                     <h6 class="mb-0 fw-bold">
-                                        <i class="fas fa-calendar-alt me-2 text-primary"></i> Production Details
+                                        <i class="fas fa-calendar-alt me-2 text-primary"></i> {% trans "Production Details" %}
                                     </h6>
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
                                         <div class="col-md-6 mb-3">
-                                            <label for="productionDate" class="form-label fw-bold">Production Date*</label>
+                                            <label for="productionDate" class="form-label fw-bold">{% trans "Production Date" %}*</label>
                                             <input type="date" name="production_date" id="productionDate" class="form-control" required>
                                             <small class="text-muted">
-                                                <i class="fas fa-info-circle me-1"></i> Cannot be earlier than the latest production record
+                                                <i class="fas fa-info-circle me-1"></i> {% trans "Cannot be earlier than the latest production record" %}
                                             </small>
                                         </div>
                                         <div class="col-md-6 mb-3">
-                                            <label for="vpowerInput" class="form-label fw-bold">VPower</label>
+                                            <label for="vpowerInput" class="form-label fw-bold">{% trans "VPower" %}</label>
                                             <div class="input-group">
                                                 <input type="number" name="vpower" id="vpowerInput" class="form-control" readonly>
-                                                <button class="btn btn-outline-secondary" type="button" id="manualVpowerBtn">Manual</button>
+                                                <button class="btn btn-outline-secondary" type="button" id="manualVpowerBtn">{% trans "Manual" %}</button>
                                             </div>
                                             <small class="text-muted">
-                                                <i class="fas fa-info-circle me-1"></i> VPower is calculated automatically from total wagons
+                                                <i class="fas fa-info-circle me-1"></i> {% trans "VPower is calculated automatically from total wagons" %}
                                             </small>
                                         </div>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="productionNotes" class="form-label fw-bold">Notes</label>
-                                        <textarea name="notes" id="productionNotes" class="form-control" rows="3" placeholder="Enter any relevant notes about this production batch"></textarea>
+                                        <label for="productionNotes" class="form-label fw-bold">{% trans "Notes" %}</label>
+                                        <textarea name="notes" id="productionNotes" class="form-control" rows="3" placeholder="{% trans "Enter any relevant notes about this production batch" %}"></textarea>
                                     </div>
                                 </div>
                             </div>
                             
                             <div class="alert alert-warning py-2">
                                 <i class="fas fa-exclamation-triangle me-2"></i>
-                                <small>Use the tabs above to enter production data, energy consumption, and packaging information.</small>
+                                <small>{% trans "Use the tabs above to enter production data, energy consumption, and packaging information." %}</small>
                             </div>
                         </div>
                         
@@ -162,17 +163,17 @@
                         <div class="tab-pane fade" id="energy" role="tabpanel" aria-labelledby="energy-tab">
                             <div class="alert alert-info py-2">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <small>Enter quantities for each energy type used in production. Total costs will be calculated automatically.</small>
+                                <small>{% trans "Enter quantities for each energy type used in production. Total costs will be calculated automatically." %}</small>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Energy Type</th>
-                                            <th>Unit</th>
-                                            <th>Quantity</th>
-                                            <th>Price per Unit</th>
-                                            <th>Total Cost</th>
+                                            <th>{% trans "Energy Type" %}</th>
+                                            <th>{% trans "Unit" %}</th>
+                                            <th>{% trans "Quantity" %}</th>
+                                            <th>{% trans "Price per Unit" %}</th>
+                                            <th>{% trans "Total Cost" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody id="energyItems">
@@ -198,7 +199,7 @@
                                     </tbody>
                                     <tfoot>
                                         <tr class="table-secondary">
-                                            <th colspan="4">Total Energy Cost</th>
+                                            <th colspan="4">{% trans "Total Energy Cost" %}</th>
                                             <td id="totalEnergyCost" class="fw-bold">0.00</td>
                                         </tr>
                                     </tfoot>
@@ -210,19 +211,19 @@
                         <div class="tab-pane fade" id="production" role="tabpanel" aria-labelledby="production-tab">
                             <div class="alert alert-info py-2">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <small>Enter number of wagons produced for each brick type. The total number of bricks is automatically calculated based on bricks per wagon. Miscellaneous values are adjustments to account for anomalies.</small>
+                                <small>{% trans "Enter number of wagons produced for each brick type. The total number of bricks is automatically calculated based on bricks per wagon. Miscellaneous values are adjustments to account for anomalies." %}</small>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Brick Type</th>
-                                            <th class="text-center">Bricks/Wagon</th>
-                                            <th class="text-center" data-bs-toggle="tooltip" title="Number of wagons produced">Wagons</th>
-                                            <th class="text-center" data-bs-toggle="tooltip" title="Adjustments (positive or negative)">Misc. Adjustment</th>
-                                            <th class="text-center">Total Bricks</th>
-                                            <th>Bulk Price</th>
-                                            <th>Value</th>
+                                            <th>{% trans "Brick Type" %}</th>
+                                            <th class="text-center">{% trans "Bricks/Wagon" %}</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="{% trans "Number of wagons produced" %}">{% trans "Wagons" %}</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="{% trans "Adjustments (positive or negative)" %}">{% trans "Misc. Adjustment" %}</th>
+                                            <th class="text-center">{% trans "Total Bricks" %}</th>
+                                            <th>{% trans "Bulk Price" %}</th>
+                                            <th>{% trans "Value" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody id="productionItems">
@@ -234,7 +235,7 @@
                                                 <input type="hidden" name="brick_type_ids[]" value="{{ brick_type.id }}">
                                             </td>
                                             <td class="text-center">
-                                                <span class="bricks-per-wagon badge bg-secondary" data-bs-toggle="tooltip" title="Bricks per wagon">{{ brick_type.bricks_per_wagon }}</span>
+                                                <span class="bricks-per-wagon badge bg-secondary" data-bs-toggle="tooltip" title="{% trans "Bricks per wagon" %}">{{ brick_type.bricks_per_wagon }}</span>
                                             </td>
                                             <td>
                                                 <input type="number" name="wagons[]" class="form-control form-control-sm wagons-input" min="0" value="0">
@@ -256,7 +257,7 @@
                                     </tbody>
                                     <tfoot>
                                         <tr class="table-secondary">
-                                            <th colspan="2">Totals</th>
+                                            <th colspan="2">{% trans "Totals" %}</th>
                                             <td id="totalWagons" class="text-center fw-bold">0</td>
                                             <td id="totalMisc" class="text-center fw-bold">0</td>
                                             <td id="grandTotal" class="text-center fw-bold">0</td>
@@ -272,21 +273,21 @@
                         <div class="tab-pane fade" id="packaging" role="tabpanel" aria-labelledby="packaging-tab">
                             <div class="alert alert-info py-2">
                                 <i class="fas fa-info-circle me-2"></i>
-                                <small>Enter the number of bricks to be packaged for each type. You cannot exceed the total bricks produced.</small>
+                                <small>{% trans "Enter the number of bricks to be packaged for each type. You cannot exceed the total bricks produced." %}</small>
                             </div>
                             <div class="table-responsive">
                                 <table class="table table-hover">
                                     <thead class="table-light">
                                         <tr>
-                                            <th>Brick Type</th>
-                                            <th class="text-center" data-bs-toggle="tooltip" title="Available bulk stock at this date">Bulk Stock</th>
-                                            <th class="text-center" data-bs-toggle="tooltip" title="Available packaged stock at this date">Packaged Stock</th>
-                                            <th class="text-center">New Production</th>
-                                            <th class="text-center">Total Available</th>
-                                            <th class="text-center">Package Amount</th>
-                                            <th class="text-center">Remaining (Bulk)</th>
-                                            <th>Package Price</th>
-                                            <th>Value Added</th>
+                                            <th>{% trans "Brick Type" %}</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="{% trans "Available bulk stock at this date" %}">{% trans "Bulk Stock" %}</th>
+                                            <th class="text-center" data-bs-toggle="tooltip" title="{% trans "Available packaged stock at this date" %}">{% trans "Packaged Stock" %}</th>
+                                            <th class="text-center">{% trans "New Production" %}</th>
+                                            <th class="text-center">{% trans "Total Available" %}</th>
+                                            <th class="text-center">{% trans "Package Amount" %}</th>
+                                            <th class="text-center">{% trans "Remaining (Bulk)" %}</th>
+                                            <th>{% trans "Package Price" %}</th>
+                                            <th>{% trans "Value Added" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody id="packagingItems">
@@ -313,7 +314,7 @@
                                     </tbody>
                                     <tfoot>
                                         <tr class="table-secondary">
-                                            <th colspan="4">Totals</th>
+                                            <th colspan="4">{% trans "Totals" %}</th>
                                             <td id="totalBulkStock" class="text-center fw-bold">0</td>
                                             <td id="totalPackaged" class="text-center fw-bold">0</td>
                                             <td id="totalRemaining" class="text-center fw-bold">0</td>
@@ -328,8 +329,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveProduction">Save</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveProduction">{% trans "Save" %}</button>
             </div>
         </div>
     </div>
@@ -933,14 +934,14 @@ const ProductionManager = {
 
             if (data.success) {
                 this.modal.hide();
-                showToast('Production record created successfully', 'success');
+                showToast('{% trans "Production record created successfully" %}', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(data.error || 'Failed to create production record', 'error');
+                showToast(data.error || '{% trans "Failed to create production record" %}', 'error');
             }
         } catch (error) {
             this.debug('Create error:', error);
-            showToast('Failed to create production record', 'error');
+            showToast('{% trans "Failed to create production record" %}', 'error');
         }
     },
 
@@ -1122,11 +1123,11 @@ const ProductionManager = {
                 this.calculateEnergyCosts();
                 
             } else {
-                showToast(data.error || 'Failed to load production record', 'error');
+                showToast(data.error || '{% trans "Failed to load production record" %}', 'error');
             }
         } catch (error) {
             this.debug('Load data error:', error);
-            showToast('Failed to load production record', 'error');
+            showToast('{% trans "Failed to load production record" %}', 'error');
         }
     },
     
@@ -1255,19 +1256,19 @@ const ProductionManager = {
 
             if (data.success) {
                 this.modal.hide();
-                showToast('Production record updated successfully', 'success');
+                showToast('{% trans "Production record updated successfully" %}', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(data.error || 'Failed to update production record', 'error');
+                showToast(data.error || '{% trans "Failed to update production record" %}', 'error');
             }
         } catch (error) {
             this.debug('Update error:', error);
-            showToast('Failed to update production record', 'error');
+            showToast('{% trans "Failed to update production record" %}', 'error');
         }
     },
 
     async deleteProduction(id) {
-        if (!confirm('Are you sure you want to delete this production record?')) {
+        if (!confirm('{% trans "Are you sure you want to delete this production record?" %}')) {
             return;
         }
 
@@ -1286,13 +1287,13 @@ const ProductionManager = {
             if (data.success) {
                 const row = document.querySelector(`tr[data-id="${id}"]`);
                 if (row) row.remove();
-                showToast('Production record deleted successfully', 'success');
+                showToast('{% trans "Production record deleted successfully" %}', 'success');
             } else {
-                showToast(data.error || 'Failed to delete production record', 'error');
+                showToast(data.error || '{% trans "Failed to delete production record" %}', 'error');
             }
         } catch (error) {
             this.debug('Delete error:', error);
-            showToast('Failed to delete production record', 'error');
+            showToast('{% trans "Failed to delete production record" %}', 'error');
         }
     }
 };

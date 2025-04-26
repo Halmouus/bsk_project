@@ -1,12 +1,13 @@
 {% extends 'base.html' %}   
-{% block title %}Client Sales{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Client Sales" %}{% endblock %}
 {% block content %}
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>Client Sales</h2>
+        <h2>{% trans "Client Sales" %}</h2>
         <button class="btn btn-primary" data-toggle="modal" data-target="#saleModal">
-            <i class="fas fa-plus"></i> New Sale
+            <i class="fas fa-plus"></i> {% trans "New Sale" %}
         </button>
     </div>
 
@@ -15,11 +16,11 @@
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Client</th>
-                    <th>Type</th>
-                    <th>Amount</th>
-                    <th>Notes</th>
+                    <th>{% trans "Date" %}</th>
+                    <th>{% trans "Client" %}</th>
+                    <th>{% trans "Type" %}</th>
+                    <th>{% trans "Amount" %}</th>
+                    <th>{% trans "Notes" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,7 +34,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="4" class="text-center">No sales recorded yet</td>
+                    <td colspan="4" class="text-center">{% trans "No sales recorded yet" %}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -46,43 +47,43 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Record New Sale</h5>
+                <h5 class="modal-title">{% trans "Record New Sale" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="saleForm">
                     {% csrf_token %}
                     <div class="form-group">
-                        <label for="client">Client</label>
-                        <input type="text" class="form-control" id="client" placeholder="Search client..." required>
+                        <label for="client">{% trans "Client" %}</label>
+                        <input type="text" class="form-control" id="client" placeholder='{% trans "Search client..." %}' required>
                         <input type="hidden" id="client_id" name="client" required>
                     </div>
                     <div class="form-group">
-                        <label for="date">Date</label>
+                        <label for="date">{% trans "Date" %}</label>
                         <input type="date" class="form-control" id="date" name="date" 
                                value="{% now 'Y-m-d' %}" required>
                     </div>
                     <div class="form-group">
-                        <label for="sale_type">Sale Type</label>
+                        <label for="sale_type">{% trans "Sale Type" %}</label>
                         <select class="form-control" id="sale_type" name="sale_type" required>
-                            <option value="BRICKS">Bricks</option>
-                            <option value="TRANSPORT">Transport</option>
+                            <option value="BRICKS">{% trans "Bricks" %}</option>
+                            <option value="TRANSPORT">{% trans "Transport" %}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label for="amount">Amount</label>
+                        <label for="amount">{% trans "Amount" %}</label>
                         <input type="number" class="form-control" id="amount" name="amount" 
                                step="0.01" min="0.01" required>
                     </div>
                     <div class="form-group">
-                        <label for="notes">Notes</label>
+                        <label for="notes">{% trans "Notes" %}</label>
                         <textarea class="form-control" id="notes" name="notes" rows="2"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveSale">Save</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveSale">{% trans "Save" %}</button>
             </div>
         </div>
     </div>
@@ -135,7 +136,7 @@ $(document).ready(function() {
             data: form.serialize(),
             success: function(response) {
                 $('#saleModal').modal('hide');
-                showToast('Sale recorded successfully');
+                showToast('{% trans "Sale recorded successfully" %}');
                 location.reload();
             },
             error: function(xhr) {

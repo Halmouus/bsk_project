@@ -1,3 +1,4 @@
+{% load i18n %}
 {% for contract in contracts %}
 <tr class="{% if contract.status == 'terminated' %}table-danger
            {% elif contract.status == 'expired' %}table-secondary
@@ -9,7 +10,7 @@
     <td>{{ contract.start_date|date:"Y-m-d" }}</td>
     <td>
         {% if contract.is_indefinite %}
-            <span class="badge badge-info">Indefinite</span>
+            <span class="badge badge-info">{% trans "Indefinite" %}</span>
         {% else %}
             {{ contract.end_date|date:"Y-m-d" }}
         {% endif %}
@@ -17,7 +18,7 @@
     <td>
         {{ contract.get_periodicity_display }}
         <small class="text-muted d-block">
-            Generation day: {{ contract.generation_day }}
+            {% trans "Generation day" %}: {{ contract.generation_day }}
         </small>
     </td>
     <td>
@@ -41,14 +42,14 @@
                 <span class="badge {% if contract.domiciliation_suspended %}badge-warning{% else %}badge-info{% endif %}">
                     <i class="fas {% if contract.domiciliation_suspended %}fa-pause-circle{% else %}fa-university{% endif %} me-1"></i>
                     {% if contract.domiciliation_suspended %}
-                        Domiciliation Suspended
+                        {% trans "Domiciliation Suspended" %}
                     {% else %}
-                        Domiciled (Day {{ contract.domiciliation_day }})
+                        {% trans "Domiciled" %} ({% trans "Day" %} {{ contract.domiciliation_day }})
                     {% endif %}
                 </span>
                 {% if contract.domiciliation_suspended %}
                     <small class="text-muted d-block">
-                        Suspended: {{ contract.domiciliation_suspension_date|date:"Y-m-d" }}
+                        {% trans "Suspended" %}: {{ contract.domiciliation_suspension_date|date:"Y-m-d" }}
                     </small>
                 {% endif %}
             </div>
@@ -61,7 +62,7 @@
         </span>
         {% if contract.cancellation_date %}
             <small class="text-muted d-block">
-                Terminated: {{ contract.cancellation_date|date:"Y-m-d" }}
+                {% trans "Terminated" %}: {{ contract.cancellation_date|date:"Y-m-d" }}
             </small>
         {% endif %}
     </td>
@@ -121,9 +122,9 @@
     <td colspan="8" class="text-center py-4">
         <div class="empty-state">
             <i class="fas fa-file-contract fa-3x text-muted mb-3"></i>
-            <p class="text-muted mb-0">No contracts found matching your criteria</p>
+            <p class="text-muted mb-0">{% trans "No contracts found matching your criteria" %}</p>
             {% if request.GET %}
-                <button type="button" class="btn btn-link" id="clear-filters">Clear all filters</button>
+                <button type="button" class="btn btn-link" id="clear-filters">{% trans "Clear all filters" %}</button>
             {% endif %}
         </div>
     </td>

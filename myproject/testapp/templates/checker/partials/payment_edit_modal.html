@@ -1,8 +1,9 @@
+{% load i18n %}
 <div class="modal fade" id="paymentEditModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Payment</h5>
+                <h5 class="modal-title">{% trans "Edit Payment" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -10,11 +11,11 @@
                     <!-- Reference Info -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label>Check Reference</label>
+                            <label>{% trans "Check Reference" %}</label>
                             <input type="text" class="form-control" id="edit-reference" disabled>
                         </div>
                         <div class="col-md-6">
-                            <label>Amount</label>
+                            <label>{% trans "Amount" %}</label>
                             <input type="text" class="form-control" id="edit-amount" disabled>
                         </div>
                     </div>
@@ -22,11 +23,11 @@
                     <!-- Creation Date and Signatures -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label>Creation Date</label>
+                            <label>{% trans "Creation Date" %}</label>
                             <input type="text" class="form-control" id="edit-creation-date" disabled>
                         </div>
                         <div class="col-md-6">
-                            <label>Signatures</label>
+                            <label>{% trans "Signatures" %}</label>
                             <div class="form-control" id="edit-signatures" style="min-height: 38px;"></div>
                         </div>
                     </div>
@@ -34,11 +35,11 @@
                     <!-- Beneficiary and Status -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label>Beneficiary</label>
+                            <label>{% trans "Beneficiary" %}</label>
                             <input type="text" class="form-control" id="edit-beneficiary" disabled>
                         </div>
                         <div class="col-md-6">
-                            <label>Status</label>
+                            <label>{% trans "Status" %}</label>
                             <input type="text" class="form-control" id="edit-status" disabled>
                         </div>
                     </div>
@@ -46,7 +47,7 @@
                     <!-- Invoice Reference -->
                     <div class="row mb-3" id="edit-invoice-row">
                         <div class="col-md-12">
-                            <label>Invoice Reference</label>
+                            <label>{% trans "Invoice Reference" %}</label>
                             <input type="text" class="form-control" id="edit-invoice-ref" disabled>
                         </div>
                     </div>
@@ -54,7 +55,7 @@
                     <!-- Document -->
                     <div class="row mb-3" id="document-upload-row">
                         <div class="col-md-12">
-                            <label for="edit-document" class="form-label">Document</label>
+                            <label for="edit-document" class="form-label">{% trans "Document" %}</label>
                             <div class="input-group">
                                 <input type="file" class="form-control" id="edit-document" name="document" accept=".pdf,.jpg,.jpeg,.png">
                                 <button class="btn btn-outline-secondary document-clear-btn" type="button" id="clear-document">
@@ -71,19 +72,19 @@
                     <!-- Editable Fields -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label>Payment Due Date</label>
+                            <label>{% trans "Payment Due Date" %}</label>
                             <input type="date" class="form-control" id="edit-payment-due" name="payment_due">
                         </div>
                         <div class="col-md-6">
-                            <label>Observation</label>
+                            <label>{% trans "Observation" %}</label>
                             <textarea class="form-control" id="edit-observation" name="observation" rows="3"></textarea>
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="save-payment-edit">Save Changes</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="save-payment-edit">{% trans "Save Changes" %}</button>
             </div>
         </div>
     </div>

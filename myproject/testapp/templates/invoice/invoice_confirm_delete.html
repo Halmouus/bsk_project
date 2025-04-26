@@ -1,14 +1,20 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}Delete Invoice{% endblock %}
+{% block title %}{% trans "Confirm Deletion" %}{% endblock %}
 
 {% block content %}
-<h1>Delete Invoice</h1>
-<p>Are you sure you want to delete the invoice with reference "{{ invoice.ref }}"?</p>
-
-<form method="post">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Confirm Deletion</button>
-    <a href="{% url 'invoice-list' %}" class="btn btn-secondary">Cancel</a>
-</form>
+<div class="card shadow mb-4">
+    <div class="card-header py-3">
+        <h6 class="m-0 font-weight-bold text-primary">{% trans "Confirm Deletion" %}</h6>
+    </div>
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <p>{% trans "Are you sure you want to delete this invoice?" %}</p>
+            <button type="submit" class="btn btn-danger">{% trans "Confirm" %}</button>
+            <a href="{% url 'invoice-list' %}" class="btn btn-secondary">{% trans "Cancel" %}</a>
+        </form>
+    </div>
+</div>
 {% endblock %}

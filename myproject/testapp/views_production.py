@@ -8,6 +8,7 @@ from django.db import transaction
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.generic import ListView, View
+from django.utils.translation import gettext as _
 from .models import BrickProduction, BrickType, BrickPriceHistory, EnergyPriceHistory, EnergyType, ProductionBatch, ProductionEnergy, BrickStock, LoadingRecord, LoadingItem
 from django.utils import timezone
 
@@ -79,7 +80,7 @@ class BrickTypeCreateView(LoginRequiredMixin, View):
                 logger.info(f"Successfully created brick type: {brick_type.name}")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Brick type created successfully'
+                    'message': _('Brick type created successfully')
                 })
 
         except Exception as e:
@@ -204,7 +205,7 @@ class BrickTypeDeleteView(LoginRequiredMixin, View):
             if BrickProduction.objects.filter(brick_type=brick_type).exists():
                 return JsonResponse({
                     'success': False,
-                    'error': 'Cannot delete: This brick type has associated production records.'
+                    'error': _('Cannot delete: This brick type has associated production records.')
                 }, status=400)
                 
             brick_type.delete()
@@ -395,7 +396,7 @@ class EnergyTypeDeleteView(LoginRequiredMixin, View):
             if ProductionEnergy.objects.filter(energy_type=energy_type).exists():
                 return JsonResponse({
                     'success': False,
-                    'error': 'Cannot delete: This energy type has associated production records.'
+                    'error': _('Cannot delete: This energy type has associated production records.')
                 }, status=400)
                 
             energy_type.delete()
@@ -806,7 +807,7 @@ class ProductionBatchDeleteView(LoginRequiredMixin, View):
                 ).exists():
                     return JsonResponse({
                         'success': False,
-                        'error': 'Cannot delete: Loading records exist after this production date. Delete those first.'
+                        'error': _('Cannot delete: Loading records exist after this production date. Delete those first.')
                     }, status=400)
                 
                 # Revert stock changes
@@ -940,7 +941,7 @@ class HistoricalStockView(LoginRequiredMixin, View):
             if not date_str:
                 return JsonResponse({
                     'success': False,
-                    'error': 'Date parameter required'
+                    'error': _('Date parameter required')
                 }, status=400)
                 
             try:
@@ -948,7 +949,7 @@ class HistoricalStockView(LoginRequiredMixin, View):
             except ValueError:
                 return JsonResponse({
                     'success': False,
-                    'error': 'Invalid date format. Use YYYY-MM-DD'
+                    'error': _('Invalid date format. Use YYYY-MM-DD')
                 }, status=400)
 
             print(f"Calculating historical stock for date: {target_date}, view_type: {view_type}, excluded_id: {excluded_id}")
@@ -1171,7 +1172,7 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
                 if not loading_date:
                     return JsonResponse({
                         'success': False,
-                        'error': 'Loading date is required'
+                        'error': _('Loading date is required')
                     }, status=400)
                 
                 # Check if we have any quantities to load
@@ -1188,7 +1189,7 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
                 if not has_quantities:
                     return JsonResponse({
                         'success': False,
-                        'error': 'At least one brick type must have quantities specified'
+                        'error': _('At least one brick type must have quantities specified')
                     }, status=400)
                 
                 # Get stock at the loading date
@@ -1216,13 +1217,15 @@ class LoadingRecordCreateView(LoginRequiredMixin, View):
                     if bulk_quantity + breakage_quantity > available_bulk:
                         return JsonResponse({
                             'success': False,
-                            'error': f'Not enough bulk stock for brick type {brick_type_id} (Available: {available_bulk}, Requested: {bulk_quantity + breakage_quantity})'
+                            'error': _('Not enough bulk stock for brick type {0} (Available: {1}, Requested: {2})').format(
+                                brick_type_id, available_bulk, bulk_quantity + breakage_quantity)
                         }, status=400)
                         
                     if packaged_quantity > available_packaged:
                         return JsonResponse({
                             'success': False,
-                            'error': f'Not enough packaged stock for brick type {brick_type_id} (Available: {available_packaged}, Requested: {packaged_quantity})'
+                            'error': _('Not enough packaged stock for brick type {0} (Available: {1}, Requested: {2})').format(
+                                brick_type_id, available_packaged, packaged_quantity)
                         }, status=400)
                 
                 # Create the parent loading record
@@ -1378,7 +1381,7 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
                 if not loading_date:
                     return JsonResponse({
                         'success': False,
-                        'error': 'Loading date is required'
+                        'error': _('Loading date is required')
                     }, status=400)
                 
                 # Check if we have any quantities to load
@@ -1395,7 +1398,7 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
                 if not has_quantities:
                     return JsonResponse({
                         'success': False,
-                        'error': 'At least one brick type must have quantities specified'
+                        'error': _('At least one brick type must have quantities specified')
                     }, status=400)
                 
                 # Get stock at the loading date
@@ -1424,13 +1427,15 @@ class LoadingRecordUpdateView(LoginRequiredMixin, View):
                     if bulk_quantity + breakage_quantity > available_bulk:
                         return JsonResponse({
                             'success': False,
-                            'error': f'Not enough bulk stock for brick type {brick_type_id} (Available: {available_bulk}, Requested: {bulk_quantity + breakage_quantity})'
+                            'error': _('Not enough bulk stock for brick type {0} (Available: {1}, Requested: {2})').format(
+                                brick_type_id, available_bulk, bulk_quantity + breakage_quantity)
                         }, status=400)
                         
                     if packaged_quantity > available_packaged:
                         return JsonResponse({
                             'success': False,
-                            'error': f'Not enough packaged stock for brick type {brick_type_id} (Available: {available_packaged}, Requested: {packaged_quantity})'
+                            'error': _('Not enough packaged stock for brick type {0} (Available: {1}, Requested: {2})').format(
+                                brick_type_id, available_packaged, packaged_quantity)
                         }, status=400)
                 
                 # Update basic info
@@ -1583,7 +1588,7 @@ class LoadingRecordDeleteView(LoginRequiredMixin, View):
                 if later_records_exist:
                     return JsonResponse({
                         'success': False,
-                        'error': 'Cannot delete this loading record because there are later records that depend on it.'
+                        'error': _('Cannot delete this loading record because there are later records that depend on it.')
                     }, status=400)
                 
                 loading_record.delete()

@@ -1,16 +1,17 @@
 {% extends 'base.html' %}
 {% load humanize %}
+{% load i18n %}
 
-{% block title %}Cash Payments{% endblock %}
+{% block title %}{% trans 'Cash Payments' %}{% endblock %}
 
 {% block content %}
 <div class="page-header mb-4 bg-white rounded-lg shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center">
         <h1 class="h3 mb-0 text-gray-800">
-            <i class="fas fa-money-bill-wave text-primary"></i> Cash Payments
+            <i class="fas fa-money-bill-wave text-primary"></i> {% trans 'Cash Payments' %}
         </h1>
         <button type="button" class="btn btn-primary btn-sm shadow-sm" data-toggle="modal" data-target="#newPaymentModal">
-            <i class="fas fa-plus-circle"></i> New Payment
+            <i class="fas fa-plus-circle"></i> {% trans 'New Payment' %}
         </button>
     </div>
 </div>
@@ -21,11 +22,11 @@
         <div class="row">
             <div class="col-md-6">
                 <h5 class="font-weight-bold text-primary mb-3">
-                    <i class="fas fa-wallet"></i> Available Balance
+                    <i class="fas fa-wallet"></i> {% trans 'Available Balance' %}
                 </h5>
                 <h3 class="mb-0">{{ current_balance|floatformat:2 }}</h3>
                 <small class="text-muted">
-                    Maximum payment threshold: {{ max_threshold|floatformat:2 }}
+                    {% trans 'Maximum payment threshold' %}: {{ max_threshold|floatformat:2 }}
                 </small>
             </div>
         </div>
@@ -39,19 +40,19 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white py-3">
                 <h5 class="card-title mb-0 font-weight-bold text-primary">
-                    <i class="fas fa-history mr-2"></i> Recent Payments
+                    <i class="fas fa-history mr-2"></i> {% trans 'Recent Payments' %}
                 </h5>
             </div>
             <div class="table-responsive">
                 <table class="table table-hover mb-0">
                     <thead class="bg-light">
                         <tr>
-                            <th>Date</th>
-                            <th>Invoice</th>
-                            <th>Supplier</th>
-                            <th class="text-right">Amount</th>
-                            <th>Reference</th>
-                            <th>Recorded By</th>
+                            <th>{% trans 'Date' %}</th>
+                            <th>{% trans 'Invoice' %}</th>
+                            <th>{% trans 'Supplier' %}</th>
+                            <th class="text-right">{% trans 'Amount' %}</th>
+                            <th>{% trans 'Reference' %}</th>
+                            <th>{% trans 'Recorded By' %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -73,7 +74,7 @@
                         {% empty %}
                         <tr>
                             <td colspan="6" class="text-center text-muted py-4">
-                                <i class="fas fa-info-circle mr-1"></i> No payments recorded
+                                <i class="fas fa-info-circle mr-1"></i> {% trans 'No payments recorded' %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -88,7 +89,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white py-3">
                 <h5 class="card-title mb-0 font-weight-bold text-primary">
-                    <i class="fas fa-file-invoice-dollar mr-2"></i> Available Invoices
+                    <i class="fas fa-file-invoice-dollar mr-2"></i> {% trans 'Available Invoices' %}
                 </h5>
             </div>
             <div class="list-group list-group-flush">
@@ -119,7 +120,7 @@
                 {% endwith %}
                 {% empty %}
                 <div class="list-group-item text-center text-muted py-4">
-                    <i class="fas fa-info-circle mr-1"></i> No eligible invoices
+                    <i class="fas fa-info-circle mr-1"></i> {% trans 'No eligible invoices' %}
                 </div>
                 {% endfor %}
             </div>
@@ -133,7 +134,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-money-bill-wave"></i> New Cash Payment
+                    <i class="fas fa-money-bill-wave"></i> {% trans 'New Cash Payment' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -146,33 +147,33 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="small font-weight-bold">Amount *</label>
+                        <label class="small font-weight-bold">{% trans 'Amount' %} *</label>
                         <input type="number" id="payment-amount" class="form-control" required
                                min="0.01" step="0.01">
                         <div class="invalid-feedback">
-                            Please enter a valid amount
+                            {% trans 'Please enter a valid amount' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Date *</label>
+                        <label class="small font-weight-bold">{% trans 'Date' %} *</label>
                         <input type="date" id="payment-date" class="form-control" required
                                value="{{ today|date:'Y-m-d' }}">
                         <div class="invalid-feedback">
-                            Please select a date
+                            {% trans 'Please select a date' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Reference *</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %} *</label>
                         <input type="text" id="payment-reference" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please enter a reference number
+                            {% trans 'Please enter a reference number' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Notes</label>
+                        <label class="small font-weight-bold">{% trans 'Notes' %}</label>
                         <textarea id="payment-notes" class="form-control" rows="3"></textarea>
                     </div>
 
@@ -180,10 +181,10 @@
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancel
+                        <i class="fas fa-times"></i> {% trans 'Cancel' %}
                     </button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Record Payment
+                        <i class="fas fa-save"></i> {% trans 'Record Payment' %}
                     </button>
                 </div>
             </form>
@@ -267,7 +268,7 @@ document.getElementById('payment-form').addEventListener('submit', function(e) {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred while recording the payment');
+        alert('{% trans "An error occurred while recording the payment" %}');
     });
 });
 </script>

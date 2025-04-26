@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from django.db import transaction
 import json
 from django.core.files.base import ContentFile
@@ -96,7 +97,7 @@ class ContractCreateView(View):
                     data['domiciliation_day'] = data['payment_day']
                 
                 if not data.get('generation_day') and not data.get('is_loan'):
-                    raise ValidationError("Generation day is required for regular contracts")
+                    raise ValidationError(_("Generation day is required for regular contracts"))
             
                 if data.get('is_domiciled'):
                     domiciliation_bank = BankAccount.objects.get(id=data['domiciliation_bank'])
@@ -168,7 +169,7 @@ class ContractCreateView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Contract created successfully',
+                    'message': _('Contract created successfully'),
                     'id': str(contract.id),
                     'amount': float(total_amount)
                 })
@@ -276,7 +277,7 @@ class ContractUpdateView(View):
                         print(f"Error saving document: {str(e)}")
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Error saving document: {str(e)}'
+                            'message': _('Error saving document: {0}').format(str(e))
                         }, status=400)
                 
                 # Handle document deletion
@@ -290,12 +291,12 @@ class ContractUpdateView(View):
                         print(f"Error deleting document: {str(e)}")
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Error deleting document: {str(e)}'
+                            'message': _('Error deleting document: {0}').format(str(e))
                         }, status=400)
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Contract document updated successfully'
+                    'message': _('Contract document updated successfully')
                 })
             
             # Regular JSON update
@@ -346,7 +347,7 @@ class ContractUpdateView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Contract updated successfully'
+                    'message': _('Contract updated successfully')
                 })
                 
         except Exception as e:
@@ -364,12 +365,12 @@ class ContractDeleteView(View):
             
             # Only allow deletion of draft contracts or those without invoices
             if contract.status != 'draft' and contract.contractinvoice_set.exists():
-                raise ValidationError("Cannot delete contract with existing invoices")
+                raise ValidationError(_("Cannot delete contract with existing invoices"))
                 
             contract.delete()
             return JsonResponse({
                 'status': 'success',
-                'message': 'Contract deleted successfully'
+                'message': _('Contract deleted successfully')
             })
         except Exception as e:
             return JsonResponse({
@@ -392,7 +393,7 @@ class ContractGenerateInvoicesView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'Generated {len(invoices)} invoices',
+                'message': _('Generated {0} invoices').format(len(invoices)),
                 'invoices': [{
                     'id': str(inv.id),
                     'ref': inv.ref,
@@ -420,7 +421,7 @@ class ContractTerminateView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': 'Contract terminated successfully'
+                'message': _('Contract terminated successfully')
             })
             
         except Exception as e:
@@ -440,11 +441,11 @@ class ContractActivateView(View):
             # Validate contract can be activated
             print("Validating contract status...")
             if contract.status != Contract.STATUS_DRAFT:
-                raise ValidationError("Only draft contracts can be activated")
+                raise ValidationError(_("Only draft contracts can be activated"))
             
             print("Checking for products...")
             if not contract.products.exists():
-                raise ValidationError("Cannot activate contract with no products")
+                raise ValidationError(_("Cannot activate contract with no products"))
             
             print("Starting atomic transaction...")
             with transaction.atomic():
@@ -465,7 +466,7 @@ class ContractActivateView(View):
             print("Transaction completed successfully")
             return JsonResponse({
                 'status': 'success',
-                'message': 'Contract activated successfully'
+                'message': _('Contract activated successfully')
             })
             
         except ValidationError as e:
@@ -513,7 +514,7 @@ class ContractHistoryView(View):
                     'period_end': inv.period_end.strftime('%Y-%m-%d'),
                     'amount': str(inv.invoice.total_amount),
                     'status': inv.invoice.payment_status,
-                    'export_status': 'Exported' if inv.invoice.exported_at else 'Not Exported',
+                    'export_status': _('Exported') if inv.invoice.exported_at else _('Not Exported'),
                     'generated_at': inv.created_at.strftime('%Y-%m-%d %H:%M'),
                     'paid_at': processed_date.strftime('%Y-%m-%d') if processed_date else None
                 })
@@ -545,7 +546,7 @@ class ContractSuspendDomiciliationView(View):
             print(f"Reason: {data.get('reason', '')}")
             
             if not contract.is_domiciled:
-                raise ValidationError("Contract is not domiciled")
+                raise ValidationError(_("Contract is not domiciled"))
                 
             with transaction.atomic():
                 # Delete future forecasts
@@ -569,7 +570,7 @@ class ContractSuspendDomiciliationView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': f'Domiciliation suspended. {deleted_count} forecasts removed.'
+                    'message': _('Domiciliation suspended. {0} forecasts removed.').format(deleted_count)
                 })
                 
         except ValidationError as e:
@@ -582,7 +583,7 @@ class ContractSuspendDomiciliationView(View):
             print(f"Error: {str(e)}")
             return JsonResponse({
                 'status': 'error',
-                'message': 'Failed to suspend domiciliation'
+                'message': _('Failed to suspend domiciliation')
             }, status=500)
 
 class ContractDocumentView(View):
@@ -590,7 +591,7 @@ class ContractDocumentView(View):
         contract = get_object_or_404(Contract, pk=pk)
         
         if not contract.document:
-            return JsonResponse({"error": "No document found"}, status=404)
+            return JsonResponse({"error": _("No document found")}, status=404)
         
         # Open the file and return it
         try:
@@ -612,4 +613,4 @@ class ContractDocumentView(View):
             response['Expires'] = '0'
             return response
         except FileNotFoundError:
-            return JsonResponse({"error": "Document file not found"}, status=404)
+            return JsonResponse({"error": _("Document file not found")}, status=404)

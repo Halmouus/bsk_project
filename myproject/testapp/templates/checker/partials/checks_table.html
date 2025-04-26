@@ -1,6 +1,7 @@
 <!-- checker/partials/checks_table.html -->
 {% load check_tags %}
 {% load permission_tags %}
+{% load i18n %}
 {% for check in checks %}
 <tr class="{% if check.status == 'paid' %}table-success{% elif check.status == 'cancelled' %}table-danger{% elif check.status == 'rejected' %}table-warning{% elif check.status == 'delivered' %}table-info{% endif %}">
     <td>
@@ -24,7 +25,7 @@
                 </span>
             {% endfor %}
         {% else %}
-            <span class="badge badge-secondary">None</span>
+            <span class="badge badge-secondary">{% trans "None" %}</span>
         {% endif %}
     </td>
     <td>{{ check.beneficiary.name }}</td>
@@ -36,7 +37,7 @@
         <span class="badge badge-{{ check.status|status_badge }} status-badge" 
               data-check-id="{{ check.id }}"
               data-toggle="tooltip" 
-              title="Click for details">
+              title="{% trans 'Click for details' %}">
             <i class="fas fa-{% if check.status == 'paid' %}check-circle
                          {% elif check.status == 'cancelled' %}ban
                          {% elif check.status == 'rejected' %}times-circle
@@ -63,13 +64,13 @@
                 <button class="btn btn-sm btn-info check-action" 
                         data-action="allocate" 
                         data-check-id="{{ check.id }}"
-                        title="Allocate Payment">
+                        title="{% trans 'Allocate Payment' %}">
                     <i class="fas fa-money-bill-wave"></i>
                 </button>
             {% endif %}
             {% if check.status == 'draft' and check.get_available_amount == 0 %}
                 <button class="btn btn-sm btn-info check-action" data-action="print" data-check-id="{{ check.id }}">
-                    <i class="fas fa-print"></i> Print
+                    <i class="fas fa-print"></i> {% trans "Print" %}
                 </button>
             {% endif %}
             {% if check.status == 'draft' %}
@@ -78,12 +79,12 @@
                         data-check-id="{{ check.id }}"
                         data-has-allocations="{{ check.allocations.exists }}"
                         {% if check.status not in 'draft,pending' %}disabled{% endif %}
-                        title="Edit Payment">
+                        title="{% trans 'Edit Payment' %}">
                     <i class="fas fa-edit"></i>
                 </button>
                 {% if not check.is_supplier_payment or check.get_available_amount == 0 %}
                     <button class="btn btn-sm btn-info check-action" data-action="print" data-check-id="{{ check.id }}">
-                        <i class="fas fa-print"></i> Print
+                        <i class="fas fa-print"></i> {% trans "Print" %}
                     </button>
                 {% endif %}
                 <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
@@ -95,19 +96,19 @@
                             data-action="edit" 
                             data-check-id="{{ check.id }}"
                             data-has-allocations="{{ check.allocations.exists }}"
-                            title="Edit Payment">
+                            title="{% trans 'Edit Payment' %}">
                         <i class="fas fa-edit"></i>
                     </button>
                     {% if 'OUK' not in check.signatures %}
                         <button class="btn btn-sm btn-outline-success check-action" 
                                 data-action="sign" data-signature="OUK" data-check-id="{{ check.id }}">
-                            <i class="fas fa-signature"></i> Sign OUK
+                            <i class="fas fa-signature"></i> {% trans "Sign" %} OUK
                         </button>
                     {% endif %}
                     {% if 'KEZ' not in check.signatures %}
                         <button class="btn btn-sm btn-outline-info check-action" 
                                 data-action="sign" data-signature="KEZ" data-check-id="{{ check.id }}">
-                            <i class="fas fa-signature"></i> Sign KEZ
+                            <i class="fas fa-signature"></i> {% trans "Sign" %} KEZ
                         </button>
                     {% endif %}
                 </div>
@@ -117,7 +118,7 @@
                         data-check-id="{{ check.id }}"
                         data-has-allocations="{{ check.allocations.exists }}"
                         {% if check.status not in 'draft,pending' %}disabled{% endif %}
-                        title="Edit Payment">
+                        title="{% trans 'Edit Payment' %}">
                     <i class="fas fa-edit"></i>
                 </button>
                 <button class="btn btn-sm btn-danger check-action" data-action="cancel" data-check-id="{{ check.id }}">
@@ -143,11 +144,11 @@
                 </button>
                 {% elif not check.is_received %}
                     <button class="btn btn-sm btn-info check-action" data-action="receive" data-check-id="{{ check.id }}">
-                        <i class="fas fa-hand-holding"></i> Receive
+                        <i class="fas fa-hand-holding"></i> {% trans "Receive" %}
                     </button>
                 {% elif not check.has_replacement %}
                     <button class="btn btn-sm btn-primary check-action" data-action="replace" data-check-id="{{ check.id }}">
-                        <i class="fas fa-sync"></i> Replace
+                        <i class="fas fa-sync"></i> {% trans "Replace" %}
                     </button>
                 {% endif %}
             {% endif %}
@@ -160,9 +161,9 @@
     <td colspan="10" class="text-center py-4">
         <div class="empty-state">
             <i class="fas fa-search fa-3x text-muted mb-3"></i>
-            <p class="text-muted mb-0">No checks found matching your criteria</p>
+            <p class="text-muted mb-0">{% trans "No checks found matching your criteria" %}</p>
             {% if request.GET %}
-                <button type="button" class="btn btn-link" id="clear-filters">Clear all filters</button>
+                <button type="button" class="btn btn-link" id="clear-filters">{% trans "Clear all filters" %}</button>
             {% endif %}
         </div>
     </td>

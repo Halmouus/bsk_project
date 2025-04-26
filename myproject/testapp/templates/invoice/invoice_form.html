@@ -1,8 +1,9 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% load accounting_filters %}
+{% load i18n %}
 
-{% block title %}{{ view.object.ref|default:'New Invoice' }}{% endblock %}
+{% block title %}{{ view.object.ref|default:_('New Invoice') }}{% endblock %}
 
 {% block content %}
 <!-- Page Header -->
@@ -12,13 +13,13 @@
             <h1 class="h3 mb-0 text-gray-800">
                 {% if view.object.pk %}
                     <i class="fas fa-edit text-primary"></i> 
-                    Invoice {{ view.object.ref }}
+                    {% trans "Invoice" %} {{ view.object.ref }}
                     <small class="text-muted d-block mt-1 font-weight-normal">
                         <i class="fas fa-building mr-1"></i>{{ view.object.supplier.name }} - 
                         <i class="fas fa-calendar-alt mr-1"></i>{{ view.object.date|date:"d/m/Y" }}
                     </small>
                 {% else %}
-                    <i class="fas fa-plus-circle text-primary"></i> New Invoice
+                    <i class="fas fa-plus-circle text-primary"></i> {% trans "New Invoice" %}
                 {% endif %}
             </h1>
         </div>
@@ -29,11 +30,11 @@
                 </span>
                 {% if view.object.payment_status == 'paid' %}
                     <span class="badge badge-pill badge-success px-3 py-2">
-                        <i class="fas fa-check-circle mr-1"></i> Paid
+                        <i class="fas fa-check-circle mr-1"></i> {% trans "Paid" %}
                     </span>
                 {% elif view.object.exported_at %}
                     <span class="badge badge-pill badge-secondary px-3 py-2">
-                        <i class="fas fa-file-export mr-1"></i> Exported
+                        <i class="fas fa-file-export mr-1"></i> {% trans "Exported" %}
                     </span>
                 {% endif %}
             </div>
@@ -44,8 +45,8 @@
 <!-- Add this temporarily for debugging -->
 {% if debug %}
 <div class="alert alert-info">
-    <p>Form date value: {{ form.date.value|default:"No date" }}</p>
-    <p>Instance date: {{ view.object.date|default:"No instance date" }}</p>
+    <p>{% trans "Form date value:" %} {{ form.date.value|default:_("No date") }}</p>
+    <p>{% trans "Instance date:" %} {{ view.object.date|default:_("No instance date") }}</p>
 </div>
 {% endif %}
 
@@ -57,14 +58,14 @@
     <div class="card shadow-sm border-0 mb-4">
         <div class="card-header bg-white py-3">
             <h5 class="card-title mb-0 font-weight-bold text-primary">
-                <i class="fas fa-file-invoice mr-2"></i> Invoice Details
+                <i class="fas fa-file-invoice mr-2"></i> {% trans "Invoice Details" %}
             </h5>
         </div>
         <div class="card-body">
             <div class="row">
                 <div class="col-lg-4">
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Reference Number *</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Reference Number" %} *</label>
                         {{ form.ref|add_class:"form-control" }}
                         {% if form.ref.errors %}
                             <div class="invalid-feedback d-block">{{ form.ref.errors|join:", " }}</div>
@@ -72,20 +73,20 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Invoice Date *</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Invoice Date" %} *</label>
                         {{ form.date|add_class:"form-control" }}
                         <!-- Add this to see any potential errors -->
                         {% if form.date.errors %}
                             <div class="invalid-feedback d-block">{{ form.date.errors|join:", " }}</div>
                         {% endif %}
                         <!-- Add this temporarily to debug the actual value -->
-                        <small class="text-muted">Current value: {{ form.date.value|default:"No value" }}</small>
+                        <small class="text-muted">{% trans "Current value:" %} {{ form.date.value|default:_("No value") }}</small>
                     </div>
                 </div>
                 
                 <div class="col-lg-4">
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Supplier *</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Supplier" %} *</label>
                         {{ form.supplier|add_class:"form-control" }}
                         {% if form.supplier.errors %}
                             <div class="invalid-feedback d-block">{{ form.supplier.errors|join:", " }}</div>
@@ -93,11 +94,11 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Invoice Type *</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Invoice Type" %} *</label>
                         {{ form.invoice_type|add_class:"form-control" }}
                         {% if view.object %}
                             <small class="form-text text-primary mt-2">
-                                <i class="fas fa-archive mr-1"></i> Archive Index: {{ view.object.archive_index }}
+                                <i class="fas fa-archive mr-1"></i> {% trans "Archive Index:" %} {{ view.object.archive_index }}
                             </small>
                         {% endif %}
                     </div>
@@ -105,7 +106,7 @@
                 
                 <div class="col-lg-4">
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Document Status *</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Document Status" %} *</label>
                         {{ form.doc_status|add_class:"form-control" }}
                     </div>
                     <div class="form-group">
@@ -115,21 +116,21 @@
                                    id="id_cash_payment_allowed" 
                                    {% if form.instance.cash_payment_allowed %}checked{% endif %}>
                             <label class="custom-control-label" for="id_cash_payment_allowed">
-                                Allow cash payment (max 5000)
+                                {% trans "Allow cash payment (max 5000)" %}
                             </label>
                         </div>
                     </div>
                         
                     <div class="form-group">
-                        <label class="small font-weight-bold text-muted">Invoice Document</label>
+                        <label class="small font-weight-bold text-muted">{% trans "Invoice Document" %}</label>
                         <div class="custom-file">
                             <input type="file" name="document" class="custom-file-input" id="documentInput" accept="application/pdf">
-                            <label class="custom-file-label" for="documentInput">Choose PDF file...</label>
+                            <label class="custom-file-label" for="documentInput">{% trans "Choose PDF file..." %}</label>
                         </div>
                         {% if view.object.document %}
                             <div class="mt-2">
                                 <a href="{{ view.object.document.url }}" target="_blank" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-file-pdf mr-1"></i> View Current Document
+                                    <i class="fas fa-file-pdf mr-1"></i> {% trans "View Current Document" %}
                                 </a>
                             </div>
                         {% endif %}
@@ -160,10 +161,10 @@
             <div class="card-header bg-white py-3">
                 <div class="d-flex justify-content-between align-items-center">
                     <h5 class="card-title mb-0 font-weight-bold text-primary">
-                        <i class="fas fa-box mr-2"></i> Products
+                        <i class="fas fa-box mr-2"></i> {% trans "Products" %}
                     </h5>
                     <button type="button" id="add-product" class="btn btn-primary btn-sm" data-toggle="modal" data-target="#productModal">
-                        <i class="fas fa-plus-circle mr-1"></i> Add Product
+                        <i class="fas fa-plus-circle mr-1"></i> {% trans "Add Product" %}
                     </button>
                 </div>
             </div>
@@ -172,15 +173,15 @@
                     <table class="table table-hover mb-0">
                         <thead class="thead-light">
                             <tr>
-                                <th>Product</th>
-                                <th>Fiscal Label</th>
-                                <th>Expense Code</th>
-                                <th class="text-right">Quantity</th>
-                                <th class="text-right">Unit Price</th>
-                                <th class="text-right">Reduction (%)</th>
-                                <th class="text-right">VAT Rate (%)</th>
-                                <th class="text-right">Subtotal</th>
-                                <th class="text-center" style="width: 100px">Actions</th>
+                                <th>{% trans "Product" %}</th>
+                                <th>{% trans "Fiscal Label" %}</th>
+                                <th>{% trans "Expense Code" %}</th>
+                                <th class="text-right">{% trans "Quantity" %}</th>
+                                <th class="text-right">{% trans "Unit Price" %}</th>
+                                <th class="text-right">{% trans "Reduction" %} (%)</th>
+                                <th class="text-right">{% trans "VAT Rate" %} (%)</th>
+                                <th class="text-right">{% trans "Subtotal" %}</th>
+                                <th class="text-center" style="width: 100px">{% trans "Actions" %}</th>
                             </tr>
                         </thead>
                         <tbody id="product-list">
@@ -196,10 +197,10 @@
                                 <td class="text-right align-middle font-weight-bold">{{ product.subtotal|space_thousands }}</td>
                                 <td class="text-center align-middle">
                                     <div class="btn-group btn-group-sm">
-                                        <button type="button" class="btn btn-warning edit-product" data-product-id="{{ product.pk }}" title="Edit Product">
+                                        <button type="button" class="btn btn-warning edit-product" data-product-id="{{ product.pk }}" title="{% trans "Edit Product" %}">
                                             <i class="fas fa-edit"></i>
                                         </button>
-                                        <button type="button" class="btn btn-danger delete-product" data-product-id="{{ product.pk }}" title="Delete Product">
+                                        <button type="button" class="btn btn-danger delete-product" data-product-id="{{ product.pk }}" title="{% trans "Delete Product" %}">
                                             <i class="fas fa-trash"></i>
                                         </button>
                                     </div>
@@ -209,17 +210,17 @@
                         </tbody>
                         <tfoot class="bg-light">
                             <tr>
-                                <th colspan="7" class="text-right">Raw Total:</th>
+                                <th colspan="7" class="text-right">{% trans "Raw Total:" %}</th>
                                 <th class="text-right" id="raw-total">{{ view.object.raw_amount|space_thousands }}</th>
                                 <th></th>
                             </tr>
                             <tr>
-                                <th colspan="7" class="text-right">Total VAT:</th>
+                                <th colspan="7" class="text-right">{% trans "Total VAT:" %}</th>
                                 <th class="text-right" id="tax-total">{{ view.object.total_tax_amount|space_thousands }}</th>
                                 <th></th>
                             </tr>
                             <tr class="bg-primary text-white">
-                                <th colspan="7" class="text-right">Total Amount (Inc. Tax):</th>
+                                <th colspan="7" class="text-right">{% trans "Total Amount (Inc. Tax):" %}</th>
                                 <th class="text-right" id="total-amount">{{ view.object.total_amount|space_thousands }}</th>
                                 <th></th>
                             </tr>
@@ -233,7 +234,7 @@
         <div class="card shadow-sm border-0 mb-4">
             <div class="card-header bg-white py-3">
                 <h5 class="card-title mb-0 font-weight-bold text-primary">
-                    <i class="fas fa-calculator mr-2"></i> Accounting Summary
+                    <i class="fas fa-calculator mr-2"></i> {% trans "Accounting Summary" %}
                 </h5>
             </div>
             <div class="card-body p-0">
@@ -241,14 +242,14 @@
                     <table class="table table-hover mb-0">
                         <thead class="thead-light">
                             <tr>
-                                <th>Date</th>
-                                <th>Label</th>
-                                <th class="text-right">Debit</th>
-                                <th class="text-right">Credit</th>
-                                <th>Account Code</th>
-                                <th>Reference</th>
-                                <th>Journal</th>
-                                <th>Counterpart</th>
+                                <th>{% trans "Date" %}</th>
+                                <th>{% trans "Label" %}</th>
+                                <th class="text-right">{% trans "Debit" %}</th>
+                                <th class="text-right">{% trans "Credit" %}</th>
+                                <th>{% trans "Account Code" %}</th>
+                                <th>{% trans "Reference" %}</th>
+                                <th>{% trans "Journal" %}</th>
+                                <th>{% trans "Counterpart" %}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -267,7 +268,7 @@
                         </tbody>
                         <tfoot class="bg-light font-weight-bold">
                             <tr>
-                                <td colspan="2" class="text-right">Totals:</td>
+                                <td colspan="2" class="text-right">{% trans "Totals:" %}</td>
                                 <td class="text-right">
                                     {% with entries=view.object.get_accounting_entries %}
                                         {{ entries|sum_debit|space_thousands }}
@@ -412,17 +413,17 @@
         </div>
     {% else %}
         <div class="alert alert-info">
-            <i class="fas fa-info-circle mr-1"></i> Save the invoice first to add products and documents.
+            <i class="fas fa-info-circle mr-1"></i> {% trans "Save the invoice first to add products and documents." %}
         </div>
     {% endif %}
 
     <!-- Form Actions -->
     <div class="form-actions py-3 text-right border-top mt-4">
         <a href="{% url 'invoice-list' %}" class="btn btn-outline-secondary">
-            <i class="fas fa-times mr-1"></i> Cancel
+            <i class="fas fa-times mr-1"></i> {% trans "Cancel" %}
         </a>
         <button type="submit" class="btn btn-primary ml-2">
-            <i class="fas fa-save mr-1"></i> Save Invoice
+            <i class="fas fa-save mr-1"></i> {% trans "Save Invoice" %}
         </button>
     </div>
 </form>
@@ -433,7 +434,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="productModalLabel">
-                    <i class="fas fa-box mr-2"></i> Add Product to Invoice
+                    <i class="fas fa-box mr-2"></i> {% trans "Add Product to Invoice" %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span aria-hidden="true">&times;</span>
@@ -443,10 +444,10 @@
                 <div id="modal-alert" class="alert d-none" role="alert"></div>
                 <form id="add-product-form" class="needs-validation" novalidate>
                     <div class="form-group">
-                        <label class="small font-weight-bold">Product *</label>
+                        <label class="small font-weight-bold">{% trans "Product" %} *</label>
                         <div class="input-group">
                             <input type="text" id="product" name="product" class="form-control" 
-                                   placeholder="Search for a product...">
+                                   placeholder="{% trans "Search for a product..." %}">
                             <input type="hidden" id="product_id" name="product_id">
                             <div class="input-group-append">
                                 <button class="btn btn-outline-secondary" type="button" id="clear-product">
@@ -460,19 +461,19 @@
                             <div class="card bg-light mt-3 border">
                                 <div class="card-body">
                                     <h6 class="card-title text-primary mb-3">
-                                        <i class="fas fa-plus-circle mr-1"></i> New Product Details
+                                        <i class="fas fa-plus-circle mr-1"></i> {% trans "New Product Details" %}
                                     </h6>
                                     <div class="form-group mb-2">
-                                        <label class="small font-weight-bold">Product Name *</label>
-                                        <input type="text" id="new-product-name" class="form-control" placeholder="Enter product name">
+                                        <label class="small font-weight-bold">{% trans "Product Name" %} *</label>
+                                        <input type="text" id="new-product-name" class="form-control" placeholder="{% trans "Enter product name" %}">
                                     </div>
                                     <div class="form-group mb-2">
-                                        <label class="small font-weight-bold">Fiscal Label *</label>
-                                        <input type="text" id="fiscal-label" class="form-control" placeholder="Enter fiscal label">
+                                        <label class="small font-weight-bold">{% trans "Fiscal Label" %} *</label>
+                                        <input type="text" id="fiscal-label" class="form-control" placeholder="{% trans "Enter fiscal label" %}">
                                     </div>
                                     <div class="custom-control custom-checkbox mt-2">
                                         <input type="checkbox" class="custom-control-input" id="is-energy">
-                                        <label class="custom-control-label" for="is-energy">Is Energy Product</label>
+                                        <label class="custom-control-label" for="is-energy">{% trans "Is Energy Product" %}</label>
                                     </div>
                                 </div>
                             </div>
@@ -480,31 +481,31 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Expense Code *</label>
+                        <label class="small font-weight-bold">{% trans "Expense Code" %} *</label>
                         <input type="text" id="expense_code" name="expense_code" class="form-control" 
-                               pattern="[0-9]{5,}" title="Expense code must be numeric and at least 5 characters long">
+                               pattern="[0-9]{5,}" title="{% trans "Expense code must be numeric and at least 5 characters long" %}">
                         <div class="invalid-feedback">
-                            Please enter a valid expense code (minimum 5 digits).
+                            {% trans "Please enter a valid expense code (minimum 5 digits)." %}
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="small font-weight-bold">Quantity *</label>
+                                <label class="small font-weight-bold">{% trans "Quantity" %} *</label>
                                 <input type="number" id="quantity" name="quantity" class="form-control" min="1" step="1">
                                 <div class="invalid-feedback">
-                                    Please enter a valid quantity (minimum 1).
+                                    {% trans "Please enter a valid quantity (minimum 1)." %}
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="small font-weight-bold">Unit Price *</label>
+                                <label class="small font-weight-bold">{% trans "Unit Price" %} *</label>
                                 <input type="number" id="unit_price" name="unit_price" class="form-control" 
                                        min="0.01" step="0.01">
                                 <div class="invalid-feedback">
-                                    Please enter a valid price.
+                                    {% trans "Please enter a valid price." %}
                                 </div>
                             </div>
                         </div>
@@ -513,17 +514,17 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="small font-weight-bold">Reduction Rate (%)</label>
+                                <label class="small font-weight-bold">{% trans "Reduction Rate" %} (%)</label>
                                 <input type="number" id="reduction_rate" name="reduction_rate" class="form-control" 
                                        min="0" max="100" step="0.01" value="0">
                                 <div class="invalid-feedback">
-                                    Rate must be between 0 and 100.
+                                    {% trans "Rate must be between 0 and 100." %}
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="small font-weight-bold">VAT Rate (%)</label>
+                                <label class="small font-weight-bold">{% trans "VAT Rate" %} (%)</label>
                                 <select id="vat_rate" name="vat_rate" class="form-control">
                                     <option value="0.00">0%</option>
                                     <option value="7.00">7%</option>
@@ -540,10 +541,10 @@
             </div>
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    <i class="fas fa-times mr-1"></i> Cancel
+                    <i class="fas fa-times mr-1"></i> {% trans "Cancel" %}
                 </button>
                 <button type="button" id="save-product-button" class="btn btn-primary">
-                    <i class="fas fa-save mr-1"></i> Save Product
+                    <i class="fas fa-save mr-1"></i> {% trans "Save Product" %}
                 </button>
             </div>
         </div>

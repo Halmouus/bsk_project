@@ -2,6 +2,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404, render
 from django.core.exceptions import ValidationError
+from django.utils.translation import gettext as _
 from .models import Client, Entity, ClientSale
 import json
 import logging
@@ -47,11 +48,11 @@ def create_client(request):
         # Validate client code format
         client_code = data.get('client_code', '').strip()
         if not client_code.isdigit() or len(client_code) < 5 or len(client_code) > 10:
-            raise ValidationError("Invalid client code format")
+            raise ValidationError(_("Invalid client code format"))
         
         # Check for duplicate client code
         if Client.objects.filter(client_code=client_code).exists():
-            raise ValidationError("Client code already exists")
+            raise ValidationError(_("Client code already exists"))
         
         client = Client.objects.create(
             name=data['name'],
@@ -86,9 +87,9 @@ def update_client(request, client_id):
         if 'client_code' in data:
             new_code = data['client_code'].strip()
             if not new_code.isdigit() or len(new_code) < 5 or len(new_code) > 10:
-                raise ValidationError("Invalid client code format")
+                raise ValidationError(_("Invalid client code format"))
             if Client.objects.filter(client_code=new_code).exclude(id=client_id).exists():
-                raise ValidationError("Client code already exists")
+                raise ValidationError(_("Client code already exists"))
             client.client_code = new_code
             
         client.save()
@@ -127,25 +128,25 @@ def validate_field(request, field, value):
     
     # Handle empty values
     if not value or value.strip() == '':
-        return JsonResponse({'error': 'Value cannot be empty'}, status=400)
+        return JsonResponse({'error': _('Value cannot be empty')}, status=400)
     
     try:
         if field == 'clientCode':
             if not (5 <= len(value) <= 10):
-                return JsonResponse({'error': 'Client code must be between 5 and 10 digits'}, status=400)
+                return JsonResponse({'error': _('Client code must be between 5 and 10 digits')}, status=400)
             exists = Client.objects.filter(client_code=value).exists()
         elif field == 'accountingCode':
             if not (5 <= len(value) <= 7):
-                return JsonResponse({'error': 'Accounting code must be between 5 and 7 digits'}, status=400)
+                return JsonResponse({'error': _('Accounting code must be between 5 and 7 digits')}, status=400)
             if not value.startswith('3'):
-                return JsonResponse({'error': 'Accounting code must start with 3'}, status=400)
+                return JsonResponse({'error': _('Accounting code must start with 3')}, status=400)
             exists = Entity.objects.filter(accounting_code=value).exists()
         elif field == 'iceCode':
             if len(value) != 15:
-                return JsonResponse({'error': 'ICE code must be exactly 15 digits'}, status=400)
+                return JsonResponse({'error': _('ICE code must be exactly 15 digits')}, status=400)
             exists = Entity.objects.filter(ice_code=value).exists()
         else:
-            return JsonResponse({'error': 'Invalid field'}, status=400)
+            return JsonResponse({'error': _('Invalid field')}, status=400)
         
         return JsonResponse({'available': not exists})
     except Exception as e:
@@ -181,7 +182,7 @@ def create_sale(request):
         )
         return JsonResponse({
             'status': 'success',
-            'message': 'Sale recorded successfully',
+            'message': _('Sale recorded successfully'),
             'id': str(sale.id)
         })
     except Exception as e:

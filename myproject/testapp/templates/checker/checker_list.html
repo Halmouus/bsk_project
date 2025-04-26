@@ -1,13 +1,14 @@
 {% extends 'base.html' %}
 {% load permission_tags %}
-{% block title %}Checkers{% endblock %} 
+{% load i18n %}
+{% block title %}{% trans "Checkers" %}{% endblock %} 
 {% block content %}
 <div class="container-fluid">
     <!-- Header Section with Stats -->
     <div class="header-section mb-4">
         <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center gap-3">
-                <h2 class="mb-0">Checkers</h2>
+                <h2 class="mb-0">{% trans "Checkers" %}</h2>
                 <span class="text-muted checker-stats">
                     <!-- Will be populated by JS -->
                 </span>
@@ -16,7 +17,7 @@
             <button class="btn btn-primary d-flex align-items-center gap-2" 
                     data-toggle="modal" data-target="#checkerModal">
                 <i class="fas fa-plus"></i>
-                <span>New Checker</span>
+                <span>{% trans "New Checker" %}</span>
             </button>
             {% endif %}
         </div>
@@ -29,10 +30,10 @@
                 <div class="col-md-3">
                     <div class="form-group">
                         <label class="form-label text-muted">
-                            <i class="fas fa-university me-1"></i> Bank
+                            <i class="fas fa-university me-1"></i> {% trans "Bank" %}
                         </label>
                         <select class="form-control" id="bankFilter">
-                            <option value="">All Banks</option>
+                            <option value="">{% trans "All Banks" %}</option>
                             {% for account in banks %}
                                 <option value="{{ account.id }}">
                                     {{ account.bank }} [{{ account.account_number }}]
@@ -44,35 +45,35 @@
                 <div class="col-md-3">
                     <div class="form-group">
                         <label class="form-label text-muted">
-                            <i class="fas fa-file-alt me-1"></i> Type
+                            <i class="fas fa-file-alt me-1"></i> {% trans "Type" %}
                         </label>
                         <select class="form-control" id="typeFilter">
-                            <option value="">All Types</option>
-                            <option value="CHQ">Cheque</option>
-                            <option value="LCN">LCN</option>
+                            <option value="">{% trans "All Types" %}</option>
+                            <option value="CHQ">{% trans "Cheque" %}</option>
+                            <option value="LCN">{% trans "LCN" %}</option>
                         </select>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
                         <label class="form-label text-muted">
-                            <i class="fas fa-chart-pie me-1"></i> Status
+                            <i class="fas fa-chart-pie me-1"></i> {% trans "Status" %}
                         </label>
                         <select class="form-control" id="statusFilter">
-                            <option value="">All Status</option>
-                            <option value="new">New</option>
-                            <option value="in_use">In Use</option>
-                            <option value="completed">Completed</option>
+                            <option value="">{% trans "All Status" %}</option>
+                            <option value="new">{% trans "New" %}</option>
+                            <option value="in_use">{% trans "In Use" %}</option>
+                            <option value="completed">{% trans "Completed" %}</option>
                         </select>
                     </div>
                 </div>
                 <div class="col-md-3">
                     <div class="form-group">
                         <label class="form-label text-muted">
-                            <i class="fas fa-search me-1"></i> Search
+                            <i class="fas fa-search me-1"></i> {% trans "Search" %}
                         </label>
                         <input type="text" class="form-control" id="searchChecker" 
-                               placeholder="Search code or index...">
+                               placeholder="{% trans 'Search code or index...' %}">
                     </div>
                 </div>
             </div>
@@ -93,7 +94,7 @@
         <div class="modal-content">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title d-flex align-items-center gap-2">
-                    <i class="fas fa-plus text-primary"></i> Create New Checker
+                    <i class="fas fa-plus text-primary"></i> {% trans "Create New Checker" %}
                 </h5>
                 <button type="button" class="btn-close" data-dismiss="modal"></button>
             </div>
@@ -104,26 +105,26 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="form-label">Bank Account</label>
+                                <label class="form-label">{% trans "Bank Account" %}</label>
                                 <input type="text" id="bankAccount" class="form-control" 
-                                       placeholder="Search bank account...">
+                                       placeholder="{% trans 'Search bank account...' %}">
                                 <input type="hidden" id="selectedBankId">
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="form-label">Type</label>
+                                <label class="form-label">{% trans "Type" %}</label>
                                 <select class="form-control" id="checkerType">
-                                    <option value="CHQ">Cheque</option>
-                                    <option value="LCN">LCN</option>
+                                    <option value="CHQ">{% trans "Cheque" %}</option>
+                                    <option value="LCN">{% trans "LCN" %}</option>
                                 </select>
                             </div>
                         </div>
 
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="form-label">Number of Pages</label>
+                                <label class="form-label">{% trans "Number of Pages" %}</label>
                                 <select class="form-control" id="numPages">
                                     <option value="25">25</option>
                                     <option value="50">50</option>
@@ -134,32 +135,32 @@
 
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label class="form-label">Index</label>
+                                <label class="form-label">{% trans "Index" %}</label>
                                 <input type="text" class="form-control" id="checkerIndex" 
                                        maxlength="3" style="text-transform: uppercase;">
-                                <div class="invalid-feedback">1-3 uppercase letters only</div>
+                                <div class="invalid-feedback">{% trans "1-3 uppercase letters only" %}</div>
                             </div>
                         </div>
 
                         <div class="col-12">
                             <div class="form-group">
-                                <label class="form-label">Starting Page</label>
+                                <label class="form-label">{% trans "Starting Page" %}</label>
                                 <input type="number" class="form-control" id="startingPage" min="1">
-                                <div class="invalid-feedback">Must be greater than 0</div>
+                                <div class="invalid-feedback">{% trans "Must be greater than 0" %}</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="preview-section mt-3">
                         <div class="alert alert-info" style="display: none;">
-                            Preview: <strong id="checkerPreview"></strong>
+                            {% trans "Preview:" %} <strong id="checkerPreview"></strong>
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer border-0 pt-0">
-                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveChecker" disabled>Create</button>
+                <button type="button" class="btn btn-light" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveChecker" disabled>{% trans "Create" %}</button>
             </div>
         </div>
     </div>
@@ -170,7 +171,7 @@
     <div class="modal-dialog" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Payment</h5>
+                <h5 class="modal-title">{% trans "Add Payment" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">
                     <span>&times;</span>
                 </button>
@@ -181,7 +182,7 @@
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">Invoice Total</h6>
+                                <h6 class="card-subtitle mb-2 text-muted">{% trans "Invoice Total" %}</h6>
                                 <h4 id="invoice-total" class="card-title mb-0">-</h4>
                             </div>
                         </div>
@@ -189,7 +190,7 @@
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">Already Issued</h6>
+                                <h6 class="card-subtitle mb-2 text-muted">{% trans "Already Issued" %}</h6>
                                 <h4 id="already-issued" class="card-title mb-0">-</h4>
                             </div>
                         </div>
@@ -199,7 +200,7 @@
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">Amount Paid</h6>
+                                <h6 class="card-subtitle mb-2 text-muted">{% trans "Amount Paid" %}</h6>
                                 <h4 id="amount-paid" class="card-title mb-0">-</h4>
                             </div>
                         </div>
@@ -207,7 +208,7 @@
                     <div class="col-md-6">
                         <div class="card bg-light">
                             <div class="card-body">
-                                <h6 class="card-subtitle mb-2 text-muted">Amount Available</h6>
+                                <h6 class="card-subtitle mb-2 text-muted">{% trans "Amount Available" %}</h6>
                                 <h4 id="amount-available" class="card-title mb-0">-</h4>
                             </div>
                         </div>
@@ -216,47 +217,47 @@
                 <form id="payment-form">
                     <input type="hidden" id="checker_id" name="checker_id">
                     <div class="form-group">
-                        <label>Position</label>
+                        <label>{% trans "Position" %}</label>
                         <input type="text" class="form-control" id="position" disabled>
                     </div>
                     <div class="form-group">
-                        <label>Creation Date</label>
+                        <label>{% trans "Creation Date" %}</label>
                         <input type="date" class="form-control" name="creation_date" 
                                value="{% now 'Y-m-d' %}">
                     </div>
                     <div class="form-group">
-                        <label>Beneficiary</label>
+                        <label>{% trans "Beneficiary" %}</label>
                         <input type="text" class="form-control" id="beneficiary" 
-                               placeholder="Search supplier...">
+                               placeholder="{% trans 'Search supplier...' %}">
                         <input type="hidden" id="supplier_id">
                     </div>
                     <div class="form-group">
-                        <label>Invoice</label>
+                        <label>{% trans "Invoice" %}</label>
                         <input type="text" class="form-control" id="invoice" 
-                               placeholder="Search invoice..." disabled>
+                               placeholder="{% trans 'Search invoice...' %}" disabled>
                         <input type="hidden" id="invoice_id" name="invoice_id">
                     </div>
                     <div class="form-group">
-                        <label>Amount</label>
+                        <label>{% trans "Amount" %}</label>
                         <input type="number" class="form-control" name="amount" step="0.01" required>
                         <div class="invalid-feedback">
-                            Amount cannot exceed the available amount for payment.
+                            {% trans "Amount cannot exceed the available amount for payment." %}
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Payment Due Date</label>
+                        <label>{% trans "Payment Due Date" %}</label>
                         <input type="date" class="form-control" name="payment_due">
                     </div>
                     <div class="form-group">
-                        <label>Observation</label>
+                        <label>{% trans "Observation" %}</label>
                         <textarea class="form-control" name="observation"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-success" id="save-and-clone">Save and Clone</button>
-                <button type="button" class="btn btn-primary" id="save-payment">Save</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
+                <button type="button" class="btn btn-success" id="save-and-clone">{% trans "Save and Clone" %}</button>
+                <button type="button" class="btn btn-primary" id="save-payment">{% trans "Save" %}</button>
             </div>
         </div>
     </div>
@@ -266,18 +267,18 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Check Action</h5>
+                <h5 class="modal-title">{% trans "Check Action" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="check-details mb-4">
                     <div class="row">
                         <div class="col-6">
-                            <small class="text-muted">Reference</small>
+                            <small class="text-muted">{% trans "Reference" %}</small>
                             <h5 id="checkRef"></h5>
                         </div>
                         <div class="col-6 text-right">
-                            <small class="text-muted">Amount</small>
+                            <small class="text-muted">{% trans "Amount" %}</small>
                             <h5 id="checkAmount"></h5>
                         </div>
                     </div>
@@ -285,29 +286,29 @@
  
                 <div class="action-section">
                     <div class="form-group">
-                        <label>Action</label>
+                        <label>{% trans "Action" %}</label>
                         <select class="form-control" id="checkAction">
-                            <option value="deliver">Deliver</option>
-                            <option value="pay">Mark as Paid</option>
-                            <option value="reject">Reject</option>
-                            <option value="replace">Replace</option>
+                            <option value="deliver">{% trans "Deliver" %}</option>
+                            <option value="pay">{% trans "Mark as Paid" %}</option>
+                            <option value="reject">{% trans "Reject" %}</option>
+                            <option value="replace">{% trans "Replace" %}</option>
                         </select>
                     </div>
  
                     <!-- Rejection Fields -->
                     <div id="rejectionFields" style="display: none;">
                         <div class="form-group">
-                            <label>Rejection Reason</label>
+                            <label>{% trans "Rejection Reason" %}</label>
                             <select class="form-control" id="rejectionReason">
-                                <option value="insufficient_funds">Insufficient Funds</option>
-                                <option value="signature_mismatch">Signature Mismatch</option>
-                                <option value="amount_error">Amount Error</option>
-                                <option value="date_error">Date Error</option>
-                                <option value="other">Other</option>
+                                <option value="insufficient_funds">{% trans "Insufficient Funds" %}</option>
+                                <option value="signature_mismatch">{% trans "Signature Mismatch" %}</option>
+                                <option value="amount_error">{% trans "Amount Error" %}</option>
+                                <option value="date_error">{% trans "Date Error" %}</option>
+                                <option value="other">{% trans "Other" %}</option>
                             </select>
                         </div>
                         <div class="form-group">
-                            <label>Rejection Note</label>
+                            <label>{% trans "Rejection Note" %}</label>
                             <textarea class="form-control" id="rejectionNote" rows="3"></textarea>
                         </div>
                     </div>
@@ -315,15 +316,14 @@
                     <!-- Replacement Fields -->
                     <div id="replacementFields" style="display: none;">
                         <div class="alert alert-info">
-                            This will create a new check with the same details.
-                            You can modify the amount and date in the next step.
+                            {% trans "This will create a new check with the same details. You can modify the amount and date in the next step." %}
                         </div>
                     </div>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="confirmAction">Confirm</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="confirmAction">{% trans "Confirm" %}</button>
             </div>
         </div>
     </div>
@@ -334,32 +334,32 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Replacement Check</h5>
+                <h5 class="modal-title">{% trans "Create Replacement Check" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <div class="alert alert-warning">
-                    <strong>Replacing check:</strong> <span id="oldCheckRef"></span>
+                    <strong>{% trans "Replacing check:" %}</strong> <span id="oldCheckRef"></span>
                 </div>
                 
                 <div class="form-group">
-                    <label>Amount</label>
+                    <label>{% trans "Amount" %}</label>
                     <input type="number" class="form-control" id="newAmount" step="0.01">
                 </div>
  
                 <div class="form-group">
-                    <label>Payment Due Date</label>
+                    <label>{% trans "Payment Due Date" %}</label>
                     <input type="date" class="form-control" id="newDueDate">
                 </div>
  
                 <div class="form-group">
-                    <label>Observation</label>
+                    <label>{% trans "Observation" %}</label>
                     <textarea class="form-control" id="newObservation" rows="2"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="createReplacement">Create</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="createReplacement">{% trans "Create" %}</button>
             </div>
         </div>
     </div>
@@ -729,18 +729,18 @@
 
 <script>
 const BANK_NAMES = {
-    'ATW': 'Attijariwafa Bank',
-    'BCP': 'Banque Populaire',
-    'BOA': 'Bank of Africa',
-    'CAM': 'Crédit Agricole du Maroc',
-    'CIH': 'CIH Bank',
-    'BMCI': 'BMCI',
-    'SGM': 'Société Générale Maroc',
-    'CDM': 'Crédit du Maroc',
-    'ABB': 'Al Barid Bank',
-    'CFG': 'CFG Bank',
-    'ABM': 'Arab Bank Maroc',
-    'CTB': 'Citibank Maghreb'
+    'ATW': '{% trans "Attijariwafa Bank" %}',
+    'BCP': '{% trans "Banque Populaire" %}',
+    'BOA': '{% trans "Bank of Africa" %}',
+    'CAM': '{% trans "Crédit Agricole du Maroc" %}',
+    'CIH': '{% trans "CIH Bank" %}',
+    'BMCI': '{% trans "BMCI" %}',
+    'SGM': '{% trans "Société Générale Maroc" %}',
+    'CDM': '{% trans "Crédit du Maroc" %}',
+    'ABB': '{% trans "Al Barid Bank" %}',
+    'CFG': '{% trans "CFG Bank" %}',
+    'ABM': '{% trans "Arab Bank Maroc" %}',
+    'CTB': '{% trans "Citibank Maghreb" %}'
 };
 
 function getBankDisplayName(code) {
@@ -832,7 +832,7 @@ const CheckerFilters = {
         try {
             const response = await fetch(`/testapp/checkers/filter/?${new URLSearchParams(filters)}`);
             if (!response.ok) {
-                throw new Error('Filter request failed: ' + response.statusText);
+                throw new Error('{% trans "Filter request failed:" %} ' + response.statusText);
             }
             const data = await response.json();
             console.log("[CheckerFilters] Filter response received:", data);
@@ -949,18 +949,18 @@ const CheckerModal = {
 
     getBankDisplayName(code) {
         const bankNames = {
-            'ATW': 'Attijariwafa Bank',
-            'BCP': 'Banque Populaire',
-            'BOA': 'Bank of Africa',
-            'CAM': 'Crédit Agricole du Maroc',
-            'CIH': 'CIH Bank',
-            'BMCI': 'BMCI',
-            'SGM': 'Société Générale Maroc',
-            'CDM': 'Crédit du Maroc',
-            'ABB': 'Al Barid Bank',
-            'CFG': 'CFG Bank',
-            'ABM': 'Arab Bank Maroc',
-            'CTB': 'Citibank Maghreb'
+            'ATW': '{% trans "Attijariwafa Bank" %}',
+            'BCP': '{% trans "Banque Populaire" %}',
+            'BOA': '{% trans "Bank of Africa" %}',
+            'CAM': '{% trans "Crédit Agricole du Maroc" %}',
+            'CIH': '{% trans "CIH Bank" %}',
+            'BMCI': '{% trans "BMCI" %}',
+            'SGM': '{% trans "Société Générale Maroc" %}',
+            'CDM': '{% trans "Crédit du Maroc" %}',
+            'ABB': '{% trans "Al Barid Bank" %}',
+            'CFG': '{% trans "CFG Bank" %}',
+            'ABM': '{% trans "Arab Bank Maroc" %}',
+            'CTB': '{% trans "Citibank Maghreb" %}'
         };
         const displayName = bankNames[code] || code;
         console.log("[CheckerModal] Bank display name for", code, ":", displayName);
@@ -1045,7 +1045,7 @@ const CheckerModal = {
 
         if (bank && index && start) {
             const end = parseInt(start) + parseInt(pages) - 1;
-            const previewText = `${bank}-${index}${start} to ${bank}-${index}${end}`;
+            const previewText = `${bank}-${index}${start} {% trans "to" %} ${bank}-${index}${end}`;
             console.log("[CheckerModal] Setting preview text:", previewText);
             $('#checkerPreview').text(previewText);
             $('.alert-info').removeClass('d-none');
@@ -1095,7 +1095,7 @@ const CheckerModal = {
 
             if (!response.ok) {
                 const errorData = await response.json();
-                throw new Error(errorData.error || 'Creation failed');
+                throw new Error(errorData.error || '{% trans "Creation failed" %}');
             }
 
             console.log("[CheckerModal] Checker created successfully");

@@ -7,6 +7,7 @@ from django.utils import timezone
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
+from django.utils.translation import gettext as _
 
 from .models import StampRightDeclaration, StampRightConfiguration, ForecastStatement, BankAccount
 from decimal import Decimal
@@ -44,7 +45,7 @@ class StampRightConfigFormView(View):
             tax_rate = data.get('tax_rate')
             
             if not bank_id:
-                return JsonResponse({'status': 'error', 'message': 'Bank account is required'})
+                return JsonResponse({'status': 'error', 'message': _('Bank account is required')})
             
             bank = BankAccount.objects.get(id=bank_id)
             
@@ -64,7 +65,7 @@ class StampRightConfigFormView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': 'Stamp Rights configuration updated successfully'
+                'message': _('Stamp Rights configuration updated successfully')
             })
             
         except Exception as e:
@@ -159,11 +160,14 @@ class StampRightDeclarationFormView(View):
     def get(self, request, declaration_id=None):
         if declaration_id:
             declaration = get_object_or_404(StampRightDeclaration, id=declaration_id)
-            title = f"Edit Stamp Rights Declaration {declaration.period_month:02d}/{declaration.period_year}"
+            title = _("Edit Stamp Rights Declaration {month:02d}/{year}").format(
+                month=declaration.period_month, 
+                year=declaration.period_year
+            )
             is_first = False
         else:
             declaration = None
-            title = "New Stamp Rights Declaration"
+            title = _("New Stamp Rights Declaration")
             is_first = StampRightDeclaration.objects.count() == 0
         
         # Get next available period if creating new declaration
@@ -177,7 +181,7 @@ class StampRightDeclarationFormView(View):
         except:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Stamp Rights configuration must be set up first'
+                'message': _('Stamp Rights configuration must be set up first')
             }, status=400)
         
         return JsonResponse({
@@ -208,7 +212,7 @@ class StampRightDeclarationFormView(View):
             if not (1 <= period_month <= 12):
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid month'
+                    'message': _('Invalid month')
                 }, status=400)
             
             # Check for existing declaration in this period
@@ -226,7 +230,10 @@ class StampRightDeclarationFormView(View):
             if existing:
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Declaration already exists for {period_month:02d}/{period_year}'
+                    'message': _('Declaration already exists for {month:02d}/{year}').format(
+                        month=period_month,
+                        year=period_year
+                    )
                 }, status=400)
             
             # Check if only first declaration or following correct sequence
@@ -235,7 +242,10 @@ class StampRightDeclarationFormView(View):
                 if period_month != next_period['month'] or period_year != next_period['year']:
                     return JsonResponse({
                         'status': 'error',
-                        'message': f'Please create declaration for {next_period["month"]:02d}/{next_period["year"]} first'
+                        'message': _('Please create declaration for {month:02d}/{year} first').format(
+                            month=next_period["month"],
+                            year=next_period["year"]
+                        )
                     }, status=400)
             
             # Get config to calculate tax amount
@@ -253,7 +263,7 @@ class StampRightDeclarationFormView(View):
                     if declaration.status in ['paid', 'rejected']:
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Cannot edit {declaration.status} declaration'
+                            'message': _('Cannot edit {status} declaration').format(status=declaration.status)
                         }, status=400)
                 else:
                     declaration = StampRightDeclaration()
@@ -271,13 +281,13 @@ class StampRightDeclarationFormView(View):
             if not declaration_id:
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration saved successfully',
+                    'message': _('Declaration saved successfully'),
                     'declaration_id': str(declaration.id)
                 })
             else:
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration updated successfully'
+                    'message': _('Declaration updated successfully')
                 })
             
         except Exception as e:
@@ -301,7 +311,7 @@ class StampRightDeclarationStatusView(View):
             if not status or status not in ['paid', 'rejected']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid status'
+                    'message': _('Invalid status')
                 }, status=400)
             
             try:
@@ -311,14 +321,20 @@ class StampRightDeclarationStatusView(View):
             
             if status == 'paid':
                 declaration.mark_as_paid(status_date)
-                message = f"Declaration {declaration.period_month:02d}/{declaration.period_year} marked as paid"
+                message = _("Declaration {month:02d}/{year} marked as paid").format(
+                    month=declaration.period_month,
+                    year=declaration.period_year
+                )
             else:
                 # Extract rejection cause and notes
                 rejection_cause = data.get('rejection_cause')
                 rejection_notes = data.get('rejection_notes', '')
                 
                 declaration.mark_as_rejected(status_date, rejection_cause, rejection_notes)
-                message = f"Declaration {declaration.period_month:02d}/{declaration.period_year} marked as rejected"
+                message = _("Declaration {month:02d}/{year} marked as rejected").format(
+                    month=declaration.period_month,
+                    year=declaration.period_year
+                )
             
             return JsonResponse({
                 'status': 'success',
@@ -343,7 +359,7 @@ class StampRightDeclarationDeleteView(View):
             if declaration.status == 'paid':
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Cannot delete paid declaration'
+                    'message': _('Cannot delete paid declaration')
                 }, status=400)
             
             # Delete forecast if exists
@@ -355,7 +371,10 @@ class StampRightDeclarationDeleteView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f"Declaration {declaration.period_month:02d}/{declaration.period_year} deleted successfully"
+                'message': _("Declaration {month:02d}/{year} deleted successfully").format(
+                    month=declaration.period_month,
+                    year=declaration.period_year
+                )
             })
             
         except Exception as e:
@@ -491,21 +510,21 @@ class StampRightDocumentUploadView(View):
             if document_type not in ['declaration', 'payment']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid document type'
+                    'message': _('Invalid document type')
                 }, status=400)
 
             file = request.FILES.get('document')
             if not file:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'No file uploaded'
+                    'message': _('No file uploaded')
                 }, status=400)
             
             # Check file size (limit to 10MB)
             if file.size > 10 * 1024 * 1024:  # 10MB in bytes
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'File size exceeds 10MB limit'
+                    'message': _('File size exceeds 10MB limit')
                 }, status=400)
                 
             # Check file type (optional)
@@ -514,7 +533,9 @@ class StampRightDocumentUploadView(View):
             if file_extension not in allowed_extensions:
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Invalid file type. Allowed types: {", ".join(allowed_extensions)}'
+                    'message': _('Invalid file type. Allowed types: {allowed_types}').format(
+                        allowed_types=", ".join(allowed_extensions)
+                    )
                 }, status=400)
             
             # Delete existing document if present
@@ -533,7 +554,7 @@ class StampRightDocumentUploadView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'Document uploaded successfully',
+                'message': _('Document uploaded successfully'),
                 'document_url': declaration.declaration_document.url if document_type == 'declaration' else declaration.payment_document.url
             })
             
@@ -556,7 +577,7 @@ class StampRightDocumentDeleteView(View):
             if document_type not in ['declaration', 'payment']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid document type'
+                    'message': _('Invalid document type')
                 }, status=400)
 
             if document_type == 'declaration':
@@ -572,7 +593,9 @@ class StampRightDocumentDeleteView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'{document_type.capitalize()} document deleted successfully'
+                'message': _("{doc_type} document deleted successfully").format(
+                    doc_type=_("Declaration") if document_type == "declaration" else _("Payment")
+                )
             })
             
         except Exception as e:

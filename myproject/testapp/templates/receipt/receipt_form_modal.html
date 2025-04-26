@@ -1,9 +1,10 @@
 <!-- Debug Info -->
-<div style="display:none">
-    Receipt type from context: {{ receipt_type }}
-    Is transfer? {% if receipt_type == 'transfer' %}Yes{% else %}No{% endif %}
-</div>
+{% load i18n %}
 {% load accounting_filters %}
+<div style="display:none">
+    {% trans "Receipt type from context" %}: {{ receipt_type }}
+    {% trans "Is transfer?" %} {% if receipt_type == 'transfer' %}{% trans "Yes" %}{% else %}{% trans "No" %}{% endif %}
+</div>
 <!-- Modal Header -->
 <div class="modal-header bg-gradient-primary text-white">
     <h5 class="modal-title">
@@ -29,7 +30,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white">
                 <h6 class="mb-0 text-primary">
-                    <i class="fas fa-info-circle me-2"></i> Basic Information
+                    <i class="fas fa-info-circle me-2"></i> {% trans "Basic Information" %}
                 </h6>
             </div>
             <div class="card-body">
@@ -48,9 +49,9 @@
                     <div class="col-md-6">
                         <div class="form-floating">
                             <input type="text" class="form-control" id="entity" name="entity_display" required
-                                   placeholder="Search entity..." value="{% if receipt %}{{ receipt.entity.name }}{% endif %}">
+                                   placeholder='{% trans "Search entity..." %}' value="{% if receipt %}{{ receipt.entity.name }}{% endif %}">
                             <label for="entity">
-                                <i class="fas fa-building text-primary me-2"></i> Entity
+                                <i class="fas fa-building text-primary me-2"></i> {% trans "Entity" %}
                             </label>
                             <input type="hidden" id="entity_id" name="entity" value="{% if receipt %}{{ receipt.entity.id }}{% endif %}">
                         </div>
@@ -63,7 +64,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white">
                 <h6 class="mb-0 text-primary">
-                    <i class="fas fa-file-invoice me-2"></i> Transaction Details
+                    <i class="fas fa-file-invoice me-2"></i> {% trans "Transaction Details" %}
                 </h6>
             </div>
             <div class="card-body">
@@ -73,7 +74,7 @@
                             <input type="date" class="form-control" id="operation_date" name="operation_date" required
                                    value="{% if receipt %}{{ receipt.operation_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}">
                             <label for="operation_date">
-                                <i class="fas fa-calendar text-primary me-2"></i> Operation Date
+                                <i class="fas fa-calendar text-primary me-2"></i> {% trans "Operation Date" %}
                             </label>
                         </div>
                     </div>
@@ -88,7 +89,7 @@
                                 {% endfor %}
                             </select>
                             <label for="client_year">
-                                <i class="fas fa-calendar-alt text-primary me-2"></i> Year
+                                <i class="fas fa-calendar-alt text-primary me-2"></i> {% trans "Year" %}
                             </label>
                         </div>
                     </div>
@@ -103,7 +104,7 @@
                                 {% endfor %}
                             </select>
                             <label for="client_month">
-                                <i class="fas fa-calendar-day text-primary me-2"></i> Month
+                                <i class="fas fa-calendar-day text-primary me-2"></i> {% trans "Month" %}
                             </label>
                         </div>
                     </div>
@@ -111,9 +112,9 @@
                     <div class="col-md-6">
                         <div class="form-floating">
                             <input type="number" class="form-control" id="amount" name="amount" required
-                                   step="0.01" min="0.01" value="{% if receipt %}{{ receipt.amount }}{% endif %}">
+                                   step="0.01" min="0.01" value="{% if receipt %}{{ receipt.amount|stringformat:'s' }}{% endif %}">
                             <label for="amount">
-                                <i class="fas fa-coins text-primary me-2"></i> Amount
+                                <i class="fas fa-coins text-primary me-2"></i> {% trans "Amount" %}
                             </label>
                         </div>
                     </div>
@@ -122,9 +123,9 @@
                         <div class="col-md-6">
                             <div class="form-floating">
                                 <input type="text" class="form-control" id="issuingBank" name="issuing_bank_display" required
-                                       placeholder="Select bank..." value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
+                                       placeholder='{% trans "Select bank..." %}' value="{% if receipt %}{{ receipt.get_issuing_bank_display }}{% endif %}">
                                 <label for="issuingBank">
-                                    <i class="fas fa-university text-primary me-2"></i> Issuing Bank
+                                    <i class="fas fa-university text-primary me-2"></i> {% trans "Issuing Bank" %}
                                 </label>
                                 <input type="hidden" id="issuingBankCode" name="issuing_bank" value="{% if receipt %}{{ receipt.issuing_bank }}{% endif %}">
                             </div>
@@ -139,7 +140,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white">
                 <h6 class="mb-0 text-primary">
-                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|upper }} Details
+                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|upper }} {% trans "Details" %}
                 </h6>
             </div>
             <div class="card-body">
@@ -151,14 +152,14 @@
                                    name="check_number" required
                                    value="{% if receipt %}{{ receipt.check_number }}{% endif %}">
                             <label for="check_number">
-                                <i class="fas fa-hashtag text-primary me-2"></i> Check Number
+                                <i class="fas fa-hashtag text-primary me-2"></i> {% trans "Check Number" %}
                             </label>
                             {% elif receipt_type == 'lcn' %}
                             <input type="text" class="form-control" id="lcn_number" 
                                    name="lcn_number" required
                                    value="{% if receipt %}{{ receipt.lcn_number }}{% endif %}">
                             <label for="lcn_number">
-                                <i class="fas fa-hashtag text-primary me-2"></i> LCN Number
+                                <i class="fas fa-hashtag text-primary me-2"></i> {% trans "LCN Number" %}
                             </label>
                             {% endif %}
                         </div>
@@ -169,7 +170,7 @@
                             <input type="date" class="form-control" id="due_date" name="due_date" required
                                    value="{% if receipt %}{{ receipt.due_date|date:'Y-m-d' }}{% endif %}">
                             <label for="due_date">
-                                <i class="fas fa-clock text-primary me-2"></i> Due Date
+                                <i class="fas fa-clock text-primary me-2"></i> {% trans "Due Date" %}
                             </label>
                         </div>
                     </div>
@@ -180,7 +181,7 @@
                             <input type="text" class="form-control" id="branch" name="branch"
                                    value="{% if receipt %}{{ receipt.branch }}{% endif %}">
                             <label for="branch">
-                                <i class="fas fa-code-branch text-primary me-2"></i> Branch
+                                <i class="fas fa-code-branch text-primary me-2"></i> {% trans "Branch" %}
                             </label>
                         </div>
                     </div>
@@ -194,7 +195,7 @@
         <div class="card shadow-sm mb-4">
             <div class="card-header bg-white">
                 <h6 class="mb-0 text-primary">
-                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|title }} Details
+                    <i class="fas fa-receipt me-2"></i> {{ receipt_type|title }} {% trans "Details" %}
                 </h6>
             </div>
             <div class="card-body">
@@ -308,10 +309,10 @@
 
 <div class="modal-footer">
     <button type="button" class="btn btn-light" data-dismiss="modal">
-        <i class="fas fa-times me-2"></i> Cancel
+        <i class="fas fa-times me-2"></i> {% trans "Cancel" %}
     </button>
     <button type="submit" class="btn btn-primary" form="receiptForm">
-        <i class="fas fa-save me-2"></i> Save Receipt
+        <i class="fas fa-save me-2"></i> {% trans "Save" %}
     </button>
 </div>
 
@@ -457,6 +458,9 @@
 <script>
 console.log('Form loaded for receipt type:', '{{ receipt_type }}');
 
+// Simple fallback for gettext
+window.gettext = window.gettext || function(text) { return text; };
+
 $(document).ready(function() {
     // Define banksList from the template context
     const banksList = [
@@ -486,8 +490,14 @@ $(document).ready(function() {
                     selected: true
                 }));
                 
+                // Fix for number format issues
+                let amount = comp.amount;
+                if (typeof amount === 'string' && amount.includes(',')) {
+                    amount = amount.replace(',', '.');
+                }
+                
                 amountInput
-                    .val(comp.amount)
+                    .val(amount)
                     .prop('disabled', false)
                     .attr('data-record-id', comp.record_id);
                     
@@ -497,6 +507,13 @@ $(document).ready(function() {
     } catch (error) {
         console.error('Error loading compensations:', error);
     }
+    
+    // Fix number input parsing for European formats
+    $(document).on('input', 'input[type="number"]', function() {
+        if (this.value.includes(',')) {
+            this.value = this.value.replace(',', '.');
+        }
+    });
 
     // Utility functions
     function getCookie(name) {

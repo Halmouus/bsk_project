@@ -1,13 +1,14 @@
 {% load accounting_filters %}
+{% load i18n %}
 <!-- templates/receipt/receipt_timeline_modal.html -->
 <div class="modal-header">
     <h5 class="modal-title">
         {% if receipt.check_number %}
-            <i class="fas fa-money-check me-2"></i>Check #{{ receipt.check_number }}
+            <i class="fas fa-money-check me-2"></i>{% trans "Check" %} #{{ receipt.check_number }}
         {% else %}
-            <i class="fas fa-file-invoice-dollar me-2"></i>LCN #{{ receipt.lcn_number }}
+            <i class="fas fa-file-invoice-dollar me-2"></i>{% trans "LCN" %} #{{ receipt.lcn_number }}
         {% endif %}
-        History
+        {% trans "History" %}
     </h5>
     <button type="button" class="close" data-dismiss="modal">&times;</button>
 </div>
@@ -18,18 +19,18 @@
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <p><strong>Entity:</strong> {{ receipt.entity.name }}</p>
-                    <p><strong>Client:</strong> {{ receipt.client.name }}</p>
-                    <p><strong>Amount:</strong> {{ receipt.amount|format_balance }}</p>
+                    <p><strong>{% trans "Entity:" %}</strong> {{ receipt.entity.name }}</p>
+                    <p><strong>{% trans "Client:" %}</strong> {{ receipt.client.name }}</p>
+                    <p><strong>{% trans "Amount:" %}</strong> {{ receipt.amount|format_balance }}</p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Status:</strong> 
+                    <p><strong>{% trans "Status:" %}</strong> 
                         <span class="badge badge-{{ receipt.status|lower }}">
                             {{ receipt.get_status_display }}
                         </span>
                     </p>
-                    <p><strong>Created:</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p>
-                    <p><strong>Due Date:</strong> {{ receipt.due_date|date:"d/m/Y" }}</p>
+                    <p><strong>{% trans "Created:" %}</strong> {{ receipt.created_at|date:"d/m/Y H:i" }}</p>
+                    <p><strong>{% trans "Due Date:" %}</strong> {{ receipt.due_date|date:"d/m/Y" }}</p>
                 </div>
             </div>
         </div>
@@ -64,29 +65,29 @@
                 <p class="mb-0">{{ event.notes }}</p>
                 {% if event.action == 'status_changed' %}
                     <small class="text-muted">
-                        Changed from 
+                        {% trans "Changed from" %} 
                         <span class="badge badge-{{ event.old_value.status|lower }}">
                             {{ event.old_value.status|default_if_none:""|get_status_display }}
                         </span>
-                        to
+                        {% trans "to" %}
                         <span class="badge badge-{{ event.new_value.status|lower }}">
                             {{ event.new_value.status|default_if_none:""|get_status_display }}
                         </span>
                     </small>
                 {% endif %}
                 {% if event.user %}
-                    <small class="text-muted d-block">by {{ event.user.get_full_name|default:event.user.username }}</small>
+                    <small class="text-muted d-block">{% trans "by" %} {{ event.user.get_full_name|default:event.user.username }}</small>
                 {% endif %}
             </div>
         </div>
         {% empty %}
-        <p class="text-center text-muted">No history available</p>
+        <p class="text-center text-muted">{% trans "No history available" %}</p>
         {% endfor %}
     </div>
 </div>
 
 <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+    <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
 </div>
 
 <style>

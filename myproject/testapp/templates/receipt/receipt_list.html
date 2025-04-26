@@ -2,30 +2,47 @@
 
 {% load presentation_filters %}
 {% load accounting_filters %}
-{% block title %}Receipts{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Receipts" %}{% endblock %}
+
+{% block extrahead %}
+<!-- JavaScript translation catalog - must be loaded first -->
+<script type="text/javascript" src="{% url 'javascript-catalog' %}"></script>
+<script type="text/javascript">
+// Test if gettext is loaded 
+try {
+    console.log("JavaScript translation test:", gettext("Test"));
+} catch (e) {
+    console.error("ERROR: JavaScript translations failed to load:", e);
+    // Define a fallback gettext function so your page doesn't break
+    window.gettext = function(text) { return text; };
+}
+</script>
+{% endblock %}
+
 {% block content %}
 <div class="container-fluid px-4">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2 class="mb-0">
-            <i class="fas fa-receipt text-primary me-2"></i> Receipts Management
+            <i class="fas fa-receipt text-primary me-2"></i> {% trans "Receipts Management" %}
         </h2>
         <div class="btn-group">
             <button type="button" class="btn btn-primary dropdown-toggle" data-toggle="dropdown">
-                <i class="fas fa-plus-circle"></i> New Receipt
+                <i class="fas fa-plus-circle"></i> {% trans "New Receipt" %}
             </button>
             <div class="dropdown-menu">
                 <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="check">
-                    <i class="fas fa-money-check"></i> Check
+                    <i class="fas fa-money-check"></i> {% trans "Check" %}
                 </a>
                 <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="lcn">
-                    <i class="fas fa-file-invoice-dollar"></i> LCN
+                    <i class="fas fa-file-invoice-dollar"></i> {% trans "LCN" %}
                 </a>
                 <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="cash">
-                    <i class="fas fa-money-bill"></i> Cash
+                    <i class="fas fa-money-bill"></i> {% trans "Cash" %}
                 </a>
                 <a class="dropdown-item" href="#" data-toggle="modal" data-target="#receiptModal" data-type="transfer">
-                    <i class="fas fa-exchange-alt"></i> Transfer
+                    <i class="fas fa-exchange-alt"></i> {% trans "Transfer" %}
                 </a>
             </div>
         </div>
@@ -35,22 +52,22 @@
     <ul class="nav nav-tabs" id="receiptTabs" role="tablist">
         <li class="nav-item">
             <a class="nav-link active" id="checks-tab" data-toggle="tab" href="#checks" role="tab">
-                <i class="fas fa-money-check"></i> Checks
+                <i class="fas fa-money-check"></i> {% trans "Checks" %}
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link" id="lcns-tab" data-toggle="tab" href="#lcns" role="tab">
-                <i class="fas fa-file-invoice-dollar"></i> LCNs
+                <i class="fas fa-file-invoice-dollar"></i> {% trans "LCNs" %}
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link" id="cash-tab" data-toggle="tab" href="#cash" role="tab">
-                <i class="fas fa-money-bill"></i> Cash
+                <i class="fas fa-money-bill"></i> {% trans "Cash" %}
             </a>
         </li>
         <li class="nav-item">
             <a class="nav-link" id="transfers-tab" data-toggle="tab" href="#transfers" role="tab">
-                <i class="fas fa-exchange-alt"></i> Transfers
+                <i class="fas fa-exchange-alt"></i> {% trans "Transfers" %}
             </a>
         </li>
     </ul>
@@ -63,18 +80,18 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Entity</th>
-                            <th>Client</th>
-                            <th>Check Number</th>
-                            <th>Issuing Bank</th>
-                            <th>Due Date</th>
-                            <th class="text-right" style="min-width: 120px;">Amount</th>
-                            <th>Bank Issued To</th>
-                            <th>Presentation</th>
-                            <th>Status</th>
-                            <th>Document</th>
-                            <th>Actions</th>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Entity" %}</th>
+                            <th>{% trans "Client" %}</th>
+                            <th>{% trans "Check Number" %}</th>
+                            <th>{% trans "Issuing Bank" %}</th>
+                            <th>{% trans "Due Date" %}</th>
+                            <th class="text-right" style="min-width: 120px;">{% trans "Amount" %}</th>
+                            <th>{% trans "Bank Issued To" %}</th>
+                            <th>{% trans "Presentation" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Document" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -123,7 +140,7 @@
                                     <br><small class="text-danger">{{ check.get_rejection_cause_display }}</small>
                                     {% with last_pres=check.check_presentations.last %}
                                         {% if last_pres %}
-                                            <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                                            <br><small class="text-muted">{% trans "Represented on" %} {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
                                         {% endif %}
                                     {% endwith %}
                                 {% endif %}
@@ -150,8 +167,8 @@
                                 {% if check.document %}
                                     <button type="button" class="btn btn-sm btn-info view-pdf" 
                                             data-url="{{ check.document.url }}" 
-                                            data-title="Check #{{ check.check_number }}"
-                                            title="View Document">
+                                            data-title='{% trans "Check" %} #{{ check.check_number }}'
+                                            title='{% trans "View Document" %}'>
                                         <i class="fas fa-file-pdf"></i>
                                     </button>
                                 {% else %}
@@ -160,21 +177,21 @@
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')">
+                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('check', '{{ check.id }}')" title='{% trans "View Timeline" %}'>
                                         <i class="fas fa-history"></i>
                                     </button>
                                     {% with pres=check.check_presentations.first %}
                                         {% if not pres %}
                                             <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
-                                                    data-type="check" data-action="edit" data-id="{{ check.id }}">
+                                                    data-type="check" data-action="edit" data-id="{{ check.id }}" title='{% trans "Edit" %}'>
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}">
+                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="check" data-id="{{ check.id }}" title='{% trans "Delete" %}'>
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         {% else %}
                                             <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
-                                                    data-type="check" data-action="edit" data-id="{{ check.id }}" title="Manage Documents">
+                                                    data-type="check" data-action="edit" data-id="{{ check.id }}" title='{% trans "Manage Documents" %}'>
                                                 <i class="fas fa-file-pdf"></i>
                                             </button>
                                         {% endif %}
@@ -184,7 +201,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="11" class="text-center">No checks found</td>
+                            <td colspan="11" class="text-center">{% trans "No checks found" %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -198,18 +215,18 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Entity</th>
-                            <th>Client</th>
-                            <th>LCN Number</th>
-                            <th>Issuing Bank</th>
-                            <th>Due Date</th>
-                            <th class="text-right" style="min-width: 120px;">Amount</th>
-                            <th>Bank Issued To</th>
-                            <th>Presentation</th>
-                            <th>Status</th>
-                            <th>Document</th>
-                            <th>Actions</th>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Entity" %}</th>
+                            <th>{% trans "Client" %}</th>
+                            <th>{% trans "LCN Number" %}</th>
+                            <th>{% trans "Issuing Bank" %}</th>
+                            <th>{% trans "Due Date" %}</th>
+                            <th class="text-right" style="min-width: 120px;">{% trans "Amount" %}</th>
+                            <th>{% trans "Bank Issued To" %}</th>
+                            <th>{% trans "Presentation" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Document" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -257,7 +274,7 @@
                                     <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
                                     {% with last_pres=lcn.lcn_presentations.last %}
                                         {% if last_pres %}
-                                            <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                                            <br><small class="text-muted">{% trans "Represented on" %} {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
                                         {% endif %}
                                     {% endwith %}
                                 {% endif %}
@@ -284,8 +301,8 @@
                                 {% if lcn.document %}
                                     <button type="button" class="btn btn-sm btn-info view-pdf" 
                                             data-url="{{ lcn.document.url }}" 
-                                            data-title="LCN #{{ lcn.lcn_number }}"
-                                            title="View Document">
+                                            data-title='{% trans "LCN" %} #{{ lcn.lcn_number }}'
+                                            title='{% trans "View Document" %}'>
                                         <i class="fas fa-file-pdf"></i>
                                     </button>
                                 {% else %}
@@ -294,21 +311,21 @@
                             </td>
                             <td>
                                 <div class="btn-group">
-                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')">
+                                    <button class="btn btn-sm btn-info" onclick="viewReceiptTimeline('lcn', '{{ lcn.id }}')" title='{% trans "View Timeline" %}'>
                                         <i class="fas fa-history"></i>
                                     </button>
                                     {% with pres=lcn.lcn_presentations.first %}
                                         {% if not pres %}
                                             <button class="btn btn-sm btn-primary" data-toggle="modal" data-target="#receiptModal" 
-                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}">
+                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title='{% trans "Edit" %}'>
                                                 <i class="fas fa-edit"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}">
+                                            <button class="btn btn-sm btn-danger delete-receipt" data-type="lcn" data-id="{{ lcn.id }}" title='{% trans "Delete" %}'>
                                                 <i class="fas fa-trash"></i>
                                             </button>
                                         {% else %}
                                             <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
-                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title="Manage Documents">
+                                                    data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title='{% trans "Manage Documents" %}'>
                                                 <i class="fas fa-file-pdf"></i>
                                             </button>
                                         {% endif %}
@@ -318,7 +335,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="11" class="text-center">No LCNs found</td>
+                            <td colspan="11" class="text-center">{% trans "No LCNs found" %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -332,14 +349,14 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Entity</th>
-                            <th>Client</th>
-                            <th>Reference</th>
-                            <th>Credited Account</th>
-                            <th class="text-right" style="min-width: 120px;">Amount</th>
-                            <th>Document</th>
-                            <th>Actions</th>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Entity" %}</th>
+                            <th>{% trans "Client" %}</th>
+                            <th>{% trans "Reference" %}</th>
+                            <th>{% trans "Credited Account" %}</th>
+                            <th class="text-right" style="min-width: 120px;">{% trans "Amount" %}</th>
+                            <th>{% trans "Document" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -366,17 +383,17 @@
                                 <div class="btn-group">
                                     {% if cash.can_edit %}
                                     <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}">
+                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}" title='{% trans "Edit" %}'>
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     {% else %}
                                     <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}" title="Manage Documents">
+                                            data-type="cash" data-action="edit" data-id="{{ cash.id }}" title='{% trans "Manage Documents" %}'>
                                         <i class="fas fa-file-pdf"></i>
                                     </button>
                                     {% endif %}
                                     {% if cash.can_delete %}
-                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}">
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="cash" data-id="{{ cash.id }}" title='{% trans "Delete" %}'>
                                         <i class="fas fa-trash"></i>
                                     </button>
                                     {% endif %}
@@ -385,7 +402,7 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="6" class="text-center">No cash receipts found</td>
+                            <td colspan="6" class="text-center">{% trans "No cash receipts found" %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -399,15 +416,15 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Entity</th>
-                            <th>Client</th>
-                            <th>Transfer Reference</th>
-                            <th>Transfer Date</th>
-                            <th>Credited Account</th>
-                            <th class="text-right" style="min-width: 120px;">Amount</th>
-                            <th>Document</th>
-                            <th>Actions</th>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Entity" %}</th>
+                            <th>{% trans "Client" %}</th>
+                            <th>{% trans "Transfer Reference" %}</th>
+                            <th>{% trans "Transfer Date" %}</th>
+                            <th>{% trans "Credited Account" %}</th>
+                            <th class="text-right" style="min-width: 120px;">{% trans "Amount" %}</th>
+                            <th>{% trans "Document" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -435,17 +452,17 @@
                                 <div class="btn-group">
                                     {% if transfer.can_edit %}
                                     <button class="btn btn-sm btn-info" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}">
+                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}" title='{% trans "Edit" %}'>
                                         <i class="fas fa-edit"></i>
                                     </button>
                                     {% else %}
                                     <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
-                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}" title="Manage Documents">
+                                            data-type="transfer" data-action="edit" data-id="{{ transfer.id }}" title='{% trans "Manage Documents" %}'>
                                         <i class="fas fa-file-pdf"></i>
                                     </button>
                                     {% endif %}
                                     {% if transfer.can_delete %}
-                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}">
+                                    <button class="btn btn-sm btn-danger delete-receipt" data-type="transfer" data-id="{{ transfer.id }}" title='{% trans "Delete" %}'>
                                         <i class="fas fa-trash"></i>
                                     </button>
                                     {% endif %}
@@ -454,13 +471,12 @@
                         </tr>
                         {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">No transfers found</td>
+                            <td colspan="7" class="text-center">{% trans "No transfers found" %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
             </div>
-        </div>
         </div>
     </div>
 </div>
@@ -497,7 +513,7 @@
     <div class="modal-dialog modal-xl" style="max-width: 90%;">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <h5 class="modal-title" id="documentViewModalLabel">{% trans "View Document" %}</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -505,9 +521,9 @@
             <div class="modal-body">
                 <div class="text-center" id="document-loading">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="sr-only">Loading...</span>
+                        <span class="sr-only">{% trans "Loading..." %}</span>
                     </div>
-                    <p class="mt-2">Loading document...</p>
+                    <p class="mt-2">{% trans "Loading document..." %}</p>
                 </div>
                 <div id="document-container" class="d-none">
                     <!-- The document will be embedded here -->
@@ -518,9 +534,9 @@
             </div>
             <div class="modal-footer">
                 <a class="btn btn-primary" id="document-download" target="_blank">
-                    <i class="fas fa-download"></i> Download
+                    <i class="fas fa-download"></i> {% trans "Download" %}
                 </a>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>
@@ -531,7 +547,7 @@
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Document Viewer</h5>
+                <h5 class="modal-title">{% trans "Document Viewer" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -541,10 +557,10 @@
             </div>
             <div class="modal-footer">
                 <a href="#" class="btn btn-primary" id="downloadPdf" target="_blank">
-                    <i class="fas fa-download"></i> Download
+                    <i class="fas fa-download"></i> {% trans "Download" %}
                 </a>
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    <i class="fas fa-times"></i> Close
+                    <i class="fas fa-times"></i> {% trans "Close" %}
                 </button>
             </div>
         </div>
@@ -649,17 +665,22 @@
     }
 </style>
 
-<script>
-    console.log("Extra JS loaded");
+<script type="text/javascript">
 
-    const MOROCCAN_BANKS = [
-        {% for code, name in bank_choices %}
-            ['{{ code }}', '{{ name }}'],
-        {% endfor %}
-    ];
+if (typeof gettext !== 'function') {
+    window.gettext = function(text) { return text; };
+    console.warn("Using fallback gettext function - translations may not work properly");
+}
+console.log("Extra JS loaded");
 
-    var bankAccountsList = [
-    {value: '', label: 'Select Bank Account'},
+const MOROCCAN_BANKS = [
+    {% for code, name in bank_choices %}
+        ['{{ code }}', '{{ name }}'],
+    {% endfor %}
+];
+
+var bankAccountsList = [
+    {value: '', label: gettext('Select Bank Account')},
     {% for account in bank_accounts %}
         {
             value: "{{ account.id }}",
@@ -668,12 +689,12 @@
     {% endfor %}
 ];
 
-    // Debug helper
-    const debug = {
-        log: function(component, message, data = null) {
-            console.log(`[${component}]`, message, data || '');
-        }
-    };
+// Debug helper
+const debug = {
+    log: function(component, message, data = null) {
+        console.log(`[${component}]`, message, data || '');
+    }
+};
 
 // Track filters per tab
 let activeFilters = null;
@@ -731,7 +752,7 @@ const DocumentHandler = {
         console.log(`[DocumentHandler] Viewing document for ${receiptType} receipt:`, receiptId);
         
         // Update modal title with filename
-        $('#documentViewModalLabel').text(`Document: ${filename}`);
+        $('#documentViewModalLabel').text(gettext("Document") + ": " + filename);
         
         // Reset modal state
         $('#document-loading').removeClass('d-none');
@@ -752,7 +773,7 @@ const DocumentHandler = {
     async loadDocument(receiptType, receiptId) {
         try {
             const response = await fetch(`/testapp/receipts/${receiptType}/${receiptId}/document/`);
-            if (!response.ok) throw new Error('Failed to load document');
+            if (!response.ok) throw new Error(gettext('Failed to load document'));
             
             const contentType = response.headers.get('content-type');
             const blob = await response.blob();
@@ -766,11 +787,11 @@ const DocumentHandler = {
             } else if (contentType.includes('image')) {
                 // Handle image
                 $('#document-container').html(`
-                    <img src="${url}" class="img-fluid" alt="Document Image">
+                    <img src="${url}" class="img-fluid" alt="${gettext('Document Image')}">
                 `);
             } else {
                 // Unsupported file type
-                throw new Error('Unsupported file type');
+                throw new Error(gettext('Unsupported file type'));
             }
             
             // Show the document
@@ -783,20 +804,18 @@ const DocumentHandler = {
             $('#document-error').removeClass('d-none');
             $('#document-error').html(`
                 <i class="fas fa-exclamation-triangle"></i> 
-                Unable to display the document. 
-                <a href="/testapp/receipts/${receiptType}/${receiptId}/document/" target="_blank">Download it instead</a>.
+                ${gettext("Unable to display the document. Download it instead")}.
             `);
         }
     }
 };
     
 $(document).ready(function() {
-
     // Restore last active tab
     const lastActiveTab = localStorage.getItem('activeReceiptTab');
-        if (lastActiveTab) {
-            $(`#receiptTabs a[href="${lastActiveTab}"]`).tab('show');
-        }
+    if (lastActiveTab) {
+        $(`#receiptTabs a[href="${lastActiveTab}"]`).tab('show');
+    }
 
     // Store tab changes
     $('#receiptTabs a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
@@ -831,8 +850,6 @@ $(document).ready(function() {
     debug.log('Init', 'Active tab:', activeTab);
     activeFilters = new ReceiptFilters(activeTab, '/testapp/receipts/filter/?type=' + activeTab);
     
-
-
     $('#receiptModal').on('show.bs.modal', function(e) {
         const button = $(e.relatedTarget);
         const type = button.data('type');
@@ -854,7 +871,7 @@ $(document).ready(function() {
             // If documents-only mode, disable fields except document upload
             if (documentsOnly) {
                 // Add a notice
-                $('#receiptModal .modal-title').text('Manage Documents');
+                $('#receiptModal .modal-title').text(gettext("Manage Documents"));
                 
                 // Disable all input fields except document-related ones
                 $('#receiptModal input, #receiptModal select, #receiptModal textarea').prop('disabled', true);
@@ -866,7 +883,7 @@ $(document).ready(function() {
                 $('#receiptModal button[type="submit"]').hide();
                 $('#receiptModal .modal-footer').prepend(`
                     <button type="button" class="btn btn-primary save-documents">
-                        <i class="fas fa-save me-1"></i> Save Documents
+                        <i class="fas fa-save me-1"></i> ${gettext("Save Documents")}
                     </button>
                 `);
             }
@@ -891,266 +908,265 @@ $(document).ready(function() {
         });
     });
 
-        // Handle form submission for both create and edit
-        $(document).on('submit', '#receiptForm', function(e) {
-            e.preventDefault();
-            const form = $(this);
-            
-            // Disable the submit button to prevent double submission
-            const submitBtn = form.find('button[type="submit"]');
-            submitBtn.prop('disabled', true);
-            
-            // Create FormData object and append transfer fields manually
-            let formData = new FormData(form[0]);
-            if ($('#transfer_reference').length) {
-                formData.append('transfer_reference', $('#transfer_reference').val());
-                formData.append('transfer_date', $('#transfer_date').val());
-            }
-
-            if ($('#delete-document').val() === 'true') {
-                formData.append('delete_document', 'true');
-            }
-
-            console.log("[Form Submit] Receipt type:", formData.get('receipt_type'));
-            console.log("[Form Submit] Form data:", formData);
-            // Convert FormData to URLSearchParams for jQuery
-            const data = new URLSearchParams(formData).toString();
-
-            $.ajax({
-                url: form.attr('action'),
-                type: 'POST',
-                data: data,
-                processData: false,
-                contentType: false, 
-                success: function(response) {
-                    if (response.status === 'success') {
-                        $('#receiptModal').modal('hide');
-                        showToast(response.message, 'success');
-                        location.reload();
-                    } else {
-                        showFormErrors(form, response.errors);
-                        submitBtn.prop('disabled', false);
-                    }
-                },
-                error: function(xhr) {
-                    try {
-                        const errors = JSON.parse(xhr.responseText);
-                        showFormErrors(form, errors);
-                    } catch (e) {
-                        showToast('An error occurred while saving the receipt.', 'error');
-                    }
-                    submitBtn.prop('disabled', false);
-                }
-            });
-        });
-
-        // Handle save documents button click
-        $(document).on('click', '.save-documents', function() {
-            // Get the form
-            const form = $('#receiptForm');
-            const submitBtn = $(this);
-            
-            // Create FormData with only document-related fields
-            // Using selective approach instead of the entire form
-            const formData = new FormData();
-            formData.append('action', 'edit_documents');
-            formData.append('documents_only', 'true'); // Keep original flag
-            
-            // Add the document file if selected (explicit handling)
-            const documentFile = $('#document')[0].files[0];
-            if (documentFile) {
-                formData.append('document', documentFile);
-            }
-            
-            // Add delete flag if needed
-            if ($('#delete-document').val() === 'true') {
-                formData.append('delete_document', 'true');
-            }
-            
-            // Disable the button to prevent double submission
-            submitBtn.prop('disabled', true);
-            
-            $.ajax({
-                url: form.attr('action'),
-                type: 'POST',
-                data: formData,
-                processData: false,
-                contentType: false,
-                success: function(response) {
-                    if (response.status === 'success') {
-                        $('#receiptModal').modal('hide');
-                        showToast(response.message, 'success');
-                        location.reload();
-                    } else {
-                        // Keep both error handling approaches
-                        if (response.errors) {
-                            showFormErrors(form, response.errors);
-                        } else {
-                            showToast(response.message || 'Error updating document', 'error');
-                        }
-                        submitBtn.prop('disabled', false);
-                    }
-                },
-                error: function(xhr) {
-                    // Keep comprehensive error handling from original
-                    try {
-                        const errors = JSON.parse(xhr.responseText);
-                        showFormErrors(form, errors);
-                    } catch (e) {
-                        showToast('Error updating document', 'error');
-                    }
-                    submitBtn.prop('disabled', false);
-                }
-            });
-        });
-
-        function showFormErrors(form, errors) {
-            // Clear previous errors
-            form.find('.is-invalid').removeClass('is-invalid');
-            form.find('.invalid-feedback').remove();
-
-            // Show new errors
-            Object.keys(errors).forEach(field => {
-                const input = form.find(`[name="${field}"]`);
-                const error = errors[field].join(' ');
-                input.addClass('is-invalid');
-                input.after(`<div class="invalid-feedback">${error}</div>`);
-            });
+    // Handle form submission for both create and edit
+    $(document).on('submit', '#receiptForm', function(e) {
+        e.preventDefault();
+        const form = $(this);
+        
+        // Disable the submit button to prevent double submission
+        const submitBtn = form.find('button[type="submit"]');
+        submitBtn.prop('disabled', true);
+        
+        // Create FormData object and append transfer fields manually
+        let formData = new FormData(form[0]);
+        if ($('#transfer_reference').length) {
+            formData.append('transfer_reference', $('#transfer_reference').val());
+            formData.append('transfer_date', $('#transfer_date').val());
         }
 
-        function showToast(message, type = 'success') {
-            const toast = `
-                <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
-                    <div class="toast-header bg-${type} text-white">
-                        <strong class="mr-auto">Notification</strong>
-                        <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast">
-                            <span aria-hidden="true">&times;</span>
-                        </button>
-                    </div>
-                    <div class="toast-body">${message}</div>
-                </div>
-            `;
-
-            const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>');
-            toastContainer.html(toast);
-            $('body').append(toastContainer);
-
-            $('.toast').toast('show');
-            
-            // Remove toast after it's hidden
-            $('.toast').on('hidden.bs.toast', function() {
-                $(this).closest('.toast-container').remove();
-            });
+        if ($('#delete-document').val() === 'true') {
+            formData.append('delete_document', 'true');
         }
+
+        console.log("[Form Submit] Receipt type:", formData.get('receipt_type'));
+        console.log("[Form Submit] Form data:", formData);
+        // Convert FormData to URLSearchParams for jQuery
+        const data = new URLSearchParams(formData).toString();
+
+        $.ajax({
+            url: form.attr('action'),
+            type: 'POST',
+            data: data,
+            processData: false,
+            contentType: false, 
+            success: function(response) {
+                if (response.status === 'success') {
+                    $('#receiptModal').modal('hide');
+                    showToast(response.message, 'success');
+                    location.reload();
+                } else {
+                    showFormErrors(form, response.errors);
+                    submitBtn.prop('disabled', false);
+                }
+            },
+            error: function(xhr) {
+                try {
+                    const errors = JSON.parse(xhr.responseText);
+                    showFormErrors(form, errors);
+                } catch (e) {
+                    showToast(gettext("An error occurred while saving the receipt."), 'error');
+                }
+                submitBtn.prop('disabled', false);
+            }
+        });
     });
 
-    // Initialize form elements after modal load
-    function initializeForm() {
-        console.log('Initializing form with autocomplete...');
-        console.log('Client input exists:', $('#client').length);
-        console.log('Entity input exists:', $('#entity').length);
-
-    // Initialize client autocomplete
-    $("#client").autocomplete({
-                minLength: 0,
-            source: function(request, response) {
-                console.log('Client search term:', request.term);
-                $.ajax({
-                    url: "{% url 'client-autocomplete' %}",
-                    dataType: "json",
-                    data: { term: request.term },
-                    success: function(data) {
-                        console.log('Client data received:', data);
-                        response($.map(data.results, function(item) {
-                            return {
-                                label: item.text,
-                                value: item.id
-                            };
-                        }));
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Client autocomplete error:', error);
-                    }
-                });
-            },
-            select: function(event, ui) {
-                console.log('Client selected:', ui.item);
-                $("#client").val(ui.item.label);
-                $("#client_id").val(ui.item.value);
-                return false;
-            }
-        }).on('focus', function() {
-            console.log('Client input focused');
-        });
-
-        // Initialize entity autocomplete
-        $("#entity").autocomplete({
-            minLength: 0,
-            source: function(request, response) {
-                console.log('Entity search term:', request.term);
-                $.ajax({
-                    url: "{% url 'entity-autocomplete' %}",
-                    dataType: "json",
-                    data: { term: request.term },
-                    success: function(data) {
-                        console.log('Entity data received:', data);
-                        response($.map(data.results, function(item) {
-                            return {
-                                label: item.text,
-                                value: item.id
-                            };
-                        }));
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('Entity autocomplete error:', error);
-                        console.log('XHR response:', xhr.responseText);
-                    }
-                });
-            },
-            select: function(event, ui) {
-                console.log('Entity selected:', ui.item);
-                $("#entity").val(ui.item.label);
-                $("#entity_id").val(ui.item.value);
-                return false;
-            }
-        }).on('focus', function() {
-            console.log('Entity input focused');
-        });
-
+    // Handle save documents button click
+    $(document).on('click', '.save-documents', function() {
+        // Get the form
+        const form = $('#receiptForm');
+        const submitBtn = $(this);
         
+        // Create FormData with only document-related fields
+        // Using selective approach instead of the entire form
+        const formData = new FormData();
+        formData.append('action', 'edit_documents');
+        formData.append('documents_only', 'true'); // Keep original flag
+        
+        // Add the document file if selected (explicit handling)
+        const documentFile = $('#document')[0].files[0];
+        if (documentFile) {
+            formData.append('document', documentFile);
+        }
+        
+        // Add delete flag if needed
+        if ($('#delete-document').val() === 'true') {
+            formData.append('delete_document', 'true');
+        }
+        
+        // Disable the button to prevent double submission
+        submitBtn.prop('disabled', true);
+        
+        $.ajax({
+            url: form.attr('action'),
+            type: 'POST',
+            data: formData,
+            processData: false,
+            contentType: false,
+            success: function(response) {
+                if (response.status === 'success') {
+                    $('#receiptModal').modal('hide');
+                    showToast(response.message, 'success');
+                    location.reload();
+                } else {
+                    // Keep both error handling approaches
+                    if (response.errors) {
+                        showFormErrors(form, response.errors);
+                    } else {
+                        showToast(response.message || gettext("Error updating document"), 'error');
+                    }
+                    submitBtn.prop('disabled', false);
+                }
+            },
+            error: function(xhr) {
+                // Keep comprehensive error handling from original
+                try {
+                    const errors = JSON.parse(xhr.responseText);
+                    showFormErrors(form, errors);
+                } catch (e) {
+                    showToast(gettext("Error updating document"), 'error');
+                }
+                submitBtn.prop('disabled', false);
+            }
+        });
+    });
 
-        // Add some basic styling to autocomplete dropdown
-        $(".ui-autocomplete").addClass("dropdown-menu").css({
-            'max-height': '200px',
-            'overflow-y': 'auto',
-            'overflow-x': 'hidden',
-            'z-index': '9999'
+    function showFormErrors(form, errors) {
+        // Clear previous errors
+        form.find('.is-invalid').removeClass('is-invalid');
+        form.find('.invalid-feedback').remove();
+
+        // Show new errors
+        Object.keys(errors).forEach(field => {
+            const input = form.find(`[name="${field}"]`);
+            const error = errors[field].join(' ');
+            input.addClass('is-invalid');
+            input.after(`<div class="invalid-feedback">${error}</div>`);
         });
     }
 
-    // Handle delete
-    $('.delete-receipt').click(function() {
-        if (confirm('Are you sure you want to delete this receipt?')) {
-            const type = $(this).data('type');
-            const id = $(this).data('id');
-            
+    function showToast(message, type = 'success') {
+        const toast = `
+            <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
+                <div class="toast-header bg-${type} text-white">
+                    <strong class="mr-auto">${gettext("Notification")}</strong>
+                    <button type="button" class="ml-2 mb-1 close text-white" data-dismiss="toast">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="toast-body">${message}</div>
+            </div>
+        `;
+
+        const toastContainer = $('<div class="toast-container position-fixed top-0 right-0 p-3"></div>');
+        toastContainer.html(toast);
+        $('body').append(toastContainer);
+
+        $('.toast').toast('show');
+        
+        // Remove toast after it's hidden
+        $('.toast').on('hidden.bs.toast', function() {
+            $(this).closest('.toast-container').remove();
+        });
+    }
+});
+
+// Initialize form elements after modal load
+function initializeForm() {
+    console.log('Initializing form with autocomplete...');
+    console.log('Client input exists:', $('#client').length);
+    console.log('Entity input exists:', $('#entity').length);
+
+    // Initialize client autocomplete
+    $("#client").autocomplete({
+        minLength: 0,
+        source: function(request, response) {
+            console.log('Client search term:', request.term);
             $.ajax({
-                url: `/testapp/receipts/delete/${type}/${id}/`,
-                type: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
+                url: "{% url 'client-autocomplete' %}",
+                dataType: "json",
+                data: { term: request.term },
+                success: function(data) {
+                    console.log('Client data received:', data);
+                    response($.map(data.results, function(item) {
+                        return {
+                            label: item.text,
+                            value: item.id
+                        };
+                    }));
                 },
-                success: function() {
-                    location.reload();
-                },
-                error: function() {
-                    alert('Error deleting receipt');
+                error: function(xhr, status, error) {
+                    console.error('Client autocomplete error:', error);
                 }
             });
+        },
+        select: function(event, ui) {
+            console.log('Client selected:', ui.item);
+            $("#client").val(ui.item.label);
+            $("#client_id").val(ui.item.value);
+            return false;
         }
+    }).on('focus', function() {
+        console.log('Client input focused');
     });
-    class ReceiptFilters {
-        constructor(tabId, filterEndpoint) {
+
+    // Initialize entity autocomplete
+    $("#entity").autocomplete({
+        minLength: 0,
+        source: function(request, response) {
+            console.log('Entity search term:', request.term);
+            $.ajax({
+                url: "{% url 'entity-autocomplete' %}",
+                dataType: "json",
+                data: { term: request.term },
+                success: function(data) {
+                    console.log('Entity data received:', data);
+                    response($.map(data.results, function(item) {
+                        return {
+                            label: item.text,
+                            value: item.id
+                        };
+                    }));
+                },
+                error: function(xhr, status, error) {
+                    console.error('Entity autocomplete error:', error);
+                    console.log('XHR response:', xhr.responseText);
+                }
+            });
+        },
+        select: function(event, ui) {
+            console.log('Entity selected:', ui.item);
+            $("#entity").val(ui.item.label);
+            $("#entity_id").val(ui.item.value);
+            return false;
+        }
+    }).on('focus', function() {
+        console.log('Entity input focused');
+    });
+
+    // Add some basic styling to autocomplete dropdown
+    $(".ui-autocomplete").addClass("dropdown-menu").css({
+        'max-height': '200px',
+        'overflow-y': 'auto',
+        'overflow-x': 'hidden',
+        'z-index': '9999'
+    });
+}
+
+// Handle delete
+$('.delete-receipt').click(function() {
+    if (confirm(gettext("Are you sure you want to delete this receipt?"))) {
+        const type = $(this).data('type');
+        const id = $(this).data('id');
+        
+        $.ajax({
+            url: `/testapp/receipts/delete/${type}/${id}/`,
+            type: 'POST',
+            headers: {
+                'X-CSRFToken': '{{ csrf_token }}'
+            },
+            success: function() {
+                location.reload();
+            },
+            error: function() {
+                alert(gettext("Error deleting receipt"));
+            }
+        });
+    }
+});
+
+class ReceiptFilters {
+    constructor(tabId, filterEndpoint) {
         debug.log('ReceiptFilters', 'Initializing for tab:', tabId);
         this.tab = $(`#${tabId}`);
         this.endpoint = filterEndpoint;
@@ -1159,17 +1175,19 @@ $(document).ready(function() {
         
         this.createFilterUI();
         this.initializeFilters();
-        
     }
 
     getFilterConfig() {
         debug.log('ReceiptFilters', 'Getting filter config for type:', this.type);
 
+        // Use the MOROCCAN_BANKS array we defined earlier instead of inline template tags
         const banksList = [
-            {value: '', label: 'All banks'},
-            {% for code, name in bank_choices %}
-            { label: '{{ name }}', value: '{{ code }}', display: '{{ name }}' },
-            {% endfor %}
+            {value: '', label: gettext('All banks')},
+            ...MOROCCAN_BANKS.map(bank => ({
+                label: bank[1],
+                value: bank[0],
+                display: bank[1]
+            }))
         ];
 
         const configs = {
@@ -1177,44 +1195,44 @@ $(document).ready(function() {
                 {
                     type: 'client',
                     icon: 'user',
-                    label: 'Client',
+                    label: gettext("Client"),
                     col: 3
                 },
                 {
                     type: 'entity',
                     icon: 'building',
-                    label: 'Entity',
+                    label: gettext("Entity"),
                     col: 3
                 },
                 {
                     type: 'status',
                     icon: 'tag',
-                    label: 'Status',
+                    label: gettext("Status"),
                     col: 3,
                     isSelect: true,
                     options: [
-                        {value: '', label: 'All Statuses'},
-                        {value: 'PORTFOLIO', label: 'In Portfolio'},
-                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
-                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
-                        {value: 'DISCOUNTED', label: 'Discounted'},
-                        {value: 'PAID', label: 'Paid'},
-                        {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
+                        {value: '', label: gettext("All Statuses")},
+                        {value: 'PORTFOLIO', label: gettext("In Portfolio")},
+                        {value: 'PRESENTED_COLLECTION', label: gettext("Presented for Collection")},
+                        {value: 'PRESENTED_DISCOUNT', label: gettext("Presented for Discount")},
+                        {value: 'DISCOUNTED', label: gettext("Discounted")},
+                        {value: 'PAID', label: gettext("Paid")},
+                        {value: 'UNPAID', label: gettext("Unpaid")},
+                        {value: 'COMPENSATED', label: gettext("Compensated")},
+                        {value: 'PARTIALLY_COMPENSATED', label: gettext("Partially Compensated")}
                     ]
                 },
                 {
                     type: 'number',
                     icon: 'hashtag',
-                    label: 'Check Number',
+                    label: gettext("Check Number"),
                     col: 3
                 },
                 // Add issuing bank dropdown
                 { 
                     type: 'issuing_bank', 
                     icon: 'university', 
-                    label: 'Issuing Bank', 
+                    label: gettext("Issuing Bank"), 
                     col: 4,
                     isSelect: true,
                     options: banksList
@@ -1223,7 +1241,7 @@ $(document).ready(function() {
                 { 
                     type: 'bank_issued_to', 
                     icon: 'university', 
-                    label: 'Bank Issued To', 
+                    label: gettext("Bank Issued To"), 
                     col: 4,
                     isSelect: true,
                     options: bankAccountsList
@@ -1232,28 +1250,28 @@ $(document).ready(function() {
                 { 
                     type: 'creation_date_from', 
                     icon: 'calendar', 
-                    label: 'Creation Date From', 
+                    label: gettext("Creation Date From"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'creation_date_to', 
                     icon: 'calendar', 
-                    label: 'Creation Date To', 
+                    label: gettext("Creation Date To"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'due_date_from', 
                     icon: 'calendar', 
-                    label: 'Due Date From', 
+                    label: gettext("Due Date From"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'due_date_to', 
                     icon: 'calendar', 
-                    label: 'Due Date To', 
+                    label: gettext("Due Date To"), 
                     col: 4,
                     isDate: true 
                 },
@@ -1261,33 +1279,33 @@ $(document).ready(function() {
                 { 
                     type: 'amount_from', 
                     icon: 'money-bill', 
-                    label: 'Amount From', 
+                    label: gettext("Amount From"), 
                     col: 4,
                     isNumber: true 
                 },
                 { 
                     type: 'amount_to', 
                     icon: 'money-bill', 
-                    label: 'Amount To', 
+                    label: gettext("Amount To"), 
                     col: 4,
                     isNumber: true 
                 },
                 { 
                     type: 'historical_status', 
                     icon: 'history', 
-                    label: 'Was Status', 
+                    label: gettext("Was Status"), 
                     col: 4,
                     isSelect: true,
                     options: [
-                        {value: '', label: 'All Statuses'},
-                        {value: 'PORTFOLIO', label: 'In Portfolio'},
-                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
-                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
-                        {value: 'PAID', label: 'Paid'},
-                        {value: 'REJECTED', label: 'Rejected'},
-                        {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
+                        {value: '', label: gettext("All Statuses")},
+                        {value: 'PORTFOLIO', label: gettext("In Portfolio")},
+                        {value: 'PRESENTED_COLLECTION', label: gettext("Presented for Collection")},
+                        {value: 'PRESENTED_DISCOUNT', label: gettext("Presented for Discount")},
+                        {value: 'PAID', label: gettext("Paid")},
+                        {value: 'REJECTED', label: gettext("Rejected")},
+                        {value: 'COMPENSATED', label: gettext("Compensated")},
+                        {value: 'UNPAID', label: gettext("Unpaid")},
+                        {value: 'PARTIALLY_COMPENSATED', label: gettext("Partially Compensated")}
                     ]
                 }
             ],
@@ -1295,44 +1313,44 @@ $(document).ready(function() {
                 {
                     type: 'client',
                     icon: 'user',
-                    label: 'Client',
+                    label: gettext("Client"),
                     col: 3
                 },
                 {
                     type: 'entity',
                     icon: 'building',
-                    label: 'Entity',
+                    label: gettext("Entity"),
                     col: 3
                 },
                 {
                     type: 'status',
                     icon: 'tag',
-                    label: 'Status',
+                    label: gettext("Status"),
                     col: 3,
                     isSelect: true,
                     options: [
-                        {value: '', label: 'All Statuses'},
-                        {value: 'PORTFOLIO', label: 'In Portfolio'},
-                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
-                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
-                        {value: 'DISCOUNTED', label: 'Discounted'},
-                        {value: 'PAID', label: 'Paid'},
-                        {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
+                        {value: '', label: gettext("All Statuses")},
+                        {value: 'PORTFOLIO', label: gettext("In Portfolio")},
+                        {value: 'PRESENTED_COLLECTION', label: gettext("Presented for Collection")},
+                        {value: 'PRESENTED_DISCOUNT', label: gettext("Presented for Discount")},
+                        {value: 'DISCOUNTED', label: gettext("Discounted")},
+                        {value: 'PAID', label: gettext("Paid")},
+                        {value: 'UNPAID', label: gettext("Unpaid")},
+                        {value: 'COMPENSATED', label: gettext("Compensated")},
+                        {value: 'PARTIALLY_COMPENSATED', label: gettext("Partially Compensated")}
                     ]
                 },
                 {
                     type: 'number',
                     icon: 'hashtag',
-                    label: 'LCN Number',
+                    label: gettext("LCN Number"),
                     col: 3
                 },
                 // Add issuing bank dropdown
                 { 
                     type: 'issuing_bank', 
                     icon: 'university', 
-                    label: 'Issuing Bank', 
+                    label: gettext("Issuing Bank"), 
                     col: 4,
                     isSelect: true,
                     options: banksList
@@ -1340,7 +1358,7 @@ $(document).ready(function() {
                 { 
                     type: 'bank_issued_to', 
                     icon: 'university', 
-                    label: 'Bank Issued To', 
+                    label: gettext("Bank Issued To"), 
                     col: 4,
                     isSelect: true,
                     options: bankAccountsList
@@ -1348,61 +1366,61 @@ $(document).ready(function() {
                 { 
                     type: 'creation_date_from', 
                     icon: 'calendar', 
-                    label: 'Creation Date From', 
+                    label: gettext("Creation Date From"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'creation_date_to', 
                     icon: 'calendar', 
-                    label: 'Creation Date To', 
+                    label: gettext("Creation Date To"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'due_date_from', 
                     icon: 'calendar', 
-                    label: 'Due Date From', 
+                    label: gettext("Due Date From"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'due_date_to', 
                     icon: 'calendar', 
-                    label: 'Due Date To', 
+                    label: gettext("Due Date To"), 
                     col: 4,
                     isDate: true 
                 },
                 { 
                     type: 'amount_from', 
                     icon: 'money-bill', 
-                    label: 'Amount From', 
+                    label: gettext("Amount From"), 
                     col: 4,
                     isNumber: true 
                 },
                 { 
                     type: 'amount_to', 
                     icon: 'money-bill', 
-                    label: 'Amount To', 
+                    label: gettext("Amount To"), 
                     col: 4,
                     isNumber: true 
                 },
                 { 
                     type: 'historical_status', 
                     icon: 'history', 
-                    label: 'Was Status', 
+                    label: gettext("Was Status"), 
                     col: 4,
                     isSelect: true,
                     options: [
-                        {value: '', label: 'All Statuses'},
-                        {value: 'PORTFOLIO', label: 'In Portfolio'},
-                        {value: 'PRESENTED_COLLECTION', label: 'Presented for Collection'},
-                        {value: 'PRESENTED_DISCOUNT', label: 'Presented for Discount'},
-                        {value: 'PAID', label: 'Paid'},
-                        {value: 'REJECTED', label: 'Rejected'},
-                        {value: 'COMPENSATED', label: 'Compensated'},
-                        {value: 'UNPAID', label: 'Unpaid'},
-                        {value: 'PARTIALLY_COMPENSATED', label: 'Partially Compensated'}
+                        {value: '', label: gettext("All Statuses")},
+                        {value: 'PORTFOLIO', label: gettext("In Portfolio")},
+                        {value: 'PRESENTED_COLLECTION', label: gettext("Presented for Collection")},
+                        {value: 'PRESENTED_DISCOUNT', label: gettext("Presented for Discount")},
+                        {value: 'PAID', label: gettext("Paid")},
+                        {value: 'REJECTED', label: gettext("Rejected")},
+                        {value: 'COMPENSATED', label: gettext("Compensated")},
+                        {value: 'UNPAID', label: gettext("Unpaid")},
+                        {value: 'PARTIALLY_COMPENSATED', label: gettext("Partially Compensated")}
                     ]
                 }
             ],
@@ -1410,19 +1428,19 @@ $(document).ready(function() {
                 {
                     type: 'client',
                     icon: 'user',
-                    label: 'Client',
+                    label: gettext("Client"),
                     col: 4
                 },
                 {
                     type: 'entity',
                     icon: 'building',
-                    label: 'Entity',
+                    label: gettext("Entity"),
                     col: 4
                 },
                 {
                     type: 'credited_account',
                     icon: 'university',
-                    label: 'Credited Account',
+                    label: gettext("Credited Account"),
                     col: 4,
                     isSelect: true,
                     options: bankAccountsList
@@ -1432,19 +1450,19 @@ $(document).ready(function() {
                 {
                     type: 'client',
                     icon: 'user',
-                    label: 'Client',
+                    label: gettext("Client"),
                     col: 4
                 },
                 {
                     type: 'entity',
                     icon: 'building',
-                    label: 'Entity',
+                    label: gettext("Entity"),
                     col: 4
                 },
                 {
                     type: 'credited_account',
                     icon: 'university',
-                    label: 'Credited Account',
+                    label: gettext("Credited Account"),
                     col: 4,
                     isSelect: true,
                     options: bankAccountsList
@@ -1458,54 +1476,54 @@ $(document).ready(function() {
     }
 
     createFilterUI() {
-    debug.log('ReceiptFilters', 'Creating filter UI');
-    const filters = this.getFilterConfig();
-    let filterElements = [];
-    filters.forEach(filter => {
-        filterElements.push(this.createFilterElement(filter));
-    });
-
-    const filterHtml = `
-    <div class="card mb-4" id="${this.type}-filters">
-        <div class="card-header d-flex justify-content-between align-items-center bg-light">
-            <h6 class="mb-0">Filters</h6>
-            <div class="btn-group">
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="${this.type}-reset-filters">
-                    <i class="fas fa-undo me-1"></i>Reset
-                </button>
-                <button type="button" class="btn btn-outline-primary btn-sm toggle-filters">
-                    <i class="fas fa-filter me-1"></i>Show Filters
-                </button>
-            </div>
-        </div>
-        <div class="card-body filter-content" style="display: none;">
-            <div class="row g-3">
-                ${filterElements.join('')}
-            </div>
-        </div>
-    </div>`;
-
-    this.tab.find('.table-responsive').before(filterHtml);
-
-    // Set up toggle button
-    $(`#${this.type}-filters .toggle-filters`).click(() => {
-        const $content = $(`#${this.type}-filters .filter-content`);
-        const $button = $(`#${this.type}-filters .toggle-filters`);
-        
-        $content.slideToggle(500, () => {
-            $button.html(
-                $content.is(':visible') ? 
-                '<i class="fas fa-filter me-1"></i>Hide Filters' : 
-                '<i class="fas fa-filter me-1"></i>Show Filters'
-            );
+        debug.log('ReceiptFilters', 'Creating filter UI');
+        const filters = this.getFilterConfig();
+        let filterElements = [];
+        filters.forEach(filter => {
+            filterElements.push(this.createFilterElement(filter));
         });
-    });
 
-    // Set up reset button
-    $(`#${this.type}-reset-filters`).click(() => {
-        this.resetFilters();
-    });
-}
+        const filterHtml = `
+        <div class="card mb-4" id="${this.type}-filters">
+            <div class="card-header d-flex justify-content-between align-items-center bg-light">
+                <h6 class="mb-0">${gettext("Filters")}</h6>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="${this.type}-reset-filters">
+                        <i class="fas fa-undo me-1"></i>${gettext("Reset")}
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm toggle-filters">
+                        <i class="fas fa-filter me-1"></i>${gettext("Show Filters")}
+                    </button>
+                </div>
+            </div>
+            <div class="card-body filter-content" style="display: none;">
+                <div class="row g-3">
+                    ${filterElements.join('')}
+                </div>
+            </div>
+        </div>`;
+
+        this.tab.find('.table-responsive').before(filterHtml);
+
+        // Set up toggle button
+        $(`#${this.type}-filters .toggle-filters`).click(() => {
+            const $content = $(`#${this.type}-filters .filter-content`);
+            const $button = $(`#${this.type}-filters .toggle-filters`);
+            
+            $content.slideToggle(500, () => {
+                $button.html(
+                    $content.is(':visible') ? 
+                    `<i class="fas fa-filter me-1"></i>${gettext("Hide Filters")}` : 
+                    `<i class="fas fa-filter me-1"></i>${gettext("Show Filters")}`
+                );
+            });
+        });
+
+        // Set up reset button
+        $(`#${this.type}-reset-filters`).click(() => {
+            this.resetFilters();
+        });
+    }
 
     // Add resetFilters method to your class
     resetFilters() {
@@ -1526,8 +1544,6 @@ $(document).ready(function() {
         this.currentFilters = {};
         this.applyFilters();
     }
-
-    
 
     createFilterElement(filter) {
         debug.log('Creating filter element:', filter);
@@ -1708,9 +1724,10 @@ $(document).ready(function() {
                 this.updateFilter('entity', ui.item.value);
                 return false;
             }
+        }).on('focus', function() {
+            console.log('Entity input focused');
         });
     }
-
 
     updateFilter(type, value) {
         debug.log('Filter', `Updating ${type} filter with value:`, value);
@@ -1758,8 +1775,8 @@ $(document).ready(function() {
             }
         });
     }
-
 }
+
 // Keyboard shortcuts
 $(document).keydown(function(e) {
     // Only trigger if no modal is open and no input is focused
@@ -1801,7 +1818,7 @@ $(document).keydown(function(e) {
 function updatePresentation(id) {
     const bankRef = $('#bankReference').val();
     if (!bankRef) {
-        showError('Bank reference is required');
+        showError(gettext("Bank reference is required"));
         return;
     }
 
@@ -1815,7 +1832,7 @@ function updatePresentation(id) {
             status: $('#presentationStatus').val()
         }),
         success: () => location.reload(),
-        error: xhr => showError(xhr.responseJSON?.message || 'Update failed')
+        error: xhr => showError(xhr.responseJSON?.message || gettext("Update failed"))
     });
 }
 
@@ -1825,7 +1842,7 @@ $(document).on('change', '.receipt-status', function() {
     const receiptId = $select.data('receipt-id');
     const newStatus = $select.val();
 
-    if (!confirm('This status change is irreversible. Continue?')) {
+    if (!confirm(gettext("This status change is irreversible. Continue?"))) {
         $select.val($select.find('option').not(':selected').val());
         return;
     }
@@ -1844,7 +1861,7 @@ $(document).on('change', '.receipt-status', function() {
             location.reload();
         },
         error: xhr => {
-            showError(xhr.responseJSON?.message || 'Status update failed');
+            showError(xhr.responseJSON?.message || gettext("Status update failed"));
             $select.val($select.find('option').not(':selected').val());
         }
     });
@@ -1855,7 +1872,7 @@ function viewCompensationTimeline(receiptType, receiptId) {
     $('#compensationModal .modal-content').html(`
         <div class="modal-body text-center">
             <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
+                <span class="sr-only">${gettext("Loading...")}</span>
             </div>
         </div>
     `);
@@ -1868,11 +1885,11 @@ function viewCompensationTimeline(receiptType, receiptId) {
         error: function() {
             $('#compensationModal .modal-content').html(`
                 <div class="modal-header">
-                    <h5 class="modal-title">Error</h5>
+                    <h5 class="modal-title">${gettext("Error")}</h5>
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
                 <div class="modal-body">
-                    <div class="alert alert-danger">Failed to load compensation timeline.</div>
+                    <div class="alert alert-danger">${gettext("Failed to load compensation timeline.")}</div>
                 </div>
             `);
         }
@@ -1887,9 +1904,9 @@ function viewReceiptTimeline(receiptType, receiptId) {
     $('#timelineModal .modal-content').html(`
         <div class="modal-body text-center">
             <div class="spinner-border text-primary" role="status">
-                <span class="sr-only">Loading...</span>
+                <span class="sr-only">${gettext("Loading...")}</span>
             </div>
-            <p class="mt-2">Loading timeline...</p>
+            <p class="mt-2">${gettext("Loading timeline...")}</p>
         </div>
     `);
 
@@ -1912,7 +1929,7 @@ function viewReceiptTimeline(receiptType, receiptId) {
             });
         },
         error: function(xhr) {
-            let errorMessage = 'Failed to load timeline';
+            let errorMessage = gettext("Failed to load timeline");
             try {
                 const response = JSON.parse(xhr.responseText);
                 errorMessage = response.message || errorMessage;
@@ -1920,7 +1937,7 @@ function viewReceiptTimeline(receiptType, receiptId) {
             
             $('#timelineModal .modal-content').html(`
                 <div class="modal-header">
-                    <h5 class="modal-title">Error</h5>
+                    <h5 class="modal-title">${gettext("Error")}</h5>
                     <button type="button" class="close" data-dismiss="modal">&times;</button>
                 </div>
                 <div class="modal-body">
@@ -1929,7 +1946,7 @@ function viewReceiptTimeline(receiptType, receiptId) {
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">${gettext("Close")}</button>
                 </div>
             `);
         }
@@ -1964,7 +1981,7 @@ function showError(message) {
     const toast = `
         <div class="toast" role="alert" aria-live="assertive" aria-atomic="true" data-delay="3000">
             <div class="toast-header bg-danger text-white">
-                <strong class="mr-auto">Error</strong>
+                <strong class="mr-auto">${gettext("Error")}</strong>
                 <button type="button" class="ml-2 mb-1 close" data-dismiss="toast">&times;</button>
             </div>
             <div class="toast-body">${message}</div>
@@ -2002,3 +2019,4 @@ $('[data-toggle="modal"][data-target="#receiptModal"]').each(function() {
 });
 </script>
 {% endblock %}
+

@@ -1,4 +1,5 @@
 {% load accounting_filters %}
+{% load i18n %}
 
 {% for item in items %}
     <tr>
@@ -6,13 +7,13 @@
         <td>{{ item.account_code }}</td>
         <td>
             <span class="badge {% if item.is_debit %}bg-danger{% else %}bg-success{% endif %}">
-                {% if item.is_debit %}Debit{% else %}Credit{% endif %}
+                {% if item.is_debit %}{% trans "Debit" %}{% else %}{% trans "Credit" %}{% endif %}
             </span>
         </td>
         <td class="text-end">{{ item.default_amount|format_balance }}</td>
         <td>
             <span class="badge {% if item.is_active %}bg-success{% else %}bg-secondary{% endif %}">
-                {% if item.is_active %}Active{% else %}Inactive{% endif %}
+                {% if item.is_active %}{% trans "Active" %}{% else %}{% trans "Inactive" %}{% endif %}
             </span>
         </td>
         <td>
@@ -36,7 +37,7 @@
 {% empty %}
     <tr>
         <td colspan="6" class="text-center text-muted">
-            No items found
+            {% trans "No items found" %}
         </td>
     </tr>
 {% endfor %}

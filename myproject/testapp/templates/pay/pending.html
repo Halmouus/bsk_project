@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Pending Pay Declarations{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Pending Pay Declarations" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-4">
@@ -8,11 +9,11 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h2>
             <i class="fas fa-clock me-2"></i>
-            Pending Pay Declarations
+            {% trans "Pending Pay Declarations" %}
             <span class="badge bg-warning ms-2">{{ declarations.count }}</span>
         </h2>
         <a href="{% url 'pay-list' %}" class="btn btn-outline-primary">
-            <i class="fas fa-arrow-left me-2"></i>Back to Dashboard
+            <i class="fas fa-arrow-left me-2"></i>{% trans "Back to Dashboard" %}
         </a>
     </div>
 
@@ -22,14 +23,14 @@
             <div class="row g-4">
                 <div class="col-md-6">
                     <h5 class="card-title text-muted mb-3">
-                        <i class="fas fa-info-circle me-2"></i>Summary
+                        <i class="fas fa-info-circle me-2"></i>{% trans "Summary" %}
                     </h5>
                     <div class="d-flex justify-content-between mb-2">
-                        <span>Total Declarations:</span>
+                        <span>{% trans "Total Declarations:" %}</span>
                         <span class="badge bg-primary">{{ declarations.count }}</span>
                     </div>
                     <div class="d-flex justify-content-between">
-                        <span>Total Amount:</span>
+                        <span>{% trans "Total Amount:" %}</span>
                         <span class="badge bg-warning">{{ total_amount|format_balance }}</span>
                     </div>
                 </div>
@@ -44,11 +45,11 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Period</th>
-                            <th>Due Date</th>
-                            <th class="text-end">Amount</th>
-                            <th>Days Overdue</th>
-                            <th>Actions</th>
+                            <th>{% trans "Period" %}</th>
+                            <th>{% trans "Due Date" %}</th>
+                            <th class="text-end">{% trans "Amount" %}</th>
+                            <th>{% trans "Days Overdue" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -61,9 +62,9 @@
                                     {% with days_overdue=declaration.due_date|timeuntil %}
                                         <span class="badge {% if days_overdue > 0 %}bg-danger{% else %}bg-warning{% endif %}">
                                             {% if days_overdue > 0 %}
-                                                {{ days_overdue }} days
+                                                {{ days_overdue }} {% trans "days" %}
                                             {% else %}
-                                                Due today
+                                                {% trans "Due today" %}
                                             {% endif %}
                                         </span>
                                     {% endwith %}
@@ -90,7 +91,7 @@
                         {% empty %}
                             <tr>
                                 <td colspan="5" class="text-center text-muted">
-                                    No pending declarations
+                                    {% trans "No pending declarations" %}
                                 </td>
                             </tr>
                         {% endfor %}

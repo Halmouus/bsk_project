@@ -25,6 +25,7 @@ from django.db import transaction
 from decimal import Decimal
 import traceback
 from . import models
+from django.utils.translation import gettext as _
 
 
 
@@ -135,7 +136,7 @@ class CheckerDeleteView(View):
             if checker.checks.exists():
                 return JsonResponse({'error': 'Cannot delete checker with existing checks'}, status=400)
             checker.delete()
-            return JsonResponse({'message': 'Checker deleted successfully'})
+            return JsonResponse({'message': _('Checker deleted successfully')})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
         
@@ -638,7 +639,7 @@ class CheckStatusView(View):
                 check.paid = True
             
             check.save()
-            return JsonResponse({'message': f'Check marked as {action}'})
+            return JsonResponse({'message': _('Check marked as {}').format(action)})
             
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
@@ -865,7 +866,7 @@ class CheckCancelView(View):
             check.status = 'cancelled'
             check.save()
             
-            return JsonResponse({'message': 'Check cancelled successfully'})
+            return JsonResponse({'message': _('Check cancelled successfully')})
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 

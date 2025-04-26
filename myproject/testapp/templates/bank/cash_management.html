@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load humanize %}
 {% load accounting_filters %}
+{% load i18n %}
 
 {% block title %}Cash Management{% endblock %}
 
@@ -12,7 +13,7 @@
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
                         <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                            Cash Balance
+                            {% trans 'Cash Balance' %}
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
                             {{ current_balance|floatformat:2 }}
@@ -30,30 +31,30 @@
     <div class="col-md-9">
         <div class="card shadow-sm h-100">
             <div class="card-body">
-                <h6 class="text-primary font-weight-bold mb-4">Quick Actions</h6>
+                <h6 class="text-primary font-weight-bold mb-4">{% trans 'Quick Actions' %}</h6>
                 <div class="d-flex justify-content-around">
                     <button class="btn-quick-action deposit-action" data-toggle="modal" data-target="#newDepositModal">
                         <div class="icon-wrapper bg-primary">
                             <i class="fas fa-plus-circle fa-2x"></i>
                         </div>
-                        <span class="action-label">New Deposit</span>
-                        <small class="text-muted">Add funds to cash reserve</small>
+                        <span class="action-label">{% trans 'New Deposit' %}</span>
+                        <small class="text-muted">{% trans 'Add funds to cash reserve' %}</small>
                     </button>
         
                     <button class="btn-quick-action expense-action" data-toggle="modal" data-target="#newExpenseModal">
                         <div class="icon-wrapper bg-danger">
                             <i class="fas fa-file-invoice fa-2x"></i>
                         </div>
-                        <span class="action-label">New Expense</span>
-                        <small class="text-muted">Record direct expense</small>
+                        <span class="action-label">{% trans 'New Expense' %}</span>
+                        <small class="text-muted">{% trans 'Record direct expense' %}</small>
                     </button>
         
                     <button class="btn-quick-action payment-action" data-toggle="modal" data-target="#cashPaymentModal">
                         <div class="icon-wrapper bg-success">
                             <i class="fas fa-money-bill-wave fa-2x"></i>
                         </div>
-                        <span class="action-label">Pay Invoice</span>
-                        <small class="text-muted">Pay invoice with cash</small>
+                        <span class="action-label">{% trans 'Pay Invoice' %}</span>
+                        <small class="text-muted">{% trans 'Pay invoice with cash' %}</small>
                     </button>
                 </div>
             </div>
@@ -65,14 +66,14 @@
 <div class="card shadow-sm mb-4">
     <div class="card-body d-flex justify-content-between align-items-center">
         <div>
-            <h5 class="font-weight-bold mb-0">Cash Configuration</h5>
+            <h5 class="font-weight-bold mb-0">{% trans 'Cash Configuration' %}</h5>
             <p class="text-muted mb-0 small">
-                <span class="mr-3"><i class="fas fa-book mr-1"></i> Journal: {{ config.journal_code|default:'Not Set' }}</span>
-                <span><i class="fas fa-hashtag mr-1"></i> Account: {{ config.accounting_code|default:'Not Set' }}</span>
+                <span class="mr-3"><i class="fas fa-book mr-1"></i> {% trans 'Journal' %}: {{ config.journal_code|default:'Not Set' }}</span>
+                <span><i class="fas fa-hashtag mr-1"></i> {% trans 'Account' %}: {{ config.accounting_code|default:'Not Set' }}</span>
             </p>
         </div>
         <button type="button" class="btn btn-primary" data-toggle="modal" data-target="#configModal">
-            <i class="fas fa-cog mr-1"></i> Edit Configuration
+            <i class="fas fa-cog mr-1"></i> {% trans 'Edit Configuration' %}
         </button>
     </div>
 </div>
@@ -85,7 +86,7 @@
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
                         <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                            Current Cash Balance
+                            {% trans 'Current Cash Balance' %}
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
                             {{ current_balance|floatformat:2 }}
@@ -105,7 +106,7 @@
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
                         <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                            Total Deposits
+                            {% trans 'Total Deposits' %}
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
                             {{ total_deposits|floatformat:2 }}
@@ -125,7 +126,7 @@
                 <div class="row no-gutters align-items-center">
                     <div class="col mr-2">
                         <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                            Total Payments
+                            {% trans 'Total Payments' %}
                         </div>
                         <div class="h5 mb-0 font-weight-bold text-gray-800">
                             {{ total_payments|floatformat:2 }}
@@ -144,12 +145,12 @@
 <ul class="nav nav-tabs mb-4">
     <li class="nav-item">
         <a class="nav-link active" id="statement-tab" data-toggle="tab" href="#statement">
-            <i class="fas fa-file-alt"></i> Statement
+            <i class="fas fa-file-alt"></i> {% trans 'Statement' %}
         </a>
     </li>
     <li class="nav-item">
         <a class="nav-link" id="accounting-tab" data-toggle="tab" href="#accounting">
-            <i class="fas fa-book"></i> Accounting
+            <i class="fas fa-book"></i> {% trans 'Accounting' %}
         </a>
     </li>
 </ul>
@@ -175,7 +176,7 @@
                         <div id="filter-status" class="text-muted small"></div>
                         <div class="text-right">
                             <button class="btn btn-sm btn-secondary" id="reset-filters">
-                                <i class="fas fa-undo"></i> Reset Filters
+                                <i class="fas fa-undo"></i> {% trans 'Reset Filters' %}
                             </button>
                         </div>
                     </div>
@@ -183,32 +184,32 @@
                 
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label class="small font-weight-bold">Reference</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %}</label>
                         <input type="text" class="form-control form-control-sm" id="reference-filter" placeholder="Search reference...">
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="small font-weight-bold">Supplier</label>
+                        <label class="small font-weight-bold">{% trans 'Supplier' %}</label>
                         <input type="text" class="form-control form-control-sm" id="supplier-filter" placeholder="Search supplier...">
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="small font-weight-bold">Transaction Type</label>
+                        <label class="small font-weight-bold">{% trans 'Transaction Type' %}</label>
                         <div class="d-flex flex-wrap">
                             <div class="custom-control custom-checkbox mr-3">
                                 <input type="checkbox" class="custom-control-input type-filter" id="type-deposit" value="deposit" checked>
-                                <label class="custom-control-label" for="type-deposit">Deposits</label>
+                                <label class="custom-control-label" for="type-deposit">{% trans 'Deposits' %}</label>
                             </div>
                             <div class="custom-control custom-checkbox mr-3">
                                 <input type="checkbox" class="custom-control-input type-filter" id="type-payment" value="payment" checked>
-                                <label class="custom-control-label" for="type-payment">Payments</label>
+                                <label class="custom-control-label" for="type-payment">{% trans 'Payments' %}</label>
                             </div>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input type-filter" id="type-expense" value="expense" checked>
-                                <label class="custom-control-label" for="type-expense">Expenses</label>
+                                <label class="custom-control-label" for="type-expense">{% trans 'Expenses' %}</label>
                             </div>
                         </div>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label class="small font-weight-bold">Amount Range</label>
+                        <label class="small font-weight-bold">{% trans 'Amount Range' %}</label>
                         <div class="d-flex">
                             <input type="number" class="form-control form-control-sm mr-2" id="min-amount" placeholder="Min" min="0" step="0.01">
                             <input type="number" class="form-control form-control-sm" id="max-amount" placeholder="Max" min="0" step="0.01">
@@ -220,14 +221,14 @@
                 <table class="table table-hover">
                     <thead class="bg-light">
                         <tr>
-                            <th>Date</th>
-                            <th>Reference</th>
-                            <th>Type</th>
-                            <th>Details</th>
-                            <th class="text-right">Credit</th>
-                            <th class="text-right">Debit</th>
-                            <th class="text-right">Balance</th>
-                            <th>Actions</th>
+                            <th>{% trans 'Date' %}</th>
+                            <th>{% trans 'Reference' %}</th>
+                            <th>{% trans 'Type' %}</th>
+                            <th>{% trans 'Details' %}</th>
+                            <th class="text-right">{% trans 'Credit' %}</th>
+                            <th class="text-right">{% trans 'Debit' %}</th>
+                            <th class="text-right">{% trans 'Balance' %}</th>
+                            <th>{% trans 'Actions' %}</th>
                         </tr>
                     </thead>
                     <tbody id="statement-entries">
@@ -237,11 +238,11 @@
                             <td>{{ entry.reference }}</td>
                             <td>
                                 {% if entry.type == 'deposit' %}
-                                <span class="badge badge-success">Deposit</span>
+                                <span class="badge badge-success">{% trans 'Deposit' %}</span>
                                 {% elif entry.type == 'expense' %}
-                                <span class="badge badge-warning">Expense</span>
+                                <span class="badge badge-warning">{% trans 'Expense' %}</span>
                                 {% else %}
-                                <span class="badge badge-danger">Payment</span>
+                                <span class="badge badge-danger">{% trans 'Payment' %}</span>
                                 {% endif %}
                             </td>
                             <td>
@@ -271,14 +272,14 @@
                         {% empty %}
                         <tr>
                             <td colspan="8" class="text-center text-muted py-4">
-                                <i class="fas fa-info-circle mr-1"></i> No transactions found
+                                <i class="fas fa-info-circle mr-1"></i> {% trans 'No transactions found' %}
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot class="bg-light font-weight-bold">
                         <tr>
-                            <td colspan="4">Totals</td>
+                            <td colspan="4">{% trans 'Totals' %}</td>
                             <td class="text-right text-success">{{ total_credit|floatformat:2 }}</td>
                             <td class="text-right text-danger">{{ total_debit|floatformat:2 }}</td>
                             <td class="text-right">{{ current_balance|floatformat:2 }}</td>
@@ -296,13 +297,13 @@
         <div class="card shadow-sm">
             <div class="card-body">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h6 class="font-weight-bold mb-0">Accounting Entries</h6>
+                    <h6 class="font-weight-bold mb-0">{% trans 'Accounting Entries' %}</h6>
                     <div class="date-filter">
                         <input type="date" class="form-control form-control-sm" id="accounting-start-date">
                         <span class="mx-2">to</span>
                         <input type="date" class="form-control form-control-sm" id="accounting-end-date">
                         <button class="btn btn-primary btn-sm ml-2" id="filter-accounting">
-                            <i class="fas fa-filter"></i> Filter
+                            <i class="fas fa-filter"></i> {% trans 'Filter' %}
                         </button>
                     </div>
                 </div>
@@ -310,13 +311,13 @@
                     <table class="table table-hover">
                         <thead class="bg-light">
                             <tr>
-                                <th>Date</th>
-                                <th>Journal</th>
-                                <th>Account</th>
-                                <th>Description</th>
-                                <th class="text-right">Debit</th>
-                                <th class="text-right">Credit</th>
-                                <th>Reference</th>
+                                <th>{% trans 'Date' %}</th>
+                                <th>{% trans 'Journal' %}</th>
+                                <th>{% trans 'Account' %}</th>
+                                <th>{% trans 'Description' %}</th>
+                                <th class="text-right">{% trans 'Debit' %}</th>
+                                <th class="text-right">{% trans 'Credit' %}</th>
+                                <th>{% trans 'Reference' %}</th>
                             </tr>
                         </thead>
                         <tbody id="accounting-entries">
@@ -345,7 +346,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-cog"></i> Cash Configuration
+                    <i class="fas fa-cog"></i> {% trans 'Cash Configuration' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -355,54 +356,54 @@
                 {% csrf_token %}
                 <div class="modal-body">
                     <div class="alert alert-info">
-                        <i class="fas fa-info-circle mr-2"></i> These settings control how cash transactions are recorded in the accounting system.
+                        <i class="fas fa-info-circle mr-2"></i> {% trans 'These settings control how cash transactions are recorded in the accounting system.' %}
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Accounting Code *</label>
+                        <label class="small font-weight-bold">{% trans 'Accounting Code' %} *</label>
                         <input type="text" name="accounting_code" class="form-control" 
                                 value="{{ config.accounting_code }}" required
                                 pattern="^\d{4,5}$">
                         <div class="invalid-feedback">
-                            Please enter 4-5 digits for accounting code
+                            {% trans 'Please enter 4-5 digits for accounting code' %}
                         </div>
                         <small class="form-text text-muted">
-                            Main account code for cash operations
+                            {% trans 'Main account code for cash operations' %}
                         </small>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Journal Code *</label>
+                        <label class="small font-weight-bold">{% trans 'Journal Code' %} *</label>
                         <input type="text" name="journal_code" class="form-control" 
                                 value="{{ config.journal_code|default:'08' }}" required
                                 pattern="^\d{2}$">
                         <div class="invalid-feedback">
-                            Please enter exactly 2 digits for journal code
+                            {% trans 'Please enter exactly 2 digits for journal code' %}
                         </div>
                         <small class="form-text text-muted">
-                            Journal for cash accounting entries
+                            {% trans 'Journal for cash accounting entries' %}
                         </small>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Maximum Payment Threshold *</label>
+                        <label class="small font-weight-bold">{% trans 'Maximum Payment Threshold' %} *</label>
                         <input type="number" name="max_payment_threshold" class="form-control" 
                             value="{{ max_threshold_value }}" required
                             min="0.01" step="0.01">
                         <div class="invalid-feedback">
-                            Please enter a valid threshold amount
+                            {% trans 'Please enter a valid threshold amount' %}
                         </div>
                         <small class="form-text text-muted">
-                            Maximum amount that can be paid in cash
+                            {% trans 'Maximum amount that can be paid in cash' %}
                         </small>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancel
+                        <i class="fas fa-times"></i> {% trans 'Cancel' %}
                     </button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Configuration
+                        <i class="fas fa-save"></i> {% trans 'Save Configuration' %}
                     </button>
                 </div>
             </form>
@@ -416,7 +417,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-plus-circle"></i> New Cash Deposit
+                    <i class="fas fa-plus-circle"></i> {% trans 'New Cash Deposit' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -425,39 +426,39 @@
             <form id="deposit-form" class="needs-validation" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="small font-weight-bold">Amount *</label>
+                        <label class="small font-weight-bold">{% trans 'Amount' %} *</label>
                         <input type="number" id="deposit-amount" name="amount" class="form-control" required
                                min="0.01" step="0.01">
                         <div class="invalid-feedback">
-                            Please enter a valid amount
+                            {% trans 'Please enter a valid amount' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Date *</label>
+                        <label class="small font-weight-bold">{% trans 'Date' %} *</label>
                         <input type="date" id="deposit-date" name="date" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please select a date
+                            {% trans 'Please select a date' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Source *</label>
+                        <label class="small font-weight-bold">{% trans 'Source' %} *</label>
                         <select id="deposit-source-type" class="form-control" required>
-                            <option value="">Select source...</option>
-                            <option value="bank">Bank Account</option>
-                            <option value="other">Other Source</option>
+                            <option value="">{% trans 'Select source...' %}</option>
+                            <option value="bank">{% trans 'Bank Account' %}</option>
+                            <option value="other">{% trans 'Other Source' %}</option>
                         </select>
                         <div class="invalid-feedback">
-                            Please select a source
+                            {% trans 'Please select a source' %}
                         </div>
                     </div>
                     
                     <!-- Bank account selection (conditionally shown) -->
                     <div id="bank-account-group" class="form-group d-none">
-                        <label class="small font-weight-bold">Bank Account *</label>
+                        <label class="small font-weight-bold">{% trans 'Bank Account' %} *</label>
                         <select id="deposit-bank-account" class="form-control">
-                            <option value="">Select bank account...</option>
+                            <option value="">{% trans 'Select bank account...' %}</option>
                             {% for account in bank_accounts %}
                             <option value="{{ account.id }}">
                                 {{ account.get_bank_display }} - {{ account.account_number }}
@@ -465,39 +466,39 @@
                             {% endfor %}
                         </select>
                         <div class="invalid-feedback">
-                            Please select a bank account
+                            {% trans 'Please select a bank account' %}
                         </div>
                     </div>
                     
                     <!-- Account code (conditionally shown) -->
                     <div id="account-code-group" class="form-group d-none">
-                        <label class="small font-weight-bold">Source Account Code *</label>
+                        <label class="small font-weight-bold">{% trans 'Source Account Code' %} *</label>
                         <input type="text" id="deposit-account-code" class="form-control"
                                pattern="^\d{4,5}$">
                         <div class="invalid-feedback">
-                            Please enter a valid account code (4-5 digits)
+                            {% trans 'Please enter a valid account code (4-5 digits)' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Reference *</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %} *</label>
                         <input type="text" id="deposit-reference" name="reference" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please enter a reference number
+                            {% trans 'Please enter a reference number' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Notes</label>
+                        <label class="small font-weight-bold">{% trans 'Notes' %}</label>
                         <textarea id="deposit-notes" name="notes" class="form-control" rows="3"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
                     <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                        <i class="fas fa-times"></i> Cancel
+                        <i class="fas fa-times"></i> {% trans 'Cancel' %}
                     </button>
                     <button type="button" id="submit-deposit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Deposit
+                        <i class="fas fa-save"></i> {% trans 'Save Deposit' %}
                     </button>
                 </div>
             </form>
@@ -511,7 +512,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-file-invoice"></i> New Direct Expense
+                    <i class="fas fa-file-invoice"></i> {% trans 'New Direct Expense' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -520,54 +521,54 @@
             <form id="expense-form" class="needs-validation" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="small font-weight-bold">Expense Type *</label>
+                        <label class="small font-weight-bold">{% trans 'Expense Type' %} *</label>
                         <select id="expense-type" class="form-control" required>
-                            <option value="">Select type...</option>
+                            <option value="">{% trans 'Select type...' %}</option>
                             {% for code, name in expense_types.items %}
                             <option value="{{ code }}">{{ name }}</option>
                             {% endfor %}
                         </select>
                         <div class="invalid-feedback">
-                            Please select an expense type
+                            {% trans 'Please select an expense type' %}
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label class="small font-weight-bold">Amount *</label>
+                        <label class="small font-weight-bold">{% trans 'Amount' %} *</label>
                         <input type="number" id="expense-amount" class="form-control" required
                                min="0.01" step="0.01">
                         <div class="invalid-feedback">
-                            Please enter a valid amount
+                            {% trans 'Please enter a valid amount' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Date *</label>
+                        <label class="small font-weight-bold">{% trans 'Date' %} *</label>
                         <input type="date" id="expense-date" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please select a date
+                            {% trans 'Please select a date' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Expense Account *</label>
+                        <label class="small font-weight-bold">{% trans 'Expense Account' %} *</label>
                         <input type="text" id="expense-account" class="form-control" required
                                pattern="^\d{4,5}$">
                         <div class="invalid-feedback">
-                            Please enter a valid 4-5 digit account code
+                            {% trans 'Please enter a valid 4-5 digit account code' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Reference *</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %} *</label>
                         <input type="text" id="expense-reference" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please enter a reference number
+                            {% trans 'Please enter a reference number' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Notes</label>
+                        <label class="small font-weight-bold">{% trans 'Notes' %}</label>
                         <textarea id="expense-notes" class="form-control" rows="3"></textarea>
                     </div>
                 </div>
@@ -576,7 +577,7 @@
                         <i class="fas fa-times"></i> Cancel
                     </button>
                     <button type="button" id="submit-expense" class="btn btn-danger">
-                        <i class="fas fa-save"></i> Record Expense
+                        <i class="fas fa-save"></i> {% trans 'Record Expense' %}
                     </button>
                 </div>
             </form>
@@ -590,7 +591,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-money-bill-wave"></i> Cash Payment
+                    <i class="fas fa-money-bill-wave"></i> {% trans 'Cash Payment' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -599,9 +600,9 @@
             <form id="payment-form" class="needs-validation" novalidate>
                 <div class="modal-body">
                     <div id="invoice-list" class="mb-3">
-                        <label class="small font-weight-bold">Select Invoice *</label>
+                        <label class="small font-weight-bold">{% trans 'Select Invoice' %} *</label>
                         <select id="invoice-selector" class="form-control" required>
-                            <option value="">Select invoice...</option>
+                            <option value="">{% trans 'Select invoice...' %}</option>
                             {% for invoice in invoices %}
                             <option value="{{ invoice.id }}" 
                                     data-ref="{{ invoice.ref }}"
@@ -617,30 +618,30 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="small font-weight-bold">Amount *</label>
+                        <label class="small font-weight-bold">{% trans 'Amount' %} *</label>
                         <input type="number" id="payment-amount" class="form-control" required
                                min="0.01" step="0.01">
-                        <small class="text-muted">Available cash: {{ current_balance|floatformat:2 }}</small>
+                        <small class="text-muted">{% trans 'Available cash' %}: {{ current_balance|floatformat:2 }}</small>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Date *</label>
+                        <label class="small font-weight-bold">{% trans 'Date' %} *</label>
                         <input type="date" id="payment-date" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please select a date
+                            {% trans 'Please select a date' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Reference *</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %} *</label>
                         <input type="text" id="payment-reference" class="form-control" required>
                         <div class="invalid-feedback">
-                            Please enter a reference number
+                            {% trans 'Please enter a reference number' %}
                         </div>
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Notes</label>
+                        <label class="small font-weight-bold">{% trans 'Notes' %}</label>
                         <textarea id="payment-notes" class="form-control" rows="3"></textarea>
                     </div>
 
@@ -651,7 +652,7 @@
                         <i class="fas fa-times"></i> Cancel
                     </button>
                     <button type="button" id="submit-payment" class="btn btn-success">
-                        <i class="fas fa-save"></i> Record Payment
+                        <i class="fas fa-save"></i> {% trans 'Record Payment' %}
                     </button>
                 </div>
             </form>
@@ -761,7 +762,7 @@ $('#submit-expense').on('click', function() {
             location.reload();
         },
         error: function(xhr) {
-                alert(xhr.responseJSON.message || 'Error creating expense');
+            alert(xhr.responseJSON.message || '{% trans "Error creating expense" %}');
             }
         });
     });
@@ -909,7 +910,7 @@ $(document).ready(function() {
         const maxAmount = $('#max-amount').val();
         
         if (!validateDates(startDate, endDate)) {
-            console.error('Invalid date range');
+            console.error('{% trans "Invalid date range" %}');
             return;
         }
         
@@ -1073,13 +1074,13 @@ $(document).ready(function() {
                     <div class="modal-dialog">
                         <div class="modal-content">
                             <div class="modal-header bg-primary text-white">
-                                <h5 class="modal-title">Payment Details</h5>
+                                <h5 class="modal-title">{% trans 'Payment Details' %}</h5>
                                 <button type="button" class="close text-white" data-dismiss="modal">&times;</button>
                             </div>
                             <div class="modal-body" id="transaction-details-content">
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans 'Close' %}</button>
                             </div>
                         </div>
                     </div>
@@ -1095,30 +1096,30 @@ $(document).ready(function() {
                     <div class="card-body">
                         <h6 class="card-title font-weight-bold">
                             <i class="fas fa-money-bill-wave text-primary mr-2"></i>
-                            Cash Payment
+                            {% trans 'Cash Payment' %}
                         </h6>
                         <table class="table table-sm">
                             <tr>
-                                <th style="width: 30%">Date:</th>
+                                <th style="width: 30%">{% trans 'Date' %}:</th>
                                 <td>${p.date}</td>
                             </tr>
                             <tr>
-                                <th>Reference:</th>
+                                <th>{% trans 'Reference' %}:</th>
                                 <td>${p.reference}</td>
                             </tr>
                             <tr>
-                                <th>Amount:</th>
+                                <th>{% trans 'Amount' %}:</th>
                                 <td class="font-weight-bold text-danger">${parseFloat(p.amount).toFixed(2)}</td>
                             </tr>
                             <tr>
-                                <th>Invoice:</th>
+                                <th>{% trans 'Invoice' %}:</th>
                                 <td>
                                     <a href="/testapp/invoices/${p.invoice.id}/update/" target="_blank">${p.invoice.ref}</a>
                                     <div class="small text-muted">${p.invoice.supplier}</div>
                                 </td>
                             </tr>
                             <tr>
-                                <th>Notes:</th>
+                                <th>{% trans 'Notes' %}:</th>
                                 <td>${p.notes}</td>
                             </tr>
                         </table>

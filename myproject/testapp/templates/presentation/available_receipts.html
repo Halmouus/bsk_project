@@ -1,10 +1,11 @@
 {% load accounting_filters %}
+{% load i18n %}
 <div class="receipt-container">
     <!-- Summary info -->
     <div class="alert alert-info">
-        <strong>Selected:</strong> 
-        <span id="selectedCount">0</span> receipts
-        <strong class="ml-3">Total Amount:</strong> 
+        <strong>{% trans "Selected:" %}</strong> 
+        <span id="selectedCount">0</span> {% trans "receipts" %}
+        <strong class="ml-3">{% trans "Total Amount:" %}</strong> 
         <span id="selectedAmount">0.00</span> MAD
     </div>
 
@@ -19,14 +20,14 @@
                             <label class="custom-control-label" for="selectAll"></label>
                         </div>
                     </th>
-                    <th>Reference</th>
-                    <th>Entity</th>
-                    <th>Issue Date</th>
-                    <th>Bank</th>
-                    <th>Due Date</th>
-                    <th>Amount</th>
-                    <th>Days to Due</th>
-                    <th>Status</th>
+                    <th>{% trans "Reference" %}</th>
+                    <th>{% trans "Entity" %}</th>
+                    <th>{% trans "Issue Date" %}</th>
+                    <th>{% trans "Bank" %}</th>
+                    <th>{% trans "Due Date" %}</th>
+                    <th>{% trans "Amount" %}</th>
+                    <th>{% trans "Days to Due" %}</th>
+                    <th>{% trans "Status" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -59,7 +60,7 @@
                         {% if receipt.status == 'UNPAID' and receipt.last_presentation_date %}
                             <br>
                             <small class="text-muted">
-                                Previously presented on {{ receipt.last_presentation_date|date:"Y-m-d" }}
+                                {% trans "Previously presented on" %} {{ receipt.last_presentation_date|date:"Y-m-d" }}
                             </small>
                         {% endif %}
                     </td>

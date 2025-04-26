@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.files.base import ContentFile
 from django.contrib.contenttypes.models import ContentType
 from django.utils import timezone
+from django.utils.translation import gettext as _
 import calendar
 from .models import CompensationRecord, CheckReceipt, LCN, CashReceipt, TransferReceipt, BankAccount, Client, Entity, ReceiptHistory, MOROCCAN_BANKS, ForecastStatement
 from django.db.models import Q
@@ -45,12 +46,12 @@ class ReceiptListView(ListView):
         ).all()
         print(f"Fetched {lcns.count()} LCNs")
 
-        # Debug presentation info
+        # Debug presentation info safely
         for check in checks:
             pres = check.check_presentations.first()
             if pres:
                 print(f"Check {check.id} presentation: {pres.presentation.id}")
-                print(f"Bank: {pres.presentation.bank_account}")
+                print(f"Bank account ID: {pres.presentation.bank_account.id if pres.presentation.bank_account else 'None'}")
 
         return {
             'checks': checks,
@@ -70,7 +71,7 @@ class ReceiptListView(ListView):
 
         # Add Moroccan banks for issuing_bank filter
         context['bank_choices'] = MOROCCAN_BANKS
-        print(f"Added bank choices: {MOROCCAN_BANKS}")
+        print(f"Added bank choices")
 
         return context
 
@@ -79,7 +80,7 @@ class ReceiptCreateView(View):
     def get(self, request, receipt_type):
         print(f"Loading form for receipt type: {receipt_type}")
         if receipt_type not in ['check', 'lcn', 'cash', 'transfer']:
-            return JsonResponse({'error': 'Invalid receipt type'}, status=400)
+            return JsonResponse({'error': _('Invalid receipt type')}, status=400)
 
         # Get current date info
         today = timezone.now()
@@ -99,7 +100,7 @@ class ReceiptCreateView(View):
 
         context = {
             'receipt_type': receipt_type,
-            'title': f'New {receipt_type.title()} Receipt',
+            'title': _('New {} Receipt').format(receipt_type.title()),
             'year_choices': year_choices,
             'month_choices': month_choices,
             'current_year': current_year,
@@ -165,7 +166,7 @@ class ReceiptCreateView(View):
             else:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid receipt type'
+                    'message': _('Invalid receipt type')
                 }, status=400)
 
             # Handle document separately if present
@@ -192,7 +193,7 @@ class ReceiptCreateView(View):
 
             return JsonResponse({
                 'status': 'success',
-                'message': f'{receipt_type.title()} created successfully',
+                'message': _('%(type)s created successfully') % {'type': receipt_type.title()},
                 'id': str(receipt.id)
             })
 
@@ -234,7 +235,7 @@ class ReceiptUpdateView(View):
         try:
             print(f"Looking for receipt with pk: {pk}")
             receipt = get_object_or_404(model_map[receipt_type], pk=pk)
-            print(f"Found receipt: {receipt}")
+            print(f"Found receipt ID: {receipt.id}")
             print(f"Receipt attributes: {receipt.__dict__}")
 
             # Get current date info for form
@@ -289,7 +290,8 @@ class ReceiptUpdateView(View):
                 'bank_choices': MOROCCAN_BANKS,
                 'existing_compensations': json.dumps(compensations)  # Add compensations to context
             }
-            print("Context prepared:", context)
+            # Don't print the entire context object as it contains model instances with translation proxies
+            print("Context prepared with receipt_type:", receipt_type)
             
             try:
                 print("\nAttempting to render template...")
@@ -352,7 +354,7 @@ class ReceiptUpdateView(View):
                         print(f"Error saving document: {str(e)}")
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Error saving document: {str(e)}'
+                            'message': _('Error saving document: {}').format(str(e))
                         }, status=400)
                 
                 # Handle document deletion
@@ -366,12 +368,12 @@ class ReceiptUpdateView(View):
                         print(f"Error deleting document: {str(e)}")
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Error deleting document: {str(e)}'
+                            'message': _('Error deleting document: {}').format(str(e))
                         }, status=400)
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': f'Document updated successfully'
+                    'message': _('Document updated successfully')
                 })
             
             # Regular edit mode - your existing code here
@@ -433,11 +435,11 @@ class ReceiptUpdateView(View):
                     receipt.transfer_date = data['transfer_date']
 
             receipt.save()
-            print(f"{receipt_type} updated successfully:", receipt)
+            print(f"{receipt_type} updated successfully: ID={receipt.id}")
 
             return JsonResponse({
                 'status': 'success',
-                'message': f'{receipt_type.title()} updated successfully',
+                'message': _('%(type)s updated successfully') % {'type': receipt_type.title()},
                 'id': str(receipt.id)
             })
 
@@ -469,13 +471,13 @@ class ReceiptDeleteView(View):
                 if presentations.exists():
                     return JsonResponse({
                         'status': 'error',
-                        'message': 'Cannot delete receipt that is part of a presentation'
+                        'message': _('Cannot delete receipt that is part of a presentation')
                     }, status=400)
 
             receipt.delete()
             return JsonResponse({
                 'status': 'success',
-                'message': f'{receipt_type.title()} deleted successfully'
+                'message': _('%(type)s deleted successfully') % {'type': receipt_type.title()}
             })
         except Exception as e:
             print("Error in receipt deletion:")
@@ -500,7 +502,7 @@ class ReceiptDetailView(View):
         if not model:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Invalid receipt type'
+                'message': _('Invalid receipt type')
             }, status=400)
         
         # Get the receipt instance
@@ -566,7 +568,7 @@ class ReceiptDetailView(View):
         except model.DoesNotExist:
             return JsonResponse({
                 'status': 'error',
-                'message': 'Receipt not found'
+                'message': _('Receipt not found')
             }, status=404)
         except Exception as e:
             return JsonResponse({
@@ -603,7 +605,7 @@ class ReceiptStatusUpdateView(View):
                 if not cause:
                     return JsonResponse({
                         'status': 'error',
-                        'message': 'Rejection cause is required'
+                        'message': _('Rejection cause is required')
                     }, status=400)
                 unpaid_date = data.get('unpaid_date')
                 if unpaid_date:
@@ -655,14 +657,14 @@ class ReceiptStatusUpdateView(View):
                     is_processed=False
                 ).update(is_processed=True)
                    
-                message = 'Receipt marked as paid'
+                message = _('Receipt marked as paid')
             else:
                 receipt.status = status
                 receipt.save()
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'Receipt status updated to {status}'
+                'message': _('Receipt status updated to %(status)s') % {'status': status}
             })
             
         except Exception as e:
@@ -851,7 +853,7 @@ def validate_receipt_number(request):
         if not all([number, entity_id, bank]):
             return JsonResponse({
                 'exists': False,
-                'message': 'Missing required fields'
+                'message': _('Missing required fields')
             })
 
         if receipt_type == 'check':
@@ -875,19 +877,19 @@ def validate_receipt_number(request):
         
         return JsonResponse({
             'exists': exists,
-            'message': f"This {'check' if receipt_type == 'check' else 'LCN'} number already exists for this entity and bank" if exists else ''
+            'message': _('This %(type)s number already exists for this entity and bank') % {'type': 'check' if receipt_type == 'check' else 'LCN'} if exists else ''
         })
 
     except json.JSONDecodeError:
         return JsonResponse({
             'exists': False,
-            'message': 'Invalid request data'
+            'message': _('Invalid request data')
         }, status=400)
     except Exception as e:
         logger.error(f"Error validating receipt number: {str(e)}")
         return JsonResponse({
             'exists': False,
-            'message': 'Server error while validating receipt number'
+            'message': _('Server error while validating receipt number')
         }, status=500)
 
 def validate_compensating_receipt(request):
@@ -906,7 +908,7 @@ def validate_compensating_receipt(request):
                     'entity': receipt.entity.name
                 }
             })
-        return JsonResponse({'valid': False, 'message': 'Receipt not found'})
+        return JsonResponse({'valid': False, 'message': _('Receipt not found')})
     except Exception as e:
         return JsonResponse({'valid': False, 'message': str(e)})
 
@@ -1014,12 +1016,14 @@ class ReceiptFilterView(View):
                     print(f"\nRecord ID: {record.id}")
                     print(f"Object ID: {record.object_id}")
                     print(f"Action: {record.action}")
-                    print(f"New Value: {record.new_value}")
+                    # Avoid printing new_value directly as it might contain translated strings
+                    if hasattr(record.new_value, 'keys'):
+                        print(f"New Value keys: {list(record.new_value.keys())}")
 
 
                 print("\n=== Historical Status Debug ===")
                 print(f"Looking for status: {historical_status}")
-                print(f"Content type: {content_type}")
+                print(f"Content type ID: {content_type.id}")
                 
                 # Check what's in ReceiptHistory
                 history_records = ReceiptHistory.objects.filter(
@@ -1027,12 +1031,9 @@ class ReceiptFilterView(View):
                     new_value__status=historical_status
                 )
                 
-                print(f"Found {history_records.count()} history records:")
-                for record in history_records:
-                    print(f"- Receipt {record.object_id}: {record.new_value}")
-                
+                print(f"Found {history_records.count()} history records")
                 receipt_ids = history_records.values_list('object_id', flat=True)
-                print(f"Receipt IDs found: {list(receipt_ids)}")
+                print(f"Receipt IDs count: {len(list(receipt_ids))}")
                 
                 filters &= Q(id__in=receipt_ids)
 
@@ -1059,7 +1060,7 @@ class ReceiptFilterView(View):
         context = super().get_context_data(**kwargs)
         context['bank_choices'] = MOROCCAN_BANKS
         bank_accounts = BankAccount.objects.filter(is_active=True)
-        print("Bank accounts being passed to context:", bank_accounts.count())  # Debug log
+        print("Bank accounts count:", bank_accounts.count())  # Safer debug log
         context['bank_accounts'] = bank_accounts
         return context
 
@@ -1115,16 +1116,16 @@ class ReceiptDocumentView(View):
         # Get the appropriate model
         model = model_map.get(receipt_type)
         if not model:
-            return JsonResponse({"error": "Invalid receipt type"}, status=400)
+            return JsonResponse({"error": _("Invalid receipt type")}, status=400)
         
         # Get the receipt instance
         try:
             receipt = model.objects.get(pk=receipt_id)
         except model.DoesNotExist:
-            return JsonResponse({"error": "Receipt not found"}, status=404)
+            return JsonResponse({"error": _("Receipt not found")}, status=404)
         
         if not receipt.document:
-            return JsonResponse({"error": "No document found for this receipt"}, status=404)
+            return JsonResponse({"error": _("No document found for this receipt")}, status=404)
         
         # Open the file and return it
         try:
@@ -1141,4 +1142,4 @@ class ReceiptDocumentView(View):
             response['Content-Disposition'] = f'inline; filename="{filename}"'
             return response
         except FileNotFoundError:
-            return JsonResponse({"error": "Document file not found"}, status=404)
+            return JsonResponse({"error": _("Document file not found")}, status=404)

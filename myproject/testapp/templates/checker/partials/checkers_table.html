@@ -1,5 +1,6 @@
 {% load custom_filters %}
 {% load permission_tags %}
+{% load i18n %}
 {% for checker in checkers %}
 <div class="checker-card">
     <div class="checker-card-header">
@@ -18,7 +19,7 @@
     <div class="checker-card-body">
         <div class="range-info mb-3">
             <div class="d-flex justify-content-between text-muted mb-1">
-                <small>Range</small>
+                <small>{% trans 'Range' %}</small>
                 <small>{{ checker.starting_page }} - {{ checker.final_page }}</small>
             </div>
             <div class="progress" style="height: 8px;">
@@ -38,7 +39,7 @@
 
         <div class="position-info mb-3" data-checker-id="{{ checker.id }}">
             <div class="d-flex justify-content-between text-muted mb-1">
-                <small>Current Position</small>
+                <small>{% trans 'Current Position' %}</small>
                 <small class="position-display">{{ checker.index }}{{ checker.current_position }}</small>
             </div>
         </div>
@@ -60,7 +61,7 @@
                     data-start="{{ checker.starting_page }}" 
                     data-end="{{ checker.final_page }}">
                 <i class="fas fa-signature"></i>
-                <span>Signatures</span>
+                <span>{% trans 'Signatures' %}</span>
             </button>
             <button class="btn btn-sm btn-outline-primary add-payment" 
                     data-checker="{{ checker.id }}" 
@@ -70,7 +71,7 @@
                     data-bank="{{ checker.bank_account.bank }}" 
                     data-type="{{ checker.type }}">
                 <i class="fas fa-money-check-alt"></i>
-                <span>Add Payment</span>
+                <span>{% trans 'Add Payment' %}</span>
             </button>
         </div>
         {% endif %}
@@ -81,10 +82,10 @@
     <div class="empty-state-icon">
         <i class="fas fa-search"></i>
     </div>
-    <h3>No checkers found</h3>
-    <p class="text-muted">Try adjusting your search or filter criteria</p>
+    <h3>{% trans 'No checkers found' %}</h3>
+    <p class="text-muted">{% trans 'Try adjusting your search or filter criteria' %}</p>
     <button class="btn btn-outline-primary" id="reset-filters">
-        <i class="fas fa-undo me-2"></i>Reset Filters
+        <i class="fas fa-undo me-2"></i>{% trans 'Reset Filters' %}
     </button>
 </div>
 {% endfor %}
@@ -95,25 +96,25 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Payment</h5>
+                <h5 class="modal-title">{% trans 'Add Payment' %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <!-- Payment Type Selection -->
                 <div class="form-group mb-4">
-                    <label>Payment Type</label>
+                    <label>{% trans 'Payment Type' %}</label>
                     <div class="btn-group btn-group-toggle w-100" data-toggle="buttons">
                         <label class="btn btn-outline-primary active">
                             <input type="radio" name="payment_type" value="invoice" checked>
-                            Pay Invoice
+                            {% trans 'Pay Invoice' %}
                         </label>
                         <label class="btn btn-outline-primary">
                             <input type="radio" name="payment_type" value="supplier">
-                            Pay Supplier
+                            {% trans 'Pay Supplier' %}
                         </label>
                         <label class="btn btn-outline-primary">
                             <input type="radio" name="payment_type" value="tax">
-                            Pay Tax
+                            {% trans 'Pay Tax' %}
                         </label>
                     </div>
                 </div>
@@ -128,7 +129,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Position</label>
+                                <label>{% trans 'Position' %}</label>
                                 <div class="input-group">
                                     <input type="number" class="form-control" id="position" 
                                            name="position">
@@ -141,7 +142,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Creation Date</label>
+                                <label>{% trans 'Creation Date' %}</label>
                                 <input type="date" class="form-control" name="creation_date" 
                                        value="{% now 'Y-m-d' %}">
                             </div>
@@ -151,7 +152,7 @@
                     <div class="row">
                         <div class="col-md-12">
                             <div class="form-group">
-                                <label>Beneficiary</label>
+                                <label>{% trans 'Beneficiary' %}</label>
                                 <input type="text" class="form-control" id="beneficiary" 
                                        placeholder="Search supplier...">
                                 <input type="hidden" id="supplier_id">
@@ -164,7 +165,7 @@
                         <div class="row">
                             <div class="col-md-12">
                                 <div class="form-group">
-                                    <label>Invoice</label>
+                                    <label>{% trans 'Invoice' %}</label>
                                     <input type="text" class="form-control" id="invoice" 
                                            placeholder="Search invoice..." disabled>
                                     <input type="hidden" id="invoice_id" name="invoice_id">
@@ -177,7 +178,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Invoice Total</h6>
+                                        <h6 class="text-muted">{% trans 'Invoice Total' %}</h6>
                                         <h4 id="invoice-total">-</h4>
                                     </div>
                                 </div>
@@ -185,7 +186,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Already Issued</h6>
+                                        <h6 class="text-muted">{% trans 'Already Issued' %}</h6>
                                         <h4 id="already-issued">-</h4>
                                     </div>
                                 </div>
@@ -193,7 +194,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Amount Paid</h6>
+                                        <h6 class="text-muted">{% trans 'Amount Paid' %}</h6>
                                         <h4 id="amount-paid">-</h4>
                                     </div>
                                 </div>
@@ -201,7 +202,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Available</h6>
+                                        <h6 class="text-muted">{% trans 'Available' %}</h6>
                                         <h4 id="amount-available">-</h4>
                                     </div>
                                 </div>
@@ -215,7 +216,7 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Total Payable</h6>
+                                        <h6 class="text-muted">{% trans 'Total Payable' %}</h6>
                                         <h4 id="supplier-payable">-</h4>
                                     </div>
                                 </div>
@@ -223,7 +224,7 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Already Paid</h6>
+                                        <h6 class="text-muted">{% trans 'Already Paid' %}</h6>
                                         <h4 id="supplier-paid">-</h4>
                                     </div>
                                 </div>
@@ -231,7 +232,7 @@
                             <div class="col-md-4">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Balance</h6>
+                                        <h6 class="text-muted">{% trans 'Balance' %}</h6>
                                         <h4 id="supplier-balance">-</h4>
                                     </div>
                                 </div>
@@ -239,7 +240,7 @@
                         </div>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i>
-                            Payment allocations can be managed after creating the check.
+                            {% trans 'Payment allocations can be managed after creating the check.' %}
                         </div>
                     </div>
                     
@@ -248,7 +249,7 @@
                         <div class="row">
                             <div class="col-md-12">
                                 <div class="form-group">
-                                    <label>Tax Declaration</label>
+                                    <label>{% trans 'Tax Declaration' %}</label>
                                     <input type="text" class="form-control" id="tax-declaration" 
                                            placeholder="Search tax declaration...">
                                     <input type="hidden" id="tax-declaration-id">
@@ -258,8 +259,7 @@
                         </div>
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i>
-                            Select a tax declaration to pay. Amount, due date, and suggested beneficiary will be filled automatically.
-                            You can modify the beneficiary if needed.
+                            {% trans 'Select a tax declaration to pay. Amount, due date, and suggested beneficiary will be filled automatically. You can modify the beneficiary if needed.' %}
                         </div>
 
                      <!-- Tax Payment Summary Cards -->
@@ -267,7 +267,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Total Amount</h6>
+                                        <h6 class="text-muted">{% trans 'Total Amount' %}</h6>
                                         <h4 id="tax-total-amount">-</h4>
                                     </div>
                                 </div>
@@ -275,7 +275,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Checks Issued</h6>
+                                        <h6 class="text-muted">{% trans 'Checks Issued' %}</h6>
                                         <h4 id="tax-issued-amount">-</h4>
                                     </div>
                                 </div>
@@ -283,7 +283,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Checks Paid</h6>
+                                        <h6 class="text-muted">{% trans 'Checks Paid' %}</h6>
                                         <h4 id="tax-paid-amount">-</h4>
                                     </div>
                                 </div>
@@ -291,7 +291,7 @@
                             <div class="col-md-3">
                                 <div class="card bg-light">
                                     <div class="card-body">
-                                        <h6 class="text-muted">Remaining to Issue</h6>
+                                        <h6 class="text-muted">{% trans 'Remaining to Issue' %}</h6>
                                         <h4 id="tax-remaining-amount">-</h4>
                                     </div>
                                 </div>
@@ -302,34 +302,34 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Amount</label>
+                                <label>{% trans 'Amount' %}</label>
                                 <input type="number" class="form-control" name="amount" 
                                        step="0.01" required>
                                 <div class="invalid-feedback">
-                                    Amount exceeds available balance.
+                                    {% trans 'Amount exceeds available balance.' %}
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Payment Due Date</label>
+                                <label>{% trans 'Payment Due Date' %}</label>
                                 <input type="date" class="form-control" name="payment_due">
                             </div>
                         </div>
                     </div>
 
                     <div class="form-group">
-                        <label>Observation</label>
+                        <label>{% trans 'Observation' %}</label>
                         <textarea class="form-control" name="observation" rows="2"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    Cancel
+                    {% trans 'Cancel' %}
                 </button>
                 <button type="button" class="btn btn-primary" id="save-payment">
-                    Create Check
+                    {% trans 'Create Check' %}
                 </button>
             </div>
         </div>
@@ -422,14 +422,14 @@ const PaymentValidation = {
 
     // Basic validation
     if (!position) {
-      this.setPositionInvalid("Position is required", input, feedback);
+      this.setPositionInvalid("{% trans 'Position is required' %}", input, feedback);
       return false;
     }
 
     // Range validation
     if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
       this.setPositionInvalid(
-        `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`,
+        `{% trans 'Position must be between' %} ${this.currentCheckerData.start} {% trans 'and' %} ${this.currentCheckerData.end}`,
         input, feedback
       );
       return false;
@@ -445,7 +445,7 @@ const PaymentValidation = {
 
       if (data.is_used) {
         this.setPositionInvalid(
-          `Position ${position} is already used`,
+          `{% trans 'Position' %} ${position} {% trans 'is already used' %}`,
           input, feedback
         );
         return false;
@@ -679,7 +679,7 @@ const PaymentSystem = {
         });
         
         // Add placeholder text to hint at tax collectors
-        this.beneficiaryInput.attr('placeholder', 'Search tax collector...');
+        this.beneficiaryInput.attr('placeholder', '{% trans "Search tax collector..." %}');                        
     },
 
     setupRegularBeneficiaryAutocomplete() {
@@ -736,7 +736,7 @@ const PaymentSystem = {
         });
         
         // Reset placeholder text
-        this.beneficiaryInput.attr('placeholder', 'Search supplier...');
+        this.beneficiaryInput.attr('placeholder', '{% trans "Search supplier..." %}');
     },
 
     setupPositionValidation() {
@@ -787,13 +787,13 @@ const PaymentSystem = {
         });
 
         if (!position) {
-            this.setPositionInvalid("Position is required", input, feedback);
+            this.setPositionInvalid("{% trans 'Position is required' %}", input, feedback);
             return false;
         }
 
         if (position < this.currentCheckerData.start || position > this.currentCheckerData.end) {
             this.setPositionInvalid(
-                `Position must be between ${this.currentCheckerData.start} and ${this.currentCheckerData.end}`,
+                `{% trans 'Position must be between' %} ${this.currentCheckerData.start} {% trans 'and' %} ${this.currentCheckerData.end}`,
                 input, feedback
             );
             return false;
@@ -808,7 +808,7 @@ const PaymentSystem = {
 
             if (data.is_used) {
                 this.setPositionInvalid(
-                    `Position ${position} is already used`,
+                    `{% trans 'Position' %} ${position} {% trans 'is already used' %}`,
                     input, feedback
                 );
                 return false;
@@ -1081,11 +1081,11 @@ const PaymentSystem = {
             if (e.type === 'input') {
                 if (amount <= 0) {
                     $input.addClass('is-invalid');
-                    $('.invalid-feedback').text('Amount must be greater than 0');
+                    $('.invalid-feedback').text('{% trans "Amount must be greater than 0" %}');
                     $('#save-payment').prop('disabled', true);
                 } else if (amount > maxAmount) {
                     $input.addClass('is-invalid');
-                    $('.invalid-feedback').text(`Amount cannot exceed ${formatMoney(maxAmount)}`);
+                    $('.invalid-feedback').text(`{% trans "Amount cannot exceed" %} ${formatMoney(maxAmount)}`);
                     $('#save-payment').prop('disabled', true);
                 } else {
                     $input.removeClass('is-invalid');
@@ -1208,7 +1208,7 @@ const PaymentSystem = {
                 data.tax_declaration_type = $('#tax-declaration-type').val();
                 
                 if (!data.tax_declaration_id || !data.tax_declaration_type) {
-                    alert('Please select a tax declaration');
+                    alert('{% trans "Please select a tax declaration" %}');
                     this.saving = false;
                     $('#save-payment').prop('disabled', false);
                     return;
@@ -1221,7 +1221,7 @@ const PaymentSystem = {
                     .replace(',', '.')) || 0;
                 
                 if (parseFloat(data.amount) > remainingToIssue) {
-                    alert(`Amount exceeds remaining amount to issue (${formatMoney(remainingToIssue)})`);
+                    alert(`{% trans "Amount exceeds remaining amount to issue" %} (${formatMoney(remainingToIssue)})`);
                     this.saving = false;
                     $('#save-payment').prop('disabled', false);
                     return;
@@ -1233,7 +1233,7 @@ const PaymentSystem = {
                 data.invoice_id = formData.get('invoice_id');
                 
                 if (!data.invoice_id) {
-                    alert('Please select an invoice');
+                    alert('{% trans "Please select an invoice" %}');
                     this.saving = false;
                     $('#save-payment').prop('disabled', false);
                     return;
@@ -1288,25 +1288,25 @@ const PaymentSystem = {
         const beneficiary = this.beneficiaryInput.val();
         if (!beneficiary) {
             console.log("[PaymentSystem] No beneficiary entered");
-            alert('Please enter a beneficiary');
+            alert('{% trans "Please enter a beneficiary" %}');
             return false;
         }
         
         if (is_tax_payment) {
             if (!$('#tax-declaration-id').val() || !$('#tax-declaration-type').val()) {
                 console.log("[PaymentSystem] No tax declaration selected");
-                alert('Please select a tax declaration');
+                alert('{% trans "Please select a tax declaration" %}');
                 return false;
             }
         } else if (!is_supplier_payment && !$('#invoice_id').val()) {
             console.log("[PaymentSystem] No invoice selected for invoice payment");
-            alert('Please select an invoice');
+            alert('{% trans "Please select an invoice" %}');
             return false;
         }
 
         if (!this.amountInput.val() || this.amountInput.hasClass('is-invalid')) {
             console.log("[PaymentSystem] Invalid amount");
-            alert('Please enter a valid amount');
+            alert('{% trans "Please enter a valid amount" %}');
             return false;
         }
 
@@ -1314,7 +1314,7 @@ const PaymentSystem = {
         const position = $('[name="position"]').val();
         if (!position || $('[name="position"]').hasClass('is-invalid')) {
             console.log("[PaymentSystem] Invalid position");
-            alert('Please enter a valid position');
+            alert('{% trans "Please enter a valid position" %}');
             return false;
         }
 
@@ -1331,7 +1331,7 @@ const PaymentSystem = {
             console.log("[PaymentSystem] Checker details:", checkerDetails);
             
             if (!checkerDetails.next_available) {
-                alert("No available positions in this checker");
+                alert("{% trans "No available positions in this checker" %}");
                 return;
             }
 
@@ -1360,7 +1360,7 @@ const PaymentSystem = {
 
         } catch (error) {
             console.error("[PaymentSystem] Error opening payment modal:", error);
-            alert("Error loading checker details");
+            alert("{% trans "Error loading checker details" %}");
         }
     },
 
@@ -1537,7 +1537,7 @@ const SignatureSystem = {
         row.append($('<td>').text(position));
         
         // Status cell
-        row.append($('<td>').text(isUsed ? 'Used' : 'Available'));
+        row.append($('<td>').text(isUsed ? '{% trans "Used" %}' : '{% trans "Available" %}'));
         
         // Signatures cell
         const signaturesCell = $('<td>');
@@ -1573,7 +1573,7 @@ const SignatureSystem = {
                 'data-position': position,
                 'data-signature': signature
             })
-            .text(`Sign ${signature}`);
+            .text(`{% trans "Sign" %} ${signature}`);
     },
 
     async addSignature(checkerId, position, signature) {
@@ -1646,7 +1646,7 @@ const AllocationSystem = {
             if (amount > availableAmount) {
                 $(this).addClass('is-invalid');
                 $(this).next('.invalid-feedback').text(
-                    `Amount cannot exceed ${formatMoney(availableAmount)}`
+                    `{% trans "Amount cannot exceed" %} ${formatMoney(availableAmount)}`
                 );
             } else {
                 $(this).removeClass('is-invalid');
@@ -1674,7 +1674,7 @@ const AllocationSystem = {
                 tbody.append(`
                     <tr class="no-allocations">
                         <td colspan="3" class="text-center text-muted">
-                            No allocations yet
+                            {% trans "No allocations yet" %}
                         </td>
                     </tr>
                 `);
@@ -1697,13 +1697,13 @@ const AllocationSystem = {
             
             // Update invoice select options
             const select = $('#invoice-select');
-            select.empty().append('<option value="">Select invoice...</option>');
+            select.empty().append('<option value="">{% trans "Select invoice..." %}</option>');
             
             data.available_invoices.forEach(invoice => {
                 select.append(`
                     <option value="${invoice.id}" 
                             data-available="${invoice.available_amount}">
-                        ${invoice.ref} (${formatMoney(invoice.available_amount)} available)
+                        ${invoice.ref} (${formatMoney(invoice.available_amount)} {% trans "available" %})
                     </option>
                 `);
             });
@@ -1720,7 +1720,7 @@ const AllocationSystem = {
             const amount = $('#allocation-amount').val();
             
             if (!invoiceId || !amount) {
-                alert('Please select an invoice and enter an amount');
+                alert('{% trans "Please select an invoice and enter an amount" %}');
                 return;
             }
             
@@ -1755,7 +1755,7 @@ const AllocationSystem = {
     
     async deleteAllocation(allocationId) {
         try {
-            if (!confirm('Are you sure you want to delete this allocation?')) {
+            if (!confirm('{% trans "Are you sure you want to delete this allocation?" %}')) {
                 return;
             }
             
@@ -1797,7 +1797,7 @@ const AllocationSystem = {
         if (amount > maxAmount) {
             amountInput.addClass('is-invalid');
             amountInput.next('.invalid-feedback').text(
-                `Amount cannot exceed ${formatMoney(maxAmount)}`
+                `{% trans "Amount cannot exceed" %} ${formatMoney(maxAmount)}`
             );
         } else {
             amountInput.removeClass('is-invalid');

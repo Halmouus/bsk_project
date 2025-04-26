@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Delete Supplier{% endblock %}
+{% block title %}{% trans "Delete Supplier" %}{% endblock %}
 
 {% block content %}
-<h1>Delete Supplier</h1>
-<p>Are you sure you want to delete "{{ supplier.name }}"?</p>
+<h1>{% trans "Delete Supplier" %}</h1>
+<p>{% trans "Are you sure you want to delete" %} "{{ supplier.name }}"?</p>
 
 <form method="post">
     {% csrf_token %}
-    <button type="submit" class="btn btn-danger">Confirm Deletion</button>
-    <a href="{% url 'supplier-list' %}" class="btn btn-secondary">Cancel</a>
+    <button type="submit" class="btn btn-danger">{% trans "Confirm Deletion" %}</button>
+    <a href="{% url 'supplier-list' %}" class="btn btn-secondary">{% trans "Cancel" %}</a>
 </form>
 {% endblock %}

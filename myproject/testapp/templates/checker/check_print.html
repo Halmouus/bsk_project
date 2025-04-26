@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Print Check{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Print Check" %}{% endblock %}
 {% block content %}
 <div class="container-fluid">
     <div class="print-layout">
@@ -8,7 +9,7 @@
         <div class="control-panel no-print">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="mb-4">Print Settings</h5>
+                    <h5 class="mb-4">{% trans "Print Settings" %}</h5>
                     
                     <div class="fields-control">
                         {% for field, config in template.items %}
@@ -24,7 +25,7 @@
                             </div>
                             <div class="position-sliders">
                                 <div class="position-slider mb-2">
-                                    <label>Vertical Position</label>
+                                    <label>{% trans "Vertical Position" %}</label>
                                     <input type="range" 
                                            class="form-range position-input" 
                                            data-field="{{ field }}" 
@@ -39,7 +40,7 @@
                                            value="{{ config.y }}">
                                 </div>
                                 <div class="position-slider">
-                                    <label>Horizontal Position</label>
+                                    <label>{% trans "Horizontal Position" %}</label>
                                     <input type="range" 
                                            class="form-range position-input" 
                                            data-field="{{ field }}" 
@@ -61,11 +62,11 @@
                     <div class="d-flex justify-content-between mt-4">
                         <button class="btn btn-primary" id="save-positions">
                             <i class="fas fa-save me-2"></i>
-                            Save Template
+                            {% trans "Save Template" %}
                         </button>
                         <button class="btn btn-success" id="trigger-print">
                             <i class="fas fa-print me-2"></i>
-                            Print Check
+                            {% trans "Print Check" %}
                         </button>
                     </div>
                 </div>
@@ -299,11 +300,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 body: JSON.stringify({ template })
             });
 
-            if (!response.ok) throw new Error('Failed to save template');
-            alert('Template saved successfully!');
+            if (!response.ok) throw new Error('{% trans "Failed to save template" %}');
+            alert('{% trans "Template saved successfully!" %}');
         } catch (error) {
-            console.error('Error saving template:', error);
-            alert('Failed to save template');
+            console.error('{% trans "Error saving template:" %}', error);
+            alert('{% trans "Failed to save template" %}');
         }
     });
 

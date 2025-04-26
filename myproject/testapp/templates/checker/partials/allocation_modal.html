@@ -1,10 +1,11 @@
+{% load i18n %}
 <div class="modal fade" id="allocationModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header border-0 pb-0">
                 <h5 class="modal-title d-flex align-items-center gap-2">
                     <i class="fas fa-money-bill-wave text-success"></i>
-                    Allocate Check Payment
+                    {% trans 'Allocate Check Payment' %}
                 </h5>
                 <button type="button" class="btn-close" data-dismiss="modal"></button>
             </div>
@@ -16,7 +17,7 @@
                             <i class="fas fa-calculator text-primary"></i>
                         </div>
                         <div class="summary-content">
-                            <label>Check Amount</label>
+                            <label>{% trans 'Check Amount' %}</label>
                             <h4 id="check-total" class="mb-0">-</h4>
                         </div>
                     </div>
@@ -25,7 +26,7 @@
                             <i class="fas fa-chart-pie text-warning"></i>
                         </div>
                         <div class="summary-content">
-                            <label>Allocated</label>
+                            <label>{% trans 'Allocated' %}</label>
                             <h4 id="allocated-amount" class="mb-0">-</h4>
                         </div>
                     </div>
@@ -34,7 +35,7 @@
                             <i class="fas fa-wallet text-success"></i>
                         </div>
                         <div class="summary-content">
-                            <label>Available</label>
+                            <label>{% trans 'Available' %}</label>
                             <h4 id="available-amount" class="mb-0">-</h4>
                         </div>
                     </div>
@@ -43,22 +44,22 @@
                 <!-- Current Allocations -->
                 <div class="card allocation-table mb-4">
                     <div class="card-header bg-transparent">
-                        <h6 class="mb-0">Current Allocations</h6>
+                        <h6 class="mb-0">{% trans 'Current Allocations' %}</h6>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-hover mb-0" id="allocations-table">
                             <thead>
                                 <tr>
-                                    <th>Invoice</th>
-                                    <th class="text-end">Amount</th>
-                                    <th class="text-center" style="width: 100px">Actions</th>
+                                    <th>{% trans 'Invoice' %}</th>
+                                    <th class="text-end">{% trans 'Amount' %}</th>
+                                    <th class="text-center" style="width: 100px">{% trans 'Actions' %}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr class="no-allocations">
                                     <td colspan="3" class="text-center text-muted py-4">
                                         <i class="fas fa-inbox mb-2 d-block"></i>
-                                        No allocations yet
+                                        {% trans 'No allocations yet' %}
                                     </td>
                                 </tr>
                             </tbody>
@@ -70,28 +71,28 @@
                 <form id="allocation-form" class="allocation-form">
                     <div class="card">
                         <div class="card-header bg-transparent">
-                            <h6 class="mb-0">Add New Allocation</h6>
+                            <h6 class="mb-0">{% trans 'Add New Allocation' %}</h6>
                         </div>
                         <div class="card-body">
                             <div class="row g-3">
                                 <div class="col-md-7">
                                     <div class="form-group">
-                                        <label class="form-label">Invoice</label>
+                                        <label class="form-label">{% trans 'Invoice' %}</label>
                                         <select class="form-control" id="invoice-select" required>
-                                            <option value="">Select invoice...</option>
+                                            <option value="">{% trans 'Select invoice...' %}</option>
                                         </select>
                                         <small class="text-muted">
-                                            Available amount shown in parentheses
+                                            {% trans 'Available amount shown in parentheses' %}
                                         </small>
                                     </div>
                                 </div>
                                 <div class="col-md-5">
                                     <div class="form-group">
-                                        <label class="form-label">Amount</label>
+                                        <label class="form-label">{% trans 'Amount' %}</label>
                                         <input type="number" class="form-control" id="allocation-amount"
                                                step="0.01" required>
                                         <div class="invalid-feedback">
-                                            Amount cannot exceed available amount
+                                            {% trans 'Amount cannot exceed available amount' %}
                                         </div>
                                     </div>
                                 </div>
@@ -100,7 +101,7 @@
                         <div class="card-footer bg-transparent text-end border-0">
                             <button type="submit" class="btn btn-primary">
                                 <i class="fas fa-plus me-2"></i>
-                                Add Allocation
+                                {% trans 'Add Allocation' %}
                             </button>
                         </div>
                     </div>

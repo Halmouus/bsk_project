@@ -6,6 +6,7 @@ from django.shortcuts import get_object_or_404, redirect
 from django.contrib import messages
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _
 
 from .models import DeliveryNote, ReceptionNote, Invoice
 from .forms import DeliveryNoteForm, ReceptionNoteForm
@@ -62,7 +63,7 @@ class DeliveryNoteCreateView(CreateView):
             self.object = form.save()
             return JsonResponse({
                 'success': True,
-                'message': 'Delivery note created successfully.'
+                'message': _('Delivery note created successfully.')
             })
         except Exception as e:
             return JsonResponse({
@@ -113,7 +114,7 @@ class DeliveryNoteUpdateView(UpdateView):
                 note.document = request.FILES['document']
             
             note.save()
-            return JsonResponse({'success': True, 'message': 'Delivery note updated successfully.'})
+            return JsonResponse({'success': True, 'message': _('Delivery note updated successfully.')})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})
         
@@ -132,7 +133,7 @@ class DeliveryNoteDeleteView(DeleteView):
         self.object.delete()
         print("Note deleted successfully")
         
-        return JsonResponse({'success': True, 'message': 'Delivery note deleted successfully.'})
+        return JsonResponse({'success': True, 'message': _('Delivery note deleted successfully.')})
 
 class AvailableDeliveryNotesView(View):
     def get(self, request):
@@ -207,7 +208,7 @@ class ReceptionNoteCreateView(CreateView):
             self.object = form.save()
             return JsonResponse({
                 'success': True,
-                'message': 'Reception note created successfully.'
+                'message': _('Reception note created successfully.')
             })
         except Exception as e:
             return JsonResponse({
@@ -256,7 +257,7 @@ class ReceptionNoteUpdateView(UpdateView):
                 note.document = request.FILES['document']
             
             note.save()
-            return JsonResponse({'success': True, 'message': 'Reception note updated successfully.'})
+            return JsonResponse({'success': True, 'message': _('Reception note updated successfully.')})
         except Exception as e:
             return JsonResponse({'success': False, 'error': str(e)})
     
@@ -275,7 +276,7 @@ class ReceptionNoteDeleteView(DeleteView):
         self.object.delete()
         print("Note deleted successfully")
         
-        return JsonResponse({'success': True, 'message': 'Reception note deleted successfully.'})
+        return JsonResponse({'success': True, 'message': _('Reception note deleted successfully.')})
 
 class AvailableReceptionNotesView(View):
     def get(self, request):

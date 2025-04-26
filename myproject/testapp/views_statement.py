@@ -17,6 +17,7 @@ import traceback
 from datetime import timedelta
 from django.utils import timezone
 from django.db import transaction
+from django.utils.translation import gettext as _
 
 from testapp import models
 
@@ -217,7 +218,7 @@ class CustomBankRecordView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Custom record created successfully',
+                    'message': _('Custom record created successfully'),
                     'id': str(record.id)
                 })
                 
@@ -235,7 +236,7 @@ class CustomBankRecordView(View):
             record.delete()
             return JsonResponse({
                 'status': 'success',
-                'message': 'Custom record deleted successfully'
+                'message': _('Custom record deleted successfully')
             })
         except Exception as e:
             return JsonResponse({
@@ -793,7 +794,7 @@ class CalendarForecastView(View):
                         print(f"Added to discounted total: {total_discounted}")
 
                     forecast_data = {
-                        'type': 'Expected Payment' if forecast.label.startswith('Expected') else 'Discounted Receipt',
+                        'type': _('Expected Payment') if forecast.label.startswith('Expected') else _('Discounted Receipt'),
                         'number': receipt.get_receipt_number(),
                         'entity': receipt.entity.name,  # Use actual entity name
                         'bank': receipt.get_issuing_bank_display(),  # Use receipt's bank
@@ -864,7 +865,7 @@ class PendingForecastsView(View):
                     supplier_balance = get_supplier_balance(check.beneficiary)
                     
                     forecast_data = {
-                        'type': 'Supplier Payment',
+                        'type': _('Supplier Payment'),
                         'payment_type': check.checker.type,
                         'number': check.position,
                         'status': check.status,
@@ -913,11 +914,11 @@ class PendingForecastsView(View):
                     supplier_balance = get_supplier_balance(contract.supplier)
                     
                     forecast_data = {
-                        'type': 'Contract Payment',
-                        'payment_type': 'Domiciliation',
+                        'type': _('Contract Payment'),
+                        'payment_type': _('Domiciliation'),
                         'number': forecast.reference,
                         'status': 'pending',
-                        'status_display': 'Pending Payment',
+                        'status_display': _('Pending Payment'),
                         'source_id': str(contract.id),
                         'supplier': {
                             'name': contract.supplier.name,
@@ -956,8 +957,8 @@ class PendingForecastsView(View):
                         print(f"Declaration: {declaration.period_month}/{declaration.period_year}")
                         
                         forecast_data = {
-                            'type': 'VAT Payment',
-                            'payment_type': 'VAT Declaration',
+                            'type': _('VAT Payment'),
+                            'payment_type': _('VAT Declaration'),
                             'number': forecast.reference,
                             'status': declaration.status,
                             'status_display': declaration.get_status_display(),
@@ -995,12 +996,12 @@ class PendingForecastsView(View):
                             # Try to extract period from the label
                             print(f"No declaration found, parsing from label: {forecast.label}")
                             label_parts = forecast.label.split()
-                            period = label_parts[-1] if len(label_parts) > 1 else "Unknown"
+                            period = label_parts[-1] if len(label_parts) > 1 else _("Unknown")
                             print(f"Extracted period: {period}")
                         
                         forecast_data = {
-                            'type': 'IR Payment',
-                            'payment_type': 'IR Declaration',
+                            'type': _('IR Payment'),
+                            'payment_type': _('IR Declaration'),
                             'number': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
                             'status': declaration.status,
                             'status_display': dict(IRDeclaration.STATUS_CHOICES).get(declaration.status, declaration.status),
@@ -1048,8 +1049,8 @@ class PendingForecastsView(View):
                         print(f"Stamp Rights Declaration: {declaration.period_month}/{declaration.period_year}")
                         
                         forecast_data = {
-                            'type': 'Stamp Rights Payment',
-                            'payment_type': 'Stamp Rights Declaration',
+                            'type': _('Stamp Rights Payment'),
+                            'payment_type': _('Stamp Rights Declaration'),
                             'number': forecast.reference,
                             'status': declaration.status,
                             'status_display': declaration.get_status_display(),
@@ -1083,11 +1084,11 @@ class PendingForecastsView(View):
                         declaration = OtherTaxDeclaration.objects.get(id=forecast.source_id)
                         
                         # Get display name based on source type
-                        display_name = "Other Tax"
+                        display_name = _("Other Tax")
                         if forecast.source_type == 'communal_tax':
-                            display_name = "Communal Tax"
+                            display_name = _("Communal Tax")
                         elif forecast.source_type == 'professional_tax':
-                            display_name = "Professional Tax"
+                            display_name = _("Professional Tax")
                         
                         # Find associated checks
                         associated_checks = Check.objects.filter(
@@ -1100,7 +1101,7 @@ class PendingForecastsView(View):
                         
                         # Create forecast data object
                         forecast_data = {
-                            'type': f"{display_name} Payment",
+                            'type': _("%(type)s Payment") % {'type': display_name},
                             'payment_type': display_name,
                             'number': f"{display_name.replace(' ', '')}-{declaration.year}",
                             'status': declaration.status,
@@ -1185,7 +1186,7 @@ class PendingForecastsView(View):
                     print(f"Calculated amount: {amount}")
 
                     forecast_data = {
-                        'type': 'Expected Payment' if forecast.label.startswith('Expected') else 'Discounted Receipt',
+                        'type': _('Expected Payment') if forecast.label.startswith('Expected') else _('Discounted Receipt'),
                         'number': receipt.get_receipt_number(),
                         'entity': receipt.entity.name,
                         'client': receipt.client.name,
@@ -1300,12 +1301,12 @@ class SupplierForecastView(View):
                         print(f"Contract: {contract.reference}")
                         
                         forecast_data = {
-                            'type': 'Contract Payment',
+                            'type': _('Contract Payment'),
                             'payment': {
                                 'reference': forecast.reference,
                                 'amount': float(forecast.debit),
                                 'status': 'pending',
-                                'status_display': 'Pending Payment'
+                                'status_display': _('Pending Payment')
                             },
                             'dates': {
                                 'due_date': forecast.date.strftime('%Y-%m-%d'),
@@ -1371,7 +1372,7 @@ class ContractPaymentActionView(View):
             
             if not direct_debit:
                 print(f"No pending direct debit found for date {forecast_date}")
-                raise ValidationError(f"No pending direct debit found for date {forecast_date}")
+                raise ValidationError(_("No pending direct debit found for date %(date)s") % {'date': forecast_date})
 
             print(f"Found direct debit {direct_debit.id}")
             
@@ -1379,7 +1380,7 @@ class ContractPaymentActionView(View):
                 if action == 'pay':
                     print("Marking as paid...")
                     direct_debit.mark_as_processed(payment_date)
-                    message = "Payment processed successfully"
+                    message = _("Payment processed successfully")
                     
                 elif action == 'reject':
                     print("Marking as rejected...")
@@ -1388,10 +1389,10 @@ class ContractPaymentActionView(View):
                         data.get('rejection_reason'),
                         data.get('rejection_note', '')
                     )
-                    message = "Payment rejection processed"
+                    message = _("Payment rejection processed")
                     
                 else:
-                    raise ValidationError("Invalid action")
+                    raise ValidationError(_("Invalid action"))
                     
             return JsonResponse({
                 'status': 'success',
@@ -1426,7 +1427,7 @@ def get_cash_statement_entries(start_date=None, end_date=None):
         for deposit in deposits:
             entries.append({
                 'date': deposit.date,
-                'label': f"Cash deposit {deposit.reference}",
+                'label': _("Cash deposit %(reference)s") % {'reference': deposit.reference},
                 'type': 'CASH_DEPOSIT',
                 'debit': None,
                 'credit': deposit.amount,
@@ -1451,7 +1452,7 @@ def get_cash_statement_entries(start_date=None, end_date=None):
         for payment in payments:
             entries.append({
                 'date': payment.payment_date,
-                'label': f"Cash payment for invoice {payment.invoice.ref}",
+                'label': _("Cash payment for invoice %(ref)s") % {'ref': payment.invoice.ref},
                 'type': 'CASH_PAYMENT',
                 'debit': payment.amount,
                 'credit': None,
@@ -1477,7 +1478,7 @@ def get_cash_statement_entries(start_date=None, end_date=None):
         for expense in expenses:
             entries.append({
                 'date': expense.date,
-                'label': f"Cash expense ({expense.get_expense_type_display()})",
+                'label': _("Cash expense (%(type)s)") % {'type': expense.get_expense_type_display()},
                 'type': 'CASH_EXPENSE',
                 'debit': expense.amount,
                 'credit': None,

@@ -1,17 +1,18 @@
 {% extends 'base.html' %}
-{% block title %}User Management{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "User Management" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>User Management</h2>
+        <h2>{% trans "User Management" %}</h2>
         <div class="btn-group">
             <button class="btn btn-primary" data-toggle="modal" data-target="#createUserModal">
-                <i class="fas fa-plus"></i> New User
+                <i class="fas fa-plus"></i> {% trans "New User" %}
             </button>
             <button class="btn btn-info" id="viewActivityLog">
-                <i class="fas fa-history"></i> Activity Log
+                <i class="fas fa-history"></i> {% trans "Activity Log" %}
             </button>
         </div>
     </div>
@@ -22,7 +23,7 @@
             <div class="row">
                 <div class="col-md-3">
                     <select class="form-control" id="roleFilter">
-                        <option value="">All Roles</option>
+                        <option value="">{% trans "All Roles" %}</option>
                         {% for role in roles %}
                             <option value="{{ role.id }}">{{ role.name }}</option>
                         {% endfor %}
@@ -30,14 +31,14 @@
                 </div>
                 <div class="col-md-3">
                     <select class="form-control" id="statusFilter">
-                        <option value="">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
+                        <option value="">{% trans "All Status" %}</option>
+                        <option value="active">{% trans "Active" %}</option>
+                        <option value="inactive">{% trans "Inactive" %}</option>
                     </select>
                 </div>
                 <div class="col-md-6">
                     <input type="text" class="form-control" id="searchUser" 
-                           placeholder="Search users...">
+                           placeholder="{% trans 'Search users...' %}">
                 </div>
             </div>
         </div>
@@ -48,12 +49,12 @@
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>Username</th>
-                    <th>Full Name</th>
-                    <th>Role</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th>Actions</th>
+                    <th>{% trans "Username" %}</th>
+                    <th>{% trans "Full Name" %}</th>
+                    <th>{% trans "Role" %}</th>
+                    <th>{% trans "Status" %}</th>
+                    <th>{% trans "Last Login" %}</th>
+                    <th>{% trans "Actions" %}</th>
                 </tr>
             </thead>
             <tbody id="usersTableBody">
@@ -66,29 +67,29 @@
                     </td>
                     <td>
                         {% if profile.is_active %}
-                            <span class="badge badge-success">Active</span>
+                            <span class="badge badge-success">{% trans "Active" %}</span>
                         {% else %}
-                            <span class="badge badge-danger">Inactive</span>
+                            <span class="badge badge-danger">{% trans "Inactive" %}</span>
                         {% endif %}
                     </td>
                     <td>{{ profile.last_login|default:"-" }}</td>
                     <td>
                         <div class="btn-group">
                             <button class="btn btn-sm btn-outline-primary" onclick="viewUserActivity('{{ profile.user.id }}')"
-                                    data-toggle="tooltip" title="View Activity">
+                                    data-toggle="tooltip" title="{% trans 'View Activity' %}">
                                 <i class="fas fa-history"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-info" onclick="UserManagement.editUserPermissions('{{ profile.user.id }}')"
-                                    data-toggle="tooltip" title="Edit Permissions">
+                                    data-toggle="tooltip" title="{% trans 'Edit Permissions' %}">
                                 <i class="fas fa-user-shield"></i>
                             </button>
                             <button class="btn btn-sm btn-outline-warning" onclick="editUser('{{ profile.user.id }}')"
-                                    data-toggle="tooltip" title="Edit User">
+                                    data-toggle="tooltip" title="{% trans 'Edit User' %}">
                                 <i class="fas fa-edit"></i>
                             </button>
                             {% if request.user != profile.user %}
                             <button class="btn btn-sm btn-outline-danger" onclick="toggleUserStatus('{{ profile.user.id }}')"
-                                    data-toggle="tooltip" title="Toggle Status">
+                                    data-toggle="tooltip" title="{% trans 'Toggle Status' %}">
                                 <i class="fas fa-power-off"></i>
                             </button>
                             {% endif %}
@@ -106,56 +107,56 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create New User</h5>
+                <h5 class="modal-title">{% trans "Create New User" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="createUserForm">
                     {% csrf_token %}
                     <div class="form-group">
-                        <label>Username</label>
+                        <label>{% trans "Username" %}</label>
                         <input type="text" class="form-control" name="username" required>
                     </div>
                     <div class="row">
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>First Name</label>
+                                <label>{% trans "First Name" %}</label>
                                 <input type="text" class="form-control" name="first_name" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
-                                <label>Last Name</label>
+                                <label>{% trans "Last Name" %}</label>
                                 <input type="text" class="form-control" name="last_name" required>
                             </div>
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Email</label>
+                        <label>{% trans "Email" %}</label>
                         <input type="email" class="form-control" name="email" required>
                     </div>
                     <div class="form-group">
-                        <label>Role</label>
+                        <label>{% trans "Role" %}</label>
                         <select class="form-control" name="role" required>
-                            <option value="">Select Role...</option>
+                            <option value="">{% trans "Select Role..." %}</option>
                             {% for role in roles %}
                                 <option value="{{ role.id }}">{{ role.name }}</option>
                             {% endfor %}
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Password</label>
+                        <label>{% trans "Password" %}</label>
                         <input type="password" class="form-control" name="password" required>
                     </div>
                     <div class="form-group">
-                        <label>Confirm Password</label>
+                        <label>{% trans "Confirm Password" %}</label>
                         <input type="password" class="form-control" name="password_confirm" required>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveUser">Create User</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveUser">{% trans "Create User" %}</button>
             </div>
         </div>
     </div>
@@ -166,7 +167,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">User Activity</h5>
+                <h5 class="modal-title">{% trans "User Activity" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -181,7 +182,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit User Permissions</h5>
+                <h5 class="modal-title">{% trans "Edit User Permissions" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
@@ -191,68 +192,68 @@
                     
                     <div class="row mb-4">
                         <div class="col">
-                            <strong class="d-block mb-3">User Management</strong>
+                            <strong class="d-block mb-3">{% trans "User Management" %}</strong>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="can_manage_users" name="can_manage_users">
-                                <label class="custom-control-label" for="can_manage_users">Can Manage Users</label>
+                                <label class="custom-control-label" for="can_manage_users">{% trans "Can Manage Users" %}</label>
                             </div>
                         </div>
                     </div>
 
                     <div class="row mb-4">
                         <div class="col-md-6">
-                            <strong class="d-block mb-3">Bank Operations</strong>
+                            <strong class="d-block mb-3">{% trans "Bank Operations" %}</strong>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="can_view_bank" name="can_view_bank">
-                                <label class="custom-control-label" for="can_view_bank">Can View Bank</label>
+                                <label class="custom-control-label" for="can_view_bank">{% trans "Can View Bank" %}</label>
                             </div>
                             <div class="custom-control custom-checkbox mt-2">
                                 <input type="checkbox" class="custom-control-input" id="can_manage_bank" name="can_manage_bank">
-                                <label class="custom-control-label" for="can_manage_bank">Can Manage Bank</label>
+                                <label class="custom-control-label" for="can_manage_bank">{% trans "Can Manage Bank" %}</label>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <strong class="d-block mb-3">Check Operations</strong>
+                            <strong class="d-block mb-3">{% trans "Check Operations" %}</strong>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="can_view_checks" name="can_view_checks">
-                                <label class="custom-control-label" for="can_view_checks">Can View Checks</label>
+                                <label class="custom-control-label" for="can_view_checks">{% trans "Can View Checks" %}</label>
                             </div>
                             <div class="custom-control custom-checkbox mt-2">
                                 <input type="checkbox" class="custom-control-input" id="can_manage_checks" name="can_manage_checks">
-                                <label class="custom-control-label" for="can_manage_checks">Can Manage Checks</label>
+                                <label class="custom-control-label" for="can_manage_checks">{% trans "Can Manage Checks" %}</label>
                             </div>
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6">
-                            <strong class="d-block mb-3">Client Operations</strong>
+                            <strong class="d-block mb-3">{% trans "Client Operations" %}</strong>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="can_view_clients" name="can_view_clients">
-                                <label class="custom-control-label" for="can_view_clients">Can View Clients</label>
+                                <label class="custom-control-label" for="can_view_clients">{% trans "Can View Clients" %}</label>
                             </div>
                             <div class="custom-control custom-checkbox mt-2">
                                 <input type="checkbox" class="custom-control-input" id="can_manage_clients" name="can_manage_clients">
-                                <label class="custom-control-label" for="can_manage_clients">Can Manage Clients</label>
+                                <label class="custom-control-label" for="can_manage_clients">{% trans "Can Manage Clients" %}</label>
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <strong class="d-block mb-3">Supplier Operations</strong>
+                            <strong class="d-block mb-3">{% trans "Supplier Operations" %}</strong>
                             <div class="custom-control custom-checkbox">
                                 <input type="checkbox" class="custom-control-input" id="can_view_suppliers" name="can_view_suppliers">
-                                <label class="custom-control-label" for="can_view_suppliers">Can View Suppliers</label>
+                                <label class="custom-control-label" for="can_view_suppliers">{% trans "Can View Suppliers" %}</label>
                             </div>
                             <div class="custom-control custom-checkbox mt-2">
                                 <input type="checkbox" class="custom-control-input" id="can_manage_suppliers" name="can_manage_suppliers">
-                                <label class="custom-control-label" for="can_manage_suppliers">Can Manage Suppliers</label>
+                                <label class="custom-control-label" for="can_manage_suppliers">{% trans "Can Manage Suppliers" %}</label>
                             </div>
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="savePermissions">Save Changes</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="savePermissions">{% trans "Save Changes" %}</button>
             </div>
         </div>
     </div>
@@ -328,7 +329,7 @@ const UserManagement = {
         
         try {
             if (form.find('[name="password"]').val() !== form.find('[name="password_confirm"]').val()) {
-                throw new Error("Passwords don't match");
+                throw new Error('{% trans "Passwords don\'t match" %}'); 
             }
 
             const response = await fetch('/testapp/users/create/', {
@@ -339,7 +340,7 @@ const UserManagement = {
                 body: new FormData(form[0])
             });
 
-            if (!response.ok) throw new Error('Failed to create user');
+            if (!response.ok) throw new Error('{% trans "Failed to create user" %}');
             
             location.reload();
             
@@ -354,7 +355,7 @@ const UserManagement = {
         
         try {
             const response = await fetch(`/testapp/users/${userId}/activity/`);
-            if (!response.ok) throw new Error('Failed to fetch activity');
+            if (!response.ok) throw new Error('{% trans "Failed to fetch activity" %}');
             
             const data = await response.json();
             this.displayActivityTimeline(data.activities);
@@ -362,7 +363,7 @@ const UserManagement = {
             
         } catch (error) {
             console.error('[UserManagement] Error:', error);
-            alert('Failed to load user activity');
+            alert('{% trans "Failed to load user activity" %}');
         }
     },
 
@@ -397,14 +398,14 @@ const UserManagement = {
 
         try {
             const response = await fetch('/testapp/users/filter/?' + new URLSearchParams(filters));
-            if (!response.ok) throw new Error('Failed to filter users');
+            if (!response.ok) throw new Error('{% trans "Failed to filter users" %}');
             
             const data = await response.json();
             $('#usersTableBody').html(data.html);
             
         } catch (error) {
             console.error('[UserManagement] Error:', error);
-            alert('Failed to filter users');
+            alert('{% trans "Failed to filter users" %}');
         }
     },
 
@@ -413,7 +414,7 @@ const UserManagement = {
         
         try {
             const response = await fetch(`/testapp/users/${userId}/permissions/`);
-            if (!response.ok) throw new Error('Failed to load permissions');
+            if (!response.ok) throw new Error('{% trans "Failed to load permissions" %}');
             
             const data = await response.json();
             
@@ -429,7 +430,7 @@ const UserManagement = {
             
         } catch (error) {
             console.error('[UserManagement] Error:', error);
-            alert('Failed to load user permissions');
+            alert('{% trans "Failed to load user permissions" %}');
         }
     },
 
@@ -447,14 +448,14 @@ const UserManagement = {
                 body: formData
             });
 
-            if (!response.ok) throw new Error('Failed to save permissions');
+            if (!response.ok) throw new Error('{% trans "Failed to save permissions" %}');
             
             $('#editPermissionsModal').modal('hide');
             location.reload();
             
         } catch (error) {
             console.error('[UserManagement] Error:', error);
-            alert('Failed to save permissions');
+            alert('{% trans "Failed to save permissions" %}');
         }
     }
 };

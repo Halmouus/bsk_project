@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load static %}
-{% block title %}Production Dashboard{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Production Dashboard" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -14,8 +15,8 @@
     <!-- Header with Filters -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 text-gray-800">Production Dashboard</h1>
-            <p class="text-muted">Comprehensive overview of production, inventory, and sales metrics</p>
+            <h1 class="h3 text-gray-800">{% trans "Production Dashboard" %}</h1>
+            <p class="text-muted">{% trans "Comprehensive overview of production, inventory, and sales metrics" %}</p>
         </div>
         
         <!-- Filters -->
@@ -28,7 +29,7 @@
                     </span>
                     <input type="date" id="start_date" name="start_date" class="form-control filter-input" value="{{ start_date }}">
                 </div>
-                <span class="mx-2">to</span>
+                <span class="mx-2">{% trans "to" %}</span>
                 <div class="input-group me-2">
                     <span class="input-group-text bg-light">
                         <i class="fas fa-calendar-alt text-primary"></i>
@@ -44,7 +45,7 @@
                         <i class="fas fa-cube text-primary"></i>
                     </span>
                     <select id="brick_type" name="brick_type" class="form-select filter-input">
-                        <option value="">All Brick Types</option>
+                        <option value="">{% trans "All Brick Types" %}</option>
                         {% for brick_type in brick_types %}
                         <option value="{{ brick_type.id }}" {% if selected_brick_type.id == brick_type.id %}selected{% endif %}>
                             {{ brick_type.name }}
@@ -55,14 +56,14 @@
             </div>
             
             <button type="submit" class="btn btn-primary" id="update-dashboard">
-                <i class="fas fa-sync-alt me-1"></i> <span id="update-text">Update</span>
+                <i class="fas fa-sync-alt me-1"></i> <span id="update-text">{% trans "Update" %}</span>
             </button>
         </form>
     </div>
 
     <div class="d-flex align-items-center ms-3">
         <button type="button" class="btn btn-success" id="generate-report-btn">
-            <i class="fas fa-file-pdf me-1"></i> Generate Report
+            <i class="fas fa-file-pdf me-1"></i> {% trans "Generate Report" %}
         </button>
     </div>
 
@@ -71,17 +72,17 @@
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title">Generate Production Report</h5>
+                    <h5 class="modal-title">{% trans "Generate Production Report" %}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        Select a date range for your report. The report will include production, loading, energy, and stock metrics.
+                        {% trans "Select a date range for your report. The report will include production, loading, energy, and stock metrics." %}
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Report Period</label>
+                        <label class="form-label fw-bold">{% trans "Report Period" %}</label>
                         <div class="d-flex align-items-center">
                             <div class="input-group me-2">
                                 <span class="input-group-text bg-light">
@@ -89,7 +90,7 @@
                                 </span>
                                 <input type="date" id="report_start_date" class="form-control" required>
                             </div>
-                            <span class="mx-2">to</span>
+                            <span class="mx-2">{% trans "to" %}</span>
                             <div class="input-group">
                                 <span class="input-group-text bg-light">
                                     <i class="fas fa-calendar-alt text-primary"></i>
@@ -100,42 +101,42 @@
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Include Sections</label>
+                        <label class="form-label fw-bold">{% trans "Include Sections" %}</label>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_summary" checked>
-                            <label class="form-check-label" for="include_summary">Executive Summary</label>
+                            <label class="form-check-label" for="include_summary">{% trans "Executive Summary" %}</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_production" checked>
-                            <label class="form-check-label" for="include_production">Production Details</label>
+                            <label class="form-check-label" for="include_production">{% trans "Production Details" %}</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_loading" checked>
-                            <label class="form-check-label" for="include_loading">Loading Activity</label>
+                            <label class="form-check-label" for="include_loading">{% trans "Loading Activity" %}</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_energy" checked>
-                            <label class="form-check-label" for="include_energy">Energy Consumption</label>
+                            <label class="form-check-label" for="include_energy">{% trans "Energy Consumption" %}</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_stock" checked>
-                            <label class="form-check-label" for="include_stock">Inventory Status</label>
+                            <label class="form-check-label" for="include_stock">{% trans "Inventory Status" %}</label>
                         </div>
                         <div class="form-check">
                             <input class="form-check-input" type="checkbox" id="include_charts" checked>
-                            <label class="form-check-label" for="include_charts">Charts and Visualizations</label>
+                            <label class="form-check-label" for="include_charts">{% trans "Charts and Visualizations" %}</label>
                         </div>
                     </div>
                     
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Report Title</label>
-                        <input type="text" id="report_title" class="form-control" placeholder="Production Report" value="Production Report">
+                        <label class="form-label fw-bold">{% trans "Report Title" %}</label>
+                        <input type="text" id="report_title" class="form-control" placeholder="{% trans "Production Report" %}" value="{% trans "Production Report" %}">
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
                     <button type="button" class="btn btn-primary" id="generate-pdf-btn">
-                        <i class="fas fa-file-pdf me-1"></i> Generate PDF
+                        <i class="fas fa-file-pdf me-1"></i> {% trans "Generate PDF" %}
                     </button>
                 </div>
             </div>
@@ -147,7 +148,7 @@
         <div class="modal-dialog modal-xl modal-dialog-scrollable"> <!-- Add modal-dialog-scrollable -->
             <div class="modal-content">
                 <div class="modal-header bg-light">
-                    <h5 class="modal-title">Report Preview</h5>
+                    <h5 class="modal-title">{% trans "Report Preview" %}</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body p-0" style="max-height: 70vh; overflow-y: auto;"> <!-- Add max height and scrolling -->
@@ -156,9 +157,9 @@
                     </div>
                 </div>
                 <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
                     <button type="button" class="btn btn-success" id="download-pdf-btn">
-                        <i class="fas fa-download me-1"></i> Download PDF
+                        <i class="fas fa-download me-1"></i> {% trans "Download PDF" %}
                     </button>
                 </div>
             </div>
@@ -168,7 +169,7 @@
     <!-- Debug Panel (initially hidden) -->
     <div id="debugPanel" class="alert alert-info mb-4" style="display: none;">
         <div class="d-flex justify-content-between">
-            <strong>Debug Information</strong>
+            <strong>{% trans "Debug Information" %}</strong>
             <button type="button" class="btn-close" onclick="document.getElementById('debugPanel').style.display='none'"></button>
         </div>
         <hr>
@@ -177,7 +178,7 @@
 
     {% if error_message %}
     <div class="alert alert-danger">
-        <strong>Error:</strong> {{ error_message }}
+        <strong>{% trans "Error:" %}</strong> {{ error_message }}
     </div>
     {% else %}
     
@@ -190,10 +191,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                Total Production</div>
+                                {% trans "Total Production" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ production_data.total_bricks }}</div>
                             <div class="text-xs text-muted mt-2">
-                                <span class="me-2">{{ production_data.avg_daily_production|floatformat:0 }} daily avg</span>
+                                <span class="me-2">{{ production_data.avg_daily_production|floatformat:0 }} {% trans "daily avg" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -211,11 +212,11 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                Current Inventory</div>
+                                {% trans "Current Inventory" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_bulk|add:stock_data.total_packaged }}</div>
                             <div class="text-xs text-muted mt-2">
-                                <span class="me-2">{{ stock_data.total_bulk }} bulk</span> 
-                                <span>{{ stock_data.total_packaged }} packaged</span>
+                                <span class="me-2">{{ stock_data.total_bulk }} {% trans "bulk" %}</span> 
+                                <span>{{ stock_data.total_packaged }} {% trans "packaged" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -233,11 +234,11 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-info text-uppercase mb-1">
-                                Total Loadings</div>
+                                {% trans "Total Loadings" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ loading_data.total_bulk|add:loading_data.total_packaged }}</div>
                             <div class="text-xs text-muted mt-2">
-                                <span class="me-2">{{ loading_data.total_bulk }} bulk</span>
-                                <span>{{ loading_data.total_packaged }} packaged</span>
+                                <span class="me-2">{{ loading_data.total_bulk }} {% trans "bulk" %}</span>
+                                <span>{{ loading_data.total_packaged }} {% trans "packaged" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -255,10 +256,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-warning text-uppercase mb-1">
-                                Avg VPower</div>
+                                {% trans "Avg VPower" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.production_efficiency.avg_vpower|floatformat:0 }}</div>
                             <div class="text-xs text-muted mt-2">
-                                <span>Industrial Power Efficiency</span>
+                                <span>{% trans "Industrial Power Efficiency" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -279,10 +280,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                                Breakage Rate</div>
+                                {% trans "Breakage Rate" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.breakage_rate|floatformat:2 }}%</div>
                             <div class="text-xs text-muted mt-2">
-                                <span>Of Total Bulk Bricks</span>
+                                <span>{% trans "Of Total Bulk Bricks" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -300,10 +301,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                                Total Breakage</div>
+                                {% trans "Total Breakage" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ loading_data.total_breakage }}</div>
                             <div class="text-xs text-muted mt-2">
-                                <span>Lost Inventory</span>
+                                <span>{% trans "Lost Inventory" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -321,10 +322,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-danger text-uppercase mb-1">
-                                Breakage Value</div>
+                                {% trans "Breakage Value" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ kpis.breakage_value|floatformat:2 }} DA</div>
                             <div class="text-xs text-muted mt-2">
-                                <span>Estimated Loss</span>
+                                <span>{% trans "Estimated Loss" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -342,10 +343,10 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                Energy Cost</div>
+                                {% trans "Energy Cost" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ energy_data.total_value|floatformat:2 }} DA</div>
                             <div class="text-xs text-muted mt-2">
-                                <span>Total Energy Consumption</span>
+                                <span>{% trans "Total Energy Consumption" %}</span>
                             </div>
                         </div>
                         <div class="col-auto">
@@ -365,17 +366,17 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-primary text-uppercase mb-1">
-                                Remaining Quantities (End of Period)</div>
+                                {% trans "Remaining Quantities (End of Period)" %}</div>
                             <div class="row mt-2">
                                 <div class="col-6">
-                                    <div class="text-xs font-weight-bold">Bulk Bricks:</div>
+                                    <div class="text-xs font-weight-bold">{% trans "Bulk Bricks:" %}</div>
                                     <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_bulk }}</div>
-                                    <div class="text-xs text-muted">Value: {{ stock_data.bulk_value|default:0|floatformat:2 }} DA</div>
+                                    <div class="text-xs text-muted">{% trans "Value:" %} {{ stock_data.bulk_value|default:0|floatformat:2 }} DA</div>
                                 </div>
                                 <div class="col-6">
-                                    <div class="text-xs font-weight-bold">Packaged Bricks:</div>
+                                    <div class="text-xs font-weight-bold">{% trans "Packaged Bricks:" %}</div>
                                     <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_packaged }}</div>
-                                    <div class="text-xs text-muted">Value: {{ stock_data.packaged_value|default:0|floatformat:2 }} DA</div>
+                                    <div class="text-xs text-muted">{% trans "Value:" %} {{ stock_data.packaged_value|default:0|floatformat:2 }} DA</div>
                                 </div>
                             </div>
                         </div>
@@ -393,9 +394,9 @@
                     <div class="row no-gutters align-items-center">
                         <div class="col mr-2">
                             <div class="text-xs font-weight-bold text-success text-uppercase mb-1">
-                                Total Inventory Value</div>
+                                {% trans "Total Inventory Value" %}</div>
                             <div class="h5 mb-0 font-weight-bold text-gray-800">{{ stock_data.total_value|default:0|floatformat:2 }} DA</div>
-                            <div class="text-xs text-muted mt-2">As of {{ end_date }}</div>
+                            <div class="text-xs text-muted mt-2">{% trans "As of" %} {{ end_date }}</div>
                         </div>
                         <div class="col-auto">
                             <i class="fas fa-money-bill-wave fa-2x text-gray-300"></i>
@@ -411,7 +412,7 @@
         <div class="col-12">
             <div class="card shadow">
                 <div class="card-header py-3">
-                    <h6 class="m-0 font-weight-bold text-primary">Inventory Evolution</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Inventory Evolution" %}</h6>
                 </div>
                 <div class="card-body">
                     <div class="chart-container" style="position: relative; height:300px;">
@@ -428,17 +429,17 @@
         <div class="col-lg-8 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Production Over Time</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Production Over Time" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="productionChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="productionChartOptions">
-                            <li><button class="dropdown-item production-view-toggle active" data-view="total">Total Production</button></li>
-                            <li><button class="dropdown-item production-view-toggle" data-view="split">Split (Bulk/Packaged)</button></li>
-                            <li><button class="dropdown-item production-view-toggle" data-view="wagons">Wagons</button></li>
+                            <li><button class="dropdown-item production-view-toggle active" data-view="total">{% trans "Total Production" %}</button></li>
+                            <li><button class="dropdown-item production-view-toggle" data-view="split">{% trans "Split (Bulk/Packaged)" %}</button></li>
+                            <li><button class="dropdown-item production-view-toggle" data-view="wagons">{% trans "Wagons" %}</button></li>
                             <li><div class="dropdown-divider"></div></li>
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionChart', 'production-over-time')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionChart', 'production-over-time')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -454,13 +455,13 @@
         <div class="col-lg-4 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Production by Type</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Production by Type" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="productionPieOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="productionPieOptions">
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionPieChart', 'production-by-type')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('productionPieChart', 'production-by-type')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -479,16 +480,16 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-success">Current Inventory</h6>
+                    <h6 class="m-0 font-weight-bold text-success">{% trans "Current Inventory" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="inventoryChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="inventoryChartOptions">
-                            <li><button class="dropdown-item inventory-view-toggle active" data-view="quantity">By Quantity</button></li>
-                            <li><button class="dropdown-item inventory-view-toggle" data-view="value">By Value</button></li>
+                            <li><button class="dropdown-item inventory-view-toggle active" data-view="quantity">{% trans "By Quantity" %}</button></li>
+                            <li><button class="dropdown-item inventory-view-toggle" data-view="value">{% trans "By Value" %}</button></li>
                             <li><div class="dropdown-divider"></div></li>
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('inventoryChart', 'inventory-status')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('inventoryChart', 'inventory-status')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -504,16 +505,16 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-info">Loading Activity</h6>
+                    <h6 class="m-0 font-weight-bold text-info">{% trans "Loading Activity" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="loadingChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="loadingChartOptions">
-                            <li><button class="dropdown-item loading-view-toggle active" data-view="quantity">By Quantity</button></li>
-                            <li><button class="dropdown-item loading-view-toggle" data-view="value">By Value</button></li>
+                            <li><button class="dropdown-item loading-view-toggle active" data-view="quantity">{% trans "By Quantity" %}</button></li>
+                            <li><button class="dropdown-item loading-view-toggle" data-view="value">{% trans "By Value" %}</button></li>
                             <li><div class="dropdown-divider"></div></li>
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('loadingChart', 'loading-activity')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('loadingChart', 'loading-activity')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -532,13 +533,13 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-warning">VPower Evolution</h6>
+                    <h6 class="m-0 font-weight-bold text-warning">{% trans "VPower Evolution" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="vpowerChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="vpowerChartOptions">
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('vpowerChart', 'vpower-evolution')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('vpowerChart', 'vpower-evolution')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -554,16 +555,16 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-danger">Breakage Evolution</h6>
+                    <h6 class="m-0 font-weight-bold text-danger">{% trans "Breakage Evolution" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="breakageChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="breakageChartOptions">
-                            <li><button class="dropdown-item breakage-view-toggle active" data-view="quantity">By Quantity</button></li>
-                            <li><button class="dropdown-item breakage-view-toggle" data-view="rate">By Rate</button></li>
+                            <li><button class="dropdown-item breakage-view-toggle active" data-view="quantity">{% trans "By Quantity" %}</button></li>
+                            <li><button class="dropdown-item breakage-view-toggle" data-view="rate">{% trans "By Rate" %}</button></li>
                             <li><div class="dropdown-divider"></div></li>
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('breakageChart', 'breakage-evolution')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('breakageChart', 'breakage-evolution')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -582,16 +583,16 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption By Type</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Energy Consumption By Type" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="energyTypeChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="energyTypeChartOptions">
-                            <li><button class="dropdown-item energy-view-toggle active" data-view="quantity">By Quantity</button></li>
-                            <li><button class="dropdown-item energy-view-toggle" data-view="value">By Value</button></li>
+                            <li><button class="dropdown-item energy-view-toggle active" data-view="quantity">{% trans "By Quantity" %}</button></li>
+                            <li><button class="dropdown-item energy-view-toggle" data-view="value">{% trans "By Value" %}</button></li>
                             <li><div class="dropdown-divider"></div></li>
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTypeChart', 'energy-by-type')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTypeChart', 'energy-by-type')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -607,13 +608,13 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex flex-row align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption Evolution</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Energy Consumption Evolution" %}</h6>
                     <div class="dropdown no-arrow">
                         <button class="btn btn-sm btn-light dropdown-toggle" type="button" id="energyTimeChartOptions" data-bs-toggle="dropdown" aria-expanded="false">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
                         <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="energyTimeChartOptions">
-                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTimeChart', 'energy-evolution')">Download Image</button></li>
+                            <li><button class="dropdown-item" onclick="downloadChartAsImage('energyTimeChart', 'energy-evolution')">{% trans "Download Image" %}</button></li>
                         </ul>
                     </div>
                 </div>
@@ -632,9 +633,9 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Recent Production</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Recent Production" %}</h6>
                     <a href="{% url 'production-list' %}" class="btn btn-sm btn-primary">
-                        <i class="fas fa-arrow-right"></i> View All
+                        <i class="fas fa-arrow-right"></i> {% trans "View All" %}
                     </a>
                 </div>
                 <div class="card-body p-0">
@@ -642,11 +643,11 @@
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Date</th>
-                                    <th>Total</th>
-                                    <th>Bulk</th>
-                                    <th>Packaged</th>
-                                    <th>Wagons</th>
+                                    <th>{% trans "Date" %}</th>
+                                    <th>{% trans "Total" %}</th>
+                                    <th>{% trans "Bulk" %}</th>
+                                    <th>{% trans "Packaged" %}</th>
+                                    <th>{% trans "Wagons" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -660,7 +661,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="5" class="text-center">No production data available</td>
+                                    <td colspan="5" class="text-center">{% trans "No production data available" %}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -674,9 +675,9 @@
         <div class="col-lg-6 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-info">Recent Loadings</h6>
+                    <h6 class="m-0 font-weight-bold text-info">{% trans "Recent Loadings" %}</h6>
                     <a href="{% url 'loading-list' %}" class="btn btn-sm btn-info">
-                        <i class="fas fa-arrow-right"></i> View All
+                        <i class="fas fa-arrow-right"></i> {% trans "View All" %}
                     </a>
                 </div>
                 <div class="card-body p-0">
@@ -684,11 +685,11 @@
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Date</th>
-                                    <th>Bulk</th>
-                                    <th>Packaged</th>
-                                    <th>Breakage</th>
-                                    <th>Value</th>
+                                    <th>{% trans "Date" %}</th>
+                                    <th>{% trans "Bulk" %}</th>
+                                    <th>{% trans "Packaged" %}</th>
+                                    <th>{% trans "Breakage" %}</th>
+                                    <th>{% trans "Value" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -702,7 +703,7 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="5" class="text-center">No loading data available</td>
+                                    <td colspan="5" class="text-center">{% trans "No loading data available" %}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -718,18 +719,18 @@
         <div class="col-12 mb-4">
             <div class="card shadow">
                 <div class="card-header py-3 d-flex align-items-center justify-content-between">
-                    <h6 class="m-0 font-weight-bold text-primary">Energy Consumption Summary</h6>
+                    <h6 class="m-0 font-weight-bold text-primary">{% trans "Energy Consumption Summary" %}</h6>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Energy Type</th>
-                                    <th>Unit</th>
-                                    <th>Quantity</th>
-                                    <th>Cost per Unit</th>
-                                    <th>Total Value</th>
+                                    <th>{% trans "Energy Type" %}</th>
+                                    <th>{% trans "Unit" %}</th>
+                                    <th>{% trans "Quantity" %}</th>
+                                    <th>{% trans "Cost per Unit" %}</th>
+                                    <th>{% trans "Total Value" %}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -743,13 +744,13 @@
                                 </tr>
                                 {% empty %}
                                 <tr>
-                                    <td colspan="5" class="text-center">No energy consumption data available</td>
+                                    <td colspan="5" class="text-center">{% trans "No energy consumption data available" %}</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="4" class="text-end">Total Energy Cost:</th>
+                                    <th colspan="4" class="text-end">{% trans "Total Energy Cost:" %}</th>
                                     <th>{{ energy_data.total_value|floatformat:2 }} DA</th>
                                 </tr>
                             </tfoot>

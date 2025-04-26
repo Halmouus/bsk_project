@@ -10,6 +10,7 @@ from django.db import transaction
 from django.template.loader import render_to_string
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.translation import gettext as _
 
 class CreateTransferView(View):
     """Handle creation of interbank transfers"""
@@ -24,7 +25,7 @@ class CreateTransferView(View):
                 to_bank = get_object_or_404(BankAccount, id=data['to_bank'])
                 
                 if from_bank == to_bank:
-                    raise ValidationError("Cannot transfer to the same bank account")
+                    raise ValidationError(_("Cannot transfer to the same bank account"))
                     
                 # Create the transfer
                 total_amount = Decimal('0.00')
@@ -36,21 +37,22 @@ class CreateTransferView(View):
                         source_type=record['source_type'],
                         source_id=record['source_id']
                     ).exists():
-                        raise ValidationError(f"Record {record['source_id']} has already been transferred")
+                        raise ValidationError(_("Record %(id)s has already been transferred") % {'id': record['source_id']})
                     
                     total_amount += Decimal(str(record['amount']))
 
                 # Check available balance
                 current_balance = BankStatement.calculate_balance_until(from_bank, timezone.now().date())
                 if current_balance < total_amount:
-                    raise ValidationError(f"Insufficient balance. Available: {current_balance}, Required: {total_amount}")
+                    raise ValidationError(_("Insufficient balance. Available: %(available)s, Required: %(required)s") % 
+                                         {'available': current_balance, 'required': total_amount})
                 
                 # Create transfer
                 transfer = InterBankTransfer.objects.create(
                     from_bank=from_bank,
                     to_bank=to_bank,
                     date=data['date'],
-                    label=data.get('label', 'Interbank Transfer'),
+                    label=data.get('label', _('Interbank Transfer')),
                     total_amount=total_amount
                 )
                 
@@ -68,7 +70,7 @@ class CreateTransferView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Transfer created successfully',
+                    'message': _('Transfer created successfully'),
                     'transfer_id': str(transfer.id)
                 })
                 
@@ -80,7 +82,7 @@ class CreateTransferView(View):
         except Exception as e:
             return JsonResponse({
                 'status': 'error',
-                'message': f'Failed to create transfer: {str(e)}'
+                'message': _('Failed to create transfer: %(error)s') % {'error': str(e)}
             }, status=500)
 
 class DeleteTransferView(View):
@@ -103,11 +105,11 @@ class DeleteTransferView(View):
                 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Transfer deleted successfully'
+                    'message': _('Transfer deleted successfully')
                 })
                 
         except Exception as e:
             return JsonResponse({
                 'status': 'error',
-                'message': f'Failed to delete transfer: {str(e)}'
+                'message': _('Failed to delete transfer: %(error)s') % {'error': str(e)}
             }, status=500)

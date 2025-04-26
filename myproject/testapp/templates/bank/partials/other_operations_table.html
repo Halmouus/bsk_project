@@ -1,5 +1,5 @@
 {% load accounting_filters %}
-
+{% load i18n %}
 {% for entry in entries %}
 <tr class="{% if entry.entry_type == 'credit' %}table-light{% endif %}">
     <td>{{ entry.date|date:"Y-m-d" }}</td>
@@ -27,6 +27,6 @@
 </tr>
 {% empty %}
 <tr>
-    <td colspan="8" class="text-center">No entries found for this period</td>
+    <td colspan="8" class="text-center">{% trans "No entries found for this period" %}</td>
 </tr>
 {% endfor %}

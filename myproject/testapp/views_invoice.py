@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.utils.decorators import method_decorator
 from django.shortcuts import get_object_or_404, redirect
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import json
@@ -52,7 +53,7 @@ class AddProductToInvoiceView(View):
             )
 
             # Success response
-            return JsonResponse({"message": "Product added successfully."}, status=200)
+            return JsonResponse({"message": _("Product added successfully.")}, status=200)
         
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=400)
@@ -356,7 +357,7 @@ class InvoiceCreateView(SuccessMessageMixin, CreateView):
     form_class = InvoiceUpdateForm  # Use the custom form here
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
-    success_message = "Invoice successfully created."
+    success_message = _("Invoice successfully created.")
 
     def form_valid(self, form):
         response = super().form_valid(form)
@@ -378,7 +379,7 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     form_class = InvoiceUpdateForm
     template_name = 'invoice/invoice_form.html'
     success_url = reverse_lazy('invoice-list')
-    success_message = "Invoice successfully updated."
+    success_message = _("Invoice successfully updated.")
 
     def get_initial(self):
         initial = super().get_initial()
@@ -436,11 +437,11 @@ class InvoiceUpdateView(SuccessMessageMixin, UpdateView):
     def dispatch(self, request, *args, **kwargs):
         invoice = self.get_object()
         if invoice.payment_status == 'paid':
-            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been paid and cannot be edited!', 
+            messages.error(request, _('<i class="fas fa-lock"></i> This invoice has been paid and cannot be edited!'), 
                          extra_tags='danger')
             return redirect('invoice-list')
         if invoice.exported_at:
-            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!', 
+            messages.error(request, _('<i class="fas fa-lock"></i> This invoice has been exported and cannot be edited!'), 
                          extra_tags='danger')
             return redirect('invoice-list')
         return super().dispatch(request, *args, **kwargs)
@@ -450,12 +451,12 @@ class InvoiceDeleteView(DeleteView):
     model = Invoice
     template_name = 'invoice/invoice_confirm_delete.html'
     success_url = reverse_lazy('invoice-list')
-    success_message = "Invoice successfully deleted."
+    success_message = _("Invoice successfully deleted.")
 
     def dispatch(self, request, *args, **kwargs):
         invoice = self.get_object()
         if invoice.exported_at:
-            messages.error(request, '<i class="fas fa-lock"></i> This invoice has been exported and cannot be deleted!', extra_tags='danger')
+            messages.error(request, _('<i class="fas fa-lock"></i> This invoice has been exported and cannot be deleted!'), extra_tags='danger')
             return redirect('invoice-list')
         return super().dispatch(request, *args, **kwargs)
 
@@ -509,7 +510,7 @@ class InvoiceDetailsView(View):
             }
             return JsonResponse(response_data)
         except Invoice.DoesNotExist:
-            return JsonResponse({'error': 'Invoice not found'}, status=404)
+            return JsonResponse({'error': _('Invoice not found')}, status=404)
 
 # Product Autocomplete View
 def product_autocomplete(request):
@@ -577,7 +578,7 @@ class EditProductInInvoiceView(View):
             invoice_product.save()
 
             # Success response
-            return JsonResponse({"message": "Product updated successfully."}, status=200)
+            return JsonResponse({"message": _("Product updated successfully.")}, status=200)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -593,7 +594,7 @@ class EditProductInInvoiceView(View):
             invoice_product.delete()
 
             # Success response
-            return JsonResponse({"message": "Product deleted successfully."}, status=200)
+            return JsonResponse({"message": _("Product deleted successfully.")}, status=200)
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
 
@@ -605,7 +606,7 @@ class ExportInvoicesView(UserPassesTestMixin, View):
     def generate_excel(self, invoices):
         wb = Workbook()
         ws = wb.active
-        ws.title = "Accounting Entries"
+        ws.title = _("Accounting Entries")
 
         # Define styles
         header_style = {
@@ -621,7 +622,7 @@ class ExportInvoicesView(UserPassesTestMixin, View):
         }
 
         # Set headers
-        headers = ['Date', 'Label', 'Debit', 'Credit', 'Account Code', 'Reference', 'Journal', 'Counterpart']
+        headers = [_('Date'), _('Label'), _('Debit'), _('Credit'), _('Account Code'), _('Reference'), _('Journal'), _('Counterpart')]
         for col, header in enumerate(headers, 1):
             cell = ws.cell(row=1, column=col)
             cell.value = header
@@ -670,7 +671,7 @@ class ExportInvoicesView(UserPassesTestMixin, View):
             invoices = Invoice.objects.filter(id__in=invoice_ids, exported_at__isnull=True)
 
             if not invoices:
-                return JsonResponse({'error': 'No valid invoices to export'}, status=400)
+                return JsonResponse({'error': _('No valid invoices to export')}, status=400)
 
             # Generate Excel file
             wb = self.generate_excel(invoices)
@@ -708,7 +709,7 @@ class UnexportInvoiceView(UserPassesTestMixin, View):
         try:
             invoice = get_object_or_404(Invoice, id=invoice_id)
             if not invoice.exported_at:
-                return JsonResponse({'error': 'Invoice is not exported'}, status=400)
+                return JsonResponse({'error': _('Invoice is not exported')}, status=400)
 
             # Create export record for the unexport action
             ExportRecord.objects.create(
@@ -721,7 +722,7 @@ class UnexportInvoiceView(UserPassesTestMixin, View):
             invoice.exported_at = None
             invoice.save()
 
-            return JsonResponse({'message': 'Invoice successfully unexported'})
+            return JsonResponse({'message': _('Invoice successfully unexported')})
 
         except Exception as e:
             return JsonResponse({'error': str(e)}, status=400)
@@ -895,7 +896,7 @@ class LinkDeliveryNoteView(View):
                 print("Note already linked to an invoice")
                 return JsonResponse({
                     'success': False, 
-                    'error': 'This delivery note is already linked to another invoice'
+                    'error': _('This delivery note is already linked to another invoice')
                 })
 
             invoice.delivery_notes.add(note)
@@ -949,7 +950,7 @@ class LinkReceptionNoteView(View):
                 print("Note already linked to an invoice")
                 return JsonResponse({
                     'success': False, 
-                    'error': 'This reception note is already linked to another invoice'
+                    'error': _('This reception note is already linked to another invoice')
                 })
 
             invoice.reception_notes.add(note)

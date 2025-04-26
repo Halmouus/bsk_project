@@ -1,37 +1,38 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Bank Statement{% endblock %}
+{% load i18n %}
+{% block title %}{% trans 'Bank Statement' %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Statement</h2>
+        <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} {% trans 'Statement' %}</h2>
         <div class="d-flex gap-2">
             <!-- Reports Button -->
             <a href="{% url 'bank-statement-report' %}?bank_id={{ bank_account.id }}" class="btn btn-info me-2">
-                <i class="fas fa-chart-bar"></i> Reports
+                <i class="fas fa-chart-bar"></i> {% trans 'Reports' %}
             </a>
             <!-- Transfer Button -->
             <button id="transferBtn" class="btn btn-primary" disabled>
-                <i class="fas fa-exchange-alt me-2"></i> Transfer Selected
+                <i class="fas fa-exchange-alt me-2"></i> {% trans 'Transfer Selected' %}
             </button>
             <!-- Add Bank Fee Button -->
             <button class="btn btn-info ms-2" id="addBankFee">
                 <i class="fas fa-coins me-2"></i>
-                Add Bank Fee
+                {% trans 'Add Bank Fee' %}
             </button>
             <!-- Add Custom Record Button -->
             <button class="btn btn-primary ms-2" id="addCustomRecord">
                 <i class="fas fa-plus me-2"></i>
-                Add Custom Record
+                {% trans 'Add Custom Record' %}
             </button>
             <!-- Filter Form -->
             <form class="form-inline" id="statementFilterForm">
                 <div class="input-group">
                     <input type="date" class="form-control" name="start_date" id="startDate">
                     <input type="date" class="form-control" name="end_date" id="endDate">
-                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <button type="submit" class="btn btn-primary">{% trans 'Apply' %}</button>
                 </div>
             </form>
         </div>
@@ -42,7 +43,7 @@
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Debit</h5>
+                    <h5 class="card-title">{% trans 'Total Debit' %}</h5>
                     <p class="card-text text-danger h4" id="total-debit">{{ total_debit|format_balance }}</p>
                 </div>
             </div>
@@ -50,7 +51,7 @@
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Credit</h5>
+                    <h5 class="card-title">{% trans 'Total Credit' %}</h5>
                     <p class="card-text text-success h4" id="total-credit">{{ total_credit|format_balance }}</p>
                 </div>
             </div>
@@ -58,7 +59,7 @@
         <div class="col-md-4">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Balance</h5>
+                    <h5 class="card-title">{% trans 'Balance' %}</h5>
                     <p class="card-text h4 {% if final_balance > 0 %}text-success{% else %}text-danger{% endif %}" id="final-balance">
                         {{ final_balance|format_balance }}
                     </p>
@@ -78,15 +79,15 @@
                             <label class="custom-control-label" for="selectAll"></label>
                         </div>
                     </th>
-                    <th>Date</th>
-                    <th>Label</th>
-                    <th>Type</th>
-                    <th>Category</th>
-                    <th class="text-right">Debit</th>
-                    <th class="text-right">Credit</th>
-                    <th>Reference</th>
-                    <th class="text-right">Balance</th>
-                    <th>Actions</th>
+                    <th>{% trans 'Date' %} <i class="fas fa-sort"></i></th>
+                    <th>{% trans 'Label' %} <i class="fas fa-sort"></i></th>
+                    <th>{% trans 'Type' %} <i class="fas fa-sort"></i></th>
+                    <th>{% trans 'Category' %} <i class="fas fa-sort"></i></th>
+                    <th class="text-right">{% trans 'Debit' %} <i class="fas fa-sort"></i></th>
+                    <th class="text-right">{% trans 'Credit' %} <i class="fas fa-sort"></i></th>
+                    <th>{% trans 'Reference' %} <i class="fas fa-sort"></i></th>
+                    <th class="text-right">{% trans 'Balance' %} <i class="fas fa-sort"></i></th>
+                    <th>{% trans 'Actions' %}</th>
                 </tr>
             </thead>
             <tbody id="statementTableBody">

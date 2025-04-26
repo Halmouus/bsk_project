@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.contrib import messages
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from decimal import Decimal
 from .models import BankFeeTransaction, Check, DirectDebit, ForecastStatement, VATConfiguration, VATDeclaration, BankAccount
 from django.db import transaction
@@ -61,7 +62,7 @@ class VATConfigurationView(View):
             default_forecast_amount = request.POST.get('default_forecast_amount')
             
             if not (1 <= declaration_day <= 31):
-                raise ValueError("Invalid declaration day")
+                raise ValueError(_("Invalid declaration day"))
                     
             bank = get_object_or_404(BankAccount, id=bank_id)
             
@@ -74,7 +75,7 @@ class VATConfigurationView(View):
                 default_forecast_amount=default_forecast_amount
             )
             
-            messages.success(request, "VAT Configuration updated successfully")
+            messages.success(request, _("VAT Configuration updated successfully"))
             return JsonResponse({'status': 'success'})
             
         except Exception as e:
@@ -94,7 +95,7 @@ class VATDeclarationCreateView(View):
             year = int(request.POST.get('year'))
             
             if not (1 <= month <= 12):
-                raise ValueError("Invalid month")
+                raise ValueError(_("Invalid month"))
             
             latest = VATDeclaration.objects.order_by('-period_year', '-period_month').first()
             
@@ -108,7 +109,9 @@ class VATDeclarationCreateView(View):
                     
                 # Validate requested period
                 if year < next_year or (year == next_year and month < next_month):
-                    raise ValidationError(f"Can only create declaration for period {next_month}/{next_year} or later")
+                    raise ValidationError(_("Can only create declaration for period {next_month}/{next_year} or later").format(
+                        next_month=next_month, next_year=next_year
+                    ))
             
                 
             declaration = VATDeclaration.objects.create(
@@ -117,7 +120,7 @@ class VATDeclarationCreateView(View):
             )
             
             print(f"Created declaration for {month}/{year}")
-            messages.success(request, f"VAT Declaration for {month}/{year} created")
+            messages.success(request, _("VAT Declaration for {month}/{year} created").format(month=month, year=year))
             
             return JsonResponse({
                 'status': 'success',
@@ -238,7 +241,7 @@ class VATDeclarationProcessView(View):
             declaration = get_object_or_404(VATDeclaration, id=declaration_id)
             
             if declaration.status != VATDeclaration.DRAFT:
-                raise ValidationError("Only draft declarations can be processed")
+                raise ValidationError(_("Only draft declarations can be processed"))
             
             # Start transaction to ensure atomicity
             with transaction.atomic():
@@ -262,7 +265,7 @@ class VATDeclarationProcessView(View):
                             deducted_by_rate[rate] = Decimal('0.00')
                         deducted_by_rate[rate] += detail.vat_amount
                 
-                messages.success(request, "Declaration processed successfully")
+                messages.success(request, _("Declaration processed successfully"))
                 return JsonResponse({
                     'status': 'success',
                     'invoiced_vat': {
@@ -295,11 +298,11 @@ class VATDeclarationDeclareView(View):
             declaration = get_object_or_404(VATDeclaration, id=declaration_id)
             
             if not declaration.is_processed:
-                raise ValidationError("Declaration must be processed first")
+                raise ValidationError(_("Declaration must be processed first"))
                 
             declaration.declare()
             
-            messages.success(request, "Declaration marked as declared")
+            messages.success(request, _("Declaration marked as declared"))
             return JsonResponse({'status': 'success'})
             
         except Exception as e:
@@ -321,17 +324,17 @@ class VATDeclarationPayView(View):
             
             if not payment_date:
                 print("No payment date found in request")  # Debug line
-                raise ValidationError("Payment date is required")
+                raise ValidationError(_("Payment date is required"))
                 
             print(f"Payment date received: {payment_date}")  # Debug line
             payment_date = datetime.strptime(payment_date, '%Y-%m-%d').date()
             
             declaration.mark_as_paid(payment_date)
             
-            messages.success(request, "VAT payment recorded")
+            messages.success(request, _("VAT payment recorded"))
             return JsonResponse({
                 'status': 'success',
-                'message': 'VAT payment recorded successfully'
+                'message': _('VAT payment recorded successfully')
             })
                 
         except ValidationError as e:
@@ -345,7 +348,7 @@ class VATDeclarationPayView(View):
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
-                'message': 'An error occurred while processing the payment'
+                'message': _('An error occurred while processing the payment')
             }, status=500)
 
 class VATPendingDeclarationsView(View):
@@ -651,10 +654,10 @@ class VATDeclarationDeleteView(View):
             declaration = get_object_or_404(VATDeclaration, id=declaration_id)
             
             if not declaration.can_be_deleted():
-                raise ValidationError("This declaration cannot be deleted")
+                raise ValidationError(_("This declaration cannot be deleted"))
                 
             declaration.delete()
-            messages.success(request, "VAT Declaration deleted successfully")
+            messages.success(request, _("VAT Declaration deleted successfully"))
             
             return JsonResponse({'status': 'success'})
             

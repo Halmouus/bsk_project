@@ -717,7 +717,7 @@ class Invoice(BaseModel):
             
             reception_refs = self.reception_notes.values_list('ref', flat=True)
             if len(reception_refs) != len(set(reception_refs)):
-                raise ValidationError("Duplicate reception notes are not allowed")
+                raise ValidationError(_("Duplicate reception notes are not allowed"))
             
         if self.type == 'credit_note':
             if not self.original_invoice:
@@ -728,7 +728,7 @@ class Invoice(BaseModel):
                 raise ValidationError(_("Credit note must have same supplier as original invoice"))
         
         if self.cash_payment_allowed and self.total_amount > Decimal('5000.00'):
-            raise ValidationError("Invoices over 5000 cannot be paid by cash")
+            raise ValidationError(_("Invoices over 5000 cannot be paid by cash"))
     
     @property
     def has_documents(self):
@@ -2127,7 +2127,7 @@ class Check(BaseModel):
         if int(self.position[len(self.checker.index):]) < self.checker.starting_page or \
            int(self.position[len(self.checker.index):]) > self.checker.final_page:
             raise ValidationError(
-                f"Position must be between {self.checker.starting_page} and {self.checker.final_page}."
+                _(f"Position must be between {self.checker.starting_page} and {self.checker.final_page}.")
             )
 
         # Check payment type validation
@@ -2343,7 +2343,7 @@ class CashConfiguration(BaseModel):
     accounting_code = models.CharField(
         max_length=5,
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(_(r'^\d{4,5}$'), _('Account code must be 4-5 digits'))
         ],
         help_text="Main account code for cash operations"
     )
@@ -2351,7 +2351,7 @@ class CashConfiguration(BaseModel):
         max_length=2,
         default='08',  # Using 08 for cash journal
         validators=[
-            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+            RegexValidator(_(r'^\d{2}$'), _('Journal must be exactly 2 digits'))
         ]
     )
     current_balance = models.DecimalField(
@@ -2368,7 +2368,7 @@ class CashConfiguration(BaseModel):
     def clean(self):
         super().clean()
         if self.pk and CashConfiguration.objects.exclude(pk=self.pk).exists():
-            raise ValidationError("Only one cash configuration can exist")
+            raise ValidationError(_("Only one cash configuration can exist"))
 
     def save(self, *args, **kwargs):
         print("\n=== Saving CashConfiguration ===")
@@ -2376,7 +2376,7 @@ class CashConfiguration(BaseModel):
         print(f"Max threshold: {self.max_payment_threshold}")
         
         if not self.pk and CashConfiguration.objects.exists():
-            raise ValidationError("Only one cash configuration can exist")
+            raise ValidationError(_("Only one cash configuration can exist"))
             
         super().save(*args, **kwargs)
 
@@ -2385,11 +2385,11 @@ class CashConfiguration(BaseModel):
         """Get or create cash configuration"""
         config = CashConfiguration.objects.first()
         if not config:
-            raise ValidationError("Cash Configuration must be set up")
+            raise ValidationError(_("Cash Configuration must be set up"))
         return config
 
     def __str__(self):
-        return f"Cash Configuration (Balance: {self.current_balance})"
+        return _(f"Cash Configuration (Balance: {self.current_balance})")
 
 class CashDeposit(BaseModel):
     """Records cash deposits to increase cash reserve"""
@@ -2407,7 +2407,7 @@ class CashDeposit(BaseModel):
     reference = models.CharField(
         max_length=50,
         unique=True,
-        help_text="Unique reference number for this deposit"
+        help_text=_("Unique reference number for this deposit")
     )
     notes = models.TextField(blank=True)
     recorded_by = models.ForeignKey(
@@ -2433,7 +2433,7 @@ class CashDeposit(BaseModel):
         max_length=10,
         null=True,
         blank=True,
-        help_text="Accounting code for the source account"
+        help_text=_("Accounting code for the source account")
     )
 
     def save(self, *args, **kwargs):
@@ -2483,7 +2483,7 @@ class CashPayment(BaseModel):
     reference = models.CharField(
         max_length=50,
         unique=True,
-        help_text="Unique reference number for this payment"
+        help_text=_("Unique reference number for this payment")
     )
     recorded_by = models.ForeignKey(
         'auth.User',
@@ -2499,7 +2499,7 @@ class CashPayment(BaseModel):
         validators=[
             RegexValidator(
                 r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
+                _('Period must be in MM-YYYY format')
             )
         ]
     )
@@ -2507,12 +2507,12 @@ class CashPayment(BaseModel):
     def clean(self):
         super().clean()
         if not self.invoice.cash_payment_allowed:
-            raise ValidationError("This invoice cannot be paid by cash")
+            raise ValidationError(_("This invoice cannot be paid by cash"))
             
         # Check if payment would exceed cash balance
         config = CashConfiguration.get_config()
         if self.amount > config.current_balance:
-            raise ValidationError("Insufficient cash balance for this payment")
+            raise ValidationError(_("Insufficient cash balance for this payment"))
             
         # Check if payment would exceed invoice remaining amount
         payment_status = self.invoice.get_cash_payment_status()
@@ -2573,14 +2573,14 @@ class CashExpense(BaseModel):
     reference = models.CharField(
         max_length=50,
         unique=True,
-        help_text="Unique reference number for this expense"
+        help_text=_("Unique reference number for this expense")
     )
     expense_account = models.CharField(
         max_length=5,
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(_(r'^\d{4,5}$'), _('Account code must be 4-5 digits'))
         ],
-        help_text="Expense account code"
+        help_text=_("Expense account code")
     )
     expense_type = models.CharField(
         max_length=20,
@@ -2920,7 +2920,7 @@ class Entity(BaseModel):
         validators=[
             RegexValidator(
                 regex=r'^[a-zA-Z\s]*$',
-                message='Name can only contain letters and spaces'
+                message=_('Name can only contain letters and spaces')
             )
         ]
     )
@@ -2931,10 +2931,10 @@ class Entity(BaseModel):
         validators=[
             RegexValidator(
                 regex=r'^\d{15}$',
-                message='ICE code must be exactly 15 digits'
+                message=_('ICE code must be exactly 15 digits')
             )
         ],
-        help_text='Enter exactly 15 digits'
+        help_text=_('Enter exactly 15 digits')
     )
     
     accounting_code = models.CharField(
@@ -2943,10 +2943,10 @@ class Entity(BaseModel):
         validators=[
             RegexValidator(
                 regex=r'^3\d{4,6}$',
-                message='Accounting code must start with 3 and be 5-7 digits long'
+                message=_('Accounting code must start with 3 and be 5-7 digits long')
             )
         ],
-        help_text='Enter 5-7 digits starting with 3'
+        help_text=_('Enter 5-7 digits starting with 3')
     )
     
     city = models.CharField(max_length=100, blank=True, null=True)
@@ -2961,18 +2961,18 @@ class Entity(BaseModel):
         # Validate ICE code
         if self.ice_code and not self.ice_code.isdigit():
             raise ValidationError({
-                'ice_code': 'ICE code must contain only digits'
+                'ice_code': _('ICE code must contain only digits')
             })
             
         # Validate accounting code
         if self.accounting_code:
             if not self.accounting_code.startswith('3'):
                 raise ValidationError({
-                    'accounting_code': 'Accounting code must start with 3'
+                    'accounting_code': _('Accounting code must start with 3')
                 })
             if not self.accounting_code.isdigit():
                 raise ValidationError({
-                    'accounting_code': 'Accounting code must contain only digits'
+                    'accounting_code': _('Accounting code must contain only digits')
                 })
 
     def save(self, *args, **kwargs):
@@ -3010,7 +3010,7 @@ class Receipt(BaseModel):
         validators=[
             RegexValidator(
                 r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
+                _('Period must be in MM-YYYY format')
             )
         ]
     )
@@ -3063,16 +3063,16 @@ class NegotiableReceipt(Receipt):
     ]
     
     REJECTION_CAUSES = [
-        ('INSUFFICIENT_FUNDS', 'Insufficient Funds'),
-        ('ACCOUNT_CLOSED', 'Account Closed/Frozen'),
-        ('SIGNATURE_MISMATCH', 'Signature Mismatch'),
-        ('INVALID_DATE', 'Date Invalid/Post-dated'),
-        ('AMOUNT_DISCREPANCY', 'Amount Discrepancy'),
-        ('TECHNICAL_ERROR', 'Technical Error (MICR)'),
-        ('STOP_PAYMENT', 'Stop Payment Order'),
-        ('ACCOUNT_ERROR', 'Account Number Error'),
-        ('FORMAL_DEFECT', 'Formal Defect'),
-        ('BANK_ERROR', 'Bank Processing Error')
+        ('INSUFFICIENT_FUNDS', _('Insufficient Funds')),
+        ('ACCOUNT_CLOSED', _('Account Closed/Frozen')),
+        ('SIGNATURE_MISMATCH', _('Signature Mismatch')),
+        ('INVALID_DATE', _('Date Invalid/Post-dated')),
+        ('AMOUNT_DISCREPANCY', _('Amount Discrepancy')),
+        ('TECHNICAL_ERROR', _('Technical Error (MICR)')),
+        ('STOP_PAYMENT', _('Stop Payment Order')),
+        ('ACCOUNT_ERROR', _('Account Number Error')),
+        ('FORMAL_DEFECT', _('Formal Defect')),
+        ('BANK_ERROR', _('Bank Processing Error'))
     ]
 
     bank_account = models.ForeignKey(
@@ -3105,13 +3105,13 @@ class NegotiableReceipt(Receipt):
 
     def present_for_collection(self):
         if not self.can_be_presented():
-            raise ValidationError("Receipt cannot be presented")
+            raise ValidationError(_("Receipt cannot be presented"))
         self.status = self.STATUS_PRESENTED_COLLECTION
         self.save()
 
     def present_for_discount(self):
         if not self.can_be_presented():
-            raise ValidationError("Receipt cannot be presented")
+            raise ValidationError(_("Receipt cannot be presented"))
         self.status = self.STATUS_PRESENTED_DISCOUNT
         self.save()
 
@@ -3184,7 +3184,7 @@ class NegotiableReceipt(Receipt):
         )
         if compensating_records.exists():
             total = sum(r.amount for r in compensating_records)
-            return f"Compensating {len(compensating_records)} receipt(s) for total {total}"
+            return _(f"Compensating {len(compensating_records)} receipt(s) for total {total}")
         
         # Check if this receipt is being compensated
         compensated_records = CompensationRecord.objects.filter(
@@ -3197,12 +3197,12 @@ class NegotiableReceipt(Receipt):
             for record in compensated_records:
                 compensator = record.compensator_receipt
                 if isinstance(compensator, CashReceipt):
-                    compensators.append(f"Cash payment (Ref: {compensator.reference_number})")
+                    compensators.append(_(f"Cash payment (Ref: {compensator.reference_number})")) 
                 elif isinstance(compensator, TransferReceipt):
-                    compensators.append(f"Transfer (Ref: {compensator.transfer_reference})")
+                    compensators.append(_(f"Transfer (Ref: {compensator.transfer_reference})"))
                 else:
-                    compensators.append(f"{compensator.__class__.__name__.replace('Receipt', '')} #{compensator.get_receipt_number()}")
-            return "Compensated by " + ", ".join(compensators)
+                    compensators.append(_(f"{compensator.__class__.__name__.replace('Receipt', '')} #{compensator.get_receipt_number()}"))
+            return _(f"Compensated by {', '.join(compensators)}")
         
         return None
 
@@ -3210,7 +3210,7 @@ class NegotiableReceipt(Receipt):
         """Mark receipt as unpaid with a cause"""
         print(f"\n=== Marking receipt {self.get_receipt_number()} as unpaid ===")
         if self.status not in ['REJECTED', 'PRESENTED_COLLECTION', 'PRESENTED_DISCOUNT', 'DISCOUNTED']:
-            msg = "Only rejected or presented receipts can be marked as unpaid"
+            msg = _(f"Only rejected or presented receipts can be marked as unpaid")
             print(f"Error: {msg}")
             raise ValidationError(msg)
         
@@ -3232,7 +3232,7 @@ class NegotiableReceipt(Receipt):
                 'status': self.STATUS_UNPAID,
                 'cause': cause
             },
-            notes=f'Marked as unpaid: {self.get_rejection_cause_display()}',
+            notes=_(f'Marked as unpaid: {self.get_rejection_cause_display()}'),
             business_date=business_date
         )
         
@@ -3275,7 +3275,7 @@ class NegotiableReceipt(Receipt):
                 compensated_receipt = record.compensated_receipt
                 compensated_receipt.record_history(
                     action='compensation_cancelled',
-                    notes=f'Compensating receipt {self.__class__.__name__} #{self.get_receipt_number()} was deleted'
+                    notes=_(f'Compensating receipt {self.__class__.__name__} #{self.get_receipt_number()} was deleted')
                 )
                 # Update the compensated receipt's status
                 compensated_receipt.update_compensation_status()
@@ -3295,7 +3295,7 @@ class NegotiableReceipt(Receipt):
             print("Creating new receipt history record")
             self.record_history(
                 action='created',
-                notes=f'Receipt created with status {self.get_status_display()}'
+                notes=_(f'Receipt created with status {self.get_status_display()}')
             )
         else:
             try:
@@ -3339,7 +3339,7 @@ class NegotiableReceipt(Receipt):
                             old_value={'status': old_instance.status},
                             new_value={'status': self.status},
                             business_date=business_date,
-                            notes=f'Status changed from {old_instance.status} to {self.status}'
+                            notes=_(f'Status changed from {old_instance.status} to {self.status}')
                         )
                     else:
                         print("Skipping status history record due to _skip_status_history flag")
@@ -3374,7 +3374,7 @@ class NegotiableReceipt(Receipt):
                     old_value={'status': old_status},
                     new_value={'status': new_status},
                     business_date=business_date,
-                    notes=f'Status updated due to compensation changes. Total: {comp_status["total_compensated"]}'
+                    notes=_(f'Status updated due to compensation changes. Total: {comp_status["total_compensated"]}')
                 )
                 self.save()
             finally:
@@ -3403,7 +3403,7 @@ class NegotiableReceipt(Receipt):
             # Record history
             self.record_history(
                 action='compensation_activated',
-                notes=f'Activated compensation for {record.compensated_receipt.__class__.__name__} #{record.compensated_receipt.get_receipt_number()}'
+                notes=_(f'Activated compensation for {record.compensated_receipt.__class__.__name__} #{record.compensated_receipt.get_receipt_number()}')
             )
 
     def mark_as_paid(self, paid_date=None):
@@ -3425,7 +3425,7 @@ class NegotiableReceipt(Receipt):
             action='status_changed',
             old_value={'status': old_status},
             new_value={'status': self.STATUS_PAID},
-            notes='Receipt marked as paid',
+            notes=_(f'Receipt marked as paid'),
             business_date=business_date
         )
         
@@ -3505,7 +3505,7 @@ class NegotiableReceipt(Receipt):
                 'compensator_number': compensating_receipt.get_receipt_number(),
                 'compensator_entity': compensating_receipt.entity.name if hasattr(compensating_receipt, 'entity') else None
             },
-            notes=f'Compensated with {amount} by {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}',
+            notes=_(f'Compensated with {amount} by {compensating_receipt.__class__.__name__} #{compensating_receipt.get_receipt_number()}'),
             business_date=business_date
         )
         
@@ -3534,7 +3534,7 @@ class CheckReceipt(NegotiableReceipt):
     branch = models.CharField(max_length=100, blank=True)
     
     def __str__(self):
-        return f"Check {self.check_number} - {self.amount}"
+        return _(f"Check {self.check_number} - {self.amount}")
 
     class Meta:
         verbose_name = "Check"
@@ -3594,7 +3594,7 @@ class LCN(NegotiableReceipt):
 
 
     def __str__(self):
-        return f"LCN {self.lcn_number} - {self.amount}"
+        return _(f"LCN {self.lcn_number} - {self.amount}")
 
     def clean(self):
         super().clean()
@@ -3670,7 +3670,7 @@ class CashReceipt(Receipt):
         return compensated_receipt is None
 
     def __str__(self):
-        return f"Cash Receipt {self.reference_number or 'N/A'}"
+        return _(f"Cash Receipt {self.reference_number or 'N/A'}")
 
     class Meta:
         verbose_name = "Cash Receipt"
@@ -3716,7 +3716,7 @@ class TransferReceipt(Receipt):
         return compensated_receipt is None
 
     def __str__(self):
-        return f"Transfer {self.transfer_reference}"
+        return _(f"Transfer {self.transfer_reference}")
 
     class Meta:
         verbose_name = "Transfer"
@@ -3764,7 +3764,7 @@ class Presentation(BaseModel):
     )
 
     def __str__(self):
-        return f"{self.get_presentation_type_display()} - {self.date}"
+        return _(f"{self.get_presentation_type_display()} - {self.date}")
 
     def save(self, *args, **kwargs):
         if not self.pk and not self.internal_reference:  # Only for new presentations
@@ -3811,7 +3811,7 @@ class Presentation(BaseModel):
             receipt__status=NegotiableReceipt.STATUS_PORTFOLIO
         )
         if invalid_receipts.exists():
-            raise ValidationError('All receipts must be in portfolio status')
+            raise ValidationError(_('All receipts must be in portfolio status'))
 
     class Meta:
         verbose_name = "Presentation"
@@ -3846,7 +3846,7 @@ class PresentationReceipt(BaseModel):
         choices=NegotiableReceipt.RECEIPT_STATUS,
         null=True,
         blank=True,
-        help_text="Stores the final status decision made in this presentation"
+        help_text=_("Stores the final status decision made in this presentation")
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
     immutable = models.BooleanField(default=False)
@@ -3862,15 +3862,15 @@ class PresentationReceipt(BaseModel):
     def __str__(self):
         receipt = self.checkreceipt or self.lcn
         if receipt:
-            return f"Presentation {self.presentation.id} - Receipt {receipt.id}"
-        return f"Presentation {self.presentation.id} - No receipt attached"
+            return _(f"Presentation {self.presentation.id} - Receipt {receipt.id}")
+        return _(f"Presentation {self.presentation.id} - No receipt attached")
 
     def clean(self):
         super().clean()
         if self.checkreceipt and self.lcn:
-            raise ValidationError("Cannot have both check and LCN")
+            raise ValidationError(_("Cannot have both check and LCN"))
         if not self.checkreceipt and not self.lcn:
-            raise ValidationError("Must have either check or LCN")
+            raise ValidationError(_("Must have either check or LCN"))
         
         # Get the actual receipt object
         receipt = self.checkreceipt or self.lcn
@@ -3878,7 +3878,7 @@ class PresentationReceipt(BaseModel):
         # Only validate receipt status during initial creation
         if not self.pk:  # If this is a new record
             if getattr(receipt, 'status', None) != 'PORTFOLIO' and getattr(receipt, 'status', None) != 'UNPAID':
-                raise ValidationError('Only receipts in portfolio status can be presented')
+                raise ValidationError(_('Only receipts in portfolio status can be presented'))
 
     def save(self, *args, **kwargs):
         print("\n=== PresentationReceipt save method start ===")
@@ -3981,15 +3981,15 @@ class ReceiptHistory(BaseModel):
     receipt = GenericForeignKey('content_type', 'object_id')
     
     ACTION_CHOICES = [
-        ('created', 'Created'),
-        ('status_changed', 'Status Changed'),
-        ('presented_collection', 'Presented for Collection'),
-        ('presented_discount', 'Presented for Discount'),
-        ('compensating_assigned', 'Compensating Receipt Assigned'),
-        ('compensated', 'Compensation Allocated'),
-        ('unpaid', 'Marked as Unpaid'),
-        ('paid', 'Paid'),
-        ('rejected', 'Rejected by Bank')
+        ('created', _('Created')),
+        ('status_changed', _('Status Changed')),
+        ('presented_collection', _('Presented for Collection')),
+        ('presented_discount', _('Presented for Discount')),
+        ('compensating_assigned', _('Compensating Receipt Assigned')),
+        ('compensated', _('Compensation Allocated')),
+        ('unpaid', _('Marked as Unpaid')),
+        ('paid', _('Paid')),
+        ('rejected', _('Rejected by Bank'))
     ]
     
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
@@ -4409,7 +4409,7 @@ class BankStatement(models.Model):
             
             entries.append({
                 'date': deposit.date,
-                'label': f"Cash withdrawal - {deposit.reference}",
+                'label': _(f"Cash withdrawal - {deposit.reference}"),
                 'type': 'CASH_WITHDRAWAL',
                 'main_type': main_type,
                 'sub_type': sub_type,
@@ -4445,7 +4445,7 @@ class BankStatement(models.Model):
             
             entries.append({
                 'date': receipt.operation_date,
-                'label': f"Cash payment from {receipt.entity.name}",
+                'label': _(f"Cash payment from {receipt.entity.name}"),
                 'type': 'CASH',
                 'main_type': main_type,
                 'sub_type': sub_type,
@@ -4478,7 +4478,7 @@ class BankStatement(models.Model):
             
             entries.append({
                 'date': receipt.operation_date,
-                'label': f"Bank transfer from {receipt.entity.name}",
+                'label': _(f"Bank transfer from {receipt.entity.name}"),
                 'type': 'TRANSFER',
                 'main_type': main_type,
                 'sub_type': sub_type,
@@ -4545,7 +4545,7 @@ class BankStatement(models.Model):
                         
                         entries.append({
                             'date': entry_date,
-                            'label': f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                            'label': _(f"Payment of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"),
                             'type': entry_type,
                             'main_type': main_type,
                             'sub_type': sub_type,
@@ -4579,7 +4579,7 @@ class BankStatement(models.Model):
                     # Record initial discount
                     discount_entry = {
                         'date': pres.date,
-                        'label': f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}",
+                        'label': _(f"Discount of {receipt_type} #{receipt.get_receipt_number()} - {receipt.entity.name}"),
                         'type': entry_type,
                         'main_type': main_type,
                         'sub_type': sub_type,
@@ -4633,7 +4633,7 @@ class BankStatement(models.Model):
                         reversal_entry = {
                             'date': unpaid_date,  # Use unpaid date if available
                             'label': (f"Reversal of {receipt_type} "
-                                    f"#{receipt.get_receipt_number()} - {receipt.entity.name}"),
+                                    f"#{receipt.get_receipt_number()} - {receipt.entity.name}"), 
                             'type': entry_type,
                             'main_type': main_type,
                             'sub_type': sub_type,
@@ -4823,7 +4823,7 @@ class BankStatement(models.Model):
 
             entries.append({
                 'date': payment.paid_at.date(),
-                'label': f"Payment to {payment.beneficiary.name}",
+                'label': _(f"Payment to {payment.beneficiary.name}"),
                 'type': 'SUPPLIER_PAYMENT',
                 'main_type': main_type,
                 'sub_type': sub_type,
@@ -4878,7 +4878,7 @@ class BankStatement(models.Model):
 
                 entries.append({
                     'date': debit.processed_date,
-                    'label': f"Domiciled payment for contract {debit.contract.reference}",
+                    'label': _(f"Domiciled payment for contract {debit.contract.reference}"),
                     'type': 'DIRECT_DEBIT',
                     'main_type': main_type,
                     'sub_type': sub_type,
@@ -4942,7 +4942,7 @@ class BankStatement(models.Model):
                 
                 entries.append({
                     'date': declaration.payment_date,
-                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'label': _(f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}"),
                     'type': 'VAT_PAYMENT',
                     'main_type': main_type,
                     'sub_type': sub_type,
@@ -4995,7 +4995,7 @@ class BankStatement(models.Model):
                     
                     entries.append({
                         'date': declaration.payment_date,
-                        'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"IR Payment {declaration.period_month:02d}/{declaration.period_year}"),
                         'type': 'IR_PAYMENT',
                         'main_type': main_type,
                         'sub_type': sub_type,
@@ -5049,7 +5049,7 @@ class BankStatement(models.Model):
 
                 entries.append({
                     'date': declaration.payment_date,
-                    'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'label': _(f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}"),
                     'type': 'STAMP_PAYMENT',
                     'main_type': main_type,
                     'sub_type': sub_type,
@@ -5088,13 +5088,13 @@ class BankStatement(models.Model):
         for declaration in pay_declarations:
             entries.append({
                 'date': declaration.payment_date,
-                'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
+                'label': _(f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}"),
                 'type': 'PAY_DECLARATION',
                 'main_type': main_type,
                 'sub_type': sub_type,
                 'debit': declaration.total_amount,
                 'credit': None,
-                'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                'reference': _(f"PAY-{declaration.period_month:02d}-{declaration.period_year}"),
                 'source_type': 'pay_declaration',
                 'source_id': declaration.id,
                 'can_delete': False,
@@ -5122,13 +5122,13 @@ class BankStatement(models.Model):
             # Add opening balance entry
             entries.append({
                 'date': start_date,
-                'label': 'Opening Balance',
+                'label': _('Opening Balance'),
                 'type': 'BALANCE',
                 'main_type': main_type,
                 'sub_type': sub_type,
                 'debit': initial_balance if initial_balance < 0 else None,
                 'credit': initial_balance if initial_balance > 0 else None,
-                'reference': 'Opening balance',
+                'reference': _('Opening balance'),
                 'source_type': 'balance',
                 'source_id': None,
                 'can_transfer': False,
@@ -5238,7 +5238,7 @@ class AccountingEntry(models.Model):
             entries.extend([
                 {
                     'date': deposit.date,
-                    'label': f"Cash withdrawal - {deposit.reference}",
+                    'label': _(f"Cash withdrawal - {deposit.reference}"),
                     'debit': None,
                     'credit': deposit.amount,
                     'account_code': bank_account.accounting_number,
@@ -5250,7 +5250,7 @@ class AccountingEntry(models.Model):
                 },
                 {
                     'date': deposit.date,
-                    'label': f"Cash withdrawal - {deposit.reference}",
+                    'label': _(f"Cash withdrawal - {deposit.reference}"),
                     'debit': deposit.amount,
                     'credit': None,
                     'account_code': CashConfiguration.get_config().accounting_code,
@@ -5620,7 +5620,7 @@ class AccountingEntry(models.Model):
             entries.extend([
                 {
                     'date': fee.date,
-                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'label': _(f"{fee.fee_type.name} - Raw Amount"),
                     'debit': fee.raw_amount,
                     'credit': None,
                     'account_code': fee.fee_type.accounting_code,  # Fee account
@@ -5632,7 +5632,7 @@ class AccountingEntry(models.Model):
                 },
                 {
                     'date': fee.date,
-                    'label': f"{fee.fee_type.name} - Raw Amount",
+                    'label': _(f"{fee.fee_type.name} - Raw Amount"),
                     'debit': None,
                     'credit': fee.raw_amount,
                     'account_code': bank_account.accounting_number,  # Bank account
@@ -5650,7 +5650,7 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': fee.date,
-                        'label': f"{fee.fee_type.name} - VAT",
+                        'label': _(f"{fee.fee_type.name} - VAT"),
                         'debit': fee.vat_amount,
                         'credit': None,
                         'account_code': fee.fee_type.vat_code,  # VAT account
@@ -5662,7 +5662,7 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': fee.date,
-                        'label': f"{fee.fee_type.name} - VAT",
+                        'label': _(f"{fee.fee_type.name} - VAT"),
                         'debit': None,
                         'credit': fee.vat_amount,
                         'account_code': bank_account.accounting_number,  # Bank account
@@ -5681,8 +5681,8 @@ class AccountingEntry(models.Model):
         ).select_related('checker', 'beneficiary')
 
         for payment in supplier_payments:
-            label = f"Payment to {payment.beneficiary.name}"
-            reference = f"{payment.checker.type} {payment.checker.index}{payment.position}"
+            label = _(f"Payment to {payment.beneficiary.name}")
+            reference = _(f"{payment.checker.type} {payment.checker.index}{payment.position}")
 
             # Add debit and credit pair
             entries.extend([
@@ -5764,7 +5764,7 @@ class AccountingEntry(models.Model):
                     entries.extend([
                         {
                             'date': payment.date,
-                            'label': f"Domiciled payment for contract {contract.reference}",
+                            'label': _(f"Domiciled payment for contract {contract.reference}"),
                             'debit': payment.debit,
                             'credit': None,
                             'account_code': contract.supplier.accounting_code,
@@ -5776,7 +5776,7 @@ class AccountingEntry(models.Model):
                         },
                         {
                             'date': payment.date,
-                            'label': f"Domiciled payment for contract {contract.reference}",
+                            'label': _(f"Domiciled payment for contract {contract.reference}"),
                             'debit': None,
                             'credit': payment.debit,
                             'account_code': bank_account.accounting_number,
@@ -5825,11 +5825,11 @@ class AccountingEntry(models.Model):
                 if total != 0:
                     entries.append({
                         'date': declaration.payment_date,
-                        'label': f"Pay {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"Pay {declaration.period_month:02d}/{declaration.period_year}"),
                         'debit': abs(total) if total > 0 else None,
                         'credit': abs(total) if total < 0 else None,
                         'account_code': account_code,
-                        'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                        'reference': _(f"PAY-{declaration.period_month:02d}-{declaration.period_year}"),
                         'journal_code': '07',
                         'source_type': 'pay_declaration',
                         'source_id': declaration.id
@@ -5867,7 +5867,7 @@ class AccountingEntry(models.Model):
             entries.extend([
                 {
                     'date': declaration.payment_date,
-                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'label': _(f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}"),
                     'debit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
                     'credit': None,
                     'account_code': config.deducted_vat_account,
@@ -5879,7 +5879,7 @@ class AccountingEntry(models.Model):
                 },
                 {
                     'date': declaration.payment_date,
-                    'label': f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}",
+                    'label': _(f"VAT Payment {declaration.period_month:02d}/{declaration.period_year}"),
                     'debit': None,
                     'credit': declaration.total_invoiced_vat - declaration.total_deducted_vat,
                     'account_code': bank_account.accounting_number,
@@ -5896,11 +5896,11 @@ class AccountingEntry(models.Model):
             entries.extend([
                 {
                     'date': period_end,
-                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
+                    'label': _(f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT"),
                     'debit': declaration.total_invoiced_vat,
                     'credit': None,
                     'account_code': config.invoiced_vat_account,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'reference': _(f"VAT-{declaration.period_month:02d}-{declaration.period_year}"),
                     'journal_code': config.journal,
                     'source_type': 'vat_declaration',
                     'source_id': declaration.id,
@@ -5908,11 +5908,11 @@ class AccountingEntry(models.Model):
                 },
                 {
                     'date': period_end,
-                    'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT",
+                    'label': _(f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - Invoiced VAT"),
                     'debit': None,
                     'credit': declaration.total_invoiced_vat,
                     'account_code': config.deducted_vat_account,
-                    'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                    'reference': _(f"VAT-{declaration.period_month:02d}-{declaration.period_year}"),
                     'journal_code': config.journal,
                     'source_type': 'vat_declaration',
                     'source_id': declaration.id,
@@ -5932,11 +5932,11 @@ class AccountingEntry(models.Model):
                     entries.extend([
                         {
                             'date': period_end,
-                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                            'label': _(f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT"),
                             'debit': amount,
                             'credit': None,
                             'account_code': config.deducted_vat_account,
-                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                            'reference': _(f"VAT-{declaration.period_month:02d}-{declaration.period_year}"),
                             'journal_code': config.journal,
                             'source_type': 'vat_declaration',
                             'source_id': declaration.id,
@@ -5944,11 +5944,11 @@ class AccountingEntry(models.Model):
                         },
                         {
                             'date': period_end,
-                            'label': f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT",
+                            'label': _(f"VAT Declaration {declaration.period_month:02d}/{declaration.period_year} - {rate}% VAT"),
                             'debit': None,
                             'credit': amount,
                             'account_code': f"345{int(rate):02d}",  # VAT rate specific account
-                            'reference': f"VAT-{declaration.period_month:02d}-{declaration.period_year}",
+                            'reference': _(f"VAT-{declaration.period_month:02d}-{declaration.period_year}"),
                             'journal_code': config.journal,
                             'source_type': 'vat_declaration',
                             'source_id': declaration.id,
@@ -5979,11 +5979,11 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': declaration.payment_date,
-                        'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"IR Payment {declaration.period_month:02d}/{declaration.period_year}"),
                         'debit': declaration.tax_amount,
                         'credit': None,
                         'account_code': config.accounting_code,
-                        'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
+                        'reference': _(f"IR-{declaration.period_month:02d}-{declaration.period_year}"),
                         'journal_code': bank_account.journal_number,
                         'source_type': 'ir_declaration',
                         'source_id': declaration.id,
@@ -5991,11 +5991,11 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': declaration.payment_date,
-                        'label': f"IR Payment {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"IR Payment {declaration.period_month:02d}/{declaration.period_year}"),
                         'debit': None,
                         'credit': declaration.tax_amount,
                         'account_code': bank_account.accounting_number,
-                        'reference': f"IR-{declaration.period_month:02d}-{declaration.period_year}",
+                        'reference': _(f"IR-{declaration.period_month:02d}-{declaration.period_year}"),
                         'journal_code': bank_account.journal_number,
                         'source_type': 'ir_declaration',
                         'source_id': declaration.id,
@@ -6031,11 +6031,11 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': declaration.payment_date,
-                        'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}"),
                         'debit': declaration.tax_amount,
                         'credit': None,
                         'account_code': config.accounting_code,
-                        'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
+                        'reference': _(f"SR-{declaration.period_month:02d}-{declaration.period_year}"),
                         'journal_code': bank_account.journal_number,
                         'source_type': 'stamp_right_declaration',
                         'source_id': declaration.id,
@@ -6043,11 +6043,11 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': declaration.payment_date,
-                        'label': f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}",
+                        'label': _(f"Stamp Rights Payment {declaration.period_month:02d}/{declaration.period_year}"),
                         'debit': None,
                         'credit': declaration.tax_amount,
                         'account_code': bank_account.accounting_number,
-                        'reference': f"SR-{declaration.period_month:02d}-{declaration.period_year}",
+                        'reference': _(f"SR-{declaration.period_month:02d}-{declaration.period_year}"),
                         'journal_code': bank_account.journal_number,
                         'source_type': 'stamp_right_declaration',
                         'source_id': declaration.id,
@@ -6096,7 +6096,7 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': deposit.date,
-                        'label': f"Cash deposit {deposit.reference}",
+                        'label': _(f"Cash deposit {deposit.reference}"),
                         'debit': deposit.amount,
                         'credit': None,
                         'account_code': config.accounting_code,
@@ -6108,7 +6108,7 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': deposit.date,
-                        'label': f"Cash deposit {deposit.reference}",
+                        'label': _(f"Cash deposit {deposit.reference}"),
                         'debit': None,
                         'credit': deposit.amount,
                         'account_code': '5161',  # Cash in transit
@@ -6131,7 +6131,7 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': payment.payment_date,
-                        'label': f"Cash payment for invoice {payment.invoice.ref}",
+                        'label': _(f"Cash payment for invoice {payment.invoice.ref}"),
                         'debit': payment.amount,
                         'credit': None,
                         'account_code': payment.invoice.supplier.accounting_code,
@@ -6143,7 +6143,7 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': payment.payment_date,
-                        'label': f"Cash payment for invoice {payment.invoice.ref}",
+                        'label': _(f"Cash payment for invoice {payment.invoice.ref}"),
                         'debit': None,
                         'credit': payment.amount,
                         'account_code': config.accounting_code,
@@ -6166,7 +6166,7 @@ class AccountingEntry(models.Model):
                 entries.extend([
                     {
                         'date': expense.date,
-                        'label': f"Cash expense ({expense.get_expense_type_display()})",
+                        'label': _(f"Cash expense ({expense.get_expense_type_display()})"),
                         'debit': expense.amount,
                         'credit': None,
                         'account_code': expense.expense_account,
@@ -6178,7 +6178,7 @@ class AccountingEntry(models.Model):
                     },
                     {
                         'date': expense.date,
-                        'label': f"Cash expense ({expense.get_expense_type_display()})",
+                        'label': _(f"Cash expense ({expense.get_expense_type_display()})"),
                         'debit': None,
                         'credit': expense.amount,
                         'account_code': config.accounting_code,
@@ -6228,16 +6228,16 @@ class AccountingEntry(models.Model):
             for (account_code, is_debit), amount in account_groups.items():
                 entries.append({
                     'date': declaration.payment_date,
-                    'label': f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
+                    'label': _(f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}"),
                     'debit': amount if is_debit else None,
                     'credit': amount if not is_debit else None,
                     'account_code': account_code,
                     'journal_code': journal_code,
-                    'reference': f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
+                    'reference': _(f"PAY-{declaration.period_month:02d}-{declaration.period_year}"),
                     'source_type': 'pay_declaration',
                     'source_id': declaration.id,
                     'details': {
-                        'period': f"{declaration.period_month:02d}/{declaration.period_year}",
+                        'period': _(f"{declaration.period_month:02d}/{declaration.period_year}"),
                         'items_count': declaration.items.count(),
                         'payment_date': declaration.payment_date.strftime('%Y-%m-% d'),
                         'due_date': declaration.due_date.strftime('%Y-%m-% d')
@@ -6260,11 +6260,11 @@ class CustomBankRecord(BaseModel):
     date = models.DateField()
     bank_label = models.CharField(
         max_length=255,
-        help_text="Label that will appear on the bank statement"
+        help_text=_("Label that will appear on the bank statement")
     )
     accounting_label = models.CharField(
         max_length=255,
-        help_text="Label that will appear in accounting entries"
+        help_text=_("Label that will appear in accounting entries")
     )
     reference = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True)
@@ -6274,19 +6274,19 @@ class CustomBankRecord(BaseModel):
         decimal_places=2, 
         null=True, 
         blank=True,
-        help_text="Amount to debit (outgoing)"
+        help_text=_("Amount to debit (outgoing)")
     )
     credit = models.DecimalField(
         max_digits=15, 
         decimal_places=2, 
         null=True, 
         blank=True,
-        help_text="Amount to credit (incoming)"
+        help_text=_("Amount to credit (incoming)")
     )
     
     account_code = models.CharField(
         max_length=10,
-        help_text="Accounting code for this entry"
+        help_text=_("Accounting code for this entry")
     )
     created_by = models.ForeignKey(
         'auth.User',
@@ -6298,13 +6298,13 @@ class CustomBankRecord(BaseModel):
     def clean(self):
         super().clean()
         if not (self.debit or self.credit):
-            raise ValidationError("Either debit or credit amount must be provided")
+            raise ValidationError(_("Either debit or credit amount must be provided"))
         if self.debit and self.credit:
-            raise ValidationError("Only one of debit or credit can be provided")
+            raise ValidationError(_("Only one of debit or credit can be provided"))
 
     def __str__(self):
         amount = self.debit or self.credit
-        return f"Custom Record: {self.bank_label} - {amount}"
+        return _(f"Custom Record: {self.bank_label} - {amount}")
 
     class Meta:
         ordering = ['-date', '-created_at']
@@ -6329,7 +6329,7 @@ class InterBankTransfer(BaseModel):
     is_deleted = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"Transfer from {self.from_bank} to {self.to_bank} on {self.date}"
+        return _(f"Transfer from {self.from_bank} to {self.to_bank} on {self.date}")
 
 class TransferredRecord(BaseModel):
     """
@@ -6352,7 +6352,7 @@ class TransferredRecord(BaseModel):
         unique_together = ['source_type', 'source_id']  # Prevent double transfers
 
     def __str__(self):
-        return f"Transferred record {self.source_type}:{self.source_id}"
+        return _(f"Transferred record {self.source_type}:{self.source_id}")
     
 class BankFeeType(BaseModel):
     """Defines bank fee types and their accounting codes"""
@@ -6363,7 +6363,7 @@ class BankFeeType(BaseModel):
     description = models.TextField(blank=True)
     
     def __str__(self):
-        return f"{self.name} ({self.code})"
+        return _(f"{self.name} ({self.code})")
 
     class Meta:
         ordering = ['name']
@@ -6402,10 +6402,10 @@ class BankFeeTransaction(BaseModel):
         validators=[
             RegexValidator(
                 r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
+                _('Period must be in MM-YYYY format')
             )
         ],
-        help_text="VAT Declaration period (MM-YYYY)"
+        help_text=_("VAT Declaration period (MM-YYYY)")
     )
 
     def calculate_amounts(self):
@@ -6429,54 +6429,54 @@ class BankFeeTransaction(BaseModel):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.fee_type.name} - {self.date}"
+        return _(f"{self.fee_type.name} - {self.date}")
 
 # Add initial fee types
 INITIAL_FEE_TYPES = [
     {
-        'name': 'Account Management Fee',
+        'name': _('Account Management Fee'),
         'code': 'AMF',
         'accounting_code': '61411',
         'vat_code': '34551'
     },
     {
-        'name': 'Statement Fee',
+        'name': _('Statement Fee'),
         'code': 'STF',
         'accounting_code': '61412',
         'vat_code': '34551'
     },
     {
-        'name': 'Check Processing Fee',
+        'name': _('Check Processing Fee'),
         'code': 'CPF',
         'accounting_code': '61413',
         'vat_code': '34551'
     },
     {
-        'name': 'Transfer Commission',
+        'name': _('Transfer Commission'),
         'code': 'TRC',
         'accounting_code': '61414',
         'vat_code': '34551'
     },
     {
-        'name': 'Check Book Fee',
+        'name': _('Check Book Fee'),
         'code': 'CBF',
         'accounting_code': '61415',
         'vat_code': '34551'
     },
     {
-        'name': 'Payment Rejection Fee',
+        'name': _('Payment Rejection Fee'),
         'code': 'PRF',
         'accounting_code': '61416',
         'vat_code': '34551'
     },
     {
-        'name': 'Check Discount Commission',
+        'name': _('Check Discount Commission'),
         'code': 'CDC',
         'accounting_code': '61417',
         'vat_code': '34551'
     },
     {
-        'name': 'LCN Discount Commission',
+        'name': _('LCN Discount Commission'),
         'code': 'LDC',
         'accounting_code': '61418',
         'vat_code': '34551'
@@ -6506,7 +6506,7 @@ class CompensationRecord(BaseModel):
         print(f"Amount: {self.amount}")
         
         if self.amount <= 0:
-            raise ValidationError("Compensation amount must be positive")
+            raise ValidationError(_("Compensation amount must be positive"))
             
         # Check if amount exceeds remaining
         remaining = self.compensated_receipt.amount
@@ -6518,7 +6518,7 @@ class CompensationRecord(BaseModel):
             remaining -= record.amount
             
         if self.amount > remaining:
-            raise ValidationError(f"Amount {self.amount} exceeds remaining {remaining}")
+            raise ValidationError(_(f"Amount {self.amount} exceeds remaining {remaining}"))
 
     def get_compensation_status(self):
         """Get total compensated amount and remaining"""
@@ -6627,18 +6627,18 @@ class Contract(BaseModel):
         ],
         null=True,
         blank=True,
-        help_text="Upload contract document"
+        help_text=_("Upload contract document")
     )
     
     def clean(self):
         if not self.is_indefinite and not self.end_date:
-            raise ValidationError("End date is required for fixed-term contracts")
+            raise ValidationError(_("End date is required for fixed-term contracts"))
         
         if self.is_indefinite and self.end_date:
-            raise ValidationError("Indefinite contracts cannot have an end date")
+            raise ValidationError(_("Indefinite contracts cannot have an end date"))
         
         if self.end_date and self.start_date and self.end_date <= self.start_date:
-            raise ValidationError("End date must be after start date")
+            raise ValidationError(_("End date must be after start date"))
 
     def get_next_generation_date(self, from_date=None):
         """Calculate the next invoice generation date based on periodicity"""
@@ -6716,7 +6716,7 @@ class Contract(BaseModel):
         print(f"Date: {for_date}")
         
         if not self.can_generate_invoice(for_date):
-            raise ValidationError("Cannot generate invoice for this date")
+            raise ValidationError(_("Cannot generate invoice for this date"))
 
         period_start = self.get_period_start_date(for_date)
         period_end = self.get_period_end_date(period_start)
@@ -7240,7 +7240,7 @@ class DirectDebit(BaseModel):
         validators=[
             RegexValidator(
                 r'^\d{2}-\d{4}$',
-                'Period must be in MM-YYYY format'
+                _('Period must be in MM-YYYY format')
             )
         ]
     )
@@ -7251,7 +7251,7 @@ class DirectDebit(BaseModel):
         verbose_name_plural = "Direct Debits"
     
     def __str__(self):
-        return f"DirectDebit {self.id} for {self.invoice.invoice.ref}"
+        return _(f"DirectDebit {self.id} for {self.invoice.invoice.ref}")
         
     def mark_as_processed(self, processed_date):
         print(f"\n=== Processing DirectDebit {self.id} ===")
@@ -7315,7 +7315,7 @@ class VATConfiguration(BaseModel):
     """Global VAT configuration settings"""
     declaration_day = models.IntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(28)],
-        help_text="Day of month for VAT declaration (1-28)"
+        help_text=_("Day of month for VAT declaration (1-28)")
     )
     domiciliation_bank = models.ForeignKey(
         'BankAccount',
@@ -7326,21 +7326,21 @@ class VATConfiguration(BaseModel):
         max_length=5,
         default='4300',
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(r'^\d{4,5}$', _('Account code must be 4-5 digits'))
         ]
     )
     deducted_vat_account = models.CharField(
         max_length=5,
         default='4400',
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(r'^\d{4,5}$', _('Account code must be 4-5 digits'))
         ]
     )
     journal = models.CharField(
         max_length=2,
         default='06',
         validators=[
-            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+            RegexValidator(r'^\d{2}$', _('Journal must be exactly 2 digits'))
         ]
     )
 
@@ -7348,7 +7348,7 @@ class VATConfiguration(BaseModel):
         max_digits=15,
         decimal_places=2,
         default=Decimal('400000.00'),
-        help_text="Default amount for VAT forecasts"
+        help_text=_("Default amount for VAT forecasts")
     )
 
     @classmethod
@@ -7356,7 +7356,7 @@ class VATConfiguration(BaseModel):
         """Get or create VAT configuration"""
         config = VATConfiguration.objects.first()
         if not config:
-            raise ValidationError("VAT Configuration must be set up")
+            raise ValidationError(_("VAT Configuration must be set up"))
         return config
 
     @classmethod
@@ -7392,7 +7392,7 @@ class VATConfiguration(BaseModel):
     def clean(self):
         super().clean()
         if self.pk and VATConfiguration.objects.exclude(pk=self.pk).exists():
-            raise ValidationError("Only one VAT configuration can exist")
+            raise ValidationError(_("Only one VAT configuration can exist"))
 
     def save(self, *args, **kwargs):
         print("\n=== Saving VAT Configuration ===")
@@ -7400,7 +7400,7 @@ class VATConfiguration(BaseModel):
         print(f"Bank: {self.domiciliation_bank}")
         
         if not self.pk and VATConfiguration.objects.exists():
-            raise ValidationError("Only one VAT configuration can exist")
+            raise ValidationError(_("Only one VAT configuration can exist"))
         
         super().save(*args, **kwargs)
 
@@ -7820,7 +7820,7 @@ class VATDeclaration(BaseModel):
         
         if self.status != self.DRAFT:
             print("Declaration not in draft status - skipping")
-            raise ValidationError("Can only process draft declarations")
+            raise ValidationError(_("Can only process draft declarations"))
         
         print("\nResetting previously declared items...")
         details = self.details.all()
@@ -8004,14 +8004,14 @@ class VATDeclaration(BaseModel):
         print(f"Payment date: {payment_date}")
         
         if not self.is_processed:
-            raise ValidationError("Declaration must be processed before payment")
+            raise ValidationError(_("Declaration must be processed before payment"))
             
         if self.status != self.DECLARED:
-            raise ValidationError("Can only pay declared VAT declarations")
+            raise ValidationError(_("Can only pay declared VAT declarations"))
         
         if payment_date < self.due_date:
             print(f"Payment date {payment_date} cannot be before due date {self.due_date}")
-            raise ValidationError("Payment date cannot be before due date")
+            raise ValidationError(_("Payment date cannot be before due date"))
         
         self.payment_date = payment_date
         self.status = self.PAID
@@ -8031,10 +8031,10 @@ class VATDeclaration(BaseModel):
         print(f"Rejection date: {rejection_date}")
         
         if not self.is_processed:
-            raise ValidationError("Declaration must be processed before rejection")
+            raise ValidationError(_("Declaration must be processed before rejection"))
             
         if self.status != self.DECLARED:
-            raise ValidationError("Can only reject declared VAT declarations")
+            raise ValidationError(_("Can only reject declared VAT declarations"))
         
         self.status = self.DRAFT
         
@@ -8104,7 +8104,7 @@ class VATDeclaration(BaseModel):
     def delete(self, *args, **kwargs):
         """Override delete to handle cleanup"""
         if not self.can_be_deleted():
-            raise ValidationError("Cannot delete this declaration")
+            raise ValidationError(_("Cannot delete this declaration"))
             
         with transaction.atomic():
             # Revert Receipt VAT marks
@@ -8168,7 +8168,7 @@ class VATDeclaration(BaseModel):
     def clean(self):
         super().clean()
         if self.status != self.DRAFT and not self.is_processed:
-            raise ValidationError("Declaration must be processed before being declared or paid")
+            raise ValidationError(_("Declaration must be processed before being declared or paid"))
 
     def save(self, *args, **kwargs):
         print("\n=== Saving VAT Declaration ===")
@@ -8185,7 +8185,7 @@ class VATDeclaration(BaseModel):
         if not self.due_date:
             config = VATConfiguration.objects.first()
             if not config:
-                raise ValidationError("VAT Configuration must exist before creating declarations")
+                raise ValidationError(_("VAT Configuration must exist before creating declarations"))
             
             # Set to declaration day of next month
             self.due_date = datetime.date(
@@ -8257,18 +8257,18 @@ class VATDeclarationDetail(BaseModel):
     vat_rate = models.DecimalField(
         max_digits=5,
         decimal_places=2,
-        help_text="VAT rate for this entry"
+        help_text=_("VAT rate for this entry")
     )
     original_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        help_text="Original amount before credits"
+        help_text=_("Original amount before credits")
     )
     credit_amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
         default=Decimal('0.00'),
-        help_text="Credit note amount"
+        help_text=_("Credit note amount")
     )
     
     def __str__(self):
@@ -8277,7 +8277,7 @@ class VATDeclarationDetail(BaseModel):
     def clean(self):
         super().clean()
         if self.declaration.status != VATDeclaration.DRAFT:
-            raise ValidationError("Cannot modify details of a declared VAT declaration")
+            raise ValidationError(_("Cannot modify details of a declared VAT declaration"))
         
     def _store_receipt_details(self):
         """Store VAT details for paid receipts"""
@@ -8463,13 +8463,13 @@ class VATDeclarationDetail(BaseModel):
         print(f"\n=== Marking VAT Declaration {self.period_month}/{self.period_year} as Paid ===")
         
         if not self.is_processed:
-            raise ValidationError("Declaration must be processed before payment")
+            raise ValidationError(_("Declaration must be processed before payment"))
             
         if self.status != self.DECLARED:
-            raise ValidationError("Can only pay declared VAT declarations")
+            raise ValidationError(_("Can only pay declared VAT declarations"))
         
         if payment_date < self.due_date:
-            raise ValidationError("Payment date cannot be before due date")
+            raise ValidationError(_("Payment date cannot be before due date"))
         
         self.payment_date = payment_date
         self.status = self.PAID
@@ -8494,7 +8494,7 @@ class PayConfiguration(BaseModel):
     
     generation_day = models.PositiveIntegerField(
         validators=[MinValueValidator(1), MaxValueValidator(28)],
-        help_text="Day of month to generate declaration (1-28)"
+        help_text=_("Day of month to generate declaration (1-28)")
     )
     periodicity = models.CharField(
         max_length=20, 
@@ -8504,9 +8504,9 @@ class PayConfiguration(BaseModel):
     account_code = models.CharField(
         max_length=5,
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(r'^\d{4,5}$', _('Account code must be 4-5 digits'))
         ],
-        help_text="Main account code for pay operations"
+        help_text=_("Main account code for pay operations")
     )
     domiciliation_bank = models.ForeignKey(
         'BankAccount',
@@ -8517,14 +8517,14 @@ class PayConfiguration(BaseModel):
         max_length=2,
         default='07',
         validators=[
-            RegexValidator(r'^\d{2}$', 'Journal must be exactly 2 digits')
+            RegexValidator(r'^\d{2}$', _('Journal must be exactly 2 digits'))
         ]
     )
     
     def clean(self):
         super().clean()
         if self.pk and PayConfiguration.objects.exclude(pk=self.pk).exists():
-            raise ValidationError("Only one pay configuration can exist")
+            raise ValidationError(_("Only one pay configuration can exist"))
             
     def save(self, *args, **kwargs):
         print("\n=== Saving PayConfiguration ===")
@@ -8532,7 +8532,7 @@ class PayConfiguration(BaseModel):
         print(f"Bank: {self.domiciliation_bank}")
         
         if not self.pk and PayConfiguration.objects.exists():
-            raise ValidationError("Only one pay configuration can exist")
+            raise ValidationError(_("Only one pay configuration can exist"))
             
         super().save(*args, **kwargs)
 
@@ -8541,7 +8541,7 @@ class PayConfiguration(BaseModel):
         """Get or create pay configuration"""
         config = PayConfiguration.objects.first()
         if not config:
-            raise ValidationError("Pay Configuration must be set up")
+            raise ValidationError(_("Pay Configuration must be set up"))
         return config
 
     def get_next_generation_date(self, from_date=None):
@@ -8571,7 +8571,7 @@ class PayItem(BaseModel):
     account_code = models.CharField(
         max_length=5,
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(r'^\d{4,5}$', _('Account code must be 4-5 digits'))
         ]
     )
     default_amount = models.DecimalField(
@@ -8581,7 +8581,7 @@ class PayItem(BaseModel):
     )
     is_debit = models.BooleanField(
         default=True,
-        help_text="If True, amount is recorded as debit; if False, as credit"
+        help_text=_("If True, amount is recorded as debit; if False, as credit")
     )
     is_active = models.BooleanField(default=True)
 
@@ -8628,7 +8628,7 @@ class PayDeclaration(BaseModel):
     )
     paid_by_check = models.BooleanField(
         default=False,
-        help_text="If True, paid by check instead of direct debit"
+        help_text=_("If True, paid by check instead of direct debit")
     )
     payment_check = models.ForeignKey(
         'Check',
@@ -8654,9 +8654,9 @@ class PayDeclaration(BaseModel):
         super().clean()
         # Ensure payment method consistency
         if self.paid_by_check and self.direct_debit:
-            raise ValidationError("Declaration cannot have both check and direct debit")
+            raise ValidationError(_("Declaration cannot have both check and direct debit"))
         if self.paid_by_check and not self.check and self.status == self.STATUS_PAID:
-            raise ValidationError("Check payment requires check reference")
+            raise ValidationError(_("Check payment requires check reference"))
             
     def save(self, *args, **kwargs):
         print(f"\n=== Saving PayDeclaration for {self.period_month}/{self.period_year} ===")
@@ -8746,7 +8746,7 @@ class PayDeclarationItem(BaseModel):
     account_code = models.CharField(
         max_length=5,
         validators=[
-            RegexValidator(r'^\d{4,5}$', 'Account code must be 4-5 digits')
+            RegexValidator(r'^\d{4,5}$', _('Account code must be 4-5 digits'))
         ]
     )
     amount = models.DecimalField(max_digits=15, decimal_places=2)
@@ -8764,7 +8764,7 @@ class PayDeclarationItem(BaseModel):
         # If declaration is paid, total mustn't change
         if (self.declaration.status == PayDeclaration.STATUS_PAID and 
             self.pk and self.amount != self.__class__.objects.get(pk=self.pk).amount):
-            raise ValidationError("Cannot modify amounts of paid declaration")
+            raise ValidationError(_("Cannot modify amounts of paid declaration"))
 
     def __str__(self):
         return f"{self.description} ({self.amount})"
@@ -10465,34 +10465,34 @@ class TaxFine(BaseModel):
     amount = models.DecimalField(
         max_digits=15,
         decimal_places=2,
-        help_text="Fine amount"
+        help_text=_("Fine amount")
     )
     
     fine_date = models.DateField(
         default=timezone.now,
-        help_text="Date when the fine was applied"
+        help_text=_("Date when the fine was applied")
     )
     
     reference = models.CharField(
         max_length=100,
         blank=True,
-        help_text="Reference number or code for the fine"
+        help_text=_("Reference number or code for the fine")
     )
     
     description = models.TextField(
         blank=True,
-        help_text="Description or reason for the fine"
+        help_text=_("Description or reason for the fine")
     )
     
     paid = models.BooleanField(
         default=False,
-        help_text="Whether the fine has been paid"
+        help_text=_("Whether the fine has been paid")
     )
     
     payment_date = models.DateField(
         null=True,
         blank=True,
-        help_text="Date when the fine was paid"
+        help_text=_("Date when the fine was paid")
     )
     
     def save(self, *args, **kwargs):

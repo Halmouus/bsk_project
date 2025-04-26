@@ -5,6 +5,7 @@ from .models import UserRole, UserProfile, UserActivity, User
 import logging
 from django.core.exceptions import PermissionDenied
 from functools import wraps
+from django.utils.translation import gettext as _
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def initialize_user_profiles(request):
     admin_role, created = UserRole.objects.get_or_create(
         name='Admin',
         defaults={
-            'description': 'Full system access',
+            'description': _('Full system access'),
             'can_manage_users': True,
             'can_view_bank': True,
             'can_manage_bank': True,
@@ -43,7 +44,7 @@ def initialize_user_profiles(request):
         )
     
     return JsonResponse({
-        'message': 'User profiles initialized',
+        'message': _('User profiles initialized'),
         'profiles_created': users_without_profiles.count()
     })
 
@@ -55,11 +56,11 @@ def user_has_permission(view_func):
             if not profile.role.can_manage_users:
                 print(f"[UserManagement] Access denied for user {request.user.username}")
                 return render(request, 'unauthorized.html', {
-                    'reason': 'You need administrator permissions to access user management.'
+                    'reason': _('You need administrator permissions to access user management.')
                 })
         except UserProfile.DoesNotExist:
             return render(request, 'unauthorized.html', {
-                'reason': 'User profile not found. Please contact an administrator.'
+                'reason': _('User profile not found. Please contact an administrator.')
             })
         return view_func(request, *args, **kwargs)
     return wrapper
@@ -96,11 +97,11 @@ def create_user(request):
     if not request.user.userprofile.role.can_manage_users:
         if request.headers.get('Accept') == 'application/json':
             return JsonResponse({
-                'error': 'Permission denied',
-                'message': 'You need administrator permissions to create users.'
+                'error': _('Permission denied'),
+                'message': _('You need administrator permissions to create users.')
             }, status=403)
         return render(request, 'unauthorized.html', {
-            'reason': 'You need administrator permissions to create users.'
+            'reason': _('You need administrator permissions to create users.')
         })
 
     if request.method == 'POST':
@@ -141,19 +142,21 @@ def create_user(request):
             print(f"[UserManagement] Error creating user: {str(e)}")
             return JsonResponse({'error': str(e)}, status=400)
             
-    return JsonResponse({'error': 'Invalid method'}, status=405)
+    return JsonResponse({'error': _('Invalid method')}, status=405)
 
 def api_permission_error(request, required_permission='can_manage_users'):
     # Check if the request expects JSON
     if request.headers.get('Accept') == 'application/json':
         return JsonResponse({
-            'error': 'Permission denied',
-            'message': 'You do not have the required permissions to perform this action.',
+            'error': _('Permission denied'),
+            'message': _('You do not have the required permissions to perform this action.'),
             'required_permission': required_permission
         }, status=403)
     else:
         return render(request, 'unauthorized.html', {
-            'reason': f'You need {required_permission.replace("_", " ")} permissions to access this feature.'
+            'reason': _('You need {permission} permissions to access this feature.').format(
+                permission=required_permission.replace("_", " ")
+            )
         })
 
 

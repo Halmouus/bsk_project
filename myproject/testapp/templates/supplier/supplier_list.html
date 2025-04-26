@@ -1,24 +1,25 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Supplier List{% endblock %}
+{% block title %}{% trans "Supplier List" %}{% endblock %}
 
 {% block content %}
 <div class="container mt-5">
-    <h1 class="mb-4 animate__animated animate__fadeInDown">Supplier List</h1>
+    <h1 class="mb-4 animate__animated animate__fadeInDown">{% trans "Supplier List" %}</h1>
     <a href="{% url 'supplier-create' %}" class="btn btn-primary mb-4 animate__animated animate__fadeIn">
-        <i class="fas fa-plus me-2"></i> Add New Supplier
+        <i class="fas fa-plus me-2"></i> {% trans "Add New Supplier" %}
     </a>
     <div class="table-responsive">
         <table class="table table-hover table-striped animate__animated animate__fadeInUp">
             <thead class="table-dark">
                 <tr>
-                    <th>Name</th>
-                    <th>IF Code</th>
-                    <th>ICE Code</th>
-                    <th>RC Code</th>
-                    <th>Primary Contact</th>
-                    <th>Documents</th>
-                    <th class="text-end">Actions</th>
+                    <th>{% trans "Name" %}</th>
+                    <th>{% trans "IF Code" %}</th>
+                    <th>{% trans "ICE Code" %}</th>
+                    <th>{% trans "RC Code" %}</th>
+                    <th>{% trans "Primary Contact" %}</th>
+                    <th>{% trans "Documents" %}</th>
+                    <th class="text-end">{% trans "Actions" %}</th>
                 </tr>
             </thead>
             <tbody>
@@ -48,33 +49,33 @@
                             <div class="d-flex">
                                 {% if supplier.regulation_file %}
                                     <a href="#" class="view-document me-2" data-document-type="regulation" data-supplier-id="{{ supplier.id }}" data-filename="{{ supplier.regulation_file.name|default:'Regulation File' }}">
-                                        <i class="fas fa-file-contract fa-lg text-danger" data-toggle="tooltip" title="Regulation File"></i>
+                                        <i class="fas fa-file-contract fa-lg text-danger" data-toggle="tooltip" title="{% trans "Regulation File" %}"></i>
                                     </a>
                                 {% else %}
-                                    <i class="fas fa-file-contract fa-lg text-muted opacity-25 me-2" data-toggle="tooltip" title="No Regulation File"></i>
+                                    <i class="fas fa-file-contract fa-lg text-muted opacity-25 me-2" data-toggle="tooltip" title="{% trans "No Regulation File" %}"></i>
                                 {% endif %}
                                 
                                 {% if supplier.payment_delay_file %}
                                     <a href="#" class="view-document" data-document-type="payment_delay" data-supplier-id="{{ supplier.id }}" data-filename="{{ supplier.payment_delay_file.name|default:'Payment Delay File' }}">
-                                        <i class="fas fa-file-invoice-dollar fa-lg text-success" data-toggle="tooltip" title="Payment Delay File"></i>
+                                        <i class="fas fa-file-invoice-dollar fa-lg text-success" data-toggle="tooltip" title="{% trans "Payment Delay File" %}"></i>
                                     </a>
                                 {% else %}
-                                    <i class="fas fa-file-invoice-dollar fa-lg text-muted opacity-25" data-toggle="tooltip" title="No Payment Delay File"></i>
+                                    <i class="fas fa-file-invoice-dollar fa-lg text-muted opacity-25" data-toggle="tooltip" title="{% trans "No Payment Delay File" %}"></i>
                                 {% endif %}
                             </div>
                         </td>
                         <td class="text-end">
                             <a href="{% url 'supplier-update' supplier.pk %}" class="btn btn-warning btn-sm">
-                                <i class="fas fa-edit"></i> Edit
+                                <i class="fas fa-edit"></i> {% trans "Edit" %}
                             </a>
                             <a href="{% url 'supplier-delete' supplier.pk %}" class="btn btn-danger btn-sm">
-                                <i class="fas fa-trash"></i> Delete
+                                <i class="fas fa-trash"></i> {% trans "Delete" %}
                             </a>
                         </td>
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="5" class="text-center text-muted">No suppliers found.</td>
+                        <td colspan="5" class="text-center text-muted">{% trans "No suppliers found." %}</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -87,7 +88,7 @@
     <div class="modal-dialog modal-xl" style="max-width: 90%;">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="documentViewModalLabel">View Document</h5>
+                <h5 class="modal-title" id="documentViewModalLabel">{% trans "View Document" %}</h5>
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -95,9 +96,9 @@
             <div class="modal-body">
                 <div class="text-center" id="document-loading">
                     <div class="spinner-border text-primary" role="status">
-                        <span class="sr-only">Loading...</span>
+                        <span class="sr-only">{% trans "Loading" %}</span>
                     </div>
-                    <p class="mt-2">Loading document...</p>
+                    <p class="mt-2">{% trans "Loading document..." %}</p>
                 </div>
                 <div id="document-container" class="d-none">
                     <!-- The document will be embedded here -->
@@ -108,9 +109,9 @@
             </div>
             <div class="modal-footer">
                 <a class="btn btn-primary" id="document-download" target="_blank">
-                    <i class="fas fa-download"></i> Download
+                    <i class="fas fa-download"></i> {% trans "Download" %}
                 </a>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>
@@ -248,11 +249,11 @@ const SupplierDocumentHandler = {
         
         // Set modal title
         const documentTypeLabels = {
-            'regulation': 'Regulation File',
-            'payment_delay': 'Payment Delay Agreement'
+            'regulation': '{% trans "Regulation File" %}',
+            'payment_delay': '{% trans "Payment Delay Agreement" %}'
         };
         
-        const documentTypeLabel = documentTypeLabels[documentType] || 'Document';
+        const documentTypeLabel = documentTypeLabels[documentType] || '{% trans "Document" %}';
         $('#documentViewModalLabel').text(`${documentTypeLabel}: ${filename}`);
         
         // Reset modal state
@@ -282,7 +283,7 @@ const SupplierDocumentHandler = {
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error(`Server error (${response.status}): ${errorText}`);
-                throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+                throw new Error(`{% trans "Server returned" %} ${response.status}: ${response.statusText}`);
             }
             
             const contentType = response.headers.get('content-type');
@@ -292,7 +293,7 @@ const SupplierDocumentHandler = {
             console.log(`[SupplierDocumentHandler] Blob size: ${blob.size} bytes`);
             
             if (blob.size === 0) {
-                throw new Error('Empty document received');
+                throw new Error('{% trans "Empty document received" %}');
             }
             
             const objectUrl = URL.createObjectURL(blob);
@@ -305,11 +306,11 @@ const SupplierDocumentHandler = {
             } else if (contentType.includes('image')) {
                 // Handle image
                 $('#document-container').html(`
-                    <img src="${objectUrl}" class="img-fluid" alt="Document Image">
+                    <img src="${objectUrl}" class="img-fluid" alt="{% trans "Document Image" %}">
                 `);
             } else {
                 // Unsupported file type
-                throw new Error(`Unsupported file type: ${contentType}`);
+                throw new Error(`{% trans "Unsupported file type" %}: ${contentType}`);
             }
             
             // Show the document
@@ -322,10 +323,10 @@ const SupplierDocumentHandler = {
             $('#document-error').removeClass('d-none');
             $('#document-error').html(`
                 <i class="fas fa-exclamation-triangle"></i> 
-                Error: ${error.message}
+                {% trans "Error" %}: ${error.message}
                 <div class="mt-2">
                     <a href="/testapp/suppliers/${supplierId}/document/${documentType}/" class="btn btn-sm btn-primary" target="_blank">
-                        Try Direct Download
+                        {% trans "Try Direct Download" %}
                     </a>
                 </div>
             `);

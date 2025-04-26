@@ -1,14 +1,15 @@
+{% load i18n %}
 <div class="table-responsive">
     <table class="table table-hover mb-0">
         <thead class="bg-light">
             <tr>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Reference</th>
-                <th>Account</th>
-                <th class="text-right">Amount</th>
-                <th>Notes</th>
-                <th>Recorded By</th>
+                <th>{% trans "Date" %}</th>
+                <th>{% trans "Type" %}</th>
+                <th>{% trans "Reference" %}</th>
+                <th>{% trans "Account" %}</th>
+                <th class="text-right">{% trans "Amount" %}</th>
+                <th>{% trans "Notes" %}</th>
+                <th>{% trans "Recorded By" %}</th>
             </tr>
         </thead>
         <tbody>
@@ -27,7 +28,7 @@
             {% empty %}
             <tr>
                 <td colspan="7" class="text-center text-muted py-4">
-                    <i class="fas fa-info-circle mr-1"></i> No expenses found
+                    <i class="fas fa-info-circle mr-1"></i> {% trans "No expenses found" %}
                 </td>
             </tr>
             {% endfor %}
@@ -35,7 +36,7 @@
         {% if expenses %}
         <tfoot class="bg-light font-weight-bold">
             <tr>
-                <td colspan="4" class="text-right">Total:</td>
+                <td colspan="4" class="text-right">{% trans "Total:" %}</td>
                 <td class="text-right">{{ total_expenses|floatformat:2 }}</td>
                 <td colspan="2"></td>
             </tr>

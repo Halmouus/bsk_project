@@ -1,24 +1,25 @@
 {% load accounting_filters %}
+{% load i18n %}
 
 <div class="modal-header">
-    <h5 class="modal-title">Check Details</h5>
+    <h5 class="modal-title">{% trans "Check Details" %}</h5>
     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
 </div>
 <div class="modal-body">
     <div class="card mb-3">
         <div class="card-header bg-light">
-            <h6 class="mb-0">Basic Information</h6>
+            <h6 class="mb-0">{% trans "Basic Information" %}</h6>
         </div>
         <div class="card-body">
             <div class="row">
                 <div class="col-md-6">
-                    <p><strong>Reference:</strong> {{ check.checker.bank_account.bank }}-{{ check.position }}</p>
-                    <p><strong>Amount:</strong> {{ check.amount|format_balance }}</p>
-                    <p><strong>Creation Date:</strong> {{ check.creation_date|date:"Y-m-d" }}</p>
+                    <p><strong>{% trans "Reference:" %}</strong> {{ check.checker.bank_account.bank }}-{{ check.position }}</p>
+                    <p><strong>{% trans "Amount:" %}</strong> {{ check.amount|format_balance }}</p>
+                    <p><strong>{% trans "Creation Date:" %}</strong> {{ check.creation_date|date:"Y-m-d" }}</p>
                 </div>
                 <div class="col-md-6">
-                    <p><strong>Beneficiary:</strong> {{ check.beneficiary.name }}</p>
-                    <p><strong>Status:</strong> 
+                    <p><strong>{% trans "Beneficiary:" %}</strong> {{ check.beneficiary.name }}</p>
+                    <p><strong>{% trans "Status:" %}</strong> 
                         <span class="badge 
                             {% if check.status == 'paid' %}bg-success
                             {% elif check.status == 'rejected' or check.status == 'cancelled' %}bg-danger
@@ -27,13 +28,13 @@
                             {{ check.get_status_display }}
                         </span>
                     </p>
-                    <p><strong>Payment Due:</strong> {% if check.payment_due %}{{ check.payment_due|date:"Y-m-d" }}{% else %}Not set{% endif %}</p>
+                    <p><strong>{% trans "Payment Due:" %}</strong> {% if check.payment_due %}{{ check.payment_due|date:"Y-m-d" }}{% else %}{% trans "Not set" %}{% endif %}</p>
                 </div>
             </div>
             {% if check.observation %}
             <div class="row mt-2">
                 <div class="col-12">
-                    <p><strong>Observation:</strong><br>{{ check.observation }}</p>
+                    <p><strong>{% trans "Observation:" %}</strong><br>{{ check.observation }}</p>
                 </div>
             </div>
             {% endif %}
@@ -42,42 +43,42 @@
 
     <div class="card mb-3">
         <div class="card-header bg-light">
-            <h6 class="mb-0">Status Timeline</h6>
+            <h6 class="mb-0">{% trans "Status Timeline" %}</h6>
         </div>
         <div class="card-body">
             <ul class="list-group">
                 <li class="list-group-item">
                     <i class="fas fa-calendar-plus text-primary me-2"></i> 
-                    <strong>Created:</strong> {{ check.creation_date|date:"Y-m-d" }}
+                    <strong>{% trans "Created:" %}</strong> {{ check.creation_date|date:"Y-m-d" }}
                 </li>
                 
                 {% if check.printed_at %}
                 <li class="list-group-item">
                     <i class="fas fa-print text-info me-2"></i>
-                    <strong>Printed:</strong> {{ check.printed_at|date:"Y-m-d" }}
+                    <strong>{% trans "Printed:" %}</strong> {{ check.printed_at|date:"Y-m-d" }}
                 </li>
                 {% endif %}
                 
                 {% if check.delivered_at %}
                 <li class="list-group-item">
                     <i class="fas fa-truck text-primary me-2"></i>
-                    <strong>Delivered:</strong> {{ check.delivered_at|date:"Y-m-d" }}
+                    <strong>{% trans "Delivered:" %}</strong> {{ check.delivered_at|date:"Y-m-d" }}
                 </li>
                 {% endif %}
                 
                 {% if check.paid_at %}
                 <li class="list-group-item">
                     <i class="fas fa-check-circle text-success me-2"></i>
-                    <strong>Paid:</strong> {{ check.paid_at|date:"Y-m-d" }}
+                    <strong>{% trans "Paid:" %}</strong> {{ check.paid_at|date:"Y-m-d" }}
                 </li>
                 {% endif %}
                 
                 {% if check.rejected_at %}
                 <li class="list-group-item">
                     <i class="fas fa-times-circle text-danger me-2"></i>
-                    <strong>Rejected:</strong> {{ check.rejected_at|date:"Y-m-d" }}
+                    <strong>{% trans "Rejected:" %}</strong> {{ check.rejected_at|date:"Y-m-d" }}
                     <p class="mb-0 ms-4 text-muted">
-                        <small>Reason: {{ check.get_rejection_reason_display }} - {{ check.rejection_note }}</small>
+                        <small>{% trans "Reason:" %} {{ check.get_rejection_reason_display }} - {{ check.rejection_note }}</small>
                     </p>
                 </li>
                 {% endif %}
@@ -85,9 +86,9 @@
                 {% if check.cancelled_at %}
                 <li class="list-group-item">
                     <i class="fas fa-ban text-danger me-2"></i>
-                    <strong>Cancelled:</strong> {{ check.cancelled_at|date:"Y-m-d" }}
+                    <strong>{% trans "Cancelled:" %}</strong> {{ check.cancelled_at|date:"Y-m-d" }}
                     <p class="mb-0 ms-4 text-muted">
-                        <small>Reason: {{ check.cancellation_reason }}</small>
+                        <small>{% trans "Reason:" %} {{ check.cancellation_reason }}</small>
                     </p>
                 </li>
                 {% endif %}
@@ -98,18 +99,18 @@
     {% if check.is_tax_payment %}
     <div class="card mb-3">
         <div class="card-header bg-light">
-            <h6 class="mb-0">Tax Payment Details</h6>
+            <h6 class="mb-0">{% trans "Tax Payment Details" %}</h6>
         </div>
         <div class="card-body">
-            <p><strong>Tax Type:</strong> {{ check.tax_declaration_type|title }}</p>
+            <p><strong>{% trans "Tax Type:" %}</strong> {{ check.tax_declaration_type|title }}</p>
             {% if check.tax_declaration %}
-            <p><strong>Tax Declaration:</strong> 
+            <p><strong>{% trans "Tax Declaration:" %}</strong> 
                 {% if check.tax_declaration_type == 'other_tax' %}
-                    {{ check.tax_declaration.get_tax_type_display }} Tax {{ check.tax_declaration.year }}
+                    {{ check.tax_declaration.get_tax_type_display }} {% trans "Tax" %} {{ check.tax_declaration.year }}
                 {% elif check.tax_declaration_type == 'ir' %}
                     IR {{ check.tax_declaration.period_month }}/{{ check.tax_declaration.period_year }}
                 {% elif check.tax_declaration_type == 'stamp_right' %}
-                    Stamp Rights {{ check.tax_declaration.period_month }}/{{ check.tax_declaration.period_year }}
+                    {% trans "Stamp Rights" %} {{ check.tax_declaration.period_month }}/{{ check.tax_declaration.period_year }}
                 {% elif check.tax_declaration_type == 'vat' %}
                     VAT {{ check.tax_declaration.period_month }}/{{ check.tax_declaration.period_year }}
                 {% endif %}
@@ -122,15 +123,15 @@
     {% if check.allocations.exists %}
     <div class="card">
         <div class="card-header bg-light">
-            <h6 class="mb-0">Allocations</h6>
+            <h6 class="mb-0">{% trans "Allocations" %}</h6>
         </div>
         <div class="card-body">
             <table class="table table-sm">
                 <thead>
                     <tr>
-                        <th>Invoice</th>
-                        <th>Date</th>
-                        <th>Amount</th>
+                        <th>{% trans "Invoice" %}</th>
+                        <th>{% trans "Date" %}</th>
+                        <th>{% trans "Amount" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -148,10 +149,10 @@
     {% endif %}
 </div>
 <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
     {% if check.status == 'draft' or check.status == 'pending' %}
     <a href="{% url 'check-update' check.id %}" class="btn btn-primary">
-        <i class="fas fa-edit"></i> Edit Check
+        <i class="fas fa-edit"></i> {% trans "Edit Check" %}
     </a>
     {% endif %}
 </div>

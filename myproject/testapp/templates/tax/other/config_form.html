@@ -89,18 +89,18 @@
                     <div class="col-md-6">
                         <label for="due_month" class="form-label">{% trans "Due Month" %}</label>
                         <select class="form-control" id="due_month" name="due_month" required>
-                            <option value="1" {% if config and config.due_month == 1 %}selected{% endif %}>January</option>
-                            <option value="2" {% if config and config.due_month == 2 %}selected{% endif %}>February</option>
-                            <option value="3" {% if config and config.due_month == 3 %}selected{% endif %}>March</option>
-                            <option value="4" {% if config and config.due_month == 4 %}selected{% endif %}>April</option>
-                            <option value="5" {% if config and config.due_month == 5 %}selected{% endif %}>May</option>
-                            <option value="6" {% if config and config.due_month == 6 %}selected{% endif %}>June</option>
-                            <option value="7" {% if config and config.due_month == 7 %}selected{% endif %}>July</option>
-                            <option value="8" {% if config and config.due_month == 8 %}selected{% endif %}>August</option>
-                            <option value="9" {% if config and config.due_month == 9 %}selected{% endif %}>September</option>
-                            <option value="10" {% if config and config.due_month == 10 %}selected{% endif %}>October</option>
-                            <option value="11" {% if config and config.due_month == 11 %}selected{% endif %}>November</option>
-                            <option value="12" {% if config and config.due_month == 12 %}selected{% endif %}>December</option>
+                            <option value="1" {% if config and config.due_month == 1 %}selected{% endif %}>{% trans "January" %}</option>
+                            <option value="2" {% if config and config.due_month == 2 %}selected{% endif %}>{% trans "February" %}</option>
+                            <option value="3" {% if config and config.due_month == 3 %}selected{% endif %}>{% trans "March" %}</option>
+                            <option value="4" {% if config and config.due_month == 4 %}selected{% endif %}>{% trans "April" %}</option>
+                            <option value="5" {% if config and config.due_month == 5 %}selected{% endif %}>{% trans "May" %}</option>
+                            <option value="6" {% if config and config.due_month == 6 %}selected{% endif %}>{% trans "June" %}</option>
+                            <option value="7" {% if config and config.due_month == 7 %}selected{% endif %}>{% trans "July" %}</option>
+                            <option value="8" {% if config and config.due_month == 8 %}selected{% endif %}>{% trans "August" %}</option>
+                            <option value="9" {% if config and config.due_month == 9 %}selected{% endif %}>{% trans "September" %}</option>
+                            <option value="10" {% if config and config.due_month == 10 %}selected{% endif %}>{% trans "October" %}</option>
+                            <option value="11" {% if config and config.due_month == 11 %}selected{% endif %}>{% trans "November" %}</option>
+                            <option value="12" {% if config and config.due_month == 12 %}selected{% endif %}>{% trans "December" %}</option>
                         </select>
                     </div>
                 </div>

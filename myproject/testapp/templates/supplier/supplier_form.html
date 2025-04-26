@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
+{% load i18n %}
 
-{% block title %}Supplier Form{% endblock %}
+{% block title %}{% trans "Supplier Form" %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -33,9 +34,9 @@
 <div class="container mt-4">
     <h1 class="mb-4">
         {% if is_create_mode %}
-            Add New Supplier
+            {% trans "Add New Supplier" %}
         {% else %}
-            Edit Supplier: {{ form.instance.name }}
+            {% trans "Edit Supplier" %}: {{ form.instance.name }}
         {% endif %}
     </h1>
     <form method="post" id="supplierForm" novalidate enctype="multipart/form-data">
@@ -44,7 +45,7 @@
         <!-- Debug form errors -->
         {% if form.errors %}
         <div class="alert alert-danger">
-            <strong>Form has errors:</strong>
+            <strong>{% trans "Form has errors" %}:</strong>
             <ul>
                 {% for field, errors in form.errors.items %}
                     <li>{{ field }}: {{ errors|join:", " }}</li>
@@ -56,29 +57,29 @@
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
                 <h5 class="card-title mb-0">
-                    <i class="fas fa-info-circle"></i> Basic Information
+                    <i class="fas fa-info-circle"></i> {% trans "Basic Information" %}
                 </h5>
             </div>
             <div class="card-body">
                 <!-- Name Field -->
                 <div class="mb-3">
-                    <label for="id_name" class="form-label">Name</label>
+                    <label for="id_name" class="form-label">{% trans "Name" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_name" name="name" value="{{ form.name.value|default:'' }}" required>
-                    <div class="invalid-feedback">Please provide a valid name.</div>
+                    <div class="invalid-feedback">{% trans "Please provide a valid name." %}</div>
                 </div>
 
                 <!-- IF Code Field -->
                 <div class="mb-3">
-                    <label for="id_if_code" class="form-label">IF Code</label>
+                    <label for="id_if_code" class="form-label">{% trans "IF Code" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_if_code" name="if_code" value="{{ form.if_code.value|default:'' }}" required>
-                    <div class="invalid-feedback">Please provide a valid IF code.</div>
+                    <div class="invalid-feedback">{% trans "Please provide a valid IF code." %}</div>
                 </div>
 
                 <!-- ICE Code Field -->
                 <div class="mb-3">
-                    <label for="id_ice_code" class="form-label">ICE Code</label>
+                    <label for="id_ice_code" class="form-label">{% trans "ICE Code" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_ice_code" name="ice_code" value="{{ form.ice_code.value|default:'' }}" required>
-                    <div class="invalid-feedback">ICE code must be exactly 15 digits.</div>
+                    <div class="invalid-feedback">{% trans "ICE code must be exactly 15 digits." %}</div>
                 </div>
             </div>
         </div>
@@ -87,29 +88,29 @@
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
                 <h5 class="card-title mb-0">
-                    <i class="fas fa-file-alt"></i> Registration Details
+                    <i class="fas fa-file-alt"></i> {% trans "Registration Details" %}
                 </h5>
             </div>
             <div class="card-body">
                 <!-- RC Code Field -->
                 <div class="mb-3">
-                    <label for="id_rc_code" class="form-label">RC Code</label>
+                    <label for="id_rc_code" class="form-label">{% trans "RC Code" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_rc_code" name="rc_code" value="{{ form.rc_code.value|default:'' }}">
-                    <div class="invalid-feedback">Please provide a valid RC code.</div>
+                    <div class="invalid-feedback">{% trans "Please provide a valid RC code." %}</div>
                 </div>
 
                 <!-- RC Center Field -->
                 <div class="mb-3">
-                    <label for="id_rc_center" class="form-label">RC Center</label>
+                    <label for="id_rc_center" class="form-label">{% trans "RC Center" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_rc_center" name="rc_center" value="{{ form.rc_center.value|default:'' }}">
-                    <div class="invalid-feedback">Please provide a valid RC center.</div>
+                    <div class="invalid-feedback">{% trans "Please provide a valid RC center." %}</div>
                 </div>
 
                 <!-- Accounting Code Field -->
                 <div class="mb-3">
-                    <label for="id_accounting_code" class="form-label">Accounting Code</label>
+                    <label for="id_accounting_code" class="form-label">{% trans "Accounting Code" %}</label>
                     <input type="text" class="form-control form-control-sm" id="id_accounting_code" name="accounting_code" value="{{ form.accounting_code.value|default:'' }}" required>
-                    <div class="invalid-feedback">Please provide a valid accounting code.</div>
+                    <div class="invalid-feedback">{% trans "Please provide a valid accounting code." %}</div>
                 </div>
             </div>
         </div>
@@ -118,36 +119,36 @@
     <div class="card mb-4">
         <div class="card-header bg-primary text-white">
             <h5 class="card-title mb-0">
-                <i class="fas fa-address-card"></i> Contact Information
+                <i class="fas fa-address-card"></i> {% trans "Contact Information" %}
             </h5>
         </div>
         <div class="card-body">
             <!-- Primary Email Field -->
             <div class="mb-3">
-                <label for="id_email_primary" class="form-label">Primary Email</label>
+                <label for="id_email_primary" class="form-label">{% trans "Primary Email" %}</label>
                 <input type="email" class="form-control form-control-sm" id="id_email_primary" name="email_primary" value="{{ form.email_primary.value|default:'' }}">
-                <div class="invalid-feedback">Please provide a valid email address.</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid email address." %}</div>
             </div>
 
             <!-- Secondary Email Field -->
             <div class="mb-3">
-                <label for="id_email_secondary" class="form-label">Secondary Email</label>
+                <label for="id_email_secondary" class="form-label">{% trans "Secondary Email" %}</label>
                 <input type="email" class="form-control form-control-sm" id="id_email_secondary" name="email_secondary" value="{{ form.email_secondary.value|default:'' }}">
-                <div class="invalid-feedback">Please provide a valid email address.</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid email address." %}</div>
             </div>
 
             <!-- Primary Phone Field -->
             <div class="mb-3">
-                <label for="id_phone_primary" class="form-label">Primary Phone</label>
+                <label for="id_phone_primary" class="form-label">{% trans "Primary Phone" %}</label>
                 <input type="tel" class="form-control form-control-sm" id="id_phone_primary" name="phone_primary" value="{{ form.phone_primary.value|default:'' }}">
-                <div class="invalid-feedback">Please provide a valid phone number.</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid phone number." %}</div>
             </div>
 
             <!-- Secondary Phone Field -->
             <div class="mb-3">
-                <label for="id_phone_secondary" class="form-label">Secondary Phone</label>
+                <label for="id_phone_secondary" class="form-label">{% trans "Secondary Phone" %}</label>
                 <input type="tel" class="form-control form-control-sm" id="id_phone_secondary" name="phone_secondary" value="{{ form.phone_secondary.value|default:'' }}">
-                <div class="invalid-feedback">Please provide a valid phone number.</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid phone number." %}</div>
             </div>
         </div>
     </div>
@@ -156,53 +157,53 @@
     <div class="card mb-4">
         <div class="card-header bg-primary text-white">
             <h5 class="card-title mb-0">
-                <i class="fas fa-cogs"></i> Additional Information
+                <i class="fas fa-cogs"></i> {% trans "Additional Information" %}
             </h5>
         </div>
         <div class="card-body">
             <!-- Is Energy Field -->
             <div class="mb-3">
-                <label for="id_is_energy" class="form-label">Is Energy?</label>
+                <label for="id_is_energy" class="form-label">{% trans "Is Energy?" %}</label>
                 <select class="form-select form-select-sm" id="id_is_energy" name="is_energy">
-                    <option value="True" {% if form.is_energy.value %}selected{% endif %}>Yes</option>
-                    <option value="False" {% if not form.is_energy.value %}selected{% endif %}>No</option>
+                    <option value="True" {% if form.is_energy.value %}selected{% endif %}>{% trans "Yes" %}</option>
+                    <option value="False" {% if not form.is_energy.value %}selected{% endif %}>{% trans "No" %}</option>
                 </select>
             </div>
 
             <!-- Service Field -->
             <div class="mb-3">
-                <label for="id_service" class="form-label">Service</label>
+                <label for="id_service" class="form-label">{% trans "Service" %}</label>
                 <input type="text" class="form-control form-control-sm" id="id_service" name="service" value="{{ form.service.value|default:'' }}">
-                <div class="invalid-feedback">Please provide a valid service description.</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid service description." %}</div>
             </div>
 
             <!-- Delay Convention Field -->
             <div class="mb-3">
-                <label for="id_delay_convention" class="form-label">Delay Convention (Days)</label>
+                <label for="id_delay_convention" class="form-label">{% trans "Delay Convention (Days)" %}</label>
                 <input type="number" class="form-control form-control-sm" id="id_delay_convention" name="delay_convention" value="{{ form.delay_convention.value|default:'' }}" required>
-                <div class="invalid-feedback">Please provide a valid delay convention (0, 30, 60, 90, or 120).</div>
+                <div class="invalid-feedback">{% trans "Please provide a valid delay convention (0, 30, 60, 90, or 120)." %}</div>
             </div>
 
             <!-- Delay Check Field -->
             <div class="mb-3">
-                <label for="id_delay_check" class="form-label">Check Payment Delay (Days)</label>
+                <label for="id_delay_check" class="form-label">{% trans "Check Payment Delay (Days)" %}</label>
                 <input type="number" class="form-control form-control-sm" id="id_delay_check" name="delay_check" value="{{ form.delay_check.value|default:0 }}">
-                <div class="form-text">Additional days to delay check payment forecasts after due date.</div>
+                <div class="form-text">{% trans "Additional days to delay check payment forecasts after due date." %}</div>
             </div>
 
             <!-- Delay LCN Field -->
             <div class="mb-3">
-                <label for="id_delay_lcn" class="form-label">LCN Payment Delay (Days)</label>
+                <label for="id_delay_lcn" class="form-label">{% trans "LCN Payment Delay (Days)" %}</label>
                 <input type="number" class="form-control form-control-sm" id="id_delay_lcn" name="delay_lcn" value="{{ form.delay_lcn.value|default:0 }}">
-                <div class="form-text">Additional days to delay LCN payment forecasts after due date.</div>
+                <div class="form-text">{% trans "Additional days to delay LCN payment forecasts after due date." %}</div>
             </div>
 
             <!-- Is Regulated Field -->
             <div class="mb-3">
-                <label for="id_is_regulated" class="form-label">Is Regulated?</label>
+                <label for="id_is_regulated" class="form-label">{% trans "Is Regulated?" %}</label>
                 <select class="form-select form-select-sm" id="id_is_regulated" name="is_regulated">
-                    <option value="True" {% if form.is_regulated.value %}selected{% endif %}>Yes</option>
-                    <option value="False" {% if not form.is_regulated.value %}selected{% endif %}>No</option>
+                    <option value="True" {% if form.is_regulated.value %}selected{% endif %}>{% trans "Yes" %}</option>
+                    <option value="False" {% if not form.is_regulated.value %}selected{% endif %}>{% trans "No" %}</option>
                 </select>
             </div>
         </div>
@@ -212,13 +213,13 @@
     <div class="card mb-4">
         <div class="card-header bg-primary text-white">
             <h5 class="card-title mb-0">
-                <i class="fas fa-file-pdf"></i> Documents
+                <i class="fas fa-file-pdf"></i> {% trans "Documents" %}
             </h5>
         </div>
         <div class="card-body">
             <!-- Regulation File -->
             <div class="mb-4">
-                <label for="id_regulation_file" class="form-label">Regulation File</label>
+                <label for="id_regulation_file" class="form-label">{% trans "Regulation File" %}</label>
                 <div class="input-group">
                     <input type="file" class="form-control form-control-sm" id="id_regulation_file" name="regulation_file" accept=".pdf">
                     <button class="btn btn-outline-secondary" type="button" id="clear-regulation-file">
@@ -229,14 +230,14 @@
                 <div class="mt-2" id="regulation-file-info">
                     <div class="alert alert-info d-flex justify-content-between align-items-center">
                         <div>
-                            <i class="fas fa-file-pdf"></i> Current file: {{ form.instance.regulation_file.name|default:"Regulation File"|truncatechars:30 }}
+                            <i class="fas fa-file-pdf"></i> {% trans "Current file" %}: {{ form.instance.regulation_file.name|default:"Regulation File"|truncatechars:30 }}
                         </div>
                         <div>
                             <a href="#" class="btn btn-sm btn-info view-document" data-document-type="regulation" data-supplier-id="{{ form.instance.id }}">
-                                <i class="fas fa-eye"></i> View
+                                <i class="fas fa-eye"></i> {% trans "View" %}
                             </a>
                             <button type="button" class="btn btn-sm btn-danger" id="remove-regulation-file">
-                                <i class="fas fa-trash"></i> Remove
+                                <i class="fas fa-trash"></i> {% trans "Remove" %}
                             </button>
                         </div>
                     </div>
@@ -247,7 +248,7 @@
             
             <!-- Payment Delay File -->
             <div class="mb-3">
-                <label for="id_payment_delay_file" class="form-label">Payment Delay Agreement</label>
+                <label for="id_payment_delay_file" class="form-label">{% trans "Payment Delay Agreement" %}</label>
                 <div class="input-group">
                     <input type="file" class="form-control form-control-sm" id="id_payment_delay_file" name="payment_delay_file" accept=".pdf">
                     <button class="btn btn-outline-secondary" type="button" id="clear-payment-delay-file">
@@ -258,14 +259,14 @@
                 <div class="mt-2" id="payment-delay-file-info">
                     <div class="alert alert-info d-flex justify-content-between align-items-center">
                         <div>
-                            <i class="fas fa-file-pdf"></i> Current file: {{ form.instance.payment_delay_file.name|default:"Payment Delay File"|truncatechars:30 }}
+                            <i class="fas fa-file-pdf"></i> {% trans "Current file" %}: {{ form.instance.payment_delay_file.name|default:"Payment Delay File"|truncatechars:30 }}
                         </div>
                         <div>
                             <a href="#" class="btn btn-sm btn-info view-document" data-document-type="payment_delay" data-supplier-id="{{ form.instance.id }}">
-                                <i class="fas fa-eye"></i> View
+                                <i class="fas fa-eye"></i> {% trans "View" %}
                             </a>
                             <button type="button" class="btn btn-sm btn-danger" id="remove-payment-delay-file">
-                                <i class="fas fa-trash"></i> Remove
+                                <i class="fas fa-trash"></i> {% trans "Remove" %}
                             </button>
                         </div>
                     </div>
@@ -278,10 +279,10 @@
 
         <!-- Save Button -->
         <button type="submit" class="btn btn-primary" id="saveButton" disabled>
-            <i class="fas fa-save"></i> Save
+            <i class="fas fa-save"></i> {% trans "Save" %}
         </button>
         <a href="{% url 'supplier-list' %}" class="btn btn-secondary">
-            <i class="fas fa-times"></i> Cancel
+            <i class="fas fa-times"></i> {% trans "Cancel" %}
         </a>
     </form>
 </div>

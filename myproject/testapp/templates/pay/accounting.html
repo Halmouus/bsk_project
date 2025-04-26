@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Pay Accounting{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Pay Accounting" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-4">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-calculator me-2"></i>Pay Accounting</h2>
+        <h2><i class="fas fa-calculator me-2"></i>{% trans "Pay Accounting" %}</h2>
         
         <!-- Filter Form -->
         <div class="d-flex gap-2">
@@ -14,7 +15,7 @@
                 <div class="input-group">
                     <input type="date" class="form-control" name="start_date" id="startDate">
                     <input type="date" class="form-control" name="end_date" id="endDate">
-                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <button type="submit" class="btn btn-primary">{% trans "Apply" %}</button>
                 </div>
             </form>
         </div>
@@ -27,7 +28,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-arrow-up me-2"></i>Total Debit
+                        <i class="fas fa-arrow-up me-2"></i>{% trans "Total Debit" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0 text-danger" id="totalDebit">
@@ -43,7 +44,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-arrow-down me-2"></i>Total Credit
+                        <i class="fas fa-arrow-down me-2"></i>{% trans "Total Credit" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0 text-success" id="totalCredit">
@@ -59,7 +60,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-balance-scale me-2"></i>Balance
+                        <i class="fas fa-balance-scale me-2"></i>{% trans "Balance" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0" id="totalBalance">
@@ -82,13 +83,13 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Date</th>
-                            <th>Label</th>
-                            <th class="text-end">Debit</th>
-                            <th class="text-end">Credit</th>
-                            <th>Account</th>
-                            <th>Reference</th>
-                            <th>Actions</th>
+                            <th>{% trans "Date" %}</th>
+                            <th>{% trans "Label" %}</th>
+                            <th class="text-end">{% trans "Debit" %}</th>
+                            <th class="text-end">{% trans "Credit" %}</th>
+                            <th>{% trans "Account" %}</th>
+                            <th>{% trans "Reference" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody id="accountingTableBody">
@@ -105,7 +106,7 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Declaration Details</h5>
+                <h5 class="modal-title">{% trans "Declaration Details" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -180,12 +181,12 @@ $(document).ready(function() {
         const endDate = $('#endDate').val();
         
         if ((startDate && !endDate) || (!startDate && endDate)) {
-            showToast('error', 'Please select both dates or neither');
+            showToast('error', '{% trans "Please select both dates or neither" %}');
             return;
         }
         
         if (startDate && endDate && startDate > endDate) {
-            showToast('error', 'Start date must be before end date');
+            showToast('error', '{% trans "Start date must be before end date" %}');
             return;
         }
 
@@ -198,7 +199,7 @@ $(document).ready(function() {
             updateTotals(response.totals);
         })
         .fail(function(xhr) {
-            showToast('error', 'Failed to load accounting data');
+            showToast('error', '{% trans "Failed to load accounting data" %}');
         });
     });
 
@@ -212,7 +213,7 @@ $(document).ready(function() {
                 $('#declarationModal').modal('show');
             })
             .fail(function(xhr) {
-                showToast('error', 'Failed to load declaration details');
+                showToast('error', '{% trans "Failed to load declaration details" %}');
             });
     });
 

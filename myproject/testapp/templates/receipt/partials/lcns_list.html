@@ -1,5 +1,7 @@
 {% load status_filters %}
 {% load accounting_filters %}
+{% load presentation_filters %}
+{% load i18n %}
 {% for lcn in receipts %}
 <tr class="status-{{ lcn.status|lower }}">
     <td>{{ lcn.operation_date|date:"Y-m-d" }}</td>
@@ -26,7 +28,7 @@
     <td>
         {% with pres=lcn.lcn_presentations.first %}
         {% if pres %}
-            {{ pres.presentation.bank_reference }} at {{ pres.presentation.date|date:"d/m/Y" }}<br>
+            {{ pres.presentation.bank_reference }} {% trans "at" %} {{ pres.presentation.date|date:"d/m/Y" }}<br>
             <span class="badge badge-{{ pres.presentation.status|status_badge }}">
                 {{ pres.presentation.get_status_display }}
             </span>
@@ -43,7 +45,7 @@
             <br><small class="text-danger">{{ lcn.get_rejection_cause_display }}</small>
             {% with last_pres=lcn.lcn_presentations.last %}
                 {% if last_pres %}
-                    <br><small class="text-muted">Represented on {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
+                    <br><small class="text-muted">{% trans "Represented on" %} {{ last_pres.presentation.date|date:"Y-m-d" }}</small>
                 {% endif %}
             {% endwith %}
         {% endif %}
@@ -68,7 +70,7 @@
     </td>
     <td>
         {% if lcn.document %}
-            <a href="{{ lcn.document.url }}" target="_blank" class="btn btn-sm btn-info" title="View Document">
+            <a href="{{ lcn.document.url }}" target="_blank" class="btn btn-sm btn-info" title='{% trans "View Document" %}'>
                 <i class="fas fa-file-pdf"></i>
             </a>
         {% else %}
@@ -91,7 +93,7 @@
                     </button>
                 {% else %}
                     <button class="btn btn-sm btn-secondary documents-only" data-toggle="modal" data-target="#receiptModal" 
-                            data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title="Manage Documents">
+                            data-type="lcn" data-action="edit" data-id="{{ lcn.id }}" title='{% trans "Manage Documents" %}'>
                         <i class="fas fa-file-pdf"></i>
                     </button>
                 {% endif %}
@@ -101,6 +103,6 @@
 </tr>
 {% empty %}
 <tr>
-    <td colspan="11" class="text-center">No LCNs found</td>
+    <td colspan="11" class="text-center">{% trans "No LCNs found" %}</td>
 </tr>
 {% endfor %}

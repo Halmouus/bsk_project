@@ -1,18 +1,19 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Pay Declarations{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Pay Declarations" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-4">
     <!-- Header -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fas fa-file-invoice me-2"></i>Pay Declarations</h2>
+        <h2><i class="fas fa-file-invoice me-2"></i>{% trans "Pay Declarations" %}</h2>
         <div class="btn-group">
             <button class="btn btn-primary" id="createDeclarationBtn">
-                <i class="fas fa-plus me-2"></i>Create Declaration
+                <i class="fas fa-plus me-2"></i>{% trans "Create Declaration" %}
             </button>
             <button class="btn btn-outline-primary" id="viewPendingBtn">
-                <i class="fas fa-clock me-2"></i>Pending
+                <i class="fas fa-clock me-2"></i>{% trans "Pending" %}
                 <span class="badge bg-warning ms-1">{{ pending_count }}</span>
             </button>
         </div>
@@ -23,9 +24,9 @@
         <div class="card-body">
             <form id="filterForm" class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label">Year</label>
+                    <label class="form-label">{% trans "Year" %}</label>
                     <select class="form-control" name="year">
-                        <option value="">All</option>
+                        <option value="">{% trans "All" %}</option>
                         {% for y in years %}
                             <option value="{{ y }}"
                                 {% if y == current_year %}selected{% endif %}>
@@ -35,9 +36,9 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Month</label>
+                    <label class="form-label">{% trans "Month" %}</label>
                     <select class="form-control" name="month">
-                        <option value="">All</option>
+                        <option value="">{% trans "All" %}</option>
                         {% for m in "123456789101112"|make_list %}
                             <option value="{{ m }}"
                                 {% if m == current_month %}selected{% endif %}>
@@ -47,9 +48,9 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Status</label>
+                    <label class="form-label">{% trans "Status" %}</label>
                     <select class="form-control" name="status">
-                        <option value="">All</option>
+                        <option value="">{% trans "All" %}</option>
                         {% for status, label in status_choices %}
                             <option value="{{ status }}">{{ label }}</option>
                         {% endfor %}
@@ -58,7 +59,7 @@
                 <div class="col-md-3">
                     <label class="form-label">&nbsp;</label>
                     <button type="submit" class="btn btn-primary d-block w-100">
-                        <i class="fas fa-filter me-2"></i>Apply
+                        <i class="fas fa-filter me-2"></i>{% trans "Apply" %}
                     </button>
                 </div>
             </form>
@@ -72,7 +73,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-file-invoice me-2"></i>Total
+                        <i class="fas fa-file-invoice me-2"></i>{% trans "Total" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0">{{ declarations|length }}</h3>
@@ -86,7 +87,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-check-circle me-2"></i>Total Paid
+                        <i class="fas fa-check-circle me-2"></i>{% trans "Total Paid" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0 text-success">
@@ -102,7 +103,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-clock me-2"></i>Total Pending
+                        <i class="fas fa-clock me-2"></i>{% trans "Total Pending" %}
                     </h6>
                     <div class="mt-3">
                         <h3 class="mb-0 text-warning">
@@ -121,12 +122,12 @@
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Period</th>
-                            <th>Due Date</th>
-                            <th class="text-end">Amount</th>
-                            <th>Status</th>
-                            <th>Payment Info</th>
-                            <th>Actions</th>
+                            <th>{% trans "Period" %}</th>
+                            <th>{% trans "Due Date" %}</th>
+                            <th class="text-end">{% trans "Amount" %}</th>
+                            <th>{% trans "Status" %}</th>
+                            <th>{% trans "Payment Info" %}</th>
+                            <th>{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody id="declarationsTable">
@@ -147,14 +148,14 @@
         <div class="modal-content">
             <div class="modal-header bg-success text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-check me-2"></i>Mark as Paid
+                    <i class="fas fa-check me-2"></i>{% trans "Mark as Paid" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="paymentForm">
                     <div class="mb-3">
-                        <label for="paymentDate" class="form-label">Payment Date</label>
+                        <label for="paymentDate" class="form-label">{% trans "Payment Date" %}</label>
                         <input type="date" 
                                class="form-control" 
                                id="paymentDate"
@@ -163,8 +164,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="confirmPayment">Confirm</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-success" id="confirmPayment">{% trans "Confirm" %}</button>
             </div>
         </div>
     </div>
@@ -176,21 +177,21 @@
         <div class="modal-content">
             <div class="modal-header bg-danger text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-times me-2"></i>Mark as Rejected
+                    <i class="fas fa-times me-2"></i>{% trans "Mark as Rejected" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="rejectionForm">
                     <div class="mb-3">
-                        <label for="rejectionDate" class="form-label">Rejection Date</label>
+                        <label for="rejectionDate" class="form-label">{% trans "Rejection Date" %}</label>
                         <input type="date" 
                                class="form-control" 
                                id="rejectionDate"
                                required>
                     </div>
                     <div class="mb-3">
-                        <label for="rejectionReason" class="form-label">Reason</label>
+                        <label for="rejectionReason" class="form-label">{% trans "Reason" %}</label>
                         <textarea class="form-control" 
                                  id="rejectionReason" 
                                  rows="3"
@@ -199,8 +200,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-danger" id="confirmRejection">Confirm</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-danger" id="confirmRejection">{% trans "Confirm" %}</button>
             </div>
         </div>
     </div>

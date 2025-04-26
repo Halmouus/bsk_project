@@ -3,7 +3,7 @@
 {% load accounting_filters %}
 {% load i18n %}
 
-{% block title %}Stamp Rights Management{% endblock %}
+{% block title %}{% trans "Stamp Rights Management" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -111,13 +111,13 @@
                                                 <a class="dropdown-item view-document" href="#" 
                                                    data-document-url="{{ declaration.declaration_document.url }}" 
                                                    data-document-type="declaration">
-                                                    <i class="fas fa-file-pdf me-2"></i> View Declaration Document
+                                                    <i class="fas fa-file-pdf me-2"></i> {% trans "View Declaration Document" %}
                                                 </a>
                                             </li>
                                             {% else %}
                                             <li>
                                                 <span class="dropdown-item disabled">
-                                                    <i class="fas fa-file-pdf me-2"></i> No Declaration Document
+                                                    <i class="fas fa-file-pdf me-2"></i> {% trans "No Declaration Document" %}
                                                 </span>
                                             </li>
                                             {% endif %}
@@ -127,13 +127,13 @@
                                                 <a class="dropdown-item view-document" href="#" 
                                                    data-document-url="{{ declaration.payment_document.url }}"
                                                    data-document-type="payment">
-                                                    <i class="fas fa-file-invoice-dollar me-2"></i> View Payment Receipt
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> {% trans "View Payment Receipt" %}
                                                 </a>
                                             </li>
                                             {% else %}
                                             <li>
                                                 <span class="dropdown-item disabled">
-                                                    <i class="fas fa-file-invoice-dollar me-2"></i> No Payment Receipt
+                                                    <i class="fas fa-file-invoice-dollar me-2"></i> {% trans "No Payment Receipt" %}
                                                 </span>
                                             </li>
                                             {% endif %}
@@ -186,7 +186,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="statusModalTitle">Update Status</h5>
+                <h5 class="modal-title" id="statusModalTitle">{% trans "Update Status" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -195,7 +195,7 @@
                     <input type="hidden" id="statusAction">
                     
                     <div class="mb-3">
-                        <label for="statusDate" class="form-label">Date</label>
+                        <label for="statusDate" class="form-label">{% trans "Date" %}</label>
                         <input type="date" class="form-control" id="statusDate" 
                                value="{% now 'Y-m-d' %}" required>
                     </div>

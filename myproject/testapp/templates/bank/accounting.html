@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% load i18n %}
 
 {% block title %}Bank Accounting{% endblock %}
 
@@ -7,14 +8,14 @@
 <div class="container-fluid">
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} Accounting</h2>
+        <h2>{{ bank_account.bank }} - {{ bank_account.account_number }} {% trans 'Accounting' %}</h2>
         <div class="d-flex gap-2">
             <!-- Filter Form -->
             <form class="form-inline" id="accountingFilterForm">
                 <div class="input-group">
                     <input type="date" class="form-control" name="start_date" id="startDate">
                     <input type="date" class="form-control" name="end_date" id="endDate">
-                    <button type="submit" class="btn btn-primary">Apply</button>
+                    <button type="submit" class="btn btn-primary">{% trans 'Apply' %}</button>
                 </div>
             </form>
         </div>
@@ -25,7 +26,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Debit</h5>
+                    <h5 class="card-title">{% trans 'Total Debit' %}</h5>
                     <p class="card-text text-danger h4">{{ total_debit|format_balance }}</p>
                 </div>
             </div>
@@ -33,7 +34,7 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    <h5 class="card-title">Total Credit</h5>
+                    <h5 class="card-title">{% trans 'Total Credit' %}</h5>
                     <p class="card-text text-success h4">{{ total_credit|format_balance }}</p>
                 </div>
             </div>
@@ -45,14 +46,14 @@
         <table class="table table-hover">
             <thead>
                 <tr>
-                    <th>Date</th>
-                    <th>Label</th>
-                    <th class="text-right">Debit</th>
-                    <th class="text-right">Credit</th>
-                    <th>Account Code</th>
-                    <th>Reference</th>
-                    <th>Journal Code</th>
-                    <th>Actions</th>
+                    <th>{% trans 'Date' %}</th>
+                    <th>{% trans 'Label' %}</th>
+                    <th class="text-right">{% trans 'Debit' %}</th>
+                    <th class="text-right">{% trans 'Credit' %}</th>
+                    <th>{% trans 'Account Code' %}</th>
+                    <th>{% trans 'Reference' %}</th>
+                    <th>{% trans 'Journal Code' %}</th>
+                    <th>{% trans 'Actions' %}</th>
                 </tr>
             </thead>
             <tbody id="accountingTableBody">

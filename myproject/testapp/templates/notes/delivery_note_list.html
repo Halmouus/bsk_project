@@ -1,14 +1,15 @@
 {% extends 'base.html' %}
-{% block title %}Delivery Notes{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Delivery Notes" %}{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h3 mb-0">
         <i class="fas fa-clipboard-list text-primary mr-2"></i>
-        Delivery Notes
+        {% trans "Delivery Notes" %}
     </h1>
     <button type="button" class="btn btn-primary d-flex align-items-center" data-toggle="modal" data-target="#addNoteModal">
         <i class="fas fa-plus-circle mr-2"></i>
-        Add New Note
+        {% trans "Add New Note" %}
     </button>
 </div>
 
@@ -19,37 +20,37 @@
             <div class="col-md-3">
                 <label class="filter-label">
                     <i class="fas fa-search filter-icon"></i>
-                    Reference
+                    {% trans "Reference" %}
                 </label>
-                <input type="text" class="form-control custom-input" id="ref-filter" placeholder="Search by reference...">
+                <input type="text" class="form-control custom-input" id="ref-filter" placeholder='{% trans "Search by reference..." %}'>
             </div>
             <div class="col-md-3">
                 <label class="filter-label">
                     <i class="fas fa-building filter-icon"></i>
-                    Supplier
+                    {% trans "Supplier" %}
                 </label>
-                <input type="text" class="form-control custom-input" id="supplier-filter" placeholder="Search by supplier...">
+                <input type="text" class="form-control custom-input" id="supplier-filter" placeholder='{% trans "Search by supplier..." %}'>
             </div>
             <div class="col-md-4">
                 <label class="filter-label">
                     <i class="fas fa-calendar filter-icon"></i>
-                    Date Range
+                    {% trans "Date Range" %}
                 </label>
                 <div class="date-range-group">
                     <input type="date" class="form-control custom-input" id="date-from-filter">
-                    <span class="date-range-separator">to</span>
+                    <span class="date-range-separator">{% trans "to" %}</span>
                     <input type="date" class="form-control custom-input" id="date-to-filter">
                 </div>
             </div>
             <div class="col-md-2">
                 <label class="filter-label">
                     <i class="fas fa-link filter-icon"></i>
-                    Status
+                    {% trans "Status" %}
                 </label>
                 <select class="form-control custom-input" id="linked-filter">
-                    <option value="">All</option>
-                    <option value="yes">Linked</option>
-                    <option value="no">Unlinked</option>
+                    <option value="">{% trans "All" %}</option>
+                    <option value="yes">{% trans "Linked" %}</option>
+                    <option value="no">{% trans "Unlinked" %}</option>
                 </select>
             </div>
         </div>
@@ -62,13 +63,13 @@
     <table class="table mb-0">
         <thead>
             <tr>
-                <th>Date</th>
-                <th>Supplier</th>
-                <th>Reference</th>
-                <th>Amount</th>
-                <th>Document</th>
-                <th>Invoice</th>
-                <th>Actions</th>
+                <th>{% trans "Date" %}</th>
+                <th>{% trans "Supplier" %}</th>
+                <th>{% trans "Reference" %}</th>
+                <th>{% trans "Amount" %}</th>
+                <th>{% trans "Document" %}</th>
+                <th>{% trans "Invoice" %}</th>
+                <th>{% trans "Actions" %}</th>
             </tr>
         </thead>
         <tbody>
@@ -94,7 +95,7 @@
                     {% else %}
                         <span class="badge-unlinked">
                             <i class="fas fa-unlink mr-1"></i>
-                            Not Linked
+                            {% trans "Not Linked" %}
                         </span>
                     {% endif %}
                 </td>
@@ -117,7 +118,7 @@
             <tr>
                 <td colspan="7" class="empty-state">
                     <i class="fas fa-clipboard"></i>
-                    <p class="mb-0">No delivery notes found</p>
+                    <p class="mb-0">{% trans "No delivery notes found" %}</p>
                 </td>
             </tr>
             {% endfor %}
@@ -130,41 +131,41 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Delivery Note</h5>
+                <h5 class="modal-title">{% trans "Add Delivery Note" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="add-note-form">
                     <div class="form-group">
-                        <label>Reference *</label>
+                        <label>{% trans "Reference" %} *</label>
                         <input type="text" name="ref" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label>Date *</label>
+                        <label>{% trans "Date" %} *</label>
                         <input type="date" name="date" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label>Supplier *</label>
-                        <input type="text" id="supplier-search" class="form-control" placeholder="Search supplier..." required>
+                        <label>{% trans "Supplier" %} *</label>
+                        <input type="text" id="supplier-search" class="form-control" placeholder='{% trans "Search supplier..." %}' required>
                         <input type="hidden" name="supplier" id="supplier-id" required>
                     </div>
                     <div class="form-group">
-                        <label>Amount</label>
+                        <label>{% trans "Amount" %}</label>
                         <input type="number" name="amount" class="form-control" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label>Document (PDF)</label>
+                        <label>{% trans "Document (PDF)" %}</label>
                         <input type="file" name="document" class="form-control" accept="application/pdf">
                     </div>
                     <div class="form-group">
-                        <label>Notes</label>
+                        <label>{% trans "Notes" %}</label>
                         <textarea name="notes" class="form-control" rows="3"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="save-note">Save</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="save-note">{% trans "Save" %}</button>
             </div>
         </div>
     </div>
@@ -175,43 +176,43 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Delivery Note</h5>
+                <h5 class="modal-title">{% trans "Edit Delivery Note" %}</h5>
                 <button type="button" class="close" data-dismiss="modal">&times;</button>
             </div>
             <div class="modal-body">
                 <form id="edit-note-form">
                     <input type="hidden" name="note_id">
                     <div class="form-group">
-                        <label>Reference *</label>
+                        <label>{% trans "Reference" %} *</label>
                         <input type="text" name="ref" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label>Date *</label>
+                        <label>{% trans "Date" %} *</label>
                         <input type="date" name="date" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label>Supplier *</label>
+                        <label>{% trans "Supplier" %} *</label>
                         <select id="edit-supplier" name="supplier" class="form-control" required disabled>
-                            <option value="">Loading...</option>
+                            <option value="">{% trans "Loading..." %}</option>
                         </select>
                     </div>
                     <div class="form-group">
-                        <label>Amount</label>
+                        <label>{% trans "Amount" %}</label>
                         <input type="number" name="amount" class="form-control" step="0.01">
                     </div>
                     <div class="form-group">
-                        <label>Document (PDF)</label>
+                        <label>{% trans "Document (PDF)" %}</label>
                         <input type="file" name="document" class="form-control" accept="application/pdf">
                     </div>
                     <div class="form-group">
-                        <label>Notes</label>
+                        <label>{% trans "Notes" %}</label>
                         <textarea name="notes" class="form-control" rows="3"></textarea>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="update-note">Update</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="update-note">{% trans "Update" %}</button>
             </div>
         </div>
     </div>
@@ -467,7 +468,7 @@ function filterNotes() {
     
     if (visibleRows === 0) {
         if (!$('tbody tr.no-results').length) {
-            $('tbody').append('<tr class="no-results"><td colspan="7" class="text-center text-muted">No matching notes found</td></tr>');
+            $('tbody').append('<tr class="no-results"><td colspan="7" class="text-center text-muted">{% trans "No matching notes found" %}</td></tr>');
         } else {
             $('.no-results').show();
         }
@@ -485,7 +486,7 @@ function filterNotes() {
                 <tr class="no-results">
                     <td colspan="7" class="empty-state">
                         <i class="fas fa-search"></i>
-                        <p class="mb-0">No matching notes found</p>
+                        <p class="mb-0">{% trans "No matching notes found" %}</p>
                         </td>
                         </tr>`;
                 $('tbody').append(emptyMessage);
@@ -587,15 +588,15 @@ document.getElementById('save-note')?.addEventListener('click', function() {
         console.log("Save response:", data);
         if (data.success) {
             $('#addNoteModal').modal('hide');
-            showAlert('Delivery note added successfully', 'success');
+            showAlert('{% trans "Delivery note added successfully" %}', 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
-            showAlert(data.error || 'An error occurred', 'danger');
+            showAlert(data.error || '{% trans "An error occurred" %}', 'danger');
         }
     })
     .catch(error => {
         console.error("Save error:", error);
-        showAlert('Failed to save delivery note', 'danger');
+        showAlert('{% trans "Failed to save delivery note" %}', 'danger');
     });
 });
 
@@ -642,9 +643,9 @@ document.querySelectorAll('.edit-note').forEach(button => {
             // Add document info with a specific class for easy removal
             if (data.document_url) {
                 const docInfo = `<div class="doc-info mb-2">
-                    <small class="text-muted">Current document:</small>
+                    <small class="text-muted">{% trans "Current document:" %}</small>
                     <a href="${data.document_url}" target="_blank" class="ml-2">
-                        <i class="fas fa-file-pdf"></i> View
+                        <i class="fas fa-file-pdf"></i> {% trans "View" %}
                     </a>
                 </div>`;
                 form.querySelector('[name="document"]').insertAdjacentHTML('beforebegin', docInfo);
@@ -652,7 +653,7 @@ document.querySelectorAll('.edit-note').forEach(button => {
         })
         .catch(error => {
             console.error('Error:', error);
-            alert('Failed to load note details');
+            alert('{% trans "Failed to load note details" %}');
         });
     });
 });
@@ -676,15 +677,15 @@ document.getElementById('update-note')?.addEventListener('click', function() {
         console.log("Update response:", data);
         if (data.success) {
             $('#editNoteModal').modal('hide');
-            showAlert('Note updated successfully', 'success');
+            showAlert('{% trans "Note updated successfully" %}', 'success');
             setTimeout(() => location.reload(), 1000);
         } else {
-            showAlert(data.error || 'Failed to update note', 'danger');
+            showAlert(data.error || '{% trans "Failed to update note" %}', 'danger');
         }
     })
     .catch(error => {
         console.error("Update error:", error);
-        showAlert('Failed to update note', 'danger');
+        showAlert('{% trans "Failed to update note" %}', 'danger');
     });
 });
 
@@ -692,7 +693,7 @@ document.getElementById('update-note')?.addEventListener('click', function() {
 document.querySelectorAll('.delete-note').forEach(button => {
     button.addEventListener('click', function() {
         console.log("Delete button clicked");
-        if (!confirm('Are you sure you want to delete this note?')) return;
+        if (!confirm('{% trans "Are you sure you want to delete this note?" %}')) return;
         
         const noteId = this.dataset.id;
         const row = this.closest('tr');
@@ -712,14 +713,14 @@ document.querySelectorAll('.delete-note').forEach(button => {
             console.log("Delete response:", data);
             if (data.success) {
                 row.remove();
-                showAlert('Note deleted successfully', 'success');
+                showAlert('{% trans "Note deleted successfully" %}', 'success');
             } else {
-                showAlert(data.error || 'Failed to delete note', 'danger');
+                showAlert(data.error || '{% trans "Failed to delete note" %}', 'danger');
             }
         })
         .catch(error => {
             console.error("Delete error:", error);
-            showAlert('Failed to delete note', 'danger');
+            showAlert('{% trans "Failed to delete note" %}', 'danger');
         });
     });
 });

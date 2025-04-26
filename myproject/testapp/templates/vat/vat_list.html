@@ -1,22 +1,23 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% load i18n %}
 
-{% block title %}VAT Management{% endblock %}
+{% block title %}{% trans "VAT Management" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     {% csrf_token %}
     <!-- Header Section -->
     <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2><i class="fa-light fa-landmark"></i> VAT Management</h2>
+        <h2><i class="fa-light fa-landmark"></i> {% trans "VAT Management" %}</h2>
         <div class="d-flex gap-2">
             {% if not config %}
                 <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#configModal">
-                    <i class="fas fa-cog me-2"></i>Configure VAT
+                    <i class="fas fa-cog me-2"></i>{% trans "Configure VAT" %}
                 </button>
             {% else %}
                 <button class="btn btn-success" id="createDeclarationBtn">
-                    <i class="fas fa-plus me-2"></i>New Declaration
+                    <i class="fas fa-plus me-2"></i>{% trans "New Declaration" %}
                 </button>
             {% endif %}
         </div>
@@ -28,28 +29,28 @@
             <div class="card-body">
                 <div class="row">
                     <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Declaration Day</h6>
+                        <h6 class="text-muted mb-1">{% trans "Declaration Day" %}</h6>
                         <p class="mb-0">{{ config.declaration_day }}</p>
                     </div>
                     <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Bank Account</h6>
+                        <h6 class="text-muted mb-1">{% trans "Bank Account" %}</h6>
                         <p class="mb-0">{{ config.domiciliation_bank }}</p>
                     </div>
                     <div class="col-md-3">
-                        <h6 class="text-muted mb-1">VAT Accounts</h6>
+                        <h6 class="text-muted mb-1">{% trans "VAT Accounts" %}</h6>
                         <p class="mb-0">{{ config.invoiced_vat_account }} / {{ config.deducted_vat_account }}</p>
                     </div>
                     <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Journal</h6>
+                        <h6 class="text-muted mb-1">{% trans "Journal" %}</h6>
                         <p class="mb-0">{{ config.journal }}</p>
                     </div>
                     <div class="col-md-3">
-                        <h6 class="text-muted mb-1">Default Forecast Amount</h6>
+                        <h6 class="text-muted mb-1">{% trans "Default Forecast Amount" %}</h6>
                         <p class="mb-0">{{ config.default_forecast_amount }}</p>
                     </div>
                     <div class="col-md-3 text-end">
                         <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#configModal">
-                            <i class="fas fa-edit me-2"></i>Edit Configuration
+                            <i class="fas fa-edit me-2"></i>{% trans "Edit Configuration" %}
                         </button>
                     </div>
                 </div>
@@ -63,13 +64,13 @@
                     <table class="table">
                         <thead>
                             <tr>
-                                <th>Period</th>
-                                <th>Due Date</th>
-                                <th class="text-end">Invoiced VAT</th>
-                                <th class="text-end">Deducted VAT</th>
-                                <th class="text-end">Net VAT</th>
-                                <th>Status</th>
-                                <th>Actions</th>
+                                <th>{% trans "Period" %}</th>
+                                <th>{% trans "Due Date" %}</th>
+                                <th class="text-end">{% trans "Invoiced VAT" %}</th>
+                                <th class="text-end">{% trans "Deducted VAT" %}</th>
+                                <th class="text-end">{% trans "Net VAT" %}</th>
+                                <th>{% trans "Status" %}</th>
+                                <th>{% trans "Actions" %}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -92,29 +93,33 @@
                                 <td>
                                     <div class="btn-group">
                                         <button class="btn btn-sm btn-primary view-details" 
-                                                data-declaration-id="{{ declaration.id }}">
+                                                data-declaration-id="{{ declaration.id }}"
+                                                title="{% trans 'View Details' %}">
                                             <i class="fas fa-eye"></i>
                                         </button>
                                         {% if declaration.status == 'draft' %}
                                             {% if declaration.is_processed %}
                                                 <button class="btn btn-sm btn-success declare-vat"
-                                                        data-declaration-id="{{ declaration.id }}">
+                                                        data-declaration-id="{{ declaration.id }}"
+                                                        title="{% trans 'Declare VAT' %}">
                                                     <i class="fas fa-check"></i>
                                                 </button>
                                             {% else %}
                                                 <button class="btn btn-sm btn-info process-vat"
-                                                        data-declaration-id="{{ declaration.id }}">
+                                                        data-declaration-id="{{ declaration.id }}"
+                                                        title="{% trans 'Process VAT' %}">
                                                     <i class="fas fa-cogs"></i>
                                                 </button>
                                                 <button class="btn btn-sm btn-danger delete-vat"
                                                         data-declaration-id="{{ declaration.id }}"
-                                                        title="Delete Declaration">
+                                                        title="{% trans 'Delete Declaration' %}">
                                                     <i class="fas fa-trash"></i>
                                                 </button>
                                             {% endif %}
                                         {% elif declaration.status == 'declared' %}
                                             <button class="btn btn-sm btn-success pay-vat"
-                                                    data-declaration-id="{{ declaration.id }}">
+                                                    data-declaration-id="{{ declaration.id }}"
+                                                    title="{% trans 'Pay VAT' %}">
                                                 <i class="fas fa-money-bill"></i>
                                             </button>
                                         {% endif %}
@@ -123,7 +128,7 @@
                             </tr>
                             {% empty %}
                             <tr>
-                                <td colspan="7" class="text-center">No declarations found</td>
+                                <td colspan="7" class="text-center">{% trans "No declarations found" %}</td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -135,7 +140,7 @@
         <!-- Configuration Required Alert -->
         <div class="alert alert-warning">
             <i class="fas fa-exclamation-triangle me-2"></i>
-            VAT Configuration required before creating declarations
+            {% trans "VAT Configuration required before creating declarations" %}
         </div>
     {% endif %}
 </div>
@@ -146,7 +151,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-cog me-2"></i>VAT Configuration
+                    <i class="fas fa-cog me-2"></i>{% trans "VAT Configuration" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -154,16 +159,16 @@
                 <form id="vatConfigForm">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">Declaration Day</label>
+                        <label class="form-label">{% trans "Declaration Day" %}</label>
                         <input type="number" class="form-control" 
                                name="declaration_day" min="1" max="31" 
                                value="{{ config.declaration_day|default:20 }}" required>
-                        <small class="text-muted">Will adjust automatically for months with fewer days</small>
+                        <small class="text-muted">{% trans "Will adjust automatically for months with fewer days" %}</small>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Bank Account</label>
+                        <label class="form-label">{% trans "Bank Account" %}</label>
                         <select class="form-control" name="bank_id" required>
-                            <option value="">Select Bank Account</option>
+                            <option value="">{% trans "Select Bank Account" %}</option>
                             {% for bank in bank_accounts %}
                                 <option value="{{ bank.id }}" 
                                     {% if config and config.domiciliation_bank_id == bank.id %}selected{% endif %}>
@@ -173,25 +178,25 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Invoiced VAT Account</label>
+                        <label class="form-label">{% trans "Invoiced VAT Account" %}</label>
                         <input type="text" class="form-control" 
                                name="invoiced_vat_account" 
                                value="{{ config.invoiced_vat_account|default:'4300' }}" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Deducted VAT Account</label>
+                        <label class="form-label">{% trans "Deducted VAT Account" %}</label>
                         <input type="text" class="form-control" 
                                name="deducted_vat_account" 
                                value="{{ config.deducted_vat_account|default:'4400' }}" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Journal</label>
+                        <label class="form-label">{% trans "Journal" %}</label>
                         <input type="text" class="form-control" 
                                name="journal" 
                                value="{{ config.journal|default:'06' }}" required>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">Default Forecast Amount</label>
+                        <label class="form-label">{% trans "Default Forecast Amount" %}</label>
                         <input type="text" class="form-control" 
                                name="default_forecast_amount" 
                                value="{{ config.default_forecast_amount|default:'400000.00' }}" required>
@@ -199,8 +204,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveConfig">Save Configuration</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveConfig">{% trans "Save Configuration" %}</button>
             </div>
         </div>
     </div>
@@ -212,7 +217,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-plus me-2"></i>New VAT Declaration
+                    <i class="fas fa-plus me-2"></i>{% trans "New VAT Declaration" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -222,7 +227,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Month</label>
+                                <label class="form-label">{% trans "Month" %}</label>
                                 <select class="form-control" name="month" required>
                                     <!-- Months 1 to 9 -->
                                     {% for i in "123456789"|make_list %}
@@ -237,7 +242,7 @@
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label class="form-label">Year</label>
+                                <label class="form-label">{% trans "Year" %}</label>
                                 <input type="number" class="form-control" 
                                        name="year" required
                                        value="{% now 'Y' %}">
@@ -247,8 +252,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="createDeclaration">Create</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="createDeclaration">{% trans "Create" %}</button>
             </div>
         </div>
     </div>
@@ -260,7 +265,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">
-                    <i class="fas fa-money-bill me-2"></i>Record VAT Payment
+                    <i class="fas fa-money-bill me-2"></i>{% trans "Record VAT Payment" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -268,7 +273,7 @@
                 <form id="paymentForm">
                     {% csrf_token %}
                     <div class="mb-3">
-                        <label class="form-label">Payment Date</label>
+                        <label class="form-label">{% trans "Payment Date" %}</label>
                         <input type="date" class="form-control" 
                                name="payment_date" required
                                value="{% now 'Y-m-d' %}">
@@ -276,8 +281,8 @@
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-success" id="recordPayment">Record Payment</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-success" id="recordPayment">{% trans "Record Payment" %}</button>
             </div>
         </div>
     </div>

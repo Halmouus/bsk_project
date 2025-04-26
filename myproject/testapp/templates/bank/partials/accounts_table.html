@@ -1,5 +1,6 @@
 {% load accounting_filters %}
-{% block title %}Bank Accounts{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Bank Accounts" %}{% endblock %}
 {% for account in accounts %}
 <tr>
     <td>

@@ -1,6 +1,7 @@
 <!-- templates/presentation/partials/presentations_table.html -->
 {% load accounting_filters %}
 {% load presentation_filters %}
+{% load i18n %}
 {% for presentation in presentations %}
 <tr>
     <td>{{ presentation.internal_reference }}</td>
@@ -9,9 +10,9 @@
     <td>
         {% with first_receipt=presentation.presentation_receipts.first %}
             {% if first_receipt.checkreceipt %}
-                Check
+                {% trans "Check" %}
             {% elif first_receipt.lcn %}
-                LCN
+                {% trans "LCN" %}
             {% endif %}
         {% endwith %}
     </td>
@@ -26,7 +27,7 @@
     </td>
     <td>
         {% if presentation.document %}
-            <a href="{{ presentation.document.url }}" target="_blank" class="btn btn-sm btn-info" title="View Document">
+            <a href="{{ presentation.document.url }}" target="_blank" class="btn btn-sm btn-info" title='{% trans "View Document" %}'>
                 <i class="fas fa-file-pdf"></i>
             </a>
         {% else %}
@@ -47,6 +48,6 @@
 </tr>
 {% empty %}
 <tr>
-    <td colspan="9" class="text-center">No presentations found</td>
+    <td colspan="9" class="text-center">{% trans "No presentations found" %}</td>
 </tr>
 {% endfor %}

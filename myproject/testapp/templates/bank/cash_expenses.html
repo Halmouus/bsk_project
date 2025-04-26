@@ -1,16 +1,16 @@
 {% extends 'base.html' %}
 {% load humanize %}
-
+{% load i18n %}
 {% block title %}Cash Expenses{% endblock %}
 
 {% block content %}
 <div class="page-header mb-4 bg-white rounded-lg shadow-sm p-4">
     <div class="d-flex justify-content-between align-items-center">
         <h1 class="h3 mb-0 text-gray-800">
-            <i class="fas fa-file-invoice text-primary"></i> Direct Cash Expenses
+            <i class="fas fa-file-invoice text-primary"></i> {% trans 'Direct Cash Expenses' %}
         </h1>
         <button type="button" class="btn btn-primary btn-sm shadow-sm" data-toggle="modal" data-target="#newExpenseModal">
-            <i class="fas fa-plus-circle"></i> New Expense
+            <i class="fas fa-plus-circle"></i> {% trans 'New Expense' %}
         </button>
     </div>
 </div>
@@ -21,13 +21,13 @@
         <div class="row">
             <div class="col-md-6">
                 <h5 class="font-weight-bold text-primary mb-3">
-                    <i class="fas fa-wallet"></i> Available Balance
+                    <i class="fas fa-wallet"></i> {% trans 'Available Balance' %}
                 </h5>
                 <h3 class="mb-0">{{ current_balance|floatformat:2 }}</h3>
             </div>
             <div class="col-md-6 text-right">
                 <h5 class="font-weight-bold text-danger mb-3">
-                    <i class="fas fa-file-invoice"></i> Total Expenses
+                    <i class="fas fa-file-invoice"></i> {% trans 'Total Expenses' %}
                 </h5>
                 <h3 class="mb-0">{{ total_expenses|floatformat:2 }}</h3>
             </div>
@@ -41,24 +41,24 @@
         <form id="filter-form" class="row">
             <div class="col-md-4">
                 <div class="form-group">
-                    <label class="small font-weight-bold">Start Date</label>
+                    <label class="small font-weight-bold">{% trans 'Start Date' %}</label>
                     <input type="date" name="start_date" class="form-control" 
                            value="{{ request.GET.start_date }}">
                 </div>
             </div>
             <div class="col-md-4">
                 <div class="form-group">
-                    <label class="small font-weight-bold">End Date</label>
+                    <label class="small font-weight-bold">{% trans 'End Date' %}</label>
                     <input type="date" name="end_date" class="form-control" 
                            value="{{ request.GET.end_date }}">
                 </div>
             </div>
             <div class="col-md-4 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary mr-2">
-                    <i class="fas fa-filter"></i> Filter
+                    <i class="fas fa-filter"></i> {% trans 'Filter' %}
                 </button>
                 <button type="button" id="clear-filters" class="btn btn-outline-secondary">
-                    <i class="fas fa-times"></i> Clear
+                    <i class="fas fa-times"></i> {% trans 'Clear' %}
                 </button>
             </div>
         </form>
@@ -76,7 +76,7 @@
         <div class="modal-content border-0">
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">
-                    <i class="fas fa-file-invoice"></i> New Direct Expense
+                    <i class="fas fa-file-invoice"></i> {% trans 'New Direct Expense' %}
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -85,9 +85,9 @@
             <form id="expense-form" class="needs-validation" novalidate>
                 <div class="modal-body">
                     <div class="form-group">
-                        <label class="small font-weight-bold">Expense Type *</label>
+                        <label class="small font-weight-bold">{% trans 'Expense Type' %} *</label>
                         <select id="expense-type" class="form-control" required>
-                            <option value="">Select type...</option>
+                            <option value="">{% trans 'Select type...' %}</option>
                             {% for code, name in expense_types.items %}
                             <option value="{{ code }}">{{ name }}</option>
                             {% endfor %}
@@ -98,7 +98,7 @@
                     </div>
 
                     <div class="form-group">
-                        <label class="small font-weight-bold">Amount *</label>
+                        <label class="small font-weight-bold">{% trans 'Amount' %} *</label>
                         <input type="number" id="expense-amount" class="form-control" required
                                min="0.01" step="0.01">
                         <div class="invalid-feedback">
@@ -107,7 +107,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Date *</label>
+                        <label class="small font-weight-bold">{% trans 'Date' %} *</label>
                         <input type="date" id="expense-date" class="form-control" required
                                value="{{ today|date:'Y-m-d' }}">
                         <div class="invalid-feedback">
@@ -116,7 +116,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Expense Account *</label>
+                        <label class="small font-weight-bold">{% trans 'Expense Account' %} *</label>
                         <input type="text" id="expense-account" class="form-control" required
                                pattern="^\d{4,5}$">
                         <div class="invalid-feedback">
@@ -125,7 +125,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Reference *</label>
+                        <label class="small font-weight-bold">{% trans 'Reference' %} *</label>
                         <input type="text" id="expense-reference" class="form-control" required>
                         <div class="invalid-feedback">
                             Please enter a reference number
@@ -133,7 +133,7 @@
                     </div>
                     
                     <div class="form-group">
-                        <label class="small font-weight-bold">Notes</label>
+                        <label class="small font-weight-bold">{% trans 'Notes' %}</label>
                         <textarea id="expense-notes" class="form-control" rows="3"></textarea>
                     </div>
                 </div>
@@ -142,7 +142,7 @@
                         <i class="fas fa-times"></i> Cancel
                     </button>
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Record Expense
+                        <i class="fas fa-save"></i> {% trans 'Record Expense' %}
                     </button>
                 </div>
             </form>
@@ -203,7 +203,7 @@ document.getElementById('expense-form').addEventListener('submit', function(e) {
     })
     .catch(error => {
         console.error('Error:', error);
-        alert('An error occurred while recording the expense');
+        alert('{% trans "An error occurred while recording the expense" %}');
     });
 });
 

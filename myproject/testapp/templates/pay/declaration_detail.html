@@ -1,6 +1,7 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
-{% block title %}Pay Declaration Detail{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Pay Declaration Detail" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-4">
@@ -9,35 +10,35 @@
         <div>
             <h2>
                 <i class="fas fa-file-invoice me-2"></i>
-                Pay Declaration {{ declaration.period_month }}/{{ declaration.period_year }}
+                {% trans "Pay Declaration" %} {{ declaration.period_month }}/{{ declaration.period_year }}
             </h2>
             <div class="text-muted">
-                Created {{ declaration.created_at|date:"Y-m-d H:i" }}
+                {% trans "Created" %} {{ declaration.created_at|date:"Y-m-d H:i" }}
             </div>
         </div>
         <div class="btn-group">
             {% if declaration.status == 'draft' %}
                 <button class="btn btn-success" id="declareBtn">
-                    <i class="fas fa-check me-2"></i>Declare
+                    <i class="fas fa-check me-2"></i>{% trans "Declare" %}
                 </button>
                 <button class="btn btn-primary" id="addItemBtn">
-                    <i class="fas fa-plus me-2"></i>Add Item
+                    <i class="fas fa-plus me-2"></i>{% trans "Add Item" %}
                 </button>
             {% endif %}
             {% if declaration.status == 'declared' %}
                 <button class="btn btn-success mark-paid"
                         data-id="{{ declaration.id }}"
                         data-due="{{ declaration.due_date|date:'Y-m-d' }}">
-                    <i class="fas fa-check me-2"></i>Mark as Paid
+                    <i class="fas fa-check me-2"></i>{% trans "Mark as Paid" %}
                 </button>
                 <button class="btn btn-danger mark-rejected"
                         data-id="{{ declaration.id }}"
                         data-due="{{ declaration.due_date|date:'Y-m-d' }}">
-                    <i class="fas fa-times me-2"></i>Mark as Rejected
+                    <i class="fas fa-times me-2"></i>{% trans "Mark as Rejected" %}
                 </button>
             {% endif %}
             <a href="{% url 'pay-declaration-list' %}" class="btn btn-outline-primary">
-                <i class="fas fa-arrow-left me-2"></i>Back
+                <i class="fas fa-arrow-left me-2"></i>{% trans "Back" %}
             </a>
         </div>
     </div>
@@ -49,7 +50,7 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-info-circle me-2"></i>Status
+                        <i class="fas fa-info-circle me-2"></i>{% trans "Status" %}
                     </h6>
                     <div class="mt-3">
                         <span class="badge 
@@ -69,19 +70,19 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-money-bill me-2"></i>Amounts
+                        <i class="fas fa-money-bill me-2"></i>{% trans "Amounts" %}
                     </h6>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between mb-2">
-                            <span>Total Debit:</span>
+                            <span>{% trans "Total Debit:" %}</span>
                             <span class="text-danger">{{ total_debit|format_balance }}</span>
                         </div>
                         <div class="d-flex justify-content-between mb-2">
-                            <span>Total Credit:</span>
+                            <span>{% trans "Total Credit:" %}</span>
                             <span class="text-success">{{ total_credit|format_balance }}</span>
                         </div>
                         <div class="d-flex justify-content-between">
-                            <span>Net Amount:</span>
+                            <span>{% trans "Net Amount:" %}</span>
                             <span class="fw-bold {% if declaration.total_amount >= 0 %}text-danger{% else %}text-success{% endif %}">
                                 {{ declaration.total_amount|format_balance }}
                             </span>
@@ -96,16 +97,16 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-calendar me-2"></i>Dates
+                        <i class="fas fa-calendar me-2"></i>{% trans "Dates" %}
                     </h6>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between mb-2">
-                            <span>Due Date:</span>
+                            <span>{% trans "Due Date:" %}</span>
                             <span>{{ declaration.due_date|date:"Y-m-d" }}</span>
                         </div>
                         {% if declaration.payment_date %}
                             <div class="d-flex justify-content-between">
-                                <span>Payment Date:</span>
+                                <span>{% trans "Payment Date:" %}</span>
                                 <span>{{ declaration.payment_date|date:"Y-m-d" }}</span>
                             </div>
                         {% endif %}
@@ -119,28 +120,28 @@
             <div class="card h-100">
                 <div class="card-body">
                     <h6 class="card-subtitle mb-2 text-muted">
-                        <i class="fas fa-credit-card me-2"></i>Payment
+                        <i class="fas fa-credit-card me-2"></i>{% trans "Payment" %}
                     </h6>
                     <div class="mt-3">
                         {% if declaration.paid_by_check %}
                             <div class="d-flex justify-content-between mb-2">
-                                <span>Method:</span>
-                                <span class="badge bg-info">Check</span>
+                                <span>{% trans "Method:" %}</span>
+                                <span class="badge bg-info">{% trans "Check" %}</span>
                             </div>
                             {% if declaration.check %}
                                 <div class="d-flex justify-content-between">
-                                    <span>Check:</span>
+                                    <span>{% trans "Check:" %}</span>
                                     <span>{{ declaration.check.position }}</span>
                                 </div>
                             {% endif %}
                         {% else %}
                             <div class="d-flex justify-content-between mb-2">
-                                <span>Method:</span>
-                                <span class="badge bg-primary">Direct Debit</span>
+                                <span>{% trans "Method:" %}</span>
+                                <span class="badge bg-primary">{% trans "Direct Debit" %}</span>
                             </div>
                             {% if declaration.direct_debit %}
                                 <div class="d-flex justify-content-between">
-                                    <span>Status:</span>
+                                    <span>{% trans "Status:" %}</span>
                                     <span class="badge 
                                         {% if declaration.direct_debit.status == 'processed' %}bg-success
                                         {% elif declaration.direct_debit.status == 'rejected' %}bg-danger
@@ -159,19 +160,19 @@
     <!-- Items Table -->
     <div class="card">
         <div class="card-header">
-            <h5 class="card-title mb-0">Items</h5>
+            <h5 class="card-title mb-0">{% trans "Items" %}</h5>
         </div>
         <div class="card-body">
             <div class="table-responsive">
                 <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Description</th>
-                            <th>Account</th>
-                            <th>Type</th>
-                            <th class="text-end">Amount</th>
+                            <th>{% trans "Description" %}</th>
+                            <th>{% trans "Account" %}</th>
+                            <th>{% trans "Type" %}</th>
+                            <th class="text-end">{% trans "Amount" %}</th>
                             {% if declaration.status == 'draft' %}
-                                <th>Actions</th>
+                                <th>{% trans "Actions" %}</th>
                             {% endif %}
                         </tr>
                     </thead>
@@ -182,7 +183,7 @@
                                 <td>{{ item.account_code }}</td>
                                 <td>
                                     <span class="badge {% if item.is_debit %}bg-danger{% else %}bg-success{% endif %}">
-                                        {% if item.is_debit %}Debit{% else %}Credit{% endif %}
+                                        {% if item.is_debit %}{% trans "Debit" %}{% else %}{% trans "Credit" %}{% endif %}
                                     </span>
                                 </td>
                                 <td class="text-end">{{ item.amount|format_balance }}</td>
@@ -205,6 +206,12 @@
                                     </td>
                                 {% endif %}
                             </tr>
+                        {% empty %}
+                            <tr>
+                                <td colspan="{% if declaration.status == 'draft' %}5{% else %}4{% endif %}" class="text-center text-muted">
+                                    {% trans "No items found" %}
+                                </td>
+                            </tr>
                         {% endfor %}
                     </tbody>
                 </table>
@@ -219,7 +226,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="itemModalTitle">
-                    <i class="fas fa-plus me-2"></i>Add Item
+                    <i class="fas fa-plus me-2"></i>{% trans "Add Item" %}
                 </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
@@ -229,9 +236,9 @@
                     
                     {% if available_templates %}
                         <div class="mb-3">
-                            <label for="templateSelect" class="form-label">Use Template</label>
+                            <label for="templateSelect" class="form-label">{% trans "Use Template" %}</label>
                             <select class="form-control" id="templateSelect">
-                                <option value="">Custom Item</option>
+                                <option value="">{% trans "Custom Item" %}</option>
                                 {% for template in available_templates %}
                                     <option value="{{ template.id }}"
                                             data-description="{{ template.description }}"
@@ -246,7 +253,7 @@
                     {% endif %}
 
                     <div class="mb-3">
-                        <label for="description" class="form-label">Description</label>
+                        <label for="description" class="form-label">{% trans "Description" %}</label>
                         <input type="text" 
                                class="form-control" 
                                id="description" 
@@ -254,17 +261,17 @@
                     </div>
 
                     <div class="mb-3">
-                        <label for="accountCode" class="form-label">Account Code</label>
+                        <label for="accountCode" class="form-label">{% trans "Account Code" %}</label>
                         <input type="text" 
                                class="form-control" 
                                id="accountCode"
                                pattern="\d{4,5}"
                                required>
-                        <div class="form-text">4-5 digits</div>
+                        <div class="form-text">{% trans "4-5 digits" %}</div>
                     </div>
 
                     <div class="mb-3">
-                        <label for="amount" class="form-label">Amount</label>
+                        <label for="amount" class="form-label">{% trans "Amount" %}</label>
                         <input type="number" 
                                class="form-control" 
                                id="amount"
@@ -282,7 +289,7 @@
                                    value="debit" 
                                    checked>
                             <label class="form-check-label" for="typeDebit">
-                                Debit
+                                {% trans "Debit" %}
                             </label>
                         </div>
                         <div class="form-check">
@@ -292,15 +299,15 @@
                                    id="typeCredit" 
                                    value="credit">
                             <label class="form-check-label" for="typeCredit">
-                                Credit
+                                {% trans "Credit" %}
                             </label>
                         </div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="saveItem">Save</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
+                <button type="button" class="btn btn-primary" id="saveItem">{% trans "Save" %}</button>
             </div>
         </div>
     </div>
@@ -354,7 +361,7 @@ $(document).ready(function() {
     $('#addItemBtn').click(function() {
         $('#itemId').val('');
         $('#itemForm')[0].reset();
-        $('#itemModalTitle').html('<i class="fas fa-plus me-2"></i>Add Item');
+        $('#itemModalTitle').html('<i class="fas fa-plus me-2"></i>{% trans "Add Item" %}');
         $('#itemModal').modal('show');
     });
 
@@ -373,7 +380,7 @@ $(document).ready(function() {
             $('#typeCredit').prop('checked', true);
         }
         
-        $('#itemModalTitle').html('<i class="fas fa-edit me-2"></i>Edit Item');
+        $('#itemModalTitle').html('<i class="fas fa-edit me-2"></i>{% trans "Edit Item" %}');
         $('#itemModal').modal('show');
     });
 

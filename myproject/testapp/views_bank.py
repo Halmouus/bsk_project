@@ -12,6 +12,7 @@ from django.db.models import Q, Sum
 from datetime import datetime
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _
 
 
 class BankAccountListView(ListView):
@@ -201,7 +202,7 @@ class BankAccountDeactivateView(View):
             account.is_active = False
             account.save()
             
-            return JsonResponse({'message': 'Account deactivated successfully'})
+            return JsonResponse({'message': _('Account deactivated successfully')})
             
         except BankAccount.DoesNotExist:
             return JsonResponse({'error': 'Account not found'}, status=404)
@@ -853,7 +854,7 @@ class CashDepositView(View):
                 print(f"Cash withdrawal from bank account {deposit.source_bank_account.account_number}: {deposit.amount}")
             
             messages.success(request, "Cash deposit recorded successfully")
-            return JsonResponse({'status': 'success', 'message': 'Deposit recorded successfully'})
+            return JsonResponse({'status': 'success', 'message': _('Deposit recorded successfully')})
             
         except Exception as e:
             print(f"Error recording cash deposit: {str(e)}")

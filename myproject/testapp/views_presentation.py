@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q
+from django.utils.translation import gettext as _
 from .models import Presentation, PresentationReceipt, CheckReceipt, LCN, BankAccount, ReceiptHistory, MOROCCAN_BANKS, ForecastStatement, BankStatement
 from django.contrib.contenttypes.models import ContentType
 import json
@@ -91,7 +92,7 @@ class PresentationCreateView(View):
 
             return JsonResponse({
                 'status': 'success',
-                'message': 'Presentation created successfully',
+                'message': _('Presentation created successfully'),
                 'id': str(presentation.id)
             })
 
@@ -104,7 +105,7 @@ class PresentationCreateView(View):
             print(f"Error in presentation creation: {type(e).__name__} - {str(e)}")
             return JsonResponse({
                 'status': 'error',
-                'message': f"Failed to create presentation: {str(e)}"
+                'message': _('Failed to create presentation: {}').format(str(e))
             }, status=400)
 
 class PresentationDetailView(View):
@@ -185,7 +186,7 @@ class PresentationDetailView(View):
             print("=======================================")
             return JsonResponse({
                 'status': 'error',
-                'message': f"Detail view error: {str(e)}",
+                'message': _('Detail view error: {}').format(str(e)),
                 'traceback': traceback.format_exc()
             }, status=400)
 
@@ -215,7 +216,7 @@ class PresentationUpdateView(View):
                         print("Error: Missing bank reference")
                         return JsonResponse({
                             'status': 'error',
-                            'message': 'Bank reference is required'
+                            'message': _('Bank reference is required')
                         }, status=400)
                     
                     print(f"Updating presentation status from pending to {data['status']}")
@@ -319,7 +320,7 @@ class PresentationUpdateView(View):
                                         unpaid_date = new_status.get('unpaid_date')
                                         print(f"Processing unpaid status with cause: {cause}")
                                         if not cause:
-                                            raise ValidationError("Rejection cause required for unpaid status")
+                                            raise ValidationError(_("Rejection cause required for unpaid status"))
                                         receipt.mark_as_unpaid(cause, unpaid_date)
                                         presentation_receipt.recorded_status = 'UNPAID'
                                         presentation_receipt.save()
@@ -354,7 +355,7 @@ class PresentationUpdateView(View):
                 print("Presentation update completed successfully")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Presentation updated successfully'
+                    'message': _('Presentation updated successfully')
                 })
 
         except Exception as e:
@@ -403,7 +404,7 @@ class PresentationDeleteView(View):
                     if presentation.status != 'pending':
                         return JsonResponse({
                             'status': 'error',
-                            'message': 'Only pending presentations can be deleted'
+                            'message': _('Only pending presentations can be deleted')
                         }, status=400)
                     
                     # Get all related receipts before deletion
@@ -432,14 +433,14 @@ class PresentationDeleteView(View):
 
                     return JsonResponse({
                         'status': 'success',
-                        'message': 'Presentation deleted successfully'
+                        'message': _('Presentation deleted successfully')
                     })
 
             except Presentation.DoesNotExist:
                 print(f"Presentation {pk} not found")
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Presentation not found'
+                    'message': _('Presentation not found')
                 }, status=404)
             except Exception as e:
                 print(f"Error deleting presentation {pk}: {str(e)}")
@@ -447,7 +448,7 @@ class PresentationDeleteView(View):
                 traceback.print_exc()
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Failed to delete presentation: {str(e)}'
+                    'message': _('Failed to delete presentation: {}').format(str(e))
                 }, status=500)
 
 class AvailableReceiptsView(View):
@@ -531,7 +532,7 @@ class DiscountInfoView(View):
             
         except Exception as e:
             return JsonResponse({
-                'error': str(e)
+                'error': _(str(e))
             }, status=400)
 
 class PresentationFilterView(View):
@@ -597,7 +598,7 @@ class PresentationFilterView(View):
             print(f"Error in presentation filter: {str(e)}")
             import traceback
             print(traceback.format_exc())
-            return JsonResponse({'error': str(e)}, status=400)
+            return JsonResponse({'error': _(str(e))}, status=400)
         
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -610,7 +611,7 @@ class PresentationDocumentUploadView(View):
             if 'document' not in request.FILES:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'No document provided'
+                    'message': _('No document provided')
                 }, status=400)
                 
             document = request.FILES['document']
@@ -679,5 +680,5 @@ class PresentationSummaryView(View):
             print(traceback.format_exc())
             return JsonResponse({
                 'status': 'error',
-                'message': f"Failed to generate summary: {str(e)}"
+                'message': _('Failed to generate summary: {}').format(str(e))
             }, status=500)

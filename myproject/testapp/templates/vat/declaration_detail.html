@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% load i18n %}
 
-{% block title %}VAT Declaration Details{% endblock %}
+{% block title %}{% trans "VAT Declaration Details" %}{% endblock %}
 {% block content %}
 
 <div class="container-fluid">
@@ -11,30 +12,30 @@
        <div>
            <h2>
                <i class="fas fa-percent me-2"></i>
-               VAT Declaration {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
+               {% trans "VAT Declaration" %} {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
            </h2>
-           <p class="text-muted mb-0">Due: {{ declaration.due_date|date:"Y-m-d" }}</p>
+           <p class="text-muted mb-0">{% trans "Due" %}: {{ declaration.due_date|date:"Y-m-d" }}</p>
        </div>
        <div class="d-flex gap-2">
         
            <a href="{% url 'vat-list' %}" class="btn btn-outline-secondary">
-               <i class="fas fa-arrow-left me-2"></i>Back
+               <i class="fas fa-arrow-left me-2"></i>{% trans "Back" %}
            </a>
            <a href="{% url 'vat-deduction-details' declaration.id %}" class="btn btn-outline-primary">
-                <i class="fas fa-list me-2"></i>View Deduction Details
+                <i class="fas fa-list me-2"></i>{% trans "View Deduction Details" %}
             </a>
            {% if declaration.status == 'draft' %}
                 <button class="btn btn-primary process-vat" data-declaration-id="{{ declaration.id }}">
-                    <i class="fas fa-cogs me-2"></i>Process
+                    <i class="fas fa-cogs me-2"></i>{% trans "Process" %}
                 </button>
                 {% if declaration.total_invoiced_vat > 0 or declaration.total_deducted_vat > 0 %}
                     <button class="btn btn-success declare-vat" data-declaration-id="{{ declaration.id }}">
-                        <i class="fas fa-check me-2"></i>Declare
+                        <i class="fas fa-check me-2"></i>{% trans "Declare" %}
                     </button>
                 {% endif %}
            {% elif declaration.status == 'declared' %}
                <button class="btn btn-success pay-vat" data-declaration-id="{{ declaration.id }}">
-                   <i class="fas fa-money-bill me-2"></i>Record Payment
+                   <i class="fas fa-money-bill me-2"></i>{% trans "Record Payment" %}
                </button>
            {% endif %}
        </div>
@@ -45,10 +46,10 @@
        <div class="col-md-4">
            <div class="card">
                <div class="card-body">
-                   <h6 class="card-subtitle mb-2 text-muted">Invoiced VAT</h6>
+                   <h6 class="card-subtitle mb-2 text-muted">{% trans "Invoiced VAT" %}</h6>
                    <h3 class="card-title text-primary">{{ declaration.total_invoiced_vat|format_balance }}</h3>
                    <p class="card-text mb-0">
-                       From {{ receipt_details.count }} receipts
+                       {% trans "From" %} {{ receipt_details.count }} {% trans "receipts" %}
                    </p>
                </div>
            </div>
@@ -56,10 +57,10 @@
        <div class="col-md-4">
            <div class="card">
                <div class="card-body">
-                   <h6 class="card-subtitle mb-2 text-muted">Deducted VAT</h6>
+                   <h6 class="card-subtitle mb-2 text-muted">{% trans "Deducted VAT" %}</h6>
                    <h3 class="card-title text-success">{{ declaration.total_deducted_vat|format_balance }}</h3>
                    <p class="card-text mb-0">
-                       From {{ invoice_details.count }} payments
+                       {% trans "From" %} {{ invoice_details.count }} {% trans "payments" %}
                    </p>
                </div>
            </div>
@@ -67,12 +68,12 @@
        <div class="col-md-4">
            <div class="card">
                <div class="card-body">
-                   <h6 class="card-subtitle mb-2 text-muted">Net VAT</h6>
+                   <h6 class="card-subtitle mb-2 text-muted">{% trans "Net VAT" %}</h6>
                    <h3 class="card-title {% if declaration.total_invoiced_vat > declaration.total_deducted_vat %}text-danger{% else %}text-success{% endif %}">
                        {{ declaration.total_invoiced_vat|sub:declaration.total_deducted_vat|format_balance }}
                    </h3>
                    <p class="card-text mb-0">
-                       Due on {{ declaration.due_date|date:"Y-m-d" }}
+                       {% trans "Due on" %} {{ declaration.due_date|date:"Y-m-d" }}
                    </p>
                </div>
            </div>
@@ -84,7 +85,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
             <i class="fas fa-receipt me-2"></i>
-            Receipts VAT ({{ receipt_details.count }})
+            {% trans "Receipts VAT" %} ({{ receipt_details.count }})
         </h5>
         <span class="fs-5">{{ total_receipts|format_balance }}</span>
     </div>
@@ -93,13 +94,13 @@
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Type</th>
-                        <th>Reference</th>
-                        <th>Entity</th>
-                        <th>Date</th>
-                        <th class="text-end">Amount</th>
-                        <th class="text-end">VAT Rate</th>
-                        <th class="text-end">VAT Amount</th>
+                        <th>{% trans "Type" %}</th>
+                        <th>{% trans "Reference" %}</th>
+                        <th>{% trans "Entity" %}</th>
+                        <th>{% trans "Date" %}</th>
+                        <th class="text-end">{% trans "Amount" %}</th>
+                        <th class="text-end">{% trans "VAT Rate" %}</th>
+                        <th class="text-end">{% trans "VAT Amount" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -115,7 +116,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="7" class="text-center">No receipt VAT entries</td>
+                            <td colspan="7" class="text-center">{% trans "No receipt VAT entries" %}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -123,14 +124,14 @@
                     {% regroup receipt_details by vat_rate as rate_groups %}
                     {% for rate_group in rate_groups %}
                         <tr class="table-light">
-                            <th colspan="4" class="text-end">Total for {{ rate_group.grouper }}% VAT</th>
+                            <th colspan="4" class="text-end">{% trans "Total for" %} {{ rate_group.grouper }}% {% trans "VAT" %}</th>
                             <th class="text-end">{{ rate_group.list|sum_by:'original_amount'|format_balance }}</th>
                             <th></th>
                             <th class="text-end">{{ rate_group.list|sum_by:'vat_amount'|format_balance }}</th>
                         </tr>
                     {% endfor %}
                     <tr class="table-primary">
-                        <th colspan="4" class="text-end">Grand Total</th>
+                        <th colspan="4" class="text-end">{% trans "Grand Total" %}</th>
                         <th class="text-end">{{ receipt_details|sum_by:'original_amount'|format_balance }}</th>
                         <th></th>
                         <th class="text-end">{{ receipt_details|sum_by:'vat_amount'|format_balance }}</th>
@@ -146,7 +147,7 @@
     <div class="card-header d-flex justify-content-between align-items-center">
         <h5 class="mb-0">
             <i class="fas fa-file-invoice me-2"></i>
-            Deducted VAT ({{ invoice_details.count }})
+            {% trans "Deducted VAT" %} ({{ invoice_details.count }})
         </h5>
         <span class="fs-5">{{ total_invoices|format_balance }}</span>
     </div>
@@ -155,15 +156,15 @@
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Type</th>
-                        <th>Reference</th>
-                        <th>Supplier</th>
-                        <th>Invoice</th>
-                        <th>Payment Date</th>
-                        <th class="text-end">Original</th>
-                        <th class="text-end">Credits</th>
-                        <th class="text-end">VAT Rate</th>
-                        <th class="text-end">VAT Amount</th>
+                        <th>{% trans "Type" %}</th>
+                        <th>{% trans "Reference" %}</th>
+                        <th>{% trans "Supplier" %}</th>
+                        <th>{% trans "Invoice" %}</th>
+                        <th>{% trans "Payment Date" %}</th>
+                        <th class="text-end">{% trans "Original" %}</th>
+                        <th class="text-end">{% trans "Credits" %}</th>
+                        <th class="text-end">{% trans "VAT Rate" %}</th>
+                        <th class="text-end">{% trans "VAT Amount" %}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -197,7 +198,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="9" class="text-center">No invoice VAT entries</td>
+                            <td colspan="9" class="text-center">{% trans "No invoice VAT entries" %}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
@@ -205,7 +206,7 @@
                     {% regroup invoice_details by vat_rate as rate_groups %}
                     {% for rate_group in rate_groups %}
                         <tr class="table-light">
-                            <th colspan="5" class="text-end">Total for {{ rate_group.grouper }}% VAT</th>
+                            <th colspan="5" class="text-end">{% trans "Total for" %} {{ rate_group.grouper }}% {% trans "VAT" %}</th>
                             <th class="text-end">{{ rate_group.list|sum_by:'original_amount'|format_balance }}</th>
                             <th class="text-end text-danger">
                                 -{{ rate_group.list|sum_by:'credit_amount'|format_balance }}
@@ -215,7 +216,7 @@
                         </tr>
                     {% endfor %}
                     <tr class="table-primary">
-                        <th colspan="5" class="text-end">Grand Total</th>
+                        <th colspan="5" class="text-end">{% trans "Grand Total" %}</th>
                         <th class="text-end">{{ invoice_details|sum_by:'original_amount'|format_balance }}</th>
                         <th class="text-end text-danger">
                             -{{ invoice_details|sum_by:'credit_amount'|format_balance }}

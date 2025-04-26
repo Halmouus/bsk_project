@@ -9,6 +9,7 @@ from django.core.exceptions import ValidationError
 from django.template.loader import render_to_string
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import csrf_exempt
+from django.utils.translation import gettext as _
 from .models import OtherTaxConfiguration, OtherTaxDeclaration, TaxFine, ForecastStatement, BankAccount, Check
 from datetime import date, datetime
 import calendar
@@ -79,7 +80,10 @@ class OtherTaxConfigFormView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'{tax_type_display} configuration {"created" if created else "updated"} successfully'
+                'message': _("{tax_type} configuration {action} successfully").format(
+                    tax_type=tax_type_display,
+                    action=_("created") if created else _("updated")
+                )
             })
             
         except Exception as e:
@@ -136,11 +140,14 @@ class OtherTaxDeclarationFormView(View):
     def get(self, request, tax_type, declaration_id=None):
         if declaration_id:
             declaration = get_object_or_404(OtherTaxDeclaration, id=declaration_id)
-            title = f"Edit {declaration.get_tax_type_display()} Declaration {declaration.year}"
+            title = _("Edit {tax_type} Declaration {year}").format(
+                tax_type=declaration.get_tax_type_display(),
+                year=declaration.year
+            )
         else:
             declaration = None
             tax_type_display = dict(OtherTaxDeclaration.TAX_TYPE_CHOICES).get(tax_type, tax_type.title())
-            title = f"New {tax_type_display} Declaration"
+            title = _("New {tax_type} Declaration").format(tax_type=tax_type_display)
         
         # Check if configuration exists
         try:
@@ -148,7 +155,7 @@ class OtherTaxDeclarationFormView(View):
         except ValidationError:
             return JsonResponse({
                 'status': 'error',
-                'message': f'{tax_type.title()} Tax configuration must be set up first'
+                'message': _("{tax_type} Tax configuration must be set up first").format(tax_type=tax_type.title())
             }, status=400)
         
         # Get current year if creating new
@@ -196,7 +203,7 @@ class OtherTaxDeclarationFormView(View):
             if year < 2000 or year > current_year + 1:
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Invalid year: must be between 2000 and {current_year + 1}'
+                    'message': _("Invalid year: must be between 2000 and {max_year}").format(max_year=current_year + 1)
                 }, status=400)
             
             # Check for existing declaration in this year
@@ -222,7 +229,7 @@ class OtherTaxDeclarationFormView(View):
                     if declaration.status == 'paid':
                         return JsonResponse({
                             'status': 'error',
-                            'message': f'Cannot edit paid declaration'
+                            'message': _("Cannot edit paid declaration")
                         }, status=400)
                 else:
                     declaration = OtherTaxDeclaration(tax_type=tax_type)
@@ -251,14 +258,14 @@ class OtherTaxDeclarationFormView(View):
             if not declaration_id:
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration saved successfully',
+                    'message': _("Declaration saved successfully"),
                     'declaration_id': str(declaration.id),
                     'existing_warning': existing_warning
                 })
             else:
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration updated successfully',
+                    'message': _("Declaration updated successfully"),
                     'existing_warning': existing_warning
                 })
             
@@ -286,7 +293,7 @@ class OtherTaxDeclarationStatusView(View):
             if not status or status not in ['paid', 'partially_paid', 'rejected']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid status'
+                    'message': _("Invalid status")
                 }, status=400)
             
             try:
@@ -299,26 +306,29 @@ class OtherTaxDeclarationStatusView(View):
                 if not amount or Decimal(amount) <= 0:
                     return JsonResponse({
                         'status': 'error',
-                        'message': 'Payment amount is required'
+                        'message': _("Payment amount is required")
                     }, status=400)
                 
                 # Make sure payment method is provided
                 if not payment_method:
                     return JsonResponse({
                         'status': 'error',
-                        'message': 'Payment method is required'
+                        'message': _("Payment method is required")
                     }, status=400)
                 
                 # Add payment to declaration
                 declaration.add_payment(Decimal(amount), payment_method, status_date)
-                message = f"Payment of {amount} added to declaration {declaration.year}"
+                message = _("Payment of {amount} added to declaration {year}").format(
+                    amount=amount,
+                    year=declaration.year
+                )
             else:
                 # Extract rejection cause and notes
                 rejection_cause = data.get('rejection_cause')
                 rejection_notes = data.get('rejection_notes', '')
                 
                 declaration.mark_as_rejected(status_date, rejection_cause, rejection_notes)
-                message = f"Declaration {declaration.year} marked as rejected"
+                message = _("Declaration {year} marked as rejected").format(year=declaration.year)
             
             return JsonResponse({
                 'status': 'success',
@@ -344,7 +354,7 @@ class OtherTaxDeclarationDeleteView(View):
             if declaration.status == 'paid':
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Cannot delete paid declaration'
+                    'message': _("Cannot delete paid declaration")
                 }, status=400)
             
             # Delete forecast if exists
@@ -356,7 +366,7 @@ class OtherTaxDeclarationDeleteView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f"Declaration {declaration.year} deleted successfully"
+                'message': _("Declaration {year} deleted successfully").format(year=declaration.year)
             })
             
         except Exception as e:
@@ -375,10 +385,10 @@ class TaxFineFormView(View):
         
         if fine_id:
             fine = get_object_or_404(TaxFine, id=fine_id, declaration=declaration)
-            title = "Edit Fine"
+            title = _("Edit Fine")
         else:
             fine = None
-            title = "Add Fine"
+            title = _("Add Fine")
         
         tax_type_display = dict(OtherTaxDeclaration.TAX_TYPE_CHOICES).get(tax_type, tax_type.title())
         
@@ -412,7 +422,7 @@ class TaxFineFormView(View):
             if not amount or Decimal(amount) <= 0:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Fine amount is required and must be positive'
+                    'message': _("Fine amount is required and must be positive")
                 }, status=400)
             
             # Validate fine date
@@ -421,7 +431,7 @@ class TaxFineFormView(View):
             except:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid fine date'
+                    'message': _("Invalid fine date")
                 }, status=400)
             
             # Validate payment date if paid
@@ -431,7 +441,7 @@ class TaxFineFormView(View):
                 except:
                     return JsonResponse({
                         'status': 'error',
-                        'message': 'Invalid payment date'
+                        'message': _("Invalid payment date")
                     }, status=400)
             
             # Create or update fine
@@ -451,7 +461,7 @@ class TaxFineFormView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f"Fine {'updated' if fine_id else 'added'} successfully"
+                'message': _("Fine {action} successfully").format(action=_("updated") if fine_id else _("added"))
             })
             
         except Exception as e:
@@ -474,7 +484,7 @@ class TaxFineDeleteView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': "Fine deleted successfully"
+                'message': _("Fine deleted successfully")
             })
             
         except Exception as e:
@@ -496,21 +506,21 @@ class OtherTaxDocumentUploadView(View):
             if document_type not in ['tax_notice', 'payment_receipt']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid document type'
+                    'message': _("Invalid document type")
                 }, status=400)
                 
             file = request.FILES.get('document')
             if not file:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'No file uploaded'
+                    'message': _("No file uploaded")
                 }, status=400)
             
             # Check file size (limit to 10MB)
             if file.size > 10 * 1024 * 1024:  # 10MB in bytes
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'File size exceeds 10MB limit'
+                    'message': _("File size exceeds 10MB limit")
                 }, status=400)
                 
             # Check file type (optional)
@@ -519,7 +529,7 @@ class OtherTaxDocumentUploadView(View):
             if file_extension not in allowed_extensions:
                 return JsonResponse({
                     'status': 'error',
-                    'message': f'Invalid file type. Allowed types: {", ".join(allowed_extensions)}'
+                    'message': _("Invalid file type. Allowed types: {allowed_types}").format(allowed_types=", ".join(allowed_extensions))
                 }, status=400)
             
             # Delete existing document if present
@@ -538,7 +548,7 @@ class OtherTaxDocumentUploadView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'Document uploaded successfully',
+                'message': _("Document uploaded successfully"),
                 'document_url': declaration.tax_notice_document.url if document_type == 'tax_notice' else declaration.payment_receipt_document.url
             })
             
@@ -563,7 +573,7 @@ class OtherTaxDocumentDeleteView(View):
             if document_type not in ['tax_notice', 'payment_receipt']:
                 return JsonResponse({
                     'status': 'error',
-                    'message': 'Invalid document type'
+                    'message': _("Invalid document type")
                 }, status=400)
                 
             # Delete the appropriate document
@@ -580,7 +590,9 @@ class OtherTaxDocumentDeleteView(View):
             
             return JsonResponse({
                 'status': 'success',
-                'message': f'{"Tax notice" if document_type == "tax_notice" else "Payment receipt"} document deleted successfully'
+                'message': _("{doc_type} document deleted successfully").format(
+                    doc_type=_("Tax notice") if document_type == "tax_notice" else _("Payment receipt")
+                )
             })
             
         except Exception as e:

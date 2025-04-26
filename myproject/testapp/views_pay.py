@@ -8,6 +8,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction
 from django.core.exceptions import ValidationError
 from django.utils import timezone
+from django.utils.translation import gettext as _
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 import json
@@ -71,7 +72,7 @@ class PayConfigurationView(View):
 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Configuration saved successfully'
+                    'message': _('Configuration saved successfully')
                 })
 
         except Exception as e:
@@ -175,7 +176,7 @@ class PayItemCreateView(View):
 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Item created successfully',
+                    'message': _('Item created successfully'),
                     'id': str(item.id)
                 })
 
@@ -209,7 +210,7 @@ class PayItemUpdateView(View):
 
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Item updated successfully'
+                    'message': _('Item updated successfully')
                 })
 
         except Exception as e:
@@ -228,7 +229,7 @@ class PayItemDeleteView(View):
             item = get_object_or_404(PayItem, pk=pk)
             item.is_active = False
             item.save()
-            return JsonResponse({'status': 'success', 'message': 'Item deleted successfully'})
+            return JsonResponse({'status': 'success', 'message': _('Item deleted successfully')})
         except Exception as e:
             print(f"Error deleting pay item: {str(e)}")
             print(traceback.format_exc())
@@ -286,7 +287,7 @@ class PayDeclarationCreateView(View):
                     period_year=data['year'],
                     period_month=data['month']
                 ).exists():
-                    raise ValidationError("Declaration already exists for this period")
+                    raise ValidationError(_("Declaration already exists for this period"))
 
                 # Get configuration
                 config = PayConfiguration.get_config()
@@ -337,7 +338,10 @@ class PayDeclarationCreateView(View):
                 forecast = ForecastStatement.objects.create(
                     bank_account=config.domiciliation_bank,
                     date=declaration.due_date,
-                    label=f"Pay Declaration {int(declaration.period_month):02d}/{declaration.period_year}",
+                    label=_("Pay Declaration {month:02d}/{year}").format(
+                        month=int(declaration.period_month),
+                        year=declaration.period_year
+                    ),
                     debit=total_amount,
                     reference=f"PAY-{int(declaration.period_month):02d}-{declaration.period_year}",
                     source_type='pay_declaration',
@@ -349,7 +353,7 @@ class PayDeclarationCreateView(View):
                 print(f"Created declaration: {declaration}")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration created successfully',
+                    'message': _('Declaration created successfully'),
                     'id': str(declaration.id)
                 })
 
@@ -426,7 +430,7 @@ class PayDeclarationItemUpdateView(View):
                 print(f"Updated item: {item}")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Item updated successfully'
+                    'message': _('Item updated successfully')
                 })
 
         except Exception as e:
@@ -484,13 +488,13 @@ class PayDeclarationActionView(View):
                 if action == 'pay':
                     payment_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
                     declaration.mark_as_paid(payment_date)
-                    message = 'Declaration marked as paid'
+                    message = _('Declaration marked as paid')
                 elif action == 'reject':
                     rejection_date = datetime.strptime(data['date'], '%Y-%m-%d').date()
                     declaration.mark_as_rejected(rejection_date, data.get('reason'))
-                    message = 'Declaration marked as rejected'
+                    message = _('Declaration marked as rejected')
                 else:
-                    raise ValidationError("Invalid action")
+                    raise ValidationError(_("Invalid action"))
 
                 return JsonResponse({
                     'status': 'success',
@@ -515,14 +519,14 @@ class PayDeclarationUpdateView(View):
             print(f"Received data: {data}")
 
             if declaration.status != PayDeclaration.STATUS_DRAFT:
-                raise ValidationError("Only draft declarations can be updated")
+                raise ValidationError(_("Only draft declarations can be updated"))
 
             with transaction.atomic():
                 if 'status' in data and data['status'] == 'declared':
                     declaration.status = PayDeclaration.STATUS_DECLARED
-                    message = 'Declaration declared successfully'
+                    message = _('Declaration declared successfully')
                 else:
-                    message = 'Declaration updated successfully'
+                    message = _('Declaration updated successfully')
                 
                 declaration.save()
 
@@ -547,13 +551,13 @@ class PayDeclarationDeleteView(View):
             declaration = get_object_or_404(PayDeclaration, pk=pk)
             
             if declaration.status != PayDeclaration.STATUS_DRAFT:
-                raise ValidationError("Only draft declarations can be deleted")
+                raise ValidationError(_("Only draft declarations can be deleted"))
 
             with transaction.atomic():
                 declaration.delete()
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration deleted successfully'
+                    'message': _('Declaration deleted successfully')
                 })
 
         except Exception as e:
@@ -574,7 +578,7 @@ class PayDeclarationItemCreateView(View):
             print(f"Received data: {data}")
 
             if declaration.status != PayDeclaration.STATUS_DRAFT:
-                raise ValidationError("Can't add items to non-draft declarations")
+                raise ValidationError(_("Can't add items to non-draft declarations"))
 
             with transaction.atomic():
                 # Convert amount to Decimal
@@ -601,7 +605,7 @@ class PayDeclarationItemCreateView(View):
                 print(f"Created item: {item}")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Item created successfully'
+                    'message': _('Item created successfully')
                 })
 
         except Exception as e:
@@ -620,7 +624,7 @@ class PayDeclarationItemDeleteView(View):
             item = get_object_or_404(PayDeclarationItem, pk=item_pk, declaration_id=pk)
             
             if item.declaration.status != PayDeclaration.STATUS_DRAFT:
-                raise ValidationError("Can't delete items from non-draft declarations")
+                raise ValidationError(_("Can't delete items from non-draft declarations"))
 
             with transaction.atomic():
                 # Update declaration total
@@ -637,7 +641,7 @@ class PayDeclarationItemDeleteView(View):
                 item.delete()
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Item deleted successfully'
+                    'message': _('Item deleted successfully')
                 })
 
         except Exception as e:
@@ -675,10 +679,10 @@ class PayDeclarationDeclareView(View):
             declaration = get_object_or_404(PayDeclaration, pk=pk)
             
             if declaration.status != PayDeclaration.STATUS_DRAFT:
-                raise ValidationError("Only draft declarations can be declared")
+                raise ValidationError(_("Only draft declarations can be declared"))
                 
             if declaration.items.count() == 0:
-                raise ValidationError("Cannot declare empty declaration")
+                raise ValidationError(_("Cannot declare empty declaration"))
 
             with transaction.atomic():
                 declaration.status = PayDeclaration.STATUS_DECLARED
@@ -690,7 +694,10 @@ class PayDeclarationDeclareView(View):
                     declaration.forecast = ForecastStatement.objects.create(
                         bank_account=config.domiciliation_bank,
                         date=declaration.due_date,
-                        label=f"Pay Declaration {declaration.period_month:02d}/{declaration.period_year}",
+                        label=_("Pay Declaration {month:02d}/{year}").format(
+                            month=declaration.period_month,
+                            year=declaration.period_year
+                        ),
                         debit=declaration.total_amount,
                         reference=f"PAY-{declaration.period_month:02d}-{declaration.period_year}",
                         source_type='pay_declaration',
@@ -701,7 +708,7 @@ class PayDeclarationDeclareView(View):
                 print(f"Declaration declared successfully")
                 return JsonResponse({
                     'status': 'success',
-                    'message': 'Declaration declared successfully'
+                    'message': _('Declaration declared successfully')
                 })
 
         except Exception as e:

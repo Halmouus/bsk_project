@@ -1,3 +1,4 @@
+{% load i18n %}
 <!-- Client Modal -->
 <div class="modal fade" id="clientModal" tabindex="-1" role="dialog">
     <div class="modal-dialog modal-dialog-centered" role="document">
@@ -5,7 +6,7 @@
             <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title" id="clientModalTitle">
                     <i class="fas fa-user-plus me-2"></i>
-                    <span class="title-text"> Add New Client</span>
+                    <span class="title-text"> {% trans "Add New Client" %}</span>
                 </h5>
                 <button type="button" class="close text-white" data-dismiss="modal">
                     <span>&times;</span>
@@ -20,7 +21,7 @@
                     <!-- Name Field -->
                     <div class="form-group mb-4">
                         <label for="clientName" class="form-label">
-                            <i class="fas fa-signature me-2"></i> Client Name
+                            <i class="fas fa-signature me-2"></i> {% trans "Client Name" %}
                         </label>
                         <input type="text" 
                                class="form-control" 
@@ -33,7 +34,7 @@
                     <!-- Client Code Field -->
                     <div class="form-group mb-4">
                         <label for="clientCode" class="form-label">
-                            <i class="fas fa-hashtag me-2"></i> Client Code
+                            <i class="fas fa-hashtag me-2"></i> {% trans "Client Code" %}
                         </label>
                         <input type="text" 
                                class="form-control" 
@@ -42,7 +43,7 @@
                                required>
                         <div class="invalid-feedback"></div>
                         <small class="text-muted">
-                            Enter a unique code (5-10 digits)
+                            {% trans "Enter a unique code (5-10 digits)" %}
                         </small>
                     </div>
                 </form>
@@ -50,10 +51,10 @@
             
             <div class="modal-footer bg-light">
                 <button type="button" class="btn btn-secondary" data-dismiss="modal">
-                    <i class="fas fa-times me-2"></i> Cancel
+                    <i class="fas fa-times me-2"></i> {% trans "Cancel" %}
                 </button>
                 <button type="button" class="btn btn-primary" id="saveClientBtn">
-                    <i class="fas fa-save me-2"></i> Save Client
+                    <i class="fas fa-save me-2"></i> {% trans "Save Client" %}
                 </button>
             </div>
         </div>

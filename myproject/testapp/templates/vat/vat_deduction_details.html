@@ -1,7 +1,8 @@
 {% extends 'base.html' %}
 {% load accounting_filters %}
+{% load i18n %}
 
-{% block title %}VAT Deduction Details{% endblock %}
+{% block title %}{% trans "VAT Deduction Details" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
@@ -10,13 +11,13 @@
         <div>
             <h2>
                 <i class="fas fa-percent me-2"></i>
-                VAT Deduction Details for {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
+                {% trans "VAT Deduction Details for" %} {{ declaration.period_month|stringformat:"02d" }}/{{ declaration.period_year }}
             </h2>
-            <p class="text-muted mb-0">Due: {{ declaration.due_date|date:"Y-m-d" }}</p>
+            <p class="text-muted mb-0">{% trans "Due" %}: {{ declaration.due_date|date:"Y-m-d" }}</p>
         </div>
         <div>
             <a href="{% url 'vat-detail' declaration.id %}" class="btn btn-outline-secondary">
-                <i class="fas fa-arrow-left me-2"></i>Back
+                <i class="fas fa-arrow-left me-2"></i>{% trans "Back" %}
             </a>
         </div>
     </div>
@@ -26,21 +27,21 @@
         <div class="card-body">
             <form id="filterForm" class="row g-3">
                 <div class="col-md-3">
-                    <label class="form-label">Supplier</label>
-                    <input type="text" class="form-control" id="supplierFilter" placeholder="Search supplier...">
+                    <label class="form-label">{% trans "Supplier" %}</label>
+                    <input type="text" class="form-control" id="supplierFilter" placeholder='{% trans "Search supplier..." %}'>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Invoice Reference</label>
-                    <input type="text" class="form-control" id="invoiceFilter" placeholder="Search reference...">
+                    <label class="form-label">{% trans "Invoice Reference" %}</label>
+                    <input type="text" class="form-control" id="invoiceFilter" placeholder='{% trans "Search reference..." %}'>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Fiscal Label</label>
-                    <input type="text" class="form-control" id="fiscalFilter" placeholder="Search fiscal label...">
+                    <label class="form-label">{% trans "Fiscal Label" %}</label>
+                    <input type="text" class="form-control" id="fiscalFilter" placeholder='{% trans "Search fiscal label..." %}'>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">VAT Rate</label>
+                    <label class="form-label">{% trans "VAT Rate" %}</label>
                     <select class="form-control" id="vatRateFilter">
-                        <option value="">All</option>
+                        <option value="">{% trans "All" %}</option>
                         <option value="7">7%</option>
                         <option value="10">10%</option>
                         <option value="14">14%</option>
@@ -48,35 +49,35 @@
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Payment Type</label>
+                    <label class="form-label">{% trans "Payment Type" %}</label>
                     <select class="form-control" id="paymentTypeFilter">
-                        <option value="">All</option>
-                        <option value="2">Check</option>
-                        <option value="3">Direct Debit</option>
-                        <option value="5">LCN</option>
+                        <option value="">{% trans "All" %}</option>
+                        <option value="2">{% trans "Check" %}</option>
+                        <option value="3">{% trans "Direct Debit" %}</option>
+                        <option value="5">{% trans "LCN" %}</option>
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Invoice Date Range</label>
+                    <label class="form-label">{% trans "Invoice Date Range" %}</label>
                     <div class="input-group">
-                        <input type="date" class="form-control" id="invoiceStartDate" placeholder="From">
-                        <input type="date" class="form-control" id="invoiceEndDate" placeholder="To">
+                        <input type="date" class="form-control" id="invoiceStartDate" placeholder='{% trans "From" %}'>
+                        <input type="date" class="form-control" id="invoiceEndDate" placeholder='{% trans "To" %}'>
                     </div>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label">Payment Date Range</label>
+                    <label class="form-label">{% trans "Payment Date Range" %}</label>
                     <div class="input-group">
-                        <input type="date" class="form-control" id="paymentStartDate" placeholder="From">
-                        <input type="date" class="form-control" id="paymentEndDate" placeholder="To">
+                        <input type="date" class="form-control" id="paymentStartDate" placeholder='{% trans "From" %}'>
+                        <input type="date" class="form-control" id="paymentEndDate" placeholder='{% trans "To" %}'>
                     </div>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">
                     <div class="btn-group w-100">
                         <button type="button" class="btn btn-secondary" id="resetFilters">
-                            <i class="fas fa-undo me-2"></i>Reset
+                            <i class="fas fa-undo me-2"></i>{% trans "Reset" %}
                         </button>
                         <button type="button" class="btn btn-success" id="exportData">
-                            <i class="fas fa-download me-2"></i>Export
+                            <i class="fas fa-download me-2"></i>{% trans "Export" %}
                         </button>
                     </div>
                 </div>
@@ -91,19 +92,19 @@
                 <table class="table" id="deductionsTable">
                     <thead>
                         <tr>
-                            <th>Order</th>
-                            <th>Payment Date</th>
-                            <th>Payment Code</th>
-                            <th>Supplier</th>
-                            <th>IF Code</th>
-                            <th>ICE Code</th>
-                            <th>Invoice Date</th>
-                            <th>Invoice Ref</th>
-                            <th>VAT Rate</th>
-                            <th>Fiscal Label</th>
-                            <th class="text-end">Raw Amount</th>
-                            <th class="text-end">VAT Amount</th>
-                            <th class="text-end">Net Amount</th>
+                            <th>{% trans "Order" %}</th>
+                            <th>{% trans "Payment Date" %}</th>
+                            <th>{% trans "Payment Code" %}</th>
+                            <th>{% trans "Supplier" %}</th>
+                            <th>{% trans "IF Code" %}</th>
+                            <th>{% trans "ICE Code" %}</th>
+                            <th>{% trans "Invoice Date" %}</th>
+                            <th>{% trans "Invoice Ref" %}</th>
+                            <th>{% trans "VAT Rate" %}</th>
+                            <th>{% trans "Fiscal Label" %}</th>
+                            <th class="text-end">{% trans "Raw Amount" %}</th>
+                            <th class="text-end">{% trans "VAT Amount" %}</th>
+                            <th class="text-end">{% trans "Net Amount" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -133,13 +134,13 @@
                             </tr>
                         {% empty %}
                             <tr>
-                                <td colspan="11" class="text-center">No deductions found</td>
+                                <td colspan="13" class="text-center">{% trans "No deductions found" %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr class="table-primary">
-                            <th colspan="10" class="text-end">Totals:</th>
+                            <th colspan="10" class="text-end">{% trans "Totals:" %}</th>
                             <th class="text-end">{{ total_raw|format_balance }}</th>
                             <th class="text-end">{{ total_vat|format_balance }}</th>
                             <th class="text-end">{{ total_net|format_balance }}</th>

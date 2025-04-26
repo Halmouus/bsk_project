@@ -1,5 +1,6 @@
 {% extends 'base.html' %}
-{% block title %}Client Management{% endblock %}
+{% load i18n %}
+{% block title %}{% trans "Client Management" %}{% endblock %}
 {% load static %}
 
 {% block extra_css %}
@@ -14,12 +15,12 @@
             <ul class="nav nav-tabs nav-fill border-0" id="clientTabs" role="tablist">
                 <li class="nav-item">
                     <a class="nav-link active custom-tab" id="clients-tab" data-toggle="tab" href="#clients" role="tab">
-                        <i class="fas fa-users me-2"></i> Clients
+                        <i class="fas fa-users me-2"></i> {% trans "Clients" %}
                     </a>
                 </li>
                 <li class="nav-item">
                     <a class="nav-link custom-tab" id="entities-tab" data-toggle="tab" href="#entities" role="tab">
-                        <i class="fas fa-building me-2"></i> Entities
+                        <i class="fas fa-building me-2"></i> {% trans "Entities" %}
                     </a>
                 </li>
             </ul>
@@ -31,11 +32,11 @@
                     <!-- Header -->
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2 class="mb-0">
-                            <i class="fas fa-users text-primary me-2"></i> Clients Management
+                            <i class="fas fa-users text-primary me-2"></i> {% trans "Clients Management" %}
                         </h2>
                         <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" 
                                 data-toggle="modal" data-target="#clientModal">
-                            <i class="fas fa-plus-circle me-2"></i> Add New Client
+                            <i class="fas fa-plus-circle me-2"></i> {% trans "Add New Client" %}
                         </button>
                     </div>
 
@@ -46,10 +47,10 @@
                                 <table class="table table-hover" id="clientsTable">
                                     <thead class="bg-light">
                                         <tr>
-                                            <th>Client Code</th>
-                                            <th>Name</th>
-                                            <th>Created At</th>
-                                            <th>Actions</th>
+                                            <th>{% trans "Client Code" %}</th>
+                                            <th>{% trans "Name" %}</th>
+                                            <th>{% trans "Created At" %}</th>
+                                            <th>{% trans "Actions" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody id="clientsTableBody">
@@ -66,11 +67,11 @@
                     <!-- Header -->
                     <div class="d-flex justify-content-between align-items-center mb-4">
                         <h2 class="mb-0">
-                            <i class="fas fa-building text-primary me-2"></i> Entities Management
+                            <i class="fas fa-building text-primary me-2"></i> {% trans "Entities Management" %}
                         </h2>
                         <button type="button" class="btn btn-primary btn-lg shadow-sm rounded-pill" 
                                 data-toggle="modal" data-target="#entityModal">
-                            <i class="fas fa-plus-circle me-2"></i> Add New Entity
+                            <i class="fas fa-plus-circle me-2"></i> {% trans "Add New Entity" %}
                         </button>
                     </div>
 
@@ -81,12 +82,12 @@
                                 <table class="table table-hover" id="entitiesTable">
                                     <thead class="bg-light">
                                         <tr>
-                                            <th>Name</th>
-                                            <th>ICE Code</th>
-                                            <th>Accounting Code</th>
-                                            <th>City</th>
-                                            <th>Phone</th>
-                                            <th>Actions</th>
+                                            <th>{% trans "Name" %}</th>
+                                            <th>{% trans "ICE Code" %}</th>
+                                            <th>{% trans "Accounting Code" %}</th>
+                                            <th>{% trans "City" %}</th>
+                                            <th>{% trans "Phone" %}</th>
+                                            <th>{% trans "Actions" %}</th>
                                         </tr>
                                     </thead>
                                     <tbody id="entitiesTableBody">
@@ -117,9 +118,9 @@
             maxLength: 10,
             pattern: /^\d+$/,
             messages: {
-                pattern: 'Only digits are allowed',
-                minLength: 'Must be at least 5 digits',
-                maxLength: 'Cannot exceed 10 digits'
+                pattern: '{% trans "Only digits are allowed" %}',
+                minLength: '{% trans "Must be at least 5 digits" %}',
+                maxLength: '{% trans "Cannot exceed 10 digits" %}'
             }
         },
         iceCode: {
@@ -127,8 +128,8 @@
             pattern: /^\d+$/,
             inputPattern: /[0-9]/,  // Add this - for single digit validation
             messages: {
-                pattern: 'Only digits are allowed',
-                length: 'Must be exactly 15 digits'
+                pattern: '{% trans "Only digits are allowed" %}',
+                length: '{% trans "Must be exactly 15 digits" %}'
             }
         },
         accountingCode: {
@@ -136,15 +137,15 @@
             maxLength: 7,
             pattern: /^\d+$/,  // Just check for digits initially
             messages: {
-                pattern: 'Only digits are allowed',
-                minLength: 'Must be at least 5 digits',
-                maxLength: 'Cannot exceed 7 digits'
+                pattern: '{% trans "Only digits are allowed" %}',
+                minLength: '{% trans "Must be at least 5 digits" %}',
+                maxLength: '{% trans "Cannot exceed 7 digits" %}'
             }
         },
         name: {
             pattern: /^[a-zA-Z\s]+$/,
             messages: {
-                pattern: 'Only letters and spaces allowed'
+                pattern: '{% trans "Only letters and spaces allowed" %}'
             }
         }
     };
@@ -226,7 +227,7 @@
             // Required field validation
             if (input.required && !value) {
                 isValid = false;
-                message = 'This field is required';
+                message = '{% trans "This field is required" %}';
                 this.updateValidationUI(input, false, message);
                 return false;
             }
@@ -235,7 +236,7 @@
             if (input.dataset.validate === 'accountingCode') {
                 if (!value.startsWith('3')) {
                     isValid = false;
-                    message = 'Must start with 3';
+                    message = '{% trans "Must start with 3" %}';
                 }
             }
 
@@ -246,7 +247,7 @@
                     .then(data => {
                         if (!data.available) {
                             isValid = false;
-                            message = `This ${input.id.replace('Code', ' code')} already exists`;
+                            message = `{% trans "This" %} ${input.id.replace('Code', ' {% trans "code" %}')} {% trans "already exists" %}`;
                             this.updateValidationUI(input, false, message, true);
                         }
                     })
@@ -420,7 +421,7 @@
                                 </button>
                                 <a href="/testapp/clients/${client.id}/card/" 
                                    class="btn btn-sm btn-outline-info">
-                                    <i class="fas fa-chart-line me-1"></i> Sales Card
+                                    <i class="fas fa-chart-line me-1"></i> {% trans "Sales Card" %}
                                 </a>
                             </td>
                         </tr>
@@ -429,7 +430,7 @@
                 });
             } catch (error) {
                 console.error('Error loading clients:', error);
-                this.showToast('Error', 'Failed to load clients');
+                this.showToast('{% trans "Error" %}', '{% trans "Failed to load clients" %}');
             }
         }
 
@@ -458,11 +459,11 @@
                     console.log('Client saved successfully:', result);
                     $('#clientModal').modal('hide');
                     await this.loadClients();
-                    this.showToast('Success', 'Client saved successfully');
+                    this.showToast('{% trans "Success" %}', '{% trans "Client saved successfully" %}');
                 }
             } catch (error) {
                 console.error('Error saving client:', error);
-                this.showToast('Error', error.message);
+                this.showToast('{% trans "Error" %}', error.message);
             }
         }
 
@@ -471,12 +472,12 @@
             $('#clientId').val(id);
             $('#clientName').val(name);
             $('#clientCode').val(client_code);
-            $('#clientModalTitle .title-text').text('Edit Client');
+            $('#clientModalTitle .title-text').text('{% trans "Edit Client" %}');
             $('#clientModal').modal('show');
         }
 
         async deleteClient(id) {
-            if (!confirm('Are you sure you want to delete this client?')) {
+            if (!confirm('{% trans "Are you sure you want to delete this client?" %}')) {
                 return;
             }
 
@@ -487,11 +488,11 @@
                 );
                 if (response.ok) {
                     await this.loadClients();
-                    this.showToast('Success', 'Client deleted successfully');
+                    this.showToast('{% trans "Success" %}', '{% trans "Client deleted successfully" %}');
                 }
             } catch (error) {
                 console.error('Error deleting client:', error);
-                this.showToast('Error', error.message);
+                this.showToast('{% trans "Error" %}', error.message);
             }
         }
 
@@ -528,7 +529,7 @@
                 });
             } catch (error) {
                 console.error('Error loading entities:', error);
-                this.showToast('Error', 'Failed to load entities');
+                this.showToast('{% trans "Error" %}', '{% trans "Failed to load entities" %}');
             }
         }
 
@@ -560,11 +561,11 @@
                     console.log('Entity saved successfully:', result);
                     $('#entityModal').modal('hide');
                     await this.loadEntities();
-                    this.showToast('Success', 'Entity saved successfully');
+                    this.showToast('{% trans "Success" %}', '{% trans "Entity saved successfully" %}');
                 }
             } catch (error) {
                 console.error('Error saving entity:', error);
-                this.showToast('Error', error.message);
+                this.showToast('{% trans "Error" %}', error.message);
             }
         }
 
@@ -576,12 +577,12 @@
             $('#accountingCode').val(entityData.accounting_code);
             $('#city').val(entityData.city || '');
             $('#phoneNumber').val(entityData.phone_number || '');
-            $('#entityModalTitle .title-text').text('Edit Entity');
+            $('#entityModalTitle .title-text').text('{% trans "Edit Entity" %}');
             $('#entityModal').modal('show');
         }
 
         async deleteEntity(id) {
-            if (!confirm('Are you sure you want to delete this entity?')) {
+            if (!confirm('{% trans "Are you sure you want to delete this entity?" %}')) {
                 return;
             }
 
@@ -592,11 +593,11 @@
                 );
                 if (response.ok) {
                     await this.loadEntities();
-                    this.showToast('Success', 'Entity deleted successfully');
+                    this.showToast('{% trans "Success" %}', '{% trans "Entity deleted successfully" %}');
                 }
             } catch (error) {
                 console.error('Error deleting entity:', error);
-                this.showToast('Error', error.message);
+                this.showToast('{% trans "Error" %}', error.message);
             }
         }
 
@@ -634,7 +635,7 @@
             const response = await fetch(url, options);
             if (!response.ok) {
                 const error = await response.json();
-                throw new Error(error.error || 'Request failed');
+                throw new Error(error.error || '{% trans "Request failed" %}');
             }
             return response;
         }
@@ -655,10 +656,10 @@
 
             // Reset titles
             if (formId === 'clientForm') {
-                $('#clientModalTitle .title-text').text('Add New Client');
+                $('#clientModalTitle .title-text').text('{% trans "Add New Client" %}');
                 $('#clientId').val('');
             } else {
-                $('#entityModalTitle .title-text').text('Add New Entity');
+                $('#entityModalTitle .title-text').text('{% trans "Add New Entity" %}');
                 $('#entityId').val('');
             }
         }

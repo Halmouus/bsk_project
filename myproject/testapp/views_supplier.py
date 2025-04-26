@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.urls import reverse_lazy
 from django.views import View
 from django.views.generic import ListView, CreateView, UpdateView, DeleteView, DetailView
+from django.utils.translation import gettext as _
 from .forms import SupplierCreateForm
 from .models import Invoice, Supplier, get_supplier_balance
 from django.contrib.messages.views import SuccessMessageMixin
@@ -29,7 +30,7 @@ class SupplierCreateView(SuccessMessageMixin, CreateView):
     form_class = SupplierCreateForm
     template_name = 'supplier/supplier_form.html'
     success_url = reverse_lazy('supplier-list')
-    success_message = "Supplier successfully created."
+    success_message = _("Supplier successfully created.")
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -72,7 +73,7 @@ class SupplierUpdateView(SuccessMessageMixin, UpdateView):
     form_class = SupplierCreateForm  # Use the custom form
     template_name = 'supplier/supplier_form.html'
     success_url = reverse_lazy('supplier-list')
-    success_message = "Supplier successfully updated."
+    success_message = _("Supplier successfully updated.")
     
     def form_valid(self, form):
         print("\n=== SupplierUpdateView.form_valid ===")
@@ -142,13 +143,16 @@ class SupplierDeleteView(DeleteView):
     model = Supplier
     template_name = 'supplier/supplier_confirm_delete.html'
     success_url = reverse_lazy('supplier-list')
-    success_message = "Supplier successfully deleted."
+    success_message = _("Supplier successfully deleted.")
 
     def get(self, request, *args, **kwargs):
         # Check for references before showing the confirmation page
         self.object = self.get_object()
         if self.object.invoice_set.exists():
-            messages.error(request, f'Cannot delete "{self.object.name}". It is used in {self.object.invoice_set.count()} invoice(s).')
+            messages.error(request, _('Cannot delete "{name}". It is used in {count} invoice(s).').format(
+                name=self.object.name, 
+                count=self.object.invoice_set.count()
+            ))
             return redirect('supplier-list')
         return super().get(request, *args, **kwargs)
 
@@ -156,7 +160,7 @@ class SupplierDeleteView(DeleteView):
         try:
             return super().post(request, *args, **kwargs)
         except ProtectedError:
-            messages.error(request, 'Cannot delete supplier. It is referenced by one or more invoices.')
+            messages.error(request, _('Cannot delete supplier. It is referenced by one or more invoices.'))
             return redirect('supplier-list')
 
 
@@ -275,19 +279,19 @@ class SupplierDocumentView(View):
         # Determine which document to serve
         if document_type == 'regulation':
             document = supplier.regulation_file
-            document_name = "Regulation File"
+            document_name = _("Regulation File")
             print(f"Regulation file: {document}")
         elif document_type == 'payment_delay':
             document = supplier.payment_delay_file
-            document_name = "Payment Delay File"
+            document_name = _("Payment Delay File")
             print(f"Payment delay file: {document}")
         else:
             print(f"Invalid document type: {document_type}")
-            return JsonResponse({"error": "Invalid document type"}, status=400)
+            return JsonResponse({"error": _("Invalid document type")}, status=400)
         
         if not document:
             print(f"No {document_name} found for this supplier")
-            return JsonResponse({"error": f"No {document_name} found for this supplier"}, status=404)
+            return JsonResponse({"error": _("No {name} found for this supplier").format(name=document_name)}, status=404)
         
         # Open the file and return it
         try:
@@ -298,7 +302,7 @@ class SupplierDocumentView(View):
             import os
             if not os.path.exists(file_path):
                 print(f"File does not exist: {file_path}")
-                return JsonResponse({"error": "File not found on disk"}, status=404)
+                return JsonResponse({"error": _("File not found on disk")}, status=404)
             
             content_type, _ = mimetypes.guess_type(file_path)
             print(f"Content type: {content_type}")
@@ -320,7 +324,7 @@ class SupplierDocumentView(View):
             return response
         except FileNotFoundError:
             print(f"Document file not found: {file_path}")
-            return JsonResponse({"error": "Document file not found"}, status=404)
+            return JsonResponse({"error": _("Document file not found")}, status=404)
         except Exception as e:
             print(f"Error serving document: {str(e)}")
-            return JsonResponse({"error": f"Error: {str(e)}"}, status=500)
+            return JsonResponse({"error": _("Error: {error}").format(error=str(e))}, status=500)

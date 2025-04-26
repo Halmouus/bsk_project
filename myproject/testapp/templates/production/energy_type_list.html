@@ -1,24 +1,25 @@
 {% extends "base.html" %}
+{% load i18n %}
 
-{% block title %}Energy Types Management{% endblock %}
+{% block title %}{% trans "Energy Types Management" %}{% endblock %}
 
 {% block content %}
 <div class="container-fluid">
     <!-- Header with improved styling -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h1 class="h3 mb-0 text-gray-800">Energy Types Management</h1>
-            <p class="text-muted small">Manage all energy types, units, and pricing</p>
+            <h1 class="h3 mb-0 text-gray-800">{% trans "Energy Types Management" %}</h1>
+            <p class="text-muted small">{% trans "Manage all energy types, units, and pricing" %}</p>
         </div>
         <button type="button" class="btn btn-primary" onclick="EnergyManager.openCreateModal()">
-            <i class="fas fa-plus me-2"></i> New Energy Type
+            <i class="fas fa-plus me-2"></i> {% trans "New Energy Type" %}
         </button>
     </div>
 
     <!-- Debug Panel (hidden by default) -->
     <div id="debugPanel" class="alert alert-info mb-4" style="display: none;">
         <div class="d-flex justify-content-between">
-            <strong>Debug Information</strong>
+            <strong>{% trans "Debug Information" %}</strong>
             <button type="button" class="btn-close" onclick="document.getElementById('debugPanel').style.display='none'"></button>
         </div>
         <hr>
@@ -28,12 +29,12 @@
     <!-- Main Table with improved styling -->
     <div class="card shadow">
         <div class="card-header py-3 d-flex justify-content-between align-items-center">
-            <h6 class="m-0 font-weight-bold text-primary">Energy Types</h6>
+            <h6 class="m-0 font-weight-bold text-primary">{% trans "Energy Types" %}</h6>
             <div class="input-group w-50">
                 <span class="input-group-text bg-light">
                     <i class="fas fa-search text-gray-500"></i>
                 </span>
-                <input type="text" id="energySearch" class="form-control" placeholder="Search by name or unit..." onkeyup="EnergyManager.filterTable()">
+                <input type="text" id="energySearch" class="form-control" placeholder="{% trans "Search by name or unit..." %}" onkeyup="EnergyManager.filterTable()">
             </div>
         </div>
         <div class="card-body">
@@ -41,11 +42,11 @@
                 <table class="table table-hover align-middle" id="energyTable">
                     <thead class="table-light">
                         <tr>
-                            <th onclick="EnergyManager.sortTable(0)" class="sortable">Name <i class="fas fa-sort ms-1 text-muted"></i></th>
-                            <th onclick="EnergyManager.sortTable(1)" class="sortable">Unit <i class="fas fa-sort ms-1 text-muted"></i></th>
-                            <th>Current Price</th>
-                            <th class="text-center">Status</th>
-                            <th class="text-center">Actions</th>
+                            <th onclick="EnergyManager.sortTable(0)" class="sortable">{% trans "Name" %} <i class="fas fa-sort ms-1 text-muted"></i></th>
+                            <th onclick="EnergyManager.sortTable(1)" class="sortable">{% trans "Unit" %} <i class="fas fa-sort ms-1 text-muted"></i></th>
+                            <th>{% trans "Current Price" %}</th>
+                            <th class="text-center">{% trans "Status" %}</th>
+                            <th class="text-center">{% trans "Actions" %}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -57,25 +58,25 @@
                                 {% if energy_type.get_current_price %}
                                     <span class="text-dark fw-bold">{{ energy_type.get_current_price }}</span>
                                 {% else %}
-                                    <span class="text-muted">Not set</span>
+                                    <span class="text-muted">{% trans "Not set" %}</span>
                                 {% endif %}
                             </td>
                             <td class="text-center">
                                 {% if energy_type.is_active %}
-                                    <span class="badge bg-success">Active</span>
+                                    <span class="badge bg-success">{% trans "Active" %}</span>
                                 {% else %}
-                                    <span class="badge bg-danger">Inactive</span>
+                                    <span class="badge bg-danger">{% trans "Inactive" %}</span>
                                 {% endif %}
                             </td>
                             <td class="text-center">
                                 <div class="btn-group" role="group">
-                                    <button class="btn btn-sm btn-outline-primary price-history" data-id="{{ energy_type.id }}" title="Price History">
+                                    <button class="btn btn-sm btn-outline-primary price-history" data-id="{{ energy_type.id }}" title="{% trans "Price History" %}">
                                         <i class="fas fa-history"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-info edit-energy ms-2" data-id="{{ energy_type.id }}" title="Edit">
+                                    <button class="btn btn-sm btn-info edit-energy ms-2" data-id="{{ energy_type.id }}" title="{% trans "Edit" %}">
                                         <i class="fas fa-edit"></i>
                                     </button>
-                                    <button class="btn btn-sm btn-danger ms-2 delete-energy" data-id="{{ energy_type.id }}" title="Delete">
+                                    <button class="btn btn-sm btn-danger ms-2 delete-energy" data-id="{{ energy_type.id }}" title="{% trans "Delete" %}">
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
@@ -88,8 +89,8 @@
                 <!-- Empty state message -->
                 <div id="emptyState" class="text-center p-5 d-none">
                     <i class="fas fa-bolt fa-3x text-muted mb-3"></i>
-                    <h5 class="text-muted">No energy types found</h5>
-                    <p class="text-muted">Try different search criteria or add a new energy type</p>
+                    <h5 class="text-muted">{% trans "No energy types found" %}</h5>
+                    <p class="text-muted">{% trans "Try different search criteria or add a new energy type" %}</p>
                 </div>
             </div>
         </div>
@@ -101,7 +102,7 @@
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header bg-light">
-                <h5 class="modal-title">New Energy Type</h5>
+                <h5 class="modal-title">{% trans "New Energy Type" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
@@ -111,68 +112,68 @@
                     
                     <div class="mb-4">
                         <label for="energyName" class="form-label fw-bold">
-                            <i class="fas fa-tag me-1 text-primary"></i> Name*
+                            <i class="fas fa-tag me-1 text-primary"></i> {% trans "Name" %}*
                         </label>
                         <input type="text" name="name" id="energyName" class="form-control" required>
-                        <div class="form-text text-muted">Enter the name of the energy type</div>
+                        <div class="form-text text-muted">{% trans "Enter the name of the energy type" %}</div>
                     </div>
 
                     <div class="mb-4">
                         <label for="energyUnit" class="form-label fw-bold">
-                            <i class="fas fa-ruler me-1 text-primary"></i> Unit*
+                            <i class="fas fa-ruler me-1 text-primary"></i> {% trans "Unit" %}*
                         </label>
                         <input type="text" name="unit" id="energyUnit" class="form-control" required>
-                        <div class="form-text text-muted">Enter the unit of measurement (e.g., kWh, ton, liter)</div>
+                        <div class="form-text text-muted">{% trans "Enter the unit of measurement (e.g., kWh, ton, liter)" %}</div>
                     </div>
 
                     <div class="card mb-4">
                         <div class="card-header bg-light py-2 d-flex justify-content-between align-items-center">
                             <h6 class="m-0 font-weight-bold">
-                                <i class="fas fa-money-bill-wave me-1 text-success"></i> Pricing Information
+                                <i class="fas fa-money-bill-wave me-1 text-success"></i> {% trans "Pricing Information" %}
                             </h6>
                             <div style="width: 200px;">
-                                <label for="priceEffectiveDate" class="form-label fw-bold">Effective Date</label>
+                                <label for="priceEffectiveDate" class="form-label fw-bold">{% trans "Effective Date" %}</label>
                                 <input type="date" name="price_effective_date" id="priceEffectiveDate" class="form-control">
-                                <div class="form-text text-muted">If blank, today will be used</div>
+                                <div class="form-text text-muted">{% trans "If blank, today will be used" %}</div>
                             </div>
                         </div>
                         <div class="card-body">
                             <div class="mb-3">
                                 <label for="energyPrice" class="form-label fw-bold">
-                                    Price per Unit*
+                                    {% trans "Price per Unit" %}*
                                 </label>
                                 <input type="number" step="0.01" min="0" name="price" id="energyPrice" class="form-control" required>
                             </div>
                             
                             <div class="mb-3">
                                 <label for="priceNotes" class="form-label fw-bold">
-                                    Price Notes
+                                    {% trans "Price Notes" %}
                                 </label>
                                 <textarea name="price_notes" id="priceNotes" class="form-control" rows="2"></textarea>
-                                <div class="form-text text-muted">Optional notes about this price change</div>
+                                <div class="form-text text-muted">{% trans "Optional notes about this price change" %}</div>
                             </div>
                         </div>
                     </div>
 
                     <div class="form-check form-switch mb-3">
                         <input class="form-check-input" type="checkbox" id="isActive" name="is_active" checked>
-                        <label class="form-check-label fw-bold" for="isActive">Active</label>
-                        <div class="form-text text-muted">Inactive energy types won't appear in production forms</div>
+                        <label class="form-check-label fw-bold" for="isActive">{% trans "Active" %}</label>
+                        <div class="form-text text-muted">{% trans "Inactive energy types won't appear in production forms" %}</div>
                     </div>
 
                     <div class="mb-3">
                         <label for="energyNotes" class="form-label fw-bold">
-                            <i class="fas fa-sticky-note me-1 text-warning"></i> Notes
+                            <i class="fas fa-sticky-note me-1 text-warning"></i> {% trans "Notes" %}
                         </label>
                         <textarea name="notes" id="energyNotes" class="form-control" rows="3"></textarea>
-                        <div class="form-text text-muted">Additional information about this energy type (optional)</div>
+                        <div class="form-text text-muted">{% trans "Additional information about this energy type (optional)" %}</div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{% trans "Cancel" %}</button>
                 <button type="button" class="btn btn-primary" id="saveEnergy">
-                    <i class="fas fa-save me-1"></i> Save
+                    <i class="fas fa-save me-1"></i> {% trans "Save" %}
                 </button>
             </div>
         </div>
@@ -184,19 +185,19 @@
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header bg-light">
-                <h5 class="modal-title">Price History</h5>
+                <h5 class="modal-title">{% trans "Price History" %}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <h6 id="energyTypeInfo" class="mb-0 fw-bold">Loading...</h6>
+                    <h6 id="energyTypeInfo" class="mb-0 fw-bold">{% trans "Loading..." %}</h6>
                     <span id="energyUnitLabel" class="badge bg-info px-3 py-2">-</span>
                 </div>
                 
                 <div class="card">
                     <div class="card-header bg-light py-2">
                         <h6 class="m-0 font-weight-bold text-primary">
-                            <i class="fas fa-chart-line me-1"></i> Price History
+                            <i class="fas fa-chart-line me-1"></i> {% trans "Price History" %}
                         </h6>
                     </div>
                     <div class="card-body p-0">
@@ -204,14 +205,14 @@
                             <table class="table mb-0" id="priceTable">
                                 <thead class="table-light">
                                     <tr>
-                                        <th>Price</th>
-                                        <th>Effective Date</th>
-                                        <th>Notes</th>
+                                        <th>{% trans "Price" %}</th>
+                                        <th>{% trans "Effective Date" %}</th>
+                                        <th>{% trans "Notes" %}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <tr>
-                                        <td colspan="3" class="text-center">Loading...</td>
+                                        <td colspan="3" class="text-center">{% trans "Loading..." %}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -220,11 +221,11 @@
                 </div>
                 
                 <div class="alert alert-info mt-4">
-                    <i class="fas fa-info-circle me-2"></i> The most recent price is highlighted in blue and is the active price used for calculations.
+                    <i class="fas fa-info-circle me-2"></i> {% trans "The most recent price is highlighted in blue and is the active price used for calculations." %}
                 </div>
             </div>
             <div class="modal-footer bg-light">
-                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{% trans "Close" %}</button>
             </div>
         </div>
     </div>
@@ -364,10 +365,10 @@ const EnergyManager = {
         
         try {
             // Clear previous data
-            document.getElementById('energyTypeInfo').textContent = 'Loading...';
+            document.getElementById('energyTypeInfo').textContent = '{% trans "Loading..." %}';
             document.getElementById('energyUnitLabel').textContent = '-';
             document.getElementById('priceTable').querySelector('tbody').innerHTML = 
-                '<tr><td colspan="3" class="text-center">Loading...</td></tr>';
+                '<tr><td colspan="3" class="text-center">{% trans "Loading..." %}</td></tr>';
             
             // Show the modal while loading
             this.priceHistoryModal.show();
@@ -377,7 +378,7 @@ const EnergyManager = {
             const data = await response.json();
             
             if (!data.success) {
-                throw new Error(data.error || 'Failed to fetch price history');
+                throw new Error(data.error || '{% trans "Failed to fetch price history" %}');
             }
             
             this.debug('Price history loaded', data);
@@ -385,14 +386,14 @@ const EnergyManager = {
             // Update energy info
             const energyInfo = data.energy_type;
             document.getElementById('energyTypeInfo').textContent = 
-                `${energyInfo.name} - Price History`;
+                `${energyInfo.name} - {% trans "Price History" %}`;
             document.getElementById('energyUnitLabel').textContent = 
                 energyInfo.unit;
             
             // Update price table
             const priceTable = document.getElementById('priceTable').querySelector('tbody');
             if (data.prices.length === 0) {
-                priceTable.innerHTML = '<tr><td colspan="3" class="text-center">No price history available</td></tr>';
+                priceTable.innerHTML = '<tr><td colspan="3" class="text-center">{% trans "No price history available" %}</td></tr>';
             } else {
                 let priceHtml = '';
                 data.prices.forEach((price, index) => {
@@ -419,12 +420,12 @@ const EnergyManager = {
             this.debug('Error fetching price history', error.message);
             
             // Show error in the tables
-            document.getElementById('energyTypeInfo').textContent = 'Error loading price history';
+            document.getElementById('energyTypeInfo').textContent = '{% trans "Error loading price history" %}';
             
             document.getElementById('priceTable').querySelector('tbody').innerHTML = 
-                `<tr><td colspan="3" class="text-center text-danger">Error: ${error.message}</td></tr>`;
+                `<tr><td colspan="3" class="text-center text-danger">{% trans "Error" %}: ${error.message}</td></tr>`;
                 
-            showToast('Failed to load price history: ' + error.message, 'error');
+            showToast('{% trans "Failed to load price history" %}: ' + error.message, 'error');
         }
     },
     
@@ -533,7 +534,7 @@ const EnergyManager = {
             elem.classList.remove('is-valid', 'is-invalid');
         });
         
-        document.querySelector('#energyModal .modal-title').textContent = 'New Energy Type';
+        document.querySelector('#energyModal .modal-title').textContent = '{% trans "New Energy Type" %}';
         this.modal.show();
     },
 
@@ -573,10 +574,10 @@ const EnergyManager = {
                     elem.classList.remove('is-valid', 'is-invalid');
                 });
                 
-                document.querySelector('#energyModal .modal-title').textContent = 'Edit Energy Type';
+                document.querySelector('#energyModal .modal-title').textContent = '{% trans "Edit Energy Type" %}';
                 this.modal.show();
             } else {
-                throw new Error(data.error || 'Failed to fetch energy type details');
+                throw new Error(data.error || '{% trans "Failed to fetch energy type details" %}');
             }
         } catch (error) {
             this.debug('Error fetching energy type details', error.message);
@@ -585,7 +586,7 @@ const EnergyManager = {
             try {
                 const row = document.querySelector(`tr[data-id="${id}"]`);
                 if (!row) {
-                    throw new Error('Energy type row not found in the table');
+                    throw new Error('{% trans "Energy type row not found in the table" %}');
                 }
                 
                 // Get basic data from row cells
@@ -593,11 +594,11 @@ const EnergyManager = {
                 const unit = row.cells[1].textContent.trim();
                 let price = row.cells[2].textContent.trim();
                 
-                if (price === 'Not set') {
+                if (price === '{% trans "Not set" %}') {
                     price = '';
                 }
                 
-                const isActive = row.cells[3].querySelector('.badge').textContent.trim() === 'Active';
+                const isActive = row.cells[3].querySelector('.badge').textContent.trim() === '{% trans "Active" %}';
                 
                 // Fill the form with the data
                 const form = document.getElementById('energyForm');
@@ -606,10 +607,10 @@ const EnergyManager = {
                 form.querySelector('[name="price"]').value = price;
                 document.getElementById('isActive').checked = isActive;
                 
-                document.querySelector('#energyModal .modal-title').textContent = 'Edit Energy Type';
+                document.querySelector('#energyModal .modal-title').textContent = '{% trans "Edit Energy Type" %}';
                 this.modal.show();
             } catch (fallbackError) {
-                showToast('Failed to load energy type details: ' + error.message, 'error');
+                showToast('{% trans "Failed to load energy type details" %}: ' + error.message, 'error');
             }
         }
     },
@@ -652,14 +653,14 @@ const EnergyManager = {
 
             if (data.success) {
                 this.modal.hide();
-                showToast('Energy type created successfully', 'success');
+                showToast('{% trans "Energy type created successfully" %}', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(data.error || 'Failed to create energy type', 'error');
+                showToast(data.error || '{% trans "Failed to create energy type" %}', 'error');
             }
         } catch (error) {
             this.debug('Create error', error);
-            showToast('Failed to create energy type: ' + error.message, 'error');
+            showToast('{% trans "Failed to create energy type" %}: ' + error.message, 'error');
         }
     },
 
@@ -702,19 +703,19 @@ const EnergyManager = {
 
             if (data.success) {
                 this.modal.hide();
-                showToast('Energy type updated successfully', 'success');
+                showToast('{% trans "Energy type updated successfully" %}', 'success');
                 setTimeout(() => location.reload(), 1000);
             } else {
-                showToast(data.error || 'Failed to update energy type', 'error');
+                showToast(data.error || '{% trans "Failed to update energy type" %}', 'error');
             }
         } catch (error) {
             this.debug('Update error', error);
-            showToast('Failed to update energy type: ' + error.message, 'error');
+            showToast('{% trans "Failed to update energy type" %}: ' + error.message, 'error');
         }
     },
 
     async deleteEnergy(id) {
-        if (!confirm('Are you sure you want to delete this energy type? This action cannot be undone.')) {
+        if (!confirm('{% trans "Are you sure you want to delete this energy type? This action cannot be undone." %}')) {
             return;
         }
 
@@ -740,13 +741,13 @@ const EnergyManager = {
                     row.style.opacity = '0';
                     setTimeout(() => row.remove(), 500);
                 }
-                showToast('Energy type deleted successfully', 'success');
+                showToast('{% trans "Energy type deleted successfully" %}', 'success');
             } else {
-                showToast(data.error || 'Failed to delete energy type', 'error');
+                showToast(data.error || '{% trans "Failed to delete energy type" %}', 'error');
             }
         } catch (error) {
             this.debug('Delete error', error);
-            showToast('Failed to delete energy type: ' + error.message, 'error');
+            showToast('{% trans "Failed to delete energy type" %}: ' + error.message, 'error');
         }
     }
 };
